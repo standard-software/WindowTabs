@@ -134,7 +134,7 @@ type TabStripDecorator(group:WindowGroup) as this =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
         let iconOnlyItem = CmiRegular({
-            text = (if group.isIconOnly then "Expand" else "Shrink") + " tabs"
+            text = (if group.isIconOnly then "タブ幅を広げる" else "タブ幅をせばめる")
             image = None
             click = fun() -> group.isIconOnly <- group.isIconOnly.not
             flags = List2()
@@ -156,19 +156,19 @@ type TabStripDecorator(group:WindowGroup) as this =
                 click = setAlignment alignment
             })
             CmiPopUp({
-                text = "Align tabs"
+                text = "タブ位置"
                 image = None
                 items = List2([
-                    ("Left", TabLeft)
-                    ("Center", TabCenter)
-                    ("Right",TabRight)
+                    ("左", TabLeft)
+                    ("中央", TabCenter)
+                    ("右",TabRight)
                 ]).map(alignmentMenuItem)
             })
 
         let autoHideItem =
             let isEnabled = group.bb.read("autoHide", true)
             CmiRegular({
-                text = "Auto hide maximized"
+                text = "最大化時にタブを隠す"
                 flags = checked(isEnabled)
                 image = None
                 click = fun() ->
@@ -177,7 +177,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let combineIconsInTaskbar =
             CmiRegular({
-                text = "Combine icons in taskbar"
+                text = "タスクバーアイコンを結合する"
                 image = None
                 click = fun() -> Services.desktop.restartGroup(group.hwnd, group.isSuperBarEnabled.not)
                 flags = checked(group.isSuperBarEnabled)
@@ -185,7 +185,7 @@ type TabStripDecorator(group:WindowGroup) as this =
         
         let renameTabItem =
             CmiRegular({
-                text = "Rename tab"
+                text = "タブ名の変更"
                 image = None
                 flags = List2()
                 click = fun() ->
@@ -193,7 +193,7 @@ type TabStripDecorator(group:WindowGroup) as this =
             })
         let restoreTabNameItem =
             CmiRegular({
-                text = "Restore tab name"
+                text = "タブ名を元に戻す"
                 image = None
                 click = fun() -> group.setTabName(hwnd, None)
                 flags = List2()
@@ -201,7 +201,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let removeTabsItem =
             CmiRegular({
-                text = sprintf "Remove tabs for '%s' windows" exeName
+                text = sprintf "'%s' ウィンドウからタブを解除する" exeName
                 image = None
                 click = fun() -> Services.filter.setIsTabbingEnabledForProcess processPath false
                 flags = List2()
@@ -210,7 +210,7 @@ type TabStripDecorator(group:WindowGroup) as this =
         let isGrouped = Services.program.getAutoGroupingEnabled processPath
         let groupTabsItem =
             CmiRegular({
-                text = sprintf "Group tabs for '%s' windows" exeName
+                text = sprintf "'%s' ウィンドウからグループ化を解除する" exeName
                 image = None
                 click = fun() -> Services.program.setAutoGroupingEnabled processPath isGrouped.not
                 flags = checked(isGrouped)
@@ -218,7 +218,7 @@ type TabStripDecorator(group:WindowGroup) as this =
                  
         let closeTabItem = 
             CmiRegular({
-                text = "Close"
+                text = "このタブを閉じる"
                 image = None
                 click = fun() -> this.onCloseWindow hwnd
                 flags = List2()
@@ -226,7 +226,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let closeOtherTabsItem =
             CmiRegular({
-                text = "Close others"
+                text = "他のタブを閉じる"
                 image = None
                 click = fun() -> this.onCloseOtherWindows hwnd
                 flags = List2()
@@ -234,7 +234,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let closeAllExeTabsItem =
             CmiRegular({
-                text = sprintf "Close all '%s' windows" exeName
+                text = sprintf "'%s' ウィンドウのすべてのタブを閉じる" exeName
                 image = None
                 click = fun() -> this.onCloseAllExeWindows exeName
                 flags = List2()
@@ -242,7 +242,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let closeAllTabsItem =
             CmiRegular({
-                text = "Close all"
+                text = "すべてのタブを閉じる"
                 image = None
                 click = fun() -> this.onCloseAllWindows()
                 flags = List2()
@@ -250,7 +250,7 @@ type TabStripDecorator(group:WindowGroup) as this =
 
         let managerItem =
             CmiRegular({
-                text = "Settings..."
+                text = "設定..."
                 image = None
                 click = fun() -> Services.managerView.show()
                 flags = List2()

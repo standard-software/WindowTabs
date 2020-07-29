@@ -145,7 +145,7 @@
     <value>タスクバーのアイコンをまとめる</value>
   </data>
   <data name="Diagnostics" xml:space="preserve">
-    <value>Diagnostics(未訳)</value>
+    <value>診断</value>
   </data>
   <data name="Edit" xml:space="preserve">
     <value>編集</value>
@@ -193,7 +193,7 @@
     <value>次のタブ</value>
   </data>
   <data name="Overlap" xml:space="preserve">
-    <value>Overlap</value>
+    <value>重なり</value>
   </data>
   <data name="prevTab" xml:space="preserve">
     <value>前のタブ</value>
