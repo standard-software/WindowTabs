@@ -1,0 +1,5 @@
+# version ss_jp_2020.08.03
+- Japanese Text
+- default Tab Align Right
+- default AutoHide false
+- ./exe/WindowTabs/WindowTabs.exe
