@@ -166,7 +166,7 @@ type TabStripDecorator(group:WindowGroup) as this =
             })
 
         let autoHideItem =
-            let isEnabled = group.bb.read("autoHide", true)
+            let isEnabled = group.bb.read("autoHide", false)
             CmiRegular({
                 text = "最大化時にタブを隠す"
                 flags = checked(isEnabled)
@@ -284,7 +284,7 @@ type TabStripDecorator(group:WindowGroup) as this =
             let update() = cell.value <- group.bb.read(key, def)
             group.bb.subscribe key update
             cell
-        let autoHideCell = propCell("autoHide", true)
+        let autoHideCell = propCell("autoHide", false)
         let contextMenuVisibleCell = propCell("contextMenuVisible", false)
         let renamingTabCell = propCell("renamingTab", false)
         let isRecentlyChangedZorderCell =
