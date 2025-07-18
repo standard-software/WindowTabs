@@ -29,9 +29,26 @@ copy /Y "%SOURCE_DIR%\Interop.Shell32.dll" "%TARGET_DIR%\" 2>nul
 if not exist "%TARGET_DIR%\ja-JP" mkdir "%TARGET_DIR%\ja-JP"
 copy /Y "%SOURCE_DIR%\ja-JP\WindowTabs.resources.dll" "%TARGET_DIR%\ja-JP\" 2>nul
 
+:: Copy English resources as fallback
+if not exist "%TARGET_DIR%\en" mkdir "%TARGET_DIR%\en"
+copy /Y "%SOURCE_DIR%\en\*.dll" "%TARGET_DIR%\en\" 2>nul
+
+:: Also try ja folder (without -JP)
+if exist "%SOURCE_DIR%\ja\*.dll" (
+    if not exist "%TARGET_DIR%\ja" mkdir "%TARGET_DIR%\ja"
+    copy /Y "%SOURCE_DIR%\ja\*.dll" "%TARGET_DIR%\ja\" 2>nul
+)
+
 :: Copy config file if exists
 if exist "%SOURCE_DIR%\WindowTabs.exe.config" (
     copy /Y "%SOURCE_DIR%\WindowTabs.exe.config" "%TARGET_DIR%\" 2>nul
+)
+
+:: Copy App.config as WindowTabs.exe.config if the above doesn't exist
+if not exist "%TARGET_DIR%\WindowTabs.exe.config" (
+    if exist "%SOURCE_DIR%\App.config" (
+        copy /Y "%SOURCE_DIR%\App.config" "%TARGET_DIR%\WindowTabs.exe.config" 2>nul
+    )
 )
 
 :: Check if WindowTabs.exe exists
