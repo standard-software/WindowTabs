@@ -45,6 +45,8 @@ type FilterService() as this =
             fun() -> this.isValidOwner(window)
             //Win32 Dialogue class
             fun() -> window.className <> "#32770"
+            //ApplicationFrameWindow check for modern Windows apps/Explorer
+            fun() -> window.className <> "ApplicationFrameWindow" || not(String.IsNullOrEmpty window.text)
             fun() -> this.isBanned(window).not
             fun() -> this.isOnScreenOrMinimized(window)
             ])

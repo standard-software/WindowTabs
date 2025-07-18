@@ -154,6 +154,23 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.adjustChildWindows = fun() ->
         this.updatePlacements()
         
+        // After initial placement, adjust sizes again to ensure DPI is considered
+        match zorderCell.value.tryHead with
+        | Some(topHwnd) ->
+            let topWindow = this.os.windowFromHwnd(topHwnd)
+            let topBounds = topWindow.bounds
+            
+            // Move all background windows again with the correct size
+            zorderCell.value.tail.iter(fun hwnd ->
+                let window = this.os.windowFromHwnd(hwnd)
+                if window.isMinimized.not then
+                    let currentBounds = window.bounds
+                    // Keep current position but use top window's size
+                    let correctBounds = Rect(currentBounds.location, topBounds.size)
+                    window.move(correctBounds)
+            )
+        | None -> ()
+        
     member private this.makeTopWindowForeground() =
         match zorderCell.value.where(isMinimized >> not).tryHead with
         | Some(top) -> 

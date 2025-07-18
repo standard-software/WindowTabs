@@ -501,23 +501,18 @@ and
         WinUserApi.TrackMouseEvent(ref tme) |> ignore
 
     member this.hideOffScreen (size:Sz option) =
-        let corners = Mon.all.map <| fun monitor -> monitor.workRect.BR.sub(monitor.workRect.location)
-        let corner = corners.fold (Pt()) <| fun maxCorner corner ->
-            if maxCorner.x < corner.x then maxCorner else corner
+        let corners = Mon.all.map <| fun monitor -> monitor.workRect.BR
+        let rightCorner = corners.fold (Pt()) <| fun maxCorner corner ->
+            if maxCorner.x < corner.x then corner else maxCorner
+        let bottomCorner = corners.fold (Pt()) <| fun maxCorner corner ->
+            if maxCorner.y < corner.y then corner else maxCorner
+        let corner = Pt(rightCorner.x + 100, bottomCorner.y + 100)
 
-        let corner = corners.fold corner <| fun maxCorner corner ->
-            if  maxCorner.x = corner.x && 
-                maxCorner.y < corner.y then
-                maxCorner
-            else
-                corner
-        let corner = Pt(corner.x-1, corner.y-1)
-        this.setPlacement(
-            { this.placement with
-                showCmd = ShowWindowCommands.SW_SHOWNOACTIVATE
-                rcNormalPosition = Rect(
-                    corner,
-                    if size.IsSome then size.Value else this.placement.rcNormalPosition.size) }) 
+        WinUserApi.SetWindowPos(
+            hwnd, 
+            WindowHandleTypes.HWND_TOP, 
+            corner.x, corner.y, 0, 0, 
+            SetWindowPosFlags.SWP_NOSIZE ||| SetWindowPosFlags.SWP_NOACTIVATE ||| SetWindowPosFlags.SWP_NOZORDER) |> ignore
 
     override this.Equals(yobj) =
         match yobj with
