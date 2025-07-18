@@ -303,7 +303,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         bmpOverlay
 
     member this.setTabBgColor((tab, color)) =
-            match color with
+        match color with
         | Some(color) -> 
             tabBgColor.map(fun m -> m.add tab color)
         | None -> 
@@ -347,13 +347,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.renderTs(top) =
         let ts = this.ts
         let ts = 
-            {
-                ts with
+            { ts with
                 zorder = 
                     match top with
                     | Some(top) -> ts.zorder.moveToEnd((=)top)
-                    | None -> ts.zorder
-            }
+                    | None -> ts.zorder }
         ts.render
 
     member this.destroy() = 
