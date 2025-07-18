@@ -59,7 +59,31 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" Condition="Exists('$(FSharpTargetsPath)')" />
   <PropertyGroup>
-    <PostBuildEvent></PostBuildEvent>
+    <PostBuildEvent>if $(ConfigurationName) == Release (
+  echo ===== ILRepack処理開始 =====
+  
+  if not exist "$(TargetDir)ILRepack.exe" (
+    echo ILRepack.exeが見つかりません
+    exit /b 0
+  )
+  
+  echo 元のexeをバックアップ中...
+  copy "$(TargetPath)" "$(TargetDir)WindowTabs_original.exe"
+  
+  echo ILRepackでDLLを統合中...
+  "$(TargetDir)ILRepack.exe" /parallel /internalize /target:winexe /out:"$(TargetDir)WindowTabs_packed.exe" "$(TargetDir)WindowTabs_original.exe" "$(TargetDir)Win32.dll" "$(TargetDir)Aga.Controls.dll" "$(TargetDir)Newtonsoft.Json.dll" "$(TargetDir)FSharp.Core.dll" "$(TargetDir)FSharp.PowerPack.dll" "$(TargetDir)FSharp.PowerPack.Linq.dll" "$(TargetDir)FSharp.PowerPack.Parallel.Seq.dll" "$(TargetDir)Interop.SHDocVw.dll" "$(TargetDir)Interop.Shell32.dll"
+  
+  if exist "$(TargetDir)WindowTabs_packed.exe" (
+    echo 統合成功！
+    del "$(TargetPath)"
+    move "$(TargetDir)WindowTabs_packed.exe" "$(TargetPath)"
+    del "$(TargetDir)WindowTabs_original.exe"
+  ) else (
+    echo 統合失敗 - オリジナルを維持
+    move "$(TargetDir)WindowTabs_original.exe" "$(TargetPath)"
+  )
+)
+    </PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Shared/Operators.fs" />
