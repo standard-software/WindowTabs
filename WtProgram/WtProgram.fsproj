@@ -71,7 +71,7 @@
   copy "$(TargetPath)" "$(TargetDir)WindowTabs_original.exe"
   
   echo ILRepackでDLLを統合中...
-  "$(TargetDir)ILRepack.exe" /parallel /internalize /target:winexe /out:"$(TargetDir)WindowTabs_packed.exe" "$(TargetDir)WindowTabs_original.exe" "$(TargetDir)Win32.dll" "$(TargetDir)Aga.Controls.dll" "$(TargetDir)Newtonsoft.Json.dll" "$(TargetDir)FSharp.Core.dll" "$(TargetDir)FSharp.PowerPack.dll" "$(TargetDir)FSharp.PowerPack.Linq.dll" "$(TargetDir)FSharp.PowerPack.Parallel.Seq.dll" "$(TargetDir)Interop.SHDocVw.dll" "$(TargetDir)Interop.Shell32.dll"
+  "$(TargetDir)ILRepack.exe" /parallel /internalize /target:winexe /out:"$(TargetDir)WindowTabs_packed.exe" "$(TargetDir)WindowTabs_original.exe" "$(TargetDir)Win32.dll" "$(TargetDir)Aga.Controls.dll" "$(TargetDir)Newtonsoft.Json.dll" "$(TargetDir)FSharp.Core.dll" "$(TargetDir)FSharp.PowerPack.dll" "$(TargetDir)FSharp.PowerPack.Linq.dll" "$(TargetDir)FSharp.PowerPack.Metadata.dll" "$(TargetDir)FSharp.PowerPack.Parallel.Seq.dll" "$(TargetDir)Interop.SHDocVw.dll" "$(TargetDir)Interop.Shell32.dll"
   
   if exist "$(TargetDir)WindowTabs_packed.exe" (
     echo 統合成功！

@@ -12,18 +12,8 @@ if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
 echo Copying WindowTabs.exe...
 copy /Y "%SOURCE_DIR%\WindowTabs.exe" "%TARGET_DIR%\" 2>nul
 
-:: Copy all necessary DLLs
-echo Copying all DLLs...
-copy /Y "%SOURCE_DIR%\FSharp.Core.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\FSharp.PowerPack.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\FSharp.PowerPack.Linq.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\FSharp.PowerPack.Metadata.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\FSharp.PowerPack.Parallel.Seq.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\Win32.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\Aga.Controls.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\Newtonsoft.Json.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\Interop.SHDocVw.dll" "%TARGET_DIR%\" 2>nul
-copy /Y "%SOURCE_DIR%\Interop.Shell32.dll" "%TARGET_DIR%\" 2>nul
+:: All DLLs are now merged into WindowTabs.exe using ILRepack
+:: No additional DLLs needed
 
 :: Language resources are no longer needed (using code-based localization)
 

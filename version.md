@@ -7,6 +7,9 @@
   - Single-tab behavior: Simple window movement without tab detachment
   - Multi-tab behavior: Existing tab detachment functionality
 - Update README
+- Enable ILRepack to create near-single executable (2MB → 8.2MB)
+  - Merged 10 DLL files into WindowTabs.exe using ILRepack NuGet package (v2.0.18)
+  - Reduced distribution files from 11 to 3 files (WindowTabs.exe, WindowTabs.exe.config, version.md)
 
 ## version ss_jp_2025.11.10
 - Add menu dark mode support
