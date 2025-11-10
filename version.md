@@ -6,6 +6,7 @@
 - Enhance tab detach menu to support single-tab window movement
   - Single-tab behavior: Simple window movement without tab detachment
   - Multi-tab behavior: Existing tab detachment functionality
+- Update README
 
 ## version ss_jp_2025.11.10
 - Add menu dark mode support
