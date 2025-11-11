@@ -613,12 +613,59 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let exeName = pid.exeName
         let processPath = pid.processPath
 
-        let newWindowItem = 
+        // Helper function to get alternative launch command for UWP apps
+        let getAlternativeLaunchCommand(path: string) =
+            let fileName = System.IO.Path.GetFileName(path).ToLowerInvariant()
+            if fileName.Contains("windowsterminal") then
+                Some("wt.exe")
+            else
+                None
+
+        let newWindowItem =
             CmiRegular({
                 text = Localization.getString("NewWindow")
                 flags = List2()
                 image = None
-                click = fun() -> Process.Start(processPath) |> ignore
+                click = fun() ->
+                    try
+                        // Check if this is a known UWP app and use alternative launch command
+                        let launchCommand =
+                            if processPath.Contains("WindowsApps") then
+                                getAlternativeLaunchCommand(processPath)
+                            else
+                                None
+
+                        match launchCommand with
+                        | Some(cmd) ->
+                            // Use alternative launch command for known UWP apps
+                            Process.Start(cmd) |> ignore
+                        | None ->
+                            // Try normal launch
+                            Process.Start(processPath) |> ignore
+                    with
+                    | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
+                        // UWP app that we don't have an alternative for
+                        let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
+                        let message =
+                            match Localization.getCurrentLanguage() with
+                            | Localization.Japanese ->
+                                sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
+                            | Localization.English ->
+                                sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
+                        MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                        System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
+                    | :? System.ComponentModel.Win32Exception as ex ->
+                        // Non-UWP app error
+                        let message = sprintf "Failed to start new window:\n%s\n\nPath: %s\nError: %s"
+                                              (Localization.getString("NewWindow"))
+                                              processPath
+                                              ex.Message
+                        MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                        System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
+                    | ex ->
+                        let message = sprintf "Unexpected error starting new window:\n%s" ex.Message
+                        MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                        System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
             })
 
         
