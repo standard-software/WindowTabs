@@ -7,3 +7,8 @@ Backup/
 .vs/WindowTabs/
 .claude
 *.wixpdb
+
+# NuGet packages (auto-restored on build)
+packages/
+
+ 
