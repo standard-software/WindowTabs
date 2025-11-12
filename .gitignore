@@ -1,7 +1,3 @@
-Release/
-Debug/
-Backup/
-
 *.sdf
 /UpgradeLog.htm
 .vs/WindowTabs/
@@ -11,4 +7,10 @@ Backup/
 # NuGet packages (auto-restored on build)
 packages/
 
- 
+# Build artifacts (intermediate files and outputs)
+# Note: exe/ folder contains intentional build outputs for distribution
+**/obj/
+**/bin/Debug/
+**/bin/Release/
+*.pdb
+
