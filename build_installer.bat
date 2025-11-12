@@ -34,12 +34,28 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Copy installer to exe\installer folder
+echo.
+echo Copying installer to exe\installer...
+if not exist exe\installer (
+    mkdir exe\installer
+)
+copy WtSetup\bin\Release\WtSetup.msi exe\installer\WtSetup.msi
+if errorlevel 1 (
+    echo WARNING: Failed to copy installer to exe\installer
+) else (
+    echo Installer copied successfully to exe\installer\WtSetup.msi
+)
+
 echo.
 echo ========================================
 echo Installer build completed successfully!
 echo ========================================
 echo.
-echo Installer location:
+echo Installer locations:
+echo   1. WtSetup\bin\Release\WtSetup.msi
+echo   2. exe\installer\WtSetup.msi
+echo.
 dir /B WtSetup\bin\Release\*.msi 2>nul
 if errorlevel 1 (
     echo WARNING: MSI file not found in expected location

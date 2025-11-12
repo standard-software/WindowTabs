@@ -4,7 +4,7 @@
    <Product Id="*"
             Name="WindowTabs"
             Language="1033"
-            Version="25.11.10.0"
+            Version="25.11.10.7"
             Manufacturer="Satoshi Yamamoto (standard-software)"
             UpgradeCode="6763D234-BCFA-4172-8190-756DEE9CF2B1">
 
@@ -24,7 +24,7 @@
          <Directory Id="ProgramFiles64Folder">
             <Directory Id="INSTALLFOLDER" Name="WindowTabs">
                <Component Id="MainExecutable" Guid="3C67513D-01DD-4637-8A68-80971EB9504F" Win64="yes">
-                  <!-- Main executable -->
+                  <!-- Main executable (all DLLs are merged using ILRepack) -->
                   <File Id="WindowTabsExe"
                         Source="$(var.WtProgram.TargetDir)WindowTabs.exe"
                         KeyPath="yes" />
@@ -33,27 +33,9 @@
                   <File Id="WindowTabsConfig"
                         Source="$(var.WtProgram.TargetDir)WindowTabs.exe.config" />
 
-                  <!-- Required DLL files -->
-                  <File Id="Win32Dll"
-                        Source="$(var.WtProgram.TargetDir)Win32.dll" />
-                  <File Id="AgaControlsDll"
-                        Source="$(var.WtProgram.TargetDir)Aga.Controls.dll" />
-                  <File Id="NewtonsoftJsonDll"
-                        Source="$(var.WtProgram.TargetDir)Newtonsoft.Json.dll" />
-                  <File Id="FSharpCoreDll"
-                        Source="$(var.WtProgram.TargetDir)FSharp.Core.dll" />
-                  <File Id="FSharpPowerPackDll"
-                        Source="$(var.WtProgram.TargetDir)FSharp.PowerPack.dll" />
-                  <File Id="FSharpPowerPackLinqDll"
-                        Source="$(var.WtProgram.TargetDir)FSharp.PowerPack.Linq.dll" />
-                  <File Id="FSharpPowerPackMetadataDll"
-                        Source="$(var.WtProgram.TargetDir)FSharp.PowerPack.Metadata.dll" />
-                  <File Id="FSharpPowerPackParallelSeqDll"
-                        Source="$(var.WtProgram.TargetDir)FSharp.PowerPack.Parallel.Seq.dll" />
-                  <File Id="InteropSHDocVwDll"
-                        Source="$(var.WtProgram.TargetDir)Interop.SHDocVw.dll" />
-                  <File Id="InteropShell32Dll"
-                        Source="$(var.WtProgram.TargetDir)Interop.Shell32.dll" />
+                  <!-- Version history file -->
+                  <File Id="VersionMd"
+                        Source="$(var.WtProgram.ProjectDir)..\version.md" />
                </Component>
 
                <!-- Registry entries for uninstall -->
@@ -118,6 +100,16 @@
       <!-- Icon definition -->
       <Icon Id="BemoIcon.ico" SourceFile="..\WtProgram\Resources\Bemo.ico"/>
       <Property Id="ARPPRODUCTICON" Value="BemoIcon.ico" />
+
+      <!-- Remember installation directory for upgrades -->
+      <Property Id="INSTALLFOLDER">
+         <RegistrySearch Id="RememberInstallFolder"
+                        Root="HKCU"
+                        Key="Software\WindowTabs"
+                        Name="InstallPath"
+                        Type="raw"
+                        Win64="yes" />
+      </Property>
 
       <!-- Launch application after installation -->
       <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch WindowTabs" />
