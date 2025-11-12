@@ -159,9 +159,8 @@ You can also build the installer and portable version yourself using the provide
 1. Download `WtSetup.msi` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
 2. Run the installer and follow the installation wizard
 3. Choose the installation directory (default: Program Files\WindowTabs)
-4. Start Menu shortcut will be created automatically
-5. Desktop shortcut is optional (click "Customize" during installation to enable it)
-6. Optionally launch WindowTabs at the end of installation
+4. Desktop shortcut and Start Menu shortcut will be created automatically
+5. Optionally launch WindowTabs at the end of installation
 
 ### Using the Portable Version (WindowTabs.zip)
 

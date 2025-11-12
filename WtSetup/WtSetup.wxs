@@ -16,8 +16,11 @@
 
       <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
 
-      <!-- Upgrade settings -->
-      <MajorUpgrade DowngradeErrorMessage="A newer version of WindowTabs is already installed." />
+      <!-- Upgrade settings: Remove all previous versions -->
+      <MajorUpgrade DowngradeErrorMessage="A newer version of WindowTabs is already installed."
+                    Schedule="afterInstallExecute"
+                    AllowSameVersionUpgrades="no"
+                    RemoveFeatures="ALL" />
 
       <!-- Installation directory structure -->
       <Directory Id="TARGETDIR" Name="SourceDir">
