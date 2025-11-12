@@ -150,7 +150,7 @@ Two download options are available:
 - **WtSetup.msi** - Windows Installer package with automatic installation and uninstallation support
 - **WindowTabs.zip** - Portable version that can be extracted and run from any location
 
-You can also compile the `exe` file yourself as described in the [Compilation](#compilation) section below.
+You can also build the installer and portable version yourself using the provided build scripts.
 
 ## Installation
 
@@ -159,8 +159,9 @@ You can also compile the `exe` file yourself as described in the [Compilation](#
 1. Download `WtSetup.msi` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
 2. Run the installer and follow the installation wizard
 3. Choose the installation directory (default: Program Files\WindowTabs)
-4. A desktop shortcut will be created automatically
-5. Optionally launch WindowTabs at the end of installation (checkbox is checked by default)
+4. Start Menu shortcut will be created automatically
+5. Desktop shortcut is optional (click "Customize" during installation to enable it)
+6. Optionally launch WindowTabs at the end of installation
 
 ### Using the Portable Version (WindowTabs.zip)
 
@@ -180,55 +181,28 @@ To run WindowTabs at startup:
 4. Right-click on tabs to access tab-specific options
 5. Drag and drop tabs to organize your windows
 
+## Building from Source
+
+### Prerequisites
+
+- Visual Studio 2022 Community Edition (or higher)
+- WiX Toolset v3.11 or newer (for building the MSI installer)
+
+### Build Scripts
+
+Two build scripts are provided in the project root:
+
+- **build_installer.bat** - Builds the MSI installer (WtSetup.msi)
+  - Output: `exe\installer\WtSetup.msi`
+
+- **build_release_zip.bat** - Builds the portable ZIP distribution
+  - Output: `exe\zip\WindowTabs.zip`
+
+Simply run the desired batch file to create the distribution packages.
+
 ## Version History
 
 See [version.md](version.md) for detailed version history and changelog.
-
-## Compilation
-
-### Requirements
-
-- Visual Studio 2022 Community Edition or later
-- .NET desktop development workload
-- F# language support
-
-### Build Instructions
-
-1. Open `WindowTabs.sln` in Visual Studio 2022
-2. Select "Release" configuration and "Any CPU" platform
-3. Build the solution (Build > Build Solution)
-4. Run `deploy_release.bat` to deploy files to `exe\WindowTabs` folder
-
-The compiled executable and required DLLs will be placed in the `exe\WindowTabs` folder.
-
-### Building Windows Installer (MSI)
-
-To create a Windows Installer package:
-
-#### Requirements
-- WiX Toolset v3.11 or newer (https://wixtoolset.org/releases/)
-- Or WiX Toolset NuGet package (included in packages.config)
-
-#### Build Steps
-
-
-1. Build the installer:
-
-   ```
-   build_installer.bat
-   ```
-
-2. The installer will be created at:
-   ```
-   WtSetup\bin\Release\WtSetup.msi
-   ```
-
-## Technical Details
-
-- Written in F# and C#
-- Uses Windows Forms GUI framework
-- Entry point: `WtProgram\Program.fs`
-- Code-based localization system (Localization.fs, Localization_en.fs, Localization_ja-JP.fs)
 
 ## Links
 
@@ -244,12 +218,8 @@ https://qiita.com/standard-software/items/dd25270fa3895365fced
 
 This project is open source. See the original repository for license information.
 
-## Contributing
-
-Contributions are welcome! Feel free to submit issues and pull requests.
-
 ## Credits
 
 - Original author: Maurice Flanagan
-- Fork contributors: redgis, leafOfTree, payoneco
+- Fork contributors: redgis, payaneco, leafOfTree
 - Current maintainer: Satoshi Yamamoto (standard-software)
