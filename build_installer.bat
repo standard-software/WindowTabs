@@ -4,6 +4,14 @@ setlocal
 echo Building WindowTabs Installer...
 echo.
 
+:: Clean previous installer if exists
+if exist exe\installer\WtSetup.msi (
+    echo Cleaning previous installer...
+    del exe\installer\WtSetup.msi
+    echo Previous installer removed.
+    echo.
+)
+
 :: Check if MSBuild exists
 set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
 if not exist %MSBUILD% (
