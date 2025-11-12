@@ -1,16 +1,11 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2025.11.10_next
-- Create Windows Installer (MSI) with directory selection, auto-termination, launch option, and EULA skip
-- Identified unnecessary DLL files and UpgradeLog.htm in project root
-- Enhance tab detach menu to support single-tab window movement
-  - Single-tab behavior: Simple window movement without tab detachment
-  - Multi-tab behavior: Existing tab detachment functionality
-- Update README
-- Enable ILRepack to create near-single executable (2MB → 8.2MB)
-  - Merged 10 DLL files into WindowTabs.exe using ILRepack NuGet package (v2.0.18)
-  - Reduced distribution files from 11 to 3 files (WindowTabs.exe, WindowTabs.exe.config, version.md)
-- Enhance "New Window" menu to support WindowTerminal applications in TabStripDecorator.fs
+- Add Windows Installer (MSI) with build scripts (build_installer.bat, build_release_zip.bat)
+- Enable ILRepack to merge DLLs into single executable (WindowTabs.exe, WindowTabs.exe.config, version.md, README.md)
+- Add Windows Terminal UWP support in "New Window" menu
+- Remove unnecessary folders and files from repository
+- Change distribution format from exe/WindowTabs/ to WindowTabs.zip
 
 ## version ss_jp_2025.11.10
 - Add menu dark mode support
