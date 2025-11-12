@@ -44,15 +44,6 @@ if exist "%TARGET_DIR%\WindowTabs.exe" (
     echo ==============================
     dir /B "%TARGET_DIR%\*.exe" | findstr /V "ILMerge ILRepack"
     dir /B "%TARGET_DIR%\*.dll" | findstr /V "ILMerge ILRepack"
-
-    echo.
-    echo Creating WindowTabs.zip...
-    powershell.exe -Command "Compress-Archive -Path '%TARGET_DIR%\*' -DestinationPath 'exe\WindowTabs.zip' -Force"
-    if exist "exe\WindowTabs.zip" (
-        echo WindowTabs.zip created successfully at exe\WindowTabs.zip
-    ) else (
-        echo ERROR: Failed to create WindowTabs.zip
-    )
 ) else (
     echo.
     echo ERROR: WindowTabs.exe not found in %SOURCE_DIR%
