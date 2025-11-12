@@ -13,4 +13,4 @@ packages/
 **/bin/Debug/
 **/bin/Release/
 *.pdb
-
+/exe/
