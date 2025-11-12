@@ -36,6 +36,10 @@
                   <!-- Version history file -->
                   <File Id="VersionMd"
                         Source="$(var.WtProgram.ProjectDir)..\version.md" />
+
+                  <!-- README file -->
+                  <File Id="ReadmeMd"
+                        Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.md" />
                </Component>
 
                <!-- Registry entries for uninstall -->

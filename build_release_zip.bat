@@ -73,6 +73,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+copy /Y "WtSetup\README.md" "%OUTPUT_DIR%\" >nul
+if errorlevel 1 (
+    echo ERROR: Failed to copy README.md
+    exit /b 1
+)
+
 echo Files copied successfully.
 echo.
 
