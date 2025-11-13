@@ -5,6 +5,7 @@
   - Rename "Move tab" → "Move tab to another group"
   - Rename "Detach tab / Move window" → "Detach tab"
   - Add "Reposition tab group" menu with display edge positioning options
+- Update README.md documentation
 
 ## version ss_jp_2025.11.13
 - Add Windows Installer (MSI) with build scripts (build_installer.bat, build_release_zip.bat)

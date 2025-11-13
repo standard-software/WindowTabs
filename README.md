@@ -2,7 +2,7 @@
 
 # WindowTabs
 
-WindowTabs is a utility that brings browser-style tabbed window management to the desktop.
+WindowTabs is a utility that enables tabbed UI for Windows applications that don't have a tab interface, as well as between different executables. You can manage Chrome and Edge with tabs, or manage multiple Excel windows or Excel and Word with tabs.
 
 ![Tabs](README_Image/Tabs.png)
 
@@ -21,123 +21,6 @@ And Mr./Ms. leafOfTree also forked the source code. See the repositories here:
 
 And I (Satoshi Yamamoto@standard-software) also forked the source code and compiled it with VS2022 Community Edition.
 
-## Features
-
-### Browser-style Tabs for Desktop Windows
-
-WindowTabs runs in the background and adds browser-like tabs to your desktop windows, allowing you to group related windows together for better organization and productivity.
-
-### Multi-Language Support
-
-- English and Japanese language support
-- Runtime language switching without restart
-- Switch languages via tray menu
-
-![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
-
-### Tab Management
-
-- **Tab Context Menu**: Right-click on tabs to access various options
-  - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
-  - New window
-  - Tab width control (narrow/wide)
-  - Rename tab
-  - Detach tab
-  - Move tab to other groups
-  - Settings
-
-![Popup Menu](README_Image/PopupMenu.png)
-
-### Tab Detach Functionality
-
-Detach tabs from groups with multi-display support:
-- Detach at same position
-- Move to display edges (right/left/top/bottom)
-- DPI-aware percentage-based positioning for correct placement across different DPI displays
-
-![Detach Tab](README_Image/DetachTab.png)
-
-### Move Tab Between Groups
-
-Transfer tabs between different window groups:
-- Shows other groups with tab names
-- Adaptive tab name truncation
-- Display application icons for easy identification
-
-![Move Tab](README_Image/MoveTab.png)
-
-### Menu Dark Mode
-
-- Dark mode support for popup menus
-- Toggle via "Menu Dark Mode" checkbox in Appearance settings
-- Applies to tab context menu and drag-and-drop menus
-
-![Light Mode Menu](README_Image/LightModeMenu.png)
-
-### Multi-Display and DPI Support
-
-- Multi-display support with proper window positioning
-- DPI-aware window placement
-- Automatic window resizing when dropped to prevent exceeding monitor dimensions
-
-### Tab Drag and Drop
-
-- Drag tabs to reorder within the same group
-- Drag tabs to separate into new windows with preview
-- Drop windows to create new tab groups
-- Respects tab alignment settings (left/center/right)
-
-### UWP Application Support
-
-- Supports UWP (Universal Windows Platform) applications
-- Automatically handles UWP window Z-order for proper tab visibility
-- Maintains tab visibility when working with UWP apps
-
-## Settings
-
-Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
-
-### Programs Tab
-
-Configure which programs should use tabs and auto-grouping behavior.
-
-![Settings Programs](README_Image/SettingsPrograms.png)
-
-### Appearance Tab
-
-Customize the visual appearance of tabs:
-- Height, width, and overlap settings
-- Border and text color
-- Background colors (active, normal, highlight, flash)
-- Color theme presets (Light Color, Dark Color, Dark Blue Color)
-- Distance from edge settings
-
-![Settings Appearance](README_Image/SettingsAppearance.png)
-
-### Behavior Tab
-
-Configure tab behavior:
-- Tab position (left/center/right)
-- Tab width (narrow/wide) default
-- Hide tabs when positioned at bottom (never/maximized only/always/double-click)
-- Delay before hiding tabs
-- Auto-grouping settings
-- Hotkey settings (Ctrl+1...+9 for tab activation)
-- Mouse hover activation
-
-![Settings Behavior](README_Image/SettingsBehavior.png)
-
-### Workspace Tab
-
-Manage saved window workspaces for quick restoration.
-
-![Settings Workspace](README_Image/SettingsWorkspace.png)
-
-### Diagnostics Tab
-
-View diagnostic information and access troubleshooting tools.
-
-![Settings Diagnostics](README_Image/SettingsDiagnostics.png)
 
 ## Download
 
@@ -180,6 +63,132 @@ To run WindowTabs at startup:
 4. Right-click on tabs to access tab-specific options
 5. Drag and drop tabs to organize your windows
 
+## Features
+
+### Tab Management
+
+- **Tab Context Menu**: Right-click on tabs to access various options
+  - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
+  - New window
+  - Tab width control (narrow/wide)
+  - Rename tab
+  - Move tab to another group
+  - Detach tab
+  - Reposition tab group
+  - Settings
+
+![Popup Menu](README_Image/PopupMenu.png)
+
+### Move tab to another group
+
+Transfer tabs between different window groups:
+- Shows other groups with tab names
+- Adaptive tab name truncation
+- Display application icons for easy identification
+
+![Move tab to another group](README_Image/MoveTab.png)
+
+### Detach tab
+
+Detach tabs from groups with multi-display support:
+- Detach at same position
+- Move to display edges (right/left/top/bottom)
+- DPI-aware percentage-based positioning for correct placement across different DPI displays
+
+![Detach Tab](README_Image/DetachTab.png)
+
+### Reposition tab group
+
+Move entire tab groups to different display positions:
+- Move to current display edges (right/left/top/bottom)
+- Move to other displays with edge positioning options
+- DPI-aware positioning for correct placement across different DPI displays
+- Maintains tab group integrity while repositioning
+
+![Reposition tab group](README_Image/MoveTabGroup.png)
+
+
+### Menu Dark Mode / Light Mode
+
+While light mode is the default, dark mode is also supported for context menus (popup menus) as shown in the screenshots.
+
+- Toggle via "Menu Dark Mode" checkbox in Appearance settings
+- Applies to tab context menu and drag-and-drop menus
+
+### Multi-Display and DPI Support
+
+- Multi-display support with proper window positioning
+- DPI-aware window placement
+- Automatic window resizing when dropped to prevent exceeding monitor dimensions
+
+### Tab Drag and Drop
+
+This feature remains unchanged from the original WindowTabs functionality.
+
+- Drag tabs to reorder within the same group
+- Drag tabs to separate into new windows with preview
+- Drop windows to create new tab groups
+- Respects tab alignment settings (left/center/right)
+
+### UWP Application Support
+
+- Supports UWP (Universal Windows Platform) applications
+- Automatically handles UWP window Z-order for proper tab visibility
+- Maintains tab visibility when working with UWP apps
+
+
+### Multi-Language Support
+
+- English and Japanese language support
+- Runtime language switching without restart
+- Switch languages via tray menu
+
+![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+
+## Settings
+
+Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
+
+### Programs Tab
+
+This feature remains unchanged from the original WindowTabs functionality.
+
+Configure which programs should use tabs and auto-grouping behavior.
+
+![Settings Programs](README_Image/SettingsPrograms.png)
+
+### Appearance Tab
+
+Customize the visual appearance of tabs:
+- Height, width, and overlap settings
+- Border and text color
+- Background colors (active, normal, highlight, flash)
+- Color theme presets (Light Color, Dark Color, Dark Blue Color)
+- Distance from edge settings
+
+![Settings Appearance](README_Image/SettingsAppearance.png)
+
+### Behavior Tab
+
+Configure tab behavior:
+- Tab position (left/center/right)
+- Tab width (narrow/wide) default
+- Hide tabs when positioned at bottom (never/maximized only/always/double-click)
+- Delay before hiding tabs
+- Auto-grouping settings
+- Hotkey settings (Ctrl+1...+9 for tab activation)
+- Mouse hover activation
+
+![Settings Behavior](README_Image/SettingsBehavior.png)
+
+### Workspace Tab
+
+This feature remains unchanged from the original WindowTabs functionality.
+
+### Diagnostics Tab
+
+This feature remains unchanged from the original WindowTabs functionality.
+
 ## Building from Source
 
 ### Prerequisites
@@ -207,10 +216,10 @@ See [version.md](version.md) for detailed version history and changelog.
 
 ### Japanese Resources
 
-c# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー
+c# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー  
 https://ja.stackoverflow.com/questions/53770/windowtabs-というオープンソースを改良してみたいのですがビルドができません-何か必要なものがありますか
 
-全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita
+全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
 https://qiita.com/standard-software/items/dd25270fa3895365fced
 
 ## License
@@ -222,3 +231,9 @@ This project is open source. See the original repository for license information
 - Original author: Maurice Flanagan
 - Fork contributors: redgis, payaneco, leafOfTree
 - Current maintainer: Satoshi Yamamoto (standard-software)
+
+## Comments
+
+If you have any issues, please contact us via GitHub Issues or email: standard.software.net@gmail.com
+
+Thanks to Claude Code's hard work, development has progressed significantly. However, I've given up on making the Settings dialog dark mode-compatible as I couldn't get it to look right. I'm hoping someone might fork this project and improve it.
