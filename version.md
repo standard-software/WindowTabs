@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2025.11.13_next
+
 ## version ss_jp_2025.11.13
 - Add Windows Installer (MSI) with build scripts (build_installer.bat, build_release_zip.bat)
 - Enable ILRepack to merge DLLs into single executable (WindowTabs.exe, WindowTabs.exe.config, version.md, README.md)
