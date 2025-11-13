@@ -19,6 +19,8 @@
     <Win32Resource>.\app.res</Win32Resource>
     <TargetFSharpCoreVersion>2.3.0.0</TargetFSharpCoreVersion>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
+    <!-- Suppress satellite resource assembly generation (language folders) -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -59,7 +61,15 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" Condition="Exists('$(FSharpTargetsPath)')" />
   <PropertyGroup>
-    <PostBuildEvent>if $(ConfigurationName) == Release (
+    <PostBuildEvent>echo ===== Removing language resource folders =====
+for %%d in (cs de en es fr it ja ja-JP ko pl pt-BR ru tr zh-Hans zh-Hant) do (
+  if exist "$(TargetDir)%%d" (
+    echo Removing $(TargetDir)%%d
+    rmdir /s /q "$(TargetDir)%%d"
+  )
+)
+
+if $(ConfigurationName) == Release (
   echo ===== ILRepack処理開始 =====
 
   if not exist "$(ProjectDir)..\packages\ILRepack.2.0.18\tools\ILRepack.exe" (
