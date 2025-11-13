@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2025.11.13_next
+- Reorganize tab context menu structure
+  - Rename "Detach tab / Move window" → "Detach tab"
+  - Add "Move tab group" menu with display edge positioning options
 
 ## version ss_jp_2025.11.13
 - Add Windows Installer (MSI) with build scripts (build_installer.bat, build_release_zip.bat)
