@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2025.11.14_next
+
 ## version ss_jp_2025.11.14
 - Reorganize tab context menu structure
   - Rename "Move tab" → "Move tab to another group"
