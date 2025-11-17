@@ -25,7 +25,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let dragInfoCell = Cell.create(None)
     let dragPtCell = Cell.create(Pt.empty)
     let dropTarget = Cell.create(None)
-    let mouseEvent = Event<_>()
+    let mouseEvent = Event<IntPtr * MouseButton * TabPart * MouseAction * Pt>()
     let _ts = TabStrip(this :> ITabStripMonitor)
     // Variables for double-click detection
     let lastClickTime = ref System.DateTime.MinValue
@@ -91,30 +91,44 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let capturedHwnd = ref None
 
-        this.mouse.Add <| fun(hwnd, btn, action, pt) ->
+        this.mouse.Add <| fun(hwnd, btn, part, action, pt) ->
             match action, btn with
             | MouseDblClick, MouseLeft ->
+                // Check if tab width toggle on icon double-click is enabled
+                let toggleTabWidthOnIconDoubleClick =
+                    try
+                        Services.settings.getValue("makeTabsNarrowerByDefault") :?> bool
+                    with
+                    | _ -> false
+
                 // Check if double-click hide mode is enabled
                 let autoHideDoubleClick = group.bb.read("autoHideDoubleClick", false)
-                
-                // Only hide tabs if:
-                // 1. Double-click mode is enabled
-                // 2. Tabs are positioned at bottom
-                // 3. The clicked tab is the active tab
-                // 4. The first click was also on this same tab (prevents activation+hide)
-                if autoHideDoubleClick && this.ts.direction = TabDown && 
-                   hwnd = group.topWindow && !firstClickTab = Some(hwnd) then
-                    // Hide tabs on double-click of active tab
-                    // Set flag BEFORE hiding to prevent immediate re-show
-                    hiddenByDoubleClick := true
-                    doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0) // 300ms protection
-                    // Use invokeAsync to ensure flag is set before Cell update
-                    group.invokeAsync <| fun() ->
-                        this.ts.isShrunk <- true
-                else
-                    group.isIconOnly <- false
-                // Disable tab rename on double-click
-                // this.beginRename(hwnd)
+
+                // Only process if it's the active tab
+                if hwnd = group.topWindow && !firstClickTab = Some(hwnd) then
+                    match part with
+                    | TabIcon when toggleTabWidthOnIconDoubleClick ->
+                        // Toggle tab width on icon double-click
+                        group.isIconOnly <- not group.isIconOnly
+                    | TabBackground when toggleTabWidthOnIconDoubleClick && group.isIconOnly ->
+                        // When tabs are narrow (icon-only), allow background click to also toggle width
+                        // This improves usability when tab is narrow (clicking beside icon still works)
+                        group.isIconOnly <- not group.isIconOnly
+                    | TabBackground when autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
+                        // Hide tabs on background double-click (only when tabs are at bottom and NOT in icon-only mode)
+                        hiddenByDoubleClick := true
+                        doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
+                        group.invokeAsync <| fun() ->
+                            this.ts.isShrunk <- true
+                    | _ when not toggleTabWidthOnIconDoubleClick && autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
+                        // When toggle feature is OFF, treat all double-clicks as background double-click
+                        // Only hide if tabs are NOT in icon-only mode
+                        hiddenByDoubleClick := true
+                        doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
+                        group.invokeAsync <| fun() ->
+                            this.ts.isShrunk <- true
+                    | _ -> ()
+
                 // Clear first click tracking after double-click
                 firstClickTab := None
             | MouseUp, MouseRight ->
@@ -677,6 +691,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         
+        let makeTabsWiderItem =
+            CmiRegular({
+                text = Localization.getString("MakeTabsWider")
+                image = None
+                flags = List2()
+                click = fun() ->
+                    group.isIconOnly <- false
+            })
+
+        let makeTabsNarrowerItem =
+            CmiRegular({
+                text = Localization.getString("MakeTabsNarrower")
+                image = None
+                flags = List2()
+                click = fun() ->
+                    group.isIconOnly <- true
+            })
+
         let renameTabItem =
             CmiRegular({
                 text = Localization.getString("RenameTab")
@@ -978,6 +1010,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(closeOtherTabsItem)
             Some(closeAllTabsItem)
             Some(CmiSeparator)
+            (if group.isIconOnly then Some(makeTabsWiderItem) else Some(makeTabsNarrowerItem))
             Some(renameTabItem)
             (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
             Some(CmiSeparator)
@@ -1222,9 +1255,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     updateAutoHide()
 
     interface ITabStripMonitor with
-        member x.tabClick((btn, tab, part, action, pt)) = 
+        member x.tabClick((btn, tab, part, action, pt)) =
             let (Tab(hwnd)) = tab
-            mouseEvent.Trigger(hwnd, btn, action, pt)
+            mouseEvent.Trigger(hwnd, btn, part, action, pt)
             let ptScreen = os.windowFromHwnd(this.ts.hwnd).ptToScreen(pt)
             match action with
             | MouseDown ->

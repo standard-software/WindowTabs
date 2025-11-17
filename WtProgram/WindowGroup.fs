@@ -55,11 +55,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
-        
-        // Apply default setting for tab width
-        let makeTabsNarrower = Services.settings.getValue("makeTabsNarrowerByDefault") :?> bool
-        this.isIconOnly <- makeTabsNarrower
-        
+
         // Apply default setting for tab position
         let defaultPosition = 
             match Services.settings.getValue("tabPositionByDefault") :?> string with
@@ -93,11 +89,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         Services.settings.notifyValue "tabAppearance" <| fun(_) ->
             this.invokeAsync <| fun() ->
                 this.ts.setTabAppearance(this.tabAppearance)
-
-        // Listen for makeTabsNarrowerByDefault changes
-        Services.settings.notifyValue "makeTabsNarrowerByDefault" <| fun value ->
-            this.invokeAsync <| fun() ->
-                this.isIconOnly <- unbox<bool>(value)
 
         // Listen for tabPositionByDefault changes
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->

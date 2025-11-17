@@ -54,7 +54,7 @@ module Localization_en =
         ("NewWindow", "New window")
         ("MakeTabsWider", "Make tabs wider")
         ("MakeTabsNarrower", "Make tabs narrower")
-        ("makeTabsNarrowerByDefault", "Make tabs narrower")
+        ("makeTabsNarrowerByDefault", "Toggle tab width on active tab icon double-click")
         ("tabPositionByDefault", "Tab position")
         ("TabPosition", "Tab position")
         ("RenameTab", "Rename tab")
