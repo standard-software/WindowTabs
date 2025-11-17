@@ -98,7 +98,7 @@ type HotKeyView() =
 
             // Set initial enabled state based on current mode
             let currentMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
-            textBox.Enabled <- (currentMode = "maximized" || currentMode = "down")
+            textBox.Enabled <- (currentMode = "down")
 
             textBox.LostFocus.Add(fun _ ->
                 match System.Int32.TryParse(textBox.Text) with
@@ -122,7 +122,14 @@ type HotKeyView() =
             panel.Margin <- Padding(0)
             panel.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
 
-            let currentMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
+            let currentMode =
+                let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
+                // Use valid modes, default to "doubleclick" for invalid/unknown values
+                match mode with
+                | "never" | "down" | "doubleclick" -> mode
+                | _ ->
+                    Services.settings.setValue("hideTabsWhenDownByDefault", "doubleclick")
+                    "doubleclick"
 
             let radioNever = new RadioButton()
             radioNever.Text <- Localization.getString("HideNever")
@@ -132,16 +139,6 @@ type HotKeyView() =
                 if radioNever.Checked then
                     Services.settings.setValue("hideTabsWhenDownByDefault", "never")
                     hideTabsDelay.Enabled <- false
-            )
-
-            let radioMaximized = new RadioButton()
-            radioMaximized.Text <- Localization.getString("HideWhenMaximized")
-            radioMaximized.AutoSize <- true
-            radioMaximized.Checked <- (currentMode = "maximized")
-            radioMaximized.CheckedChanged.Add(fun _ ->
-                if radioMaximized.Checked then
-                    Services.settings.setValue("hideTabsWhenDownByDefault", "maximized")
-                    hideTabsDelay.Enabled <- true
             )
 
             let radioDown = new RadioButton()
@@ -165,7 +162,6 @@ type HotKeyView() =
             )
 
             panel.Controls.Add(radioNever)
-            panel.Controls.Add(radioMaximized)
             panel.Controls.Add(radioDown)
             panel.Controls.Add(radioDoubleClick)
             panel

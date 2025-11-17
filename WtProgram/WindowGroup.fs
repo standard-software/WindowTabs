@@ -68,9 +68,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
         match hideTabsMode with
         | "down" -> _bb.write("autoHide", true)
-        | "maximized" -> _bb.write("autoHideMaximized", true)
         | "doubleclick" -> _bb.write("autoHideDoubleClick", true)
-        | _ -> () // "never" - do nothing
+        | "never" -> () // Do nothing
+        | _ -> _bb.write("autoHideDoubleClick", true)  // Default to "doubleclick" for invalid/unknown values
 
         winEventHandler.set(Some(
             _os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND <| fun(hwnd) -> 
@@ -112,9 +112,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 // Set new mode
                 match hideMode with
                 | "down" -> _bb.write("autoHide", true)
-                | "maximized" -> _bb.write("autoHideMaximized", true)
                 | "doubleclick" -> _bb.write("autoHideDoubleClick", true)
-                | _ -> () // "never" - do nothing
+                | "never" -> () // Do nothing
+                | _ -> _bb.write("autoHideDoubleClick", true)  // Default to "doubleclick" for invalid/unknown values
 
         Cell.listen <| fun() ->
             this.ts.zorder <- zorderCell.value.map(Tab)

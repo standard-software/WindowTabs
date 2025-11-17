@@ -5,6 +5,7 @@
   - Added "Make tabs wider" / "Make tabs narrower" menu items to tab context menu
   - Tab width can be toggled individually for each tab group
   - Added "Toggle tab width on active tab icon double-click" setting in Behavior tab
+- Remove "Hide after specified time when maximized only" option from hide tabs settings
 
 ## version ss_jp_2025.11.14
 - Reorganize tab context menu structure
