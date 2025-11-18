@@ -225,17 +225,58 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member this.beginRename(hwnd) =
         let tab = Tab(hwnd)
-        let textBounds = 
+        let textBounds =
             this.ts.sprite.children.pick <| fun (tabOffset, tabSprite) ->
                 let tabSprite = tabSprite :?> TabSprite<Tab>
-                if tabSprite.id = tab then 
+                if tabSprite.id = tab then
                     Some(Rect(tabSprite.textLocation.add(tabOffset), tabSprite.textSize))
                 else None
         let verticalMargin = 2
+
         let form = new FloatingTextBox()
-        form.textBox.Font <- SystemFonts.MenuFont
-        form.Location <- textBounds.location.add(this.placement.bounds.location).add(Pt(0, verticalMargin)).Point
-        form.SetSize(textBounds.size.add(Sz(0, -2 * verticalMargin)).Size)
+
+        // Find which screen contains the tab strip window
+        let containingScreen = Screen.FromHandle(this.ts.hwnd)
+
+        // Create device context for the specific display to get physical vs logical resolution
+        let hdc = WinUserApi.CreateDC(containingScreen.DeviceName, null, null, IntPtr.Zero)
+        let logicalWidth = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.HORZRES))
+        let physicalWidth = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.DESKTOPHORZRES))
+        let logicalHeight = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.VERTRES))
+        let physicalHeight = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.DESKTOPVERTRES))
+        WinUserApi.DeleteDC(hdc) |> ignore
+
+        // Calculate scale factor from physical/logical ratio
+        let scaleX = if logicalWidth > 0 then float(physicalWidth) / float(logicalWidth) else 1.0
+        let scaleY = if logicalHeight > 0 then float(physicalHeight) / float(logicalHeight) else 1.0
+        let dpiScale = (scaleX + scaleY) / 2.0
+
+        // Scale font size according to DPI
+        let baseFont = SystemFonts.MenuFont
+        let scaledFontSize = baseFont.Size * float32(dpiScale)
+        form.textBox.Font <- new Font(baseFont.FontFamily, scaledFontSize, baseFont.Style)
+
+        // Convert client coordinates to screen coordinates using Win32 API
+        let mutable pt = POINT(X = textBounds.location.x, Y = textBounds.location.y + verticalMargin)
+        WinUserApi.ClientToScreen(this.ts.hwnd, &pt) |> ignore
+
+        // Calculate position: display offset + (relative position × DPI scale)
+        let displayOffset = Point(containingScreen.Bounds.X, containingScreen.Bounds.Y)
+        let relativePos = Point(pt.X - displayOffset.X, pt.Y - displayOffset.Y)
+        let scaledRelativePos = Point(
+            int(float(relativePos.X) * dpiScale),
+            int(float(relativePos.Y) * dpiScale)
+        )
+        let finalPos = Point(
+            displayOffset.X + scaledRelativePos.X,
+            displayOffset.Y + scaledRelativePos.Y
+        )
+
+        form.Location <- finalPos
+        form.SetSize(Size(
+            int(float(textBounds.size.width) * dpiScale),
+            int(float(textBounds.size.height - 2 * verticalMargin) * dpiScale)
+        ))
         form.textBox.KeyPress.Add <| fun e ->
             if e.KeyChar = char(Keys.Enter) then
                 let newName = form.textBox.Text
@@ -1061,8 +1102,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         not (info.tabHwnds |> List.contains hwnd)
                     )
                 )
-                System.Diagnostics.Debug.WriteLine(sprintf "Total visible groups found: %d" allGroupInfos.Length)
-                System.Diagnostics.Debug.WriteLine(sprintf "Current group hwnd: %A" group.hwnd)
 
                 if not (List.isEmpty allGroupInfos) then
                     // Build menu items for each other group
@@ -1072,8 +1111,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         uniqueGroupInfos
                         |> List.choose (fun info ->
                             try
-                                System.Diagnostics.Debug.WriteLine(sprintf "Group hwnd=%A, tabs count=%d" info.hwnd info.tabCount)
-
                                 // Get the decorator for this group to handle the click
                                 let targetDecorator = lock decorators (fun () ->
                                     decorators.Values |> Seq.tryFind (fun d ->
@@ -1130,8 +1167,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                             Localization.getString("TabPlural")
                                     let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
 
-                                    System.Diagnostics.Debug.WriteLine(sprintf "Menu text: %s" menuText)
-
                                     Some(CmiRegular({
                                         text = menuText
                                         image = info.firstTabIcon
@@ -1142,7 +1177,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     }))
                                 | None ->
                                     // No valid decorator found, skip this item
-                                    System.Diagnostics.Debug.WriteLine(sprintf "No valid decorator for group hwnd=%A" info.hwnd)
                                     None
                             with ex ->
                                 System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)

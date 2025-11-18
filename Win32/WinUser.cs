@@ -3093,8 +3093,26 @@ namespace Bemo
         
         [DllImport("shcore.dll")]
         public static extern int GetProcessDpiAwareness(IntPtr hprocess, out int awareness);
+
+        [DllImport("gdi32.dll")]
+        public static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
+
+        [DllImport("gdi32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr CreateDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
+
+        [DllImport("gdi32.dll")]
+        public static extern bool DeleteDC(IntPtr hdc);
     }
-    
+
+    // Device caps indices
+    public enum DeviceCap
+    {
+        HORZRES = 8,          // Horizontal width in pixels
+        VERTRES = 10,         // Vertical height in pixels
+        DESKTOPHORZRES = 118, // Horizontal width of entire desktop in pixels
+        DESKTOPVERTRES = 117  // Vertical height of entire desktop in pixels
+    }
+
     // DPI type for GetDpiForMonitor
     public enum DpiType
     {

@@ -6,6 +6,7 @@
   - Tab width can be toggled individually for each tab group
   - Added "Toggle tab width on active tab icon double-click" setting in Behavior tab
 - Remove "Hide after specified time when maximized only" option from hide tabs settings
+- Fix tab rename floating textbox positioning on high-DPI displays
 
 ## version ss_jp_2025.11.14
 - Reorganize tab context menu structure
