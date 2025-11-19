@@ -7,6 +7,7 @@
   - Added "Toggle tab width on active tab icon double-click" setting in Behavior tab
 - Remove "Hide after specified time when maximized only" option from hide tabs settings
 - Fix tab rename floating textbox positioning on high-DPI displays
+- Add "Detach and link tab to another group" and "Link tab group to another group" features to tab context menu
 
 ## version ss_jp_2025.11.14
 - Reorganize tab context menu structure

@@ -549,6 +549,31 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // Resume monitoring even on error
                 try Services.program.resumeTabMonitoring() with _ -> ()
 
+    member private this.moveTabGroupToGroup(targetGroup: WindowGroup) =
+        // Move all tabs from current group to target group
+        if targetGroup.hwnd <> group.hwnd then
+            try
+                // Suspend tab monitoring to prevent auto-grouping during the move
+                Services.program.suspendTabMonitoring()
+
+                try
+                    // Get all tabs in current group (copy to avoid modification during iteration)
+                    let tabsToMove = group.windows.items.list
+
+                    // Move each tab to target group
+                    tabsToMove |> List.iter (fun hwnd ->
+                        this.moveTabToGroup(hwnd, targetGroup)
+                    )
+
+                    System.Diagnostics.Debug.WriteLine(sprintf "Successfully moved %d tabs from group %A to group %A" tabsToMove.Length group.hwnd targetGroup.hwnd)
+                finally
+                    // Resume tab monitoring
+                    Services.program.resumeTabMonitoring()
+            with ex ->
+                System.Diagnostics.Debug.WriteLine(sprintf "Error moving tab group: %s" ex.Message)
+                // Resume monitoring even on error
+                try Services.program.resumeTabMonitoring() with _ -> ()
+
     member private this.detachTabToPosition(hwnd: IntPtr, position: Option<string>) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
         if group.windows.items.count <= 1 then
@@ -954,7 +979,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     baseMenuItems
 
             Some(CmiPopUp({
-                text = Localization.getString("DetachTab")
+                text = Localization.getString("DetachAndMovePosTab")
                 image = None
                 items = List2(menuItems)
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
@@ -1040,11 +1065,144 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     baseMenuItems
 
             Some(CmiPopUp({
-                text = Localization.getString("MoveTabGroup")
+                text = Localization.getString("MovePosTabGroup")
                 image = None
                 items = List2(menuItems)
                 flags = List2()
             }))
+
+        let moveTabGroupToGroupMenu =
+            // Update all group infos before building menu (same as moveTabMenu)
+            let allDecorators = lock decorators (fun () ->
+                decorators.Values
+                |> List.ofSeq
+                |> List.filter (fun d ->
+                    // Filter out invalid decorators
+                    try
+                        d.ts.hwnd <> IntPtr.Zero &&
+                        WinUserApi.IsWindow(d.group.hwnd) &&
+                        WinUserApi.IsWindow(d.ts.hwnd)
+                    with _ -> false
+                )
+            )
+
+            // First, update the current group's info synchronously
+            this.updateGroupInfo()
+
+            // Update all other decorators' group info and wait for completion
+            let updateTasks =
+                allDecorators
+                |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
+                |> List.map (fun d ->
+                    async {
+                        try
+                            // Double check the window is still valid
+                            if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
+                                d.group.invokeSync(fun () -> d.updateGroupInfo())
+                        with _ -> ()
+                    }
+                )
+
+            // Wait for all updates to complete
+            updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
+
+            // Now get the updated group infos
+            let allGroupInfos = lock groupInfos (fun () ->
+                groupInfos.Values
+                |> List.ofSeq
+                |> List.filter (fun info ->
+                    info.hwnd <> group.hwnd && // Not current group
+                    info.tabCount > 0 // Has at least one tab
+                )
+            )
+
+            if not (List.isEmpty allGroupInfos) then
+                // Build menu items for each other group
+                let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
+                let menuItems =
+                    uniqueGroupInfos
+                    |> List.choose (fun info ->
+                        try
+                            // Get the decorator for this group to handle the click
+                            let targetDecorator = lock decorators (fun () ->
+                                decorators.Values |> Seq.tryFind (fun d ->
+                                    d.group.hwnd = info.hwnd &&
+                                    WinUserApi.IsWindow(d.group.hwnd) &&
+                                    WinUserApi.IsWindow(d.ts.hwnd)
+                                )
+                            )
+
+                            // Only create menu item if we have a valid decorator
+                            match targetDecorator with
+                            | Some decorator ->
+                                // Build menu text with tab names (same as moveTabMenu)
+                                let fullNameString =
+                                    if info.tabCount = 1 then
+                                        let tabName = info.tabNames |> List.head
+                                        if tabName.Length > 22 then
+                                            tabName.Substring(0, 22) + "..."
+                                        else
+                                            tabName
+                                    elif info.tabCount = 2 then
+                                        let tabNames = info.tabNames |> List.take 2
+                                        let truncatedNames = tabNames |> List.map (fun name ->
+                                            if name.Length > 9 then
+                                                name.Substring(0, 9) + "..."
+                                            else
+                                                name
+                                        )
+                                        String.Join(" ", truncatedNames)
+                                    else
+                                        let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
+                                        let truncatedNames = tabNames |> List.map (fun name ->
+                                            if name.Length > 5 then
+                                                name.Substring(0, 5) + "..."
+                                            else
+                                                name
+                                        )
+                                        let nameString = String.Join(" ", truncatedNames)
+                                        if info.tabCount > 3 then
+                                            nameString + "..."
+                                        else
+                                            nameString
+
+                                let formatString = Localization.getString("MoveTabGroupFormat")
+                                let tabWord =
+                                    if info.tabCount = 1 then
+                                        Localization.getString("TabSingular")
+                                    else
+                                        Localization.getString("TabPlural")
+                                let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
+
+                                Some(CmiRegular({
+                                    text = menuText
+                                    image = info.firstTabIcon
+                                    click = fun() ->
+                                        // Move all tabs to the target group
+                                        this.moveTabGroupToGroup(decorator.group)
+                                    flags = List2()
+                                }))
+                            | None ->
+                                None
+                        with ex ->
+                            System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)
+                            None
+                    )
+
+                CmiPopUp({
+                    text = Localization.getString("DockingTabGroupToGroup")
+                    image = None
+                    items = List2(menuItems)
+                    flags = List2()
+                })
+            else
+                // No other groups available - show disabled menu
+                CmiPopUp({
+                    text = Localization.getString("DockingTabGroupToGroup")
+                    image = None
+                    items = List2([])
+                    flags = List2([MenuFlags.MF_GRAYED])
+                })
 
         List2([
             Some(newWindowItem)
@@ -1059,146 +1217,150 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(renameTabItem)
             (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
             Some(CmiSeparator)
-            // Add "Move tab" menu - use static group infos for thread-safe access
-            (
-                // Update all group infos before building menu
-                let allDecorators = lock decorators (fun () ->
-                    decorators.Values
-                    |> List.ofSeq
-                    |> List.filter (fun d ->
-                        // Filter out invalid decorators
-                        try
-                            d.ts.hwnd <> IntPtr.Zero &&
-                            WinUserApi.IsWindow(d.group.hwnd) &&
-                            WinUserApi.IsWindow(d.ts.hwnd)
-                        with _ -> false
-                    )
-                )
-
-                // First, update the current group's info synchronously
-                this.updateGroupInfo()
-
-                // Update all other decorators' group info and wait for completion
-                let updateTasks =
-                    allDecorators
-                    |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
-                    |> List.map (fun d ->
-                        async {
-                            try
-                                // Double check the window is still valid
-                                if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
-                                    d.group.invokeSync(fun () -> d.updateGroupInfo())
-                            with _ -> ()
-                        }
-                    )
-
-                // Wait for all updates to complete
-                updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
-
-                // Now get the updated group infos
-                let allGroupInfos = lock groupInfos (fun () ->
-                    groupInfos.Values
-                    |> List.ofSeq
-                    |> List.filter (fun info ->
-                        info.hwnd <> group.hwnd && // Not current group
-                        info.tabCount > 0 && // Has at least one tab
-                        // Don't show groups that contain the tab we're moving
-                        not (info.tabHwnds |> List.contains hwnd)
-                    )
-                )
-
-                if not (List.isEmpty allGroupInfos) then
-                    // Build menu items for each other group
-                    // Use distinctBy to prevent duplicates
-                    let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
-                    let menuItems =
-                        uniqueGroupInfos
-                        |> List.choose (fun info ->
-                            try
-                                // Get the decorator for this group to handle the click
-                                let targetDecorator = lock decorators (fun () ->
-                                    decorators.Values |> Seq.tryFind (fun d ->
-                                        d.group.hwnd = info.hwnd &&
-                                        WinUserApi.IsWindow(d.group.hwnd) &&
-                                        WinUserApi.IsWindow(d.ts.hwnd)
-                                    )
-                                )
-
-                                // Only create menu item if we have a valid decorator
-                                match targetDecorator with
-                                | Some decorator ->
-                                    // Build menu text with tab names
-                                    let fullNameString =
-                                        if info.tabCount = 1 then
-                                            // Single tab: show first 22 chars
-                                            let tabName = info.tabNames |> List.head
-                                            if tabName.Length > 22 then
-                                                tabName.Substring(0, 22) + "..."
-                                            else
-                                                tabName
-                                        elif info.tabCount = 2 then
-                                            // 2 tabs: show 9 chars each
-                                            let tabNames = info.tabNames |> List.take 2
-                                            let truncatedNames = tabNames |> List.map (fun name ->
-                                                if name.Length > 9 then
-                                                    name.Substring(0, 9) + "..."
-                                                else
-                                                    name
-                                            )
-                                            String.Join(" ", truncatedNames)
-                                        else
-                                            // 3+ tabs: show first 3 tabs with 5 chars each
-                                            let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
-                                            let truncatedNames = tabNames |> List.map (fun name ->
-                                                if name.Length > 5 then
-                                                    name.Substring(0, 5) + "..."
-                                                else
-                                                    name
-                                            )
-                                            let nameString = String.Join(" ", truncatedNames)
-                                            // For 4+ tabs, still show only 3 tab names
-                                            if info.tabCount > 3 then
-                                                nameString + "..."
-                                            else
-                                                nameString
-
-                                    // Use same pattern as CloseTabsToTheRight
-                                    let formatString = Localization.getString("MoveTabGroupFormat")
-                                    let tabWord =
-                                        if info.tabCount = 1 then
-                                            Localization.getString("TabSingular")
-                                        else
-                                            Localization.getString("TabPlural")
-                                    let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
-
-                                    Some(CmiRegular({
-                                        text = menuText
-                                        image = info.firstTabIcon
-                                        click = fun() ->
-                                            // Move the tab to the target group
-                                            this.moveTabToGroup(hwnd, decorator.group)
-                                        flags = List2()
-                                    }))
-                                | None ->
-                                    // No valid decorator found, skip this item
-                                    None
-                            with ex ->
-                                System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)
-                                None
-                        )
-
-                    Some(CmiPopUp({
-                        text = Localization.getString("MoveTab")
-                        image = None
-                        items = List2(menuItems)
-                        flags = List2()
-                    }))
-                else
-                    // No other groups available
-                    None
-            )
             detachTabSubMenu
             moveTabGroupSubMenu
+            // Build "Move tab to another group" menu
+            (
+                let moveTabMenu =
+                    // Update all group infos before building menu
+                    let allDecorators = lock decorators (fun () ->
+                        decorators.Values
+                        |> List.ofSeq
+                        |> List.filter (fun d ->
+                            // Filter out invalid decorators
+                            try
+                                d.ts.hwnd <> IntPtr.Zero &&
+                                WinUserApi.IsWindow(d.group.hwnd) &&
+                                WinUserApi.IsWindow(d.ts.hwnd)
+                            with _ -> false
+                        )
+                    )
+
+                    // First, update the current group's info synchronously
+                    this.updateGroupInfo()
+
+                    // Update all other decorators' group info and wait for completion
+                    let updateTasks =
+                        allDecorators
+                        |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
+                        |> List.map (fun d ->
+                            async {
+                                try
+                                    // Double check the window is still valid
+                                    if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
+                                        d.group.invokeSync(fun () -> d.updateGroupInfo())
+                                with _ -> ()
+                            }
+                        )
+
+                    // Wait for all updates to complete
+                    updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
+
+                    // Now get the updated group infos
+                    let allGroupInfos = lock groupInfos (fun () ->
+                        groupInfos.Values
+                        |> List.ofSeq
+                        |> List.filter (fun info ->
+                            info.hwnd <> group.hwnd && // Not current group
+                            info.tabCount > 0 && // Has at least one tab
+                            // Don't show groups that contain the tab we're moving
+                            not (info.tabHwnds |> List.contains hwnd)
+                        )
+                    )
+
+                    if not (List.isEmpty allGroupInfos) then
+                        // Build menu items for each other group
+                        // Use distinctBy to prevent duplicates
+                        let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
+                        let menuItems =
+                            uniqueGroupInfos
+                            |> List.choose (fun info ->
+                                try
+                                    // Get the decorator for this group to handle the click
+                                    let targetDecorator = lock decorators (fun () ->
+                                        decorators.Values |> Seq.tryFind (fun d ->
+                                            d.group.hwnd = info.hwnd &&
+                                            WinUserApi.IsWindow(d.group.hwnd) &&
+                                            WinUserApi.IsWindow(d.ts.hwnd)
+                                        )
+                                    )
+
+                                    // Only create menu item if we have a valid decorator
+                                    match targetDecorator with
+                                    | Some decorator ->
+                                        // Build menu text with tab names
+                                        let fullNameString =
+                                            if info.tabCount = 1 then
+                                                // Single tab: show first 22 chars
+                                                let tabName = info.tabNames |> List.head
+                                                if tabName.Length > 22 then
+                                                    tabName.Substring(0, 22) + "..."
+                                                else
+                                                    tabName
+                                            elif info.tabCount = 2 then
+                                                // 2 tabs: show 9 chars each
+                                                let tabNames = info.tabNames |> List.take 2
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 9 then
+                                                        name.Substring(0, 9) + "..."
+                                                    else
+                                                        name
+                                                )
+                                                String.Join(" ", truncatedNames)
+                                            else
+                                                // 3+ tabs: show first 3 tabs with 5 chars each
+                                                let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 5 then
+                                                        name.Substring(0, 5) + "..."
+                                                    else
+                                                        name
+                                                )
+                                                let nameString = String.Join(" ", truncatedNames)
+                                                // For 4+ tabs, still show only 3 tab names
+                                                if info.tabCount > 3 then
+                                                    nameString + "..."
+                                                else
+                                                    nameString
+
+                                        // Use same pattern as CloseTabsToTheRight
+                                        let formatString = Localization.getString("MoveTabGroupFormat")
+                                        let tabWord =
+                                            if info.tabCount = 1 then
+                                                Localization.getString("TabSingular")
+                                            else
+                                                Localization.getString("TabPlural")
+                                        let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
+
+                                        Some(CmiRegular({
+                                            text = menuText
+                                            image = info.firstTabIcon
+                                            click = fun() ->
+                                                // Move the tab to the target group
+                                                this.moveTabToGroup(hwnd, decorator.group)
+                                            flags = List2()
+                                        }))
+                                    | None ->
+                                        // No valid decorator found, skip this item
+                                        None
+                                with ex ->
+                                    System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)
+                                    None
+                            )
+
+                        Some(CmiPopUp({
+                            text = Localization.getString("DetachAndDockingTabToGroup")
+                            image = None
+                            items = List2(menuItems)
+                            flags = if group.zorder.value.length <= 1 then List2([MenuFlags.MF_GRAYED]) else List2()
+                        }))
+                    else
+                        // No other groups available
+                        None
+
+                moveTabMenu
+            )
+            Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             Some(managerItem)
         ]).choose(id)
