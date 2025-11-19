@@ -65,32 +65,33 @@ To run WindowTabs at startup:
 
 ## Features
 
+### Tab Drag and Drop
+
+This feature remains unchanged from the original WindowTabs functionality.
+
+- Drag tabs to reorder within the same group
+- Drag tabs to separate into new windows with preview
+- Drop windows to create new tab groups
+- Respects tab alignment settings (left/center/right)
+
 ### Tab Management
 
 - **Tab Context Menu**: Right-click on tabs to access various options
   - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
   - New window
-  - Tab width control (narrow/wide)
+  - Make tabs wider / Make tabs narrower
   - Rename tab
-  - Move tab to another group
-  - Detach tab
+  - Detach and reposition tab
   - Reposition tab group
+  - Detach and link tab to another group
+  - Link tab group to another group
   - Settings
 
 ![Popup Menu](README_Image/PopupMenu.png)
 
-### Move tab to another group
+### Detach and reposition tab
 
-Transfer tabs between different window groups:
-- Shows other groups with tab names
-- Adaptive tab name truncation
-- Display application icons for easy identification
-
-![Move tab to another group](README_Image/MoveTab.png)
-
-### Detach tab
-
-Detach tabs from groups with multi-display support:
+Detach a tab from group and reposition it with multi-display support:
 - Detach at same position
 - Move to display edges (right/left/top/bottom)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
@@ -99,13 +100,33 @@ Detach tabs from groups with multi-display support:
 
 ### Reposition tab group
 
-Move entire tab groups to different display positions:
+Move entire tab group to different display positions:
 - Move to current display edges (right/left/top/bottom)
 - Move to other displays with edge positioning options
 - DPI-aware positioning for correct placement across different DPI displays
 - Maintains tab group integrity while repositioning
 
 ![Reposition tab group](README_Image/MoveTabGroup.png)
+
+### Detach and link tab to another group
+
+Detach a single tab from current group and link it to another existing group:
+- Shows other groups with tab names and counts
+- Adaptive tab name truncation for easy identification
+- Display application icons for group recognition
+- Disabled when tab group has only one tab
+
+![Detach and link tab to another group](README_Image/MoveTab.png)
+
+### Link tab group to another group
+
+Transfer all tabs from current group to another existing group:
+- Shows other groups with tab names and counts
+- Transfers all tabs at once from current group to target group
+- Adaptive tab name truncation for easy identification
+- Display application icons for group recognition
+
+![Link tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
 
 ### Menu Dark Mode / Light Mode
@@ -120,15 +141,8 @@ While light mode is the default, dark mode is also supported for context menus (
 - Multi-display support with proper window positioning
 - DPI-aware window placement
 - Automatic window resizing when dropped to prevent exceeding monitor dimensions
+- Fixed tab rename floating textbox positioning on high-DPI displays
 
-### Tab Drag and Drop
-
-This feature remains unchanged from the original WindowTabs functionality.
-
-- Drag tabs to reorder within the same group
-- Drag tabs to separate into new windows with preview
-- Drop windows to create new tab groups
-- Respects tab alignment settings (left/center/right)
 
 ### UWP Application Support
 
@@ -173,7 +187,8 @@ Customize the visual appearance of tabs:
 Configure tab behavior:
 - Tab position (left/center/right)
 - Tab width (narrow/wide) default
-- Hide tabs when positioned at bottom (never/maximized only/always/double-click)
+- Toggle tab width on active tab icon double-click
+- Hide tabs when positioned at bottom (never/always/double-click)
 - Delay before hiding tabs
 - Auto-grouping settings
 - Hotkey settings (Ctrl+1...+9 for tab activation)
