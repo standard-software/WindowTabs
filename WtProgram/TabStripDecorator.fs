@@ -591,9 +591,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
         // Move the entire tab group to the specified position
-        let window = os.windowFromHwnd(hwnd)
+        // Always use the active window (topWindow) as the reference point
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
-        let screen = this.getCurrentScreenForWindow(hwnd)
+        let screen = this.getCurrentScreenForWindow(activeHwnd)
 
         // Restore window if minimized or maximized
         if window.isMinimized || window.isMaximized then
@@ -614,9 +616,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
-        let window = os.windowFromHwnd(hwnd)
+        // Always use the active window (topWindow) as the reference point
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
-        let sourceScreen = this.getCurrentScreenForWindow(hwnd)
+        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
 
         // Calculate size percentages for DPI-aware placement
