@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2025.11.14_next
+## version ss_jp_2025.11.20
 - Add tab width toggle feature per tab group
   - Added "Make tabs wider" / "Make tabs narrower" menu items to tab context menu
   - Tab width can be toggled individually for each tab group
