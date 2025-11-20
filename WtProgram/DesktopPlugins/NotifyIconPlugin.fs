@@ -76,9 +76,21 @@ type NotifyIconPlugin() as this =
                             elif langItem.Text = "Japanese" then
                                 langItem.Checked <- (currentLanguage = "ja")
                                 langItem.Enabled <- not (currentLanguage = "ja")
+                    | "Disable" ->
+                        menuItem.Text <- Localization.getString("Disable")
+                        // Update checkbox state
+                        menuItem.Checked <- Services.program.isDisabled
                     | "RestartWindowTabs" -> menuItem.Text <- Localization.getString("RestartWindowTabs")
                     | "CloseWindowTabs" -> menuItem.Text <- Localization.getString("CloseWindowTabs")
                     | _ -> ()
+                | _ -> ()
+
+            // Update Settings menu item enabled state based on disabled status
+            for i in 0 .. contextMenu.MenuItems.Count - 1 do
+                let menuItem = contextMenu.MenuItems.[i]
+                match menuItem.Tag with
+                | :? string as tag when tag = "Settings" ->
+                    menuItem.Enabled <- not Services.program.isDisabled
                 | _ -> ()
 
         notifyIcon.ContextMenu <- contextMenu
@@ -170,6 +182,15 @@ type NotifyIconPlugin() as this =
             this.contextMenuItems.Add(languageMenu) |> ignore
 
             //this.addItem(Localization.getString("Feedback"), Forms.openFeedback) // 404 Not Found.
+            this.contextMenuItems.Add("-") |> ignore
+
+            let disableMenuItem = new MenuItem(Localization.getString("Disable"))
+            disableMenuItem.Click.Add <| fun _ ->
+                let newState = not Services.program.isDisabled
+                Services.program.setDisabled(newState)
+            disableMenuItem.Tag <- box("Disable")
+            this.contextMenuItems.Add(disableMenuItem) |> ignore
+
             this.contextMenuItems.Add("-") |> ignore
 
             let restartMenuItem = new MenuItem(Localization.getString("RestartWindowTabs"))

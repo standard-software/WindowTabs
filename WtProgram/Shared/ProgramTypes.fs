@@ -104,6 +104,8 @@ type IProgram =
     abstract member suspendTabMonitoring : unit -> unit
     abstract member resumeTabMonitoring : unit -> unit
     abstract member llMouse : IEvent<int32 * IntPtr>
+    abstract member isDisabled : bool
+    abstract member setDisabled : bool -> unit
 
 type IGroup =
     abstract member hwnd : IntPtr

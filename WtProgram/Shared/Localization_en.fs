@@ -11,6 +11,7 @@ module Localization_en =
         ("Border", "Border")
         ("RestartWindowTabs", "Restart WindowTabs")
         ("CloseWindowTabs", "Close WindowTabs")
+        ("Disable", "Disable")
         ("Diagnostics", "Diagnostics")
         ("Edit", "Edit")
         ("enableAutoGrouping", "Auto Grouping")

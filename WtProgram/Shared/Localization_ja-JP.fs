@@ -11,6 +11,7 @@ module Localization_ja =
         ("Border", "枠線")
         ("RestartWindowTabs", "WindowTabs 再起動")
         ("CloseWindowTabs", "WindowTabs 終了")
+        ("Disable", "無効化")
         ("Diagnostics", "診断")
         ("Edit", "編集")
         ("enableAutoGrouping", "自動グループ化")

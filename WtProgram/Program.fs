@@ -53,6 +53,7 @@ type Program() as this =
     let os = OS()
     let invoker = InvokerService.invoker
     let isTabMonitoringSuspendedCell = Cell.create(false)
+    let isDisabledCell = Cell.create(false)
     let llMouseEvent = Event<_>()
 
     // case 727 outlook calendar items appear behind outlook main window
@@ -144,7 +145,7 @@ type Program() as this =
 
     member this.updateAppWindows() =
         if this.desktop.isDragging.not then
-            if inShutdown.value.not then
+            if inShutdown.value.not && isDisabledCell.value.not then
                 os.windowsInZorder.iter <| fun window ->
                     this.ensureWindowIsSubscribed(window)
                     if this.isTabMonitoringSuspended.not then
@@ -326,6 +327,16 @@ type Program() as this =
         member x.notifyNewVersion() = notifyNewVersionEvt.Trigger()
         member x.newVersion = notifyNewVersionEvt.Publish
         member x.llMouse = llMouseEvent.Publish
+        member x.isDisabled = isDisabledCell.value
+        member x.setDisabled(value) =
+            isDisabledCell.set(value)
+            if value then
+                // When disabled, destroy all tab groups to hide them
+                this.desktop.groups.iter <| fun gi ->
+                    gi.windows.iter <| fun window ->
+                        gi.removeWindow window
+                    gi.destroy()
+            this.refresh()
 
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =
