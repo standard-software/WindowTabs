@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2025.11.14_next
+## version ss_jp_2025.11.20
 - Add tab width toggle feature per tab group
   - Added "Make tabs wider" / "Make tabs narrower" menu items to tab context menu
   - Tab width can be toggled individually for each tab group
@@ -8,6 +8,7 @@
 - Remove "Hide after specified time when maximized only" option from hide tabs settings
 - Fix tab rename floating textbox positioning on high-DPI displays
 - Add "Detach and link tab to another group" and "Link tab group to another group" features to tab context menu
+- Update README.md documentation
 
 ## version ss_jp_2025.11.14
 - Reorganize tab context menu structure
