@@ -318,6 +318,39 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             
         currentDpi <> initialDpi // Return true if DPI changed
 
+    // Common method to apply window bounds with DPI-aware logic
+    member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect) =
+        let window = this.os.windowFromHwnd(hwnd)
+
+        // Get current DPI (before move) and target DPI (after move)
+        let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
+        let targetDpi =
+            // Find other windows in the group (excluding current hwnd)
+            let otherWindows = zorderCell.value.where(fun h -> h <> hwnd)
+            match otherWindows.tryHead with
+            | Some(otherHwnd) ->
+                // Use DPI of another window in the group
+                WinUserApi.GetDpiForWindow(otherHwnd)
+            | None ->
+                // No other windows, use current DPI
+                currentDpi
+
+        // Use different approach based on DPI change
+        if currentDpi <> targetDpi then
+            // Different DPI: use position-first approach to handle DPI scaling
+            window.setPositionOnly bounds.x bounds.y
+
+            // Wait for DPI change (max 200ms)
+            if this.waitForDpiChange(hwnd, currentDpi, 200) then
+                // DPI changed, wait a bit more for stabilization
+                System.Threading.Thread.Sleep(20)
+
+            // Apply final position with size
+            window.move(bounds)
+        else
+            // Same DPI: move with position and size at once for better performance
+            window.move(bounds)
+
     member private this.adjustWindowPlacement(hwnd) =
         let window = this.os.windowFromHwnd(hwnd)
         if placement.value.IsSome then
@@ -329,36 +362,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             if  wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL &&
                 window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
                 then
-                // Get current DPI (before move) and target DPI (after move)
-                let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
-
-                // Get target DPI from the monitor at target position
-                let targetDpi =
-                    // Find other windows in the group (excluding current hwnd)
-                    let otherWindows = zorderCell.value.where(fun h -> h <> hwnd)
-                    match otherWindows.tryHead with
-                    | Some(otherHwnd) ->
-                        // Use DPI of another window in the group
-                        WinUserApi.GetDpiForWindow(otherHwnd)
-                    | None ->
-                        // No other windows, use current DPI
-                        currentDpi
-
-                // Use different approach based on DPI change
-                if currentDpi <> targetDpi then
-                    // Different DPI: use position-first approach to handle DPI scaling
-                    window.setPositionOnly bounds.x bounds.y
-
-                    // Wait for DPI change (max 200ms)
-                    if this.waitForDpiChange(hwnd, currentDpi, 200) then
-                        // DPI changed, wait a bit more for stabilization
-                        System.Threading.Thread.Sleep(20)
-
-                    // Apply final position with size
-                    window.move(bounds)
-                else
-                    // Same DPI: move with position and size at once for better performance
-                    window.move(bounds)
+                this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
             else
                 if window.placement.showCmd = ShowWindowCommands.SW_SHOWMINIMIZED then
                     window.setPlacement({wp with showCmd = ShowWindowCommands.SW_SHOWMINIMIZED})
@@ -367,34 +371,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
                         //maximized windows won't move from one monitor to another by setting placement alone,
                         //need to first move to the new bounds, then set placement
-
-                        // Get current DPI (before move) and target DPI (after move)
-                        let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
-                        let targetDpi =
-                            // Find other windows in the group (excluding current hwnd)
-                            let otherWindows = zorderCell.value.where(fun h -> h <> hwnd)
-                            match otherWindows.tryHead with
-                            | Some(otherHwnd) ->
-                                // Use DPI of another window in the group
-                                WinUserApi.GetDpiForWindow(otherHwnd)
-                            | None ->
-                                // No other windows, use current DPI
-                                currentDpi
-
-                        // Use different approach based on DPI change
-                        if currentDpi <> targetDpi then
-                            // Different DPI: use position-first approach to handle DPI scaling
-                            window.setPositionOnly bounds.x bounds.y
-
-                            // Wait for DPI change (max 200ms)
-                            if this.waitForDpiChange(hwnd, currentDpi, 200) then
-                                // DPI changed, wait a bit more for stabilization
-                                System.Threading.Thread.Sleep(20)
-
-                            window.move(bounds)
-                        else
-                            // Same DPI: move with position and size at once
-                            window.move(bounds)
+                        this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
                     window.setPlacement(wp)
                      
     member this.setTabName(hwnd,name) =

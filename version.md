@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2025.11.20_next_2
+## version ss_jp_2025.11.20_next_3
 - Added "Disable" checkbox menu item in tray icon context menu
   - When enabled, hides all tab groups and stops tab grouping
   - Settings menu becomes disabled when Disable is enabled
