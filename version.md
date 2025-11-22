@@ -5,6 +5,9 @@
   - When enabled, hides all tab groups and stops tab grouping
   - Settings menu becomes disabled when Disable is enabled
   - Disable state is now saved to settings file and persists across restarts
+- Fix background window resize visual glitch
+  - Background windows now move and resize simultaneously instead of sequentially
+  - DPI-aware logic: Same DPI uses fast single-step move, different DPI uses position-first approach to handle scaling correctly
 
 ## version ss_jp_2025.11.20
 - Add tab width toggle feature per tab group
