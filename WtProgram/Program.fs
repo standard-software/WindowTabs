@@ -45,7 +45,7 @@ type ProgramVersion(parts:List2<int>)=
         this.compare(v2) > 0
 
 type Program() as this =
-    let version = "ss_jp_2025.11.20_next_1"
+    let version = "ss_jp_2025.11.20_next_2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached 
 
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
@@ -60,6 +60,15 @@ type Program() as this =
     let delayTabExeNames = Set2(List2(["outlook.exe"]))
 
     let settingsManager = Settings(isStandAlone)
+
+    // Load disabled state from settings
+    do
+        let savedDisabledState =
+            try
+                settingsManager.settingsJson.getBool("isDisabled").def(false)
+            with
+            | _ -> false
+        isDisabledCell.set(savedDisabledState)
 
     let keepAliveCell = Cell.create(List2())
     let keepAlive (obj:obj) =
@@ -330,6 +339,13 @@ type Program() as this =
         member x.isDisabled = isDisabledCell.value
         member x.setDisabled(value) =
             isDisabledCell.set(value)
+            // Save disabled state to settings
+            try
+                let json = settingsManager.settingsJson
+                json.setBool("isDisabled", value)
+                settingsManager.settingsJson <- json
+            with
+            | ex -> ()  // Ignore errors when saving settings
             if value then
                 // When disabled, destroy all tab groups to hide them
                 this.desktop.groups.iter <| fun gi ->

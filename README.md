@@ -159,6 +159,15 @@ While light mode is the default, dark mode is also supported for context menus (
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
+### Disable Feature
+
+Temporarily disable WindowTabs functionality via tray menu:
+- **Disable** checkbox in tray icon context menu
+- When enabled:
+  - Immediately hides all existing tab groups
+  - Stops automatic tab grouping for new windows
+  - Disables Settings menu to prevent configuration changes
+
 ## Settings
 
 Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
