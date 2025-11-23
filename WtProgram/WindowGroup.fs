@@ -367,8 +367,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 if window.placement.showCmd = ShowWindowCommands.SW_SHOWMINIMIZED then
                     window.setPlacement({wp with showCmd = ShowWindowCommands.SW_SHOWMINIMIZED})
                 else
-                    if window.placement.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED &&
-                        wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
+                    // Apply DPI-aware handling when target is maximized (regardless of source state)
+                    if wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
                         //maximized windows won't move from one monitor to another by setting placement alone,
                         //need to first move to the new bounds, then set placement
                         this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
