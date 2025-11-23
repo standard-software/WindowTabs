@@ -10,6 +10,7 @@
   - DPI-aware logic: Same DPI uses fast single-step move for better performance, different DPI uses position-first approach to handle scaling correctly
   - Significantly faster window resizing and movement operations
 - Fix window size issue when linking tabs to maximized group across different DPI displays
+- Improve Windows Installer to prevent duplicate entries and preserve installation path after uninstall
 
 ## version ss_jp_2025.11.20
 - Add tab width toggle feature per tab group

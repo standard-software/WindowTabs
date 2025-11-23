@@ -18,7 +18,7 @@
 
       <!-- Upgrade settings: Remove all previous versions -->
       <MajorUpgrade DowngradeErrorMessage="A newer version of WindowTabs is already installed."
-                    Schedule="afterInstallExecute"
+                    Schedule="afterInstallInitialize"
                     AllowSameVersionUpgrades="no"
                     RemoveFeatures="ALL" />
 
@@ -45,11 +45,10 @@
                         Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.md" />
                </Component>
 
-               <!-- Registry entries for uninstall -->
-               <Component Id="RegistryEntries" Guid="A5B2E1C3-4D6F-7890-ABCD-EF1234567890" Win64="yes">
+               <!-- Registry entries for installation path persistence -->
+               <Component Id="RegistryEntries" Guid="A5B2E1C3-4D6F-7890-ABCD-EF1234567890" Win64="yes" Permanent="yes">
                   <RegistryKey Root="HKCU"
-                               Key="Software\WindowTabs"
-                               ForceDeleteOnUninstall="yes">
+                               Key="Software\WindowTabs">
                      <RegistryValue Type="string"
                                     Name="InstallPath"
                                     Value="[INSTALLFOLDER]"
