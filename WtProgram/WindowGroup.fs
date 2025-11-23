@@ -364,16 +364,17 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 then
                 this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
             else
-                if window.placement.showCmd = ShowWindowCommands.SW_SHOWMINIMIZED then
-                    window.setPlacement({wp with showCmd = ShowWindowCommands.SW_SHOWMINIMIZED})
-                else
-                    // Apply DPI-aware handling when target is maximized (regardless of source state)
-                    if wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
-                        //maximized windows won't move from one monitor to another by setting placement alone,
-                        //need to first move to the new bounds, then set placement
-                        this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
-                    window.setPlacement(wp)
-                     
+                // Apply DPI-aware handling when target is maximized (regardless of source state)
+                if wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
+                    //maximized windows won't move from one monitor to another by setting placement alone,
+                    //need to first move to the new bounds, then set placement
+                    this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
+                window.setPlacement(wp)
+
+            // Note: Cases not covered above (e.g., maximized -> normal) do not require DPI handling
+            // because setPlacement correctly handles the transition without DPI-related issues.
+            // This has been verified through testing across different DPI displays.
+
     member this.setTabName(hwnd,name) =
         Services.program.setWindowNameOverride(hwnd, name)
         this.setTabInfo(hwnd)
