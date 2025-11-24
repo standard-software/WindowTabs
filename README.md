@@ -21,6 +21,12 @@ And Mr./Ms. leafOfTree also forked the source code. See the repositories here:
 
 And I (Satoshi Yamamoto@standard-software) also forked the source code and compiled it with VS2022 Community Edition.
 
+## Version
+
+Latest version **ss_jp_2025.11.24**
+
+For detailed version history and changelog, see [version.md](version.md).
+
 
 ## Download
 
@@ -232,9 +238,6 @@ Two build scripts are provided in the project root:
 
 Simply run the desired batch file to create the distribution packages.
 
-## Version History
-
-See [version.md](version.md) for detailed version history and changelog.
 
 ## Links
 
