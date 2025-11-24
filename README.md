@@ -30,6 +30,8 @@ For detailed version history and changelog, see [version.md](version.md).
 
 ## Download
 
+**Supported OS:** Windows 10, Windows 11
+
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/standard-software/windowtabs/total)</a>
 
 You can download prebuilt files from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
