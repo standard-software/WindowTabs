@@ -13,10 +13,10 @@ if exist exe\installer\WtSetup.msi (
 )
 
 :: Check if MSBuild exists
-set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+set MSBUILD="C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
 if not exist %MSBUILD% (
     echo ERROR: MSBuild not found at %MSBUILD%
-    echo Please install Visual Studio 2022 with WiX Toolset support
+    echo Please install Visual Studio 2026 with WiX Toolset support
     exit /b 1
 )
 
