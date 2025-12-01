@@ -10,16 +10,15 @@ It was originally developed by Maurice Flanagan in 2009 and was back then provid
 
 And Mr./Ms. redgis forked and migrated to VS2017 / .NET 4.0. The forked repository here: https://github.com/redgis/WindowTabs : 404 Not Found
 
-And Mr./Ms. payaneco forked the source code. See the repositories here:
+And Mr./Ms. payaneco forked the source code from redgis. See the repository here:
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
 
-And Mr./Ms. leafOfTree also forked the source code. See the repositories here:
+Mr./Ms. leafOfTree also created a fork with various improvements:
 - https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
 
-And I (Satoshi Yamamoto@standard-software) also forked the source code and compiled it with VS2022 Community Edition.
+This version is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by Satoshi Yamamoto (standard-software). Can be compiled with Visual Studio 2022 or 2026 Community Edition.
 
 ## Version
 
