@@ -17,8 +17,11 @@ And Mr./Ms. payaneco forked the source code from redgis. See the repository here
 
 Mr./Ms. leafOfTree also created a fork with various improvements:
 - https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
 
-This version is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by Satoshi Yamamoto (standard-software). Can be compiled with Visual Studio 2022 or 2026 Community Edition.
+This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by Satoshi Yamamoto (standard-software). Can be compiled with Visual Studio 2022 or 2026 Community Edition.
+- https://github.com/standard-software/WindowTabs
+
 
 ## Version
 
