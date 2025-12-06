@@ -2,21 +2,11 @@ namespace Bemo
 open System
 
 module Localization =
-    type Language =
-        | English
-        | Japanese
-
-    let mutable private currentLanguage = English
+    // Current language stored as string (e.g., "English", "Japanese")
+    // This allows dynamic language support via JSON files in the future
+    let mutable currentLanguage = "English"
 
     let languageChanged = Event<unit>()
-
-    let getCurrentLanguage() =
-        currentLanguage
-
-    let setLanguage(lang: Language) =
-        if currentLanguage <> lang then
-            currentLanguage <- lang
-            languageChanged.Trigger()
 
     // Normalize old format ("en"/"ja") to new format ("English"/"Japanese")
     let normalizeLanguageString(langStr: string) =
@@ -25,22 +15,17 @@ module Localization =
         | "ja" -> "Japanese"
         | other -> other
 
-    let setLanguageByString(langStr: string) =
-        match normalizeLanguageString(langStr) with
-        | "Japanese" -> setLanguage(Japanese)
-        | "English" -> setLanguage(English)
-        | _ -> setLanguage(English)
-
-    let getLanguageString() =
-        match currentLanguage with
-        | English -> "English"
-        | Japanese -> "Japanese"
+    let setLanguage(langStr: string) =
+        let normalized = normalizeLanguageString(langStr)
+        if currentLanguage <> normalized then
+            currentLanguage <- normalized
+            languageChanged.Trigger()
 
     let getString(key: string) =
         let strings =
             match currentLanguage with
-            | English -> Localization_en.strings
-            | Japanese -> Localization_ja.strings
+            | "Japanese" -> Localization_ja.strings
+            | _ -> Localization_en.strings  // Default to English
 
         match strings.TryGetValue(key) with
         | true, value -> value

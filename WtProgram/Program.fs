@@ -371,7 +371,7 @@ type Program() as this =
                 if value = null then "English" else value.ToString()
             with
             | _ -> "English"
-        Localization.setLanguageByString(language)
+        Localization.setLanguage(language)
         
         if System.Diagnostics.Debugger.IsAttached.not then
             if mutex.WaitOne(TimeSpan.FromSeconds(0.5), false).not then

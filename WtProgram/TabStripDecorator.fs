@@ -343,17 +343,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         if screen.Bounds.Top = 0 && screen.Bounds.Left = 0 || directions.IsEmpty then
             let main = Localization.getString("Main")
-            match Localization.getCurrentLanguage() with
-            | Localization.English -> display + " " + main
-            | Localization.Japanese -> main + display
+            match Localization.currentLanguage with
+            | "Japanese" -> main + display
+            | _ -> display + " " + main
         else
             let directionStr =
-                match Localization.getCurrentLanguage() with
-                | Localization.English -> String.concat " " directions
-                | Localization.Japanese -> String.concat "" directions
-            match Localization.getCurrentLanguage() with
-            | Localization.English -> display + " " + directionStr
-            | Localization.Japanese -> directionStr + display
+                match Localization.currentLanguage with
+                | "Japanese" -> String.concat "" directions
+                | _ -> String.concat " " directions
+            match Localization.currentLanguage with
+            | "Japanese" -> directionStr + display
+            | _ -> display + " " + directionStr
 
     member private this.getCurrentScreenForWindow(hwnd: IntPtr) =
         let window = os.windowFromHwnd(hwnd)
@@ -739,10 +739,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         // UWP app that we don't have an alternative for
                         let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
                         let message =
-                            match Localization.getCurrentLanguage() with
-                            | Localization.Japanese ->
+                            match Localization.currentLanguage with
+                            | "Japanese" ->
                                 sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
-                            | Localization.English ->
+                            | _ ->
                                 sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
                         MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
                         System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)

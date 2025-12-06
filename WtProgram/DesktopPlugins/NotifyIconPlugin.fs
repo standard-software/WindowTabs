@@ -59,24 +59,17 @@ type NotifyIconPlugin() as this =
                     | "Settings" -> menuItem.Text <- Localization.getString("Settings")
                     | "Language" ->
                         menuItem.Text <- Localization.getString("Language")
-                        // Update language menu checkmarks
-                        let currentLanguage =
-                            try
-                                let settingsJson = Services.settings.root
-                                let value = settingsJson.["language"]
-                                if value = null then "English" else value.ToString()
-                            with
-                            | _ -> "English"
-                        let normalizedLanguage = Localization.normalizeLanguageString(currentLanguage)
+                        // Update language menu checkmarks using current language from Localization module
+                        let currentLanguage = Localization.currentLanguage
 
                         for j in 0 .. menuItem.MenuItems.Count - 1 do
                             let langItem = menuItem.MenuItems.[j]
                             if langItem.Text = "English" then
-                                langItem.Checked <- (normalizedLanguage = "English")
-                                langItem.Enabled <- not (normalizedLanguage = "English")
+                                langItem.Checked <- (currentLanguage = "English")
+                                langItem.Enabled <- not (currentLanguage = "English")
                             elif langItem.Text = "Japanese" then
-                                langItem.Checked <- (normalizedLanguage = "Japanese")
-                                langItem.Enabled <- not (normalizedLanguage = "Japanese")
+                                langItem.Checked <- (currentLanguage = "Japanese")
+                                langItem.Enabled <- not (currentLanguage = "Japanese")
                     | "Disable" ->
                         menuItem.Text <- Localization.getString("Disable")
                         // Update checkbox state
@@ -127,38 +120,32 @@ type NotifyIconPlugin() as this =
 
     member this.createLanguageMenu() =
         let languageMenu = new MenuItem(Localization.getString("Language"))
-        let currentLanguage =
-            try
-                let settingsJson = Services.settings.root
-                let value = settingsJson.["language"]
-                if value = null then "English" else value.ToString()
-            with
-            | _ -> "English"
-        let normalizedLanguage = Localization.normalizeLanguageString(currentLanguage)
+        // Use current language from Localization module
+        let currentLanguage = Localization.currentLanguage
 
         let englishItem = new MenuItem("English")
-        englishItem.Checked <- (normalizedLanguage = "English")
-        englishItem.Enabled <- not (normalizedLanguage = "English")
+        englishItem.Checked <- (currentLanguage = "English")
+        englishItem.Enabled <- not (currentLanguage = "English")
         englishItem.Click.Add <| fun _ ->
             try
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject("English")
                 Services.settings.root <- json
-                Localization.setLanguageByString("English")
+                Localization.setLanguage("English")
                 closeSettingsDialog()
                 MessageBox.Show("Language has been changed to English.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
             with
             | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
 
         let japaneseItem = new MenuItem("Japanese")
-        japaneseItem.Checked <- (normalizedLanguage = "Japanese")
-        japaneseItem.Enabled <- not (normalizedLanguage = "Japanese")
+        japaneseItem.Checked <- (currentLanguage = "Japanese")
+        japaneseItem.Enabled <- not (currentLanguage = "Japanese")
         japaneseItem.Click.Add <| fun _ ->
             try
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject("Japanese")
                 Services.settings.root <- json
-                Localization.setLanguageByString("Japanese")
+                Localization.setLanguage("Japanese")
                 closeSettingsDialog()
                 MessageBox.Show("Language has been changed to Japanese.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
             with
