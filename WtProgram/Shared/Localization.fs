@@ -18,16 +18,23 @@ module Localization =
             currentLanguage <- lang
             languageChanged.Trigger()
 
-    let setLanguageByString(langStr: string) =
+    // Normalize old format ("en"/"ja") to new format ("English"/"Japanese")
+    let normalizeLanguageString(langStr: string) =
         match langStr with
-        | "ja" -> setLanguage(Japanese)
-        | "en" -> setLanguage(English)
+        | "en" -> "English"
+        | "ja" -> "Japanese"
+        | other -> other
+
+    let setLanguageByString(langStr: string) =
+        match normalizeLanguageString(langStr) with
+        | "Japanese" -> setLanguage(Japanese)
+        | "English" -> setLanguage(English)
         | _ -> setLanguage(English)
 
     let getLanguageString() =
         match currentLanguage with
-        | English -> "en"
-        | Japanese -> "ja"
+        | English -> "English"
+        | Japanese -> "Japanese"
 
     let getString(key: string) =
         let strings =

@@ -64,18 +64,19 @@ type NotifyIconPlugin() as this =
                             try
                                 let settingsJson = Services.settings.root
                                 let value = settingsJson.["language"]
-                                if value = null then "en" else value.ToString()
+                                if value = null then "English" else value.ToString()
                             with
-                            | _ -> "en"
+                            | _ -> "English"
+                        let normalizedLanguage = Localization.normalizeLanguageString(currentLanguage)
 
                         for j in 0 .. menuItem.MenuItems.Count - 1 do
                             let langItem = menuItem.MenuItems.[j]
                             if langItem.Text = "English" then
-                                langItem.Checked <- (currentLanguage = "en")
-                                langItem.Enabled <- not (currentLanguage = "en")
+                                langItem.Checked <- (normalizedLanguage = "English")
+                                langItem.Enabled <- not (normalizedLanguage = "English")
                             elif langItem.Text = "Japanese" then
-                                langItem.Checked <- (currentLanguage = "ja")
-                                langItem.Enabled <- not (currentLanguage = "ja")
+                                langItem.Checked <- (normalizedLanguage = "Japanese")
+                                langItem.Enabled <- not (normalizedLanguage = "Japanese")
                     | "Disable" ->
                         menuItem.Text <- Localization.getString("Disable")
                         // Update checkbox state
@@ -130,33 +131,34 @@ type NotifyIconPlugin() as this =
             try
                 let settingsJson = Services.settings.root
                 let value = settingsJson.["language"]
-                if value = null then "en" else value.ToString()
+                if value = null then "English" else value.ToString()
             with
-            | _ -> "en"
-        
+            | _ -> "English"
+        let normalizedLanguage = Localization.normalizeLanguageString(currentLanguage)
+
         let englishItem = new MenuItem("English")
-        englishItem.Checked <- (currentLanguage = "en")
-        englishItem.Enabled <- not (currentLanguage = "en")
+        englishItem.Checked <- (normalizedLanguage = "English")
+        englishItem.Enabled <- not (normalizedLanguage = "English")
         englishItem.Click.Add <| fun _ ->
             try
                 let json = Services.settings.root
-                json.["language"] <- JToken.FromObject("en")
+                json.["language"] <- JToken.FromObject("English")
                 Services.settings.root <- json
-                Localization.setLanguageByString("en")
+                Localization.setLanguageByString("English")
                 closeSettingsDialog()
                 MessageBox.Show("Language has been changed to English.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
             with
             | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
 
         let japaneseItem = new MenuItem("Japanese")
-        japaneseItem.Checked <- (currentLanguage = "ja")
-        japaneseItem.Enabled <- not (currentLanguage = "ja")
+        japaneseItem.Checked <- (normalizedLanguage = "Japanese")
+        japaneseItem.Enabled <- not (normalizedLanguage = "Japanese")
         japaneseItem.Click.Add <| fun _ ->
             try
                 let json = Services.settings.root
-                json.["language"] <- JToken.FromObject("ja")
+                json.["language"] <- JToken.FromObject("Japanese")
                 Services.settings.root <- json
-                Localization.setLanguageByString("ja")
+                Localization.setLanguageByString("Japanese")
                 closeSettingsDialog()
                 MessageBox.Show("Language has been changed to Japanese.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
             with

@@ -368,9 +368,9 @@ type Program() as this =
         let language =
             try
                 let value = settingsManager.settingsJson.["language"]
-                if value = null then "en" else value.ToString()
+                if value = null then "English" else value.ToString()
             with
-            | _ -> "en"
+            | _ -> "English"
         Localization.setLanguageByString(language)
         
         if System.Diagnostics.Debugger.IsAttached.not then
