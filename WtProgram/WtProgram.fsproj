@@ -69,6 +69,10 @@ for %%d in (cs de en es fr it ja ja-JP ko pl pt-BR ru tr zh-Hans zh-Hant) do (
   )
 )
 
+echo ===== Copying Language files =====
+if not exist "$(TargetDir)Language" mkdir "$(TargetDir)Language"
+copy /y "$(ProjectDir)Language\*.json" "$(TargetDir)Language\"
+
 if $(ConfigurationName) == Release (
   echo ===== ILRepack処理開始 =====
 
@@ -96,6 +100,9 @@ if $(ConfigurationName) == Release (
     </PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Localization\Localization_en.fs" />
+    <Compile Include="Localization\Localization_ja-JP.fs" />
+    <Compile Include="Localization\Localization.fs" />
     <Compile Include="Shared/Operators.fs" />
     <Compile Include="Shared/Dynamic.fs" />
     <Compile Include="Shared/Observable.fs" />
@@ -110,9 +117,6 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/DragDrop.fs" />
     <Compile Include="Shared/Serialize.fs" />
     <Compile Include="Shared/DarkMode.fs" />
-    <Compile Include="Shared/Localization_en.fs" />
-    <Compile Include="Shared/Localization_ja-JP.fs" />
-    <Compile Include="Shared/Localization.fs" />
     <Compile Include="Shared/Win32Menu.fs" />
     <Compile Include="Shared/Services.fs" />
     <Compile Include="Shared/AnimationWindow.fs" />

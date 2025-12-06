@@ -64,12 +64,12 @@ type NotifyIconPlugin() as this =
 
                         for j in 0 .. menuItem.MenuItems.Count - 1 do
                             let langItem = menuItem.MenuItems.[j]
-                            if langItem.Text = "English" then
-                                langItem.Checked <- (currentLanguage = "English")
-                                langItem.Enabled <- not (currentLanguage = "English")
-                            elif langItem.Text = "Japanese" then
-                                langItem.Checked <- (currentLanguage = "Japanese")
-                                langItem.Enabled <- not (currentLanguage = "Japanese")
+                            // Get language name from Tag (stored without .json extension)
+                            match langItem.Tag with
+                            | :? string as langName ->
+                                langItem.Checked <- (currentLanguage = langName)
+                                langItem.Enabled <- not (currentLanguage = langName)
+                            | _ -> ()
                     | "Disable" ->
                         menuItem.Text <- Localization.getString("Disable")
                         // Update checkbox state
@@ -118,41 +118,51 @@ type NotifyIconPlugin() as this =
         with
         | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
 
+    member this.getLanguageFolder() =
+        let exePath = Assembly.GetExecutingAssembly().Location
+        let exeDir = Path.GetDirectoryName(exePath)
+        Path.Combine(exeDir, "Language")
+
+    member this.getLanguageListFromFileList() =
+        try
+            let fileListPath = Path.Combine(this.getLanguageFolder(), "FileList.json")
+            if File.Exists(fileListPath) then
+                let json = File.ReadAllText(fileListPath)
+                let arr = JArray.Parse(json)
+                arr
+                |> Seq.map (fun t -> t.ToString())
+                |> Seq.map (fun s -> s.Replace(".json", ""))
+                |> Seq.toList
+            else
+                // Fallback to default languages
+                ["English"; "Japanese"]
+        with
+        | _ -> ["English"; "Japanese"]
+
     member this.createLanguageMenu() =
         let languageMenu = new MenuItem(Localization.getString("Language"))
-        // Use current language from Localization module
         let currentLanguage = Localization.currentLanguage
 
-        let englishItem = new MenuItem("English")
-        englishItem.Checked <- (currentLanguage = "English")
-        englishItem.Enabled <- not (currentLanguage = "English")
-        englishItem.Click.Add <| fun _ ->
-            try
-                let json = Services.settings.root
-                json.["language"] <- JToken.FromObject("English")
-                Services.settings.root <- json
-                Localization.setLanguage("English")
-                closeSettingsDialog()
-                MessageBox.Show("Language has been changed to English.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
-            with
-            | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+        // Load language list from FileList.json
+        let languages = this.getLanguageListFromFileList()
 
-        let japaneseItem = new MenuItem("Japanese")
-        japaneseItem.Checked <- (currentLanguage = "Japanese")
-        japaneseItem.Enabled <- not (currentLanguage = "Japanese")
-        japaneseItem.Click.Add <| fun _ ->
-            try
-                let json = Services.settings.root
-                json.["language"] <- JToken.FromObject("Japanese")
-                Services.settings.root <- json
-                Localization.setLanguage("Japanese")
-                closeSettingsDialog()
-                MessageBox.Show("Language has been changed to Japanese.", "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
-            with
-            | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
-            
-        languageMenu.MenuItems.Add(englishItem) |> ignore
-        languageMenu.MenuItems.Add(japaneseItem) |> ignore
+        for langName in languages do
+            let langItem = new MenuItem(langName)
+            langItem.Checked <- (currentLanguage = langName)
+            langItem.Enabled <- not (currentLanguage = langName)
+            langItem.Tag <- box(langName)  // Store language name in Tag
+            langItem.Click.Add <| fun _ ->
+                try
+                    let json = Services.settings.root
+                    json.["language"] <- JToken.FromObject(langName)
+                    Services.settings.root <- json
+                    Localization.setLanguage(langName)
+                    closeSettingsDialog()
+                    MessageBox.Show(sprintf "Language has been changed to %s." langName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                with
+                | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+            languageMenu.MenuItems.Add(langItem) |> ignore
+
         languageMenu
 
     interface IPlugin with
