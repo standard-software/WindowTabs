@@ -1,4 +1,8 @@
 [
-  "English.json",
-  "Japanese.json"
+  "English",
+  "Japanese",
+  "Japanese_関西弁",
+  "Japanese_東北弁",
+  "Chinese_Simplified",
+  "Chinese_Traditional"
 ]

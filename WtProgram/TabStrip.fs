@@ -80,7 +80,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         
         tooltipLabel.ForeColor <- Color.White
         tooltipLabel.BackColor <- Color.FromArgb(40, 40, 40)
-        tooltipLabel.Font <- new Font("Segoe UI", 9.0f, FontStyle.Regular)
+        tooltipLabel.Font <- new Font(Localization.getString("Font"), 9.0f, FontStyle.Regular)
         tooltipLabel.TextAlign <- ContentAlignment.TopLeft  // Top-left aligned for proper wrapping
         tooltipLabel.AutoSize <- false  // Keep false for proper width control
         tooltipLabel.MaximumSize <- new Size(maxWidth, 0)

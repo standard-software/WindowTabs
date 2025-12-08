@@ -39,7 +39,6 @@
   "Restore": "元に戻す",
   "runAtStartup": "電源投入時にWindowTabsを起動",
   "Settings": "設定",
-  "Language": "Language",
   "CloseTab": "このタブを閉じる",
   "CloseTabsToTheRight": "右のタブを閉じる",
   "CloseTabsToTheRightFormat": "右のタブを閉じる({0}タブ)",
@@ -85,6 +84,6 @@
   "HideOnDoubleClick": "アクティブタブをダブルクリック時に隠す",
   "Title": "タイトル",
   "Workspace": "ワークスペース",
-  "Font": "Segoe UI",
+  "Font": "Yu Gothic UI",
   "MenuDarkMode": "メニューをダークモードにする"
 }

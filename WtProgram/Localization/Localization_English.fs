@@ -1,6 +1,6 @@
 namespace Bemo
 
-module Localization_en =
+module Localization_English =
     let strings = dict [
         ("Appearance", "Appearance")
         ("Background Active", "Background Active")
@@ -88,6 +88,6 @@ module Localization_en =
         ("HideOnDoubleClick", "Hide when double-clicking active tab")
         ("Title", "Title")
         ("Workspace", "Workspace")
-        ("Font", "Segoe UI")
+        ("Font", "Yu Gothic UI")
         ("MenuDarkMode", "Menu Dark Mode")
     ]

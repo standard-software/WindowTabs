@@ -1,10 +1,16 @@
 namespace Bemo
 open System
+open System.IO
+open System.Reflection
+open System.Collections.Generic
+open Newtonsoft.Json.Linq
 
 module Localization =
     // Current language stored as string (e.g., "English", "Japanese")
-    // This allows dynamic language support via JSON files in the future
     let mutable currentLanguage = "English"
+
+    // Loaded strings from JSON file (if any)
+    let mutable private loadedStrings : IDictionary<string, string> option = None
 
     let languageChanged = Event<unit>()
 
@@ -15,22 +21,55 @@ module Localization =
         | "ja" -> "Japanese"
         | other -> other
 
+    // Get the Language folder path
+    let getLanguageFolder() =
+        let exePath = Assembly.GetExecutingAssembly().Location
+        let exeDir = Path.GetDirectoryName(exePath)
+        Path.Combine(exeDir, "Language")
+
+    // Load language strings from JSON file
+    let loadLanguageFromJson(langName: string) =
+        try
+            let jsonPath = Path.Combine(getLanguageFolder(), langName + ".json")
+            if File.Exists(jsonPath) then
+                let json = File.ReadAllText(jsonPath)
+                let jobj = JObject.Parse(json)
+                let dict = Dictionary<string, string>()
+                for prop in jobj.Properties() do
+                    dict.[prop.Name] <- prop.Value.ToString()
+                Some(dict :> IDictionary<string, string>)
+            else
+                None
+        with
+        | _ -> None
+
     let setLanguage(langStr: string) =
         let normalized = normalizeLanguageString(langStr)
         if currentLanguage <> normalized then
             currentLanguage <- normalized
+            // Try to load from JSON file
+            loadedStrings <- loadLanguageFromJson(normalized)
             languageChanged.Trigger()
 
-    let getString(key: string) =
-        let strings =
-            match currentLanguage with
-            | "Japanese" -> Localization_ja.strings
-            | _ -> Localization_en.strings  // Default to English
+    // Initialize language (called at startup)
+    let initLanguage(langStr: string) =
+        let normalized = normalizeLanguageString(langStr)
+        currentLanguage <- normalized
+        loadedStrings <- loadLanguageFromJson(normalized)
 
-        match strings.TryGetValue(key) with
-        | true, value -> value
-        | false, _ ->
-            // Fallback to English if key not found in current language
-            match Localization_en.strings.TryGetValue(key) with
+    let getString(key: string) =
+        // First, try to get from loaded JSON strings
+        match loadedStrings with
+        | Some(dict) ->
+            match dict.TryGetValue(key) with
             | true, value -> value
-            | false, _ -> key  // Last resort: return the key itself
+            | false, _ ->
+                // Fallback to Localization_English.fs
+                match Localization_English.strings.TryGetValue(key) with
+                | true, value -> value
+                | false, _ -> key
+        | None ->
+            // No JSON loaded, use built-in English dictionary
+            match Localization_English.strings.TryGetValue(key) with
+            | true, value -> value
+            | false, _ -> key

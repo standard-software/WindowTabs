@@ -134,36 +134,40 @@ type NotifyIconPlugin() as this =
                 |> Seq.map (fun s -> s.Replace(".json", ""))
                 |> Seq.toList
             else
-                // Fallback to default languages
-                ["English"; "Japanese"]
+                // FileList.json not found - return empty list
+                []
         with
-        | _ -> ["English"; "Japanese"]
+        | _ -> []
 
     member this.createLanguageMenu() =
-        let languageMenu = new MenuItem(Localization.getString("Language"))
-        let currentLanguage = Localization.currentLanguage
-
         // Load language list from FileList.json
         let languages = this.getLanguageListFromFileList()
 
-        for langName in languages do
-            let langItem = new MenuItem(langName)
-            langItem.Checked <- (currentLanguage = langName)
-            langItem.Enabled <- not (currentLanguage = langName)
-            langItem.Tag <- box(langName)  // Store language name in Tag
-            langItem.Click.Add <| fun _ ->
-                try
-                    let json = Services.settings.root
-                    json.["language"] <- JToken.FromObject(langName)
-                    Services.settings.root <- json
-                    Localization.setLanguage(langName)
-                    closeSettingsDialog()
-                    MessageBox.Show(sprintf "Language has been changed to %s." langName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
-                with
-                | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
-            languageMenu.MenuItems.Add(langItem) |> ignore
+        // If language list is empty, return None (hide Language menu)
+        if languages.IsEmpty then
+            None
+        else
+            let languageMenu = new MenuItem(Localization.getString("Language"))
+            let currentLanguage = Localization.currentLanguage
 
-        languageMenu
+            for langName in languages do
+                let langItem = new MenuItem(langName)
+                langItem.Checked <- (currentLanguage = langName)
+                langItem.Enabled <- not (currentLanguage = langName)
+                langItem.Tag <- box(langName)  // Store language name in Tag
+                langItem.Click.Add <| fun _ ->
+                    try
+                        let json = Services.settings.root
+                        json.["language"] <- JToken.FromObject(langName)
+                        Services.settings.root <- json
+                        Localization.setLanguage(langName)
+                        closeSettingsDialog()
+                        MessageBox.Show(sprintf "Language has been changed to %s." langName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                    with
+                    | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                languageMenu.MenuItems.Add(langItem) |> ignore
+
+            Some(languageMenu)
 
     interface IPlugin with
         member this.init() =
@@ -176,9 +180,12 @@ type NotifyIconPlugin() as this =
             settingsMenuItem.Tag <- box("Settings")
             this.contextMenuItems.Add(settingsMenuItem) |> ignore
 
-            let languageMenu = this.createLanguageMenu()
-            languageMenu.Tag <- box("Language")
-            this.contextMenuItems.Add(languageMenu) |> ignore
+            // Only add Language menu if FileList.json exists and is not empty
+            match this.createLanguageMenu() with
+            | Some(languageMenu) ->
+                languageMenu.Tag <- box("Language")
+                this.contextMenuItems.Add(languageMenu) |> ignore
+            | None -> ()
 
             //this.addItem(Localization.getString("Feedback"), Forms.openFeedback) // 404 Not Found.
             this.contextMenuItems.Add("-") |> ignore
