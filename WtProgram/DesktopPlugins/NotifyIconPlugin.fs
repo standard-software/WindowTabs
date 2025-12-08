@@ -123,15 +123,19 @@ type NotifyIconPlugin() as this =
         let exeDir = Path.GetDirectoryName(exePath)
         Path.Combine(exeDir, "Language")
 
-    member this.getLanguageListFromFileList() =
+    // Returns list of (displayName, fileName) tuples
+    member this.getLanguageListFromFileList() : (string * string) list =
         try
             let fileListPath = Path.Combine(this.getLanguageFolder(), "FileList.json")
             if File.Exists(fileListPath) then
                 let json = File.ReadAllText(fileListPath)
                 let arr = JArray.Parse(json)
                 arr
-                |> Seq.map (fun t -> t.ToString())
-                |> Seq.map (fun s -> s.Replace(".json", ""))
+                |> Seq.map (fun t ->
+                    let obj = t :?> JObject
+                    let name = obj.["name"].ToString()
+                    let fileName = obj.["fileName"].ToString().Replace(".json", "")
+                    (name, fileName))
                 |> Seq.toList
             else
                 // FileList.json not found - return empty list
@@ -150,19 +154,19 @@ type NotifyIconPlugin() as this =
             let languageMenu = new MenuItem(Localization.getString("Language"))
             let currentLanguage = Localization.currentLanguage
 
-            for langName in languages do
-                let langItem = new MenuItem(langName)
-                langItem.Checked <- (currentLanguage = langName)
-                langItem.Enabled <- not (currentLanguage = langName)
-                langItem.Tag <- box(langName)  // Store language name in Tag
+            for (displayName, fileName) in languages do
+                let langItem = new MenuItem(displayName)
+                langItem.Checked <- (currentLanguage = fileName)
+                langItem.Enabled <- not (currentLanguage = fileName)
+                langItem.Tag <- box(fileName)  // Store fileName (without .json) in Tag for language switching
                 langItem.Click.Add <| fun _ ->
                     try
                         let json = Services.settings.root
-                        json.["language"] <- JToken.FromObject(langName)
+                        json.["language"] <- JToken.FromObject(fileName)
                         Services.settings.root <- json
-                        Localization.setLanguage(langName)
+                        Localization.setLanguage(fileName)
                         closeSettingsDialog()
-                        MessageBox.Show(sprintf "Language has been changed to %s." langName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                        MessageBox.Show(sprintf "Language has been changed to %s." displayName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
                     with
                     | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
                 languageMenu.MenuItems.Add(langItem) |> ignore
