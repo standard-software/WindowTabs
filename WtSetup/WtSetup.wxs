@@ -45,6 +45,27 @@
                         Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.md" />
                </Component>
 
+               <!-- Language folder -->
+               <Directory Id="LanguageFolder" Name="Language">
+                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes">
+                     <File Id="FileListJson"
+                           Source="$(var.WtProgram.TargetDir)Language\FileList.json"
+                           KeyPath="yes" />
+                     <File Id="EnglishJson"
+                           Source="$(var.WtProgram.TargetDir)Language\English.json" />
+                     <File Id="JapaneseJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Japanese.json" />
+                     <File Id="JapaneseKansaiJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Japanese_Kansai.json" />
+                     <File Id="JapaneseTohokuJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Japanese_Tohoku.json" />
+                     <File Id="ChineseSimplifiedJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Chinese_Simplified.json" />
+                     <File Id="ChineseTraditionalJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Chinese_Traditional.json" />
+                  </Component>
+               </Directory>
+
                <!-- Registry entries for installation path persistence -->
                <Component Id="RegistryEntries" Guid="A5B2E1C3-4D6F-7890-ABCD-EF1234567890" Win64="yes" Permanent="yes">
                   <RegistryKey Root="HKCU"
@@ -144,6 +165,7 @@
                Level="1"
                ConfigurableDirectory="INSTALLFOLDER">
          <ComponentRef Id="MainExecutable"/>
+         <ComponentRef Id="LanguageFiles"/>
          <ComponentRef Id="RegistryEntries"/>
          <ComponentRef Id="ApplicationShortcut"/>
       </Feature>
