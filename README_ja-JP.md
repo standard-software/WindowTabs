@@ -182,7 +182,9 @@ WindowTabs をスタートアップ時に起動:
 
 ### 多言語をサポート
 
-- 英語と日本語の言語をサポート
+- 英語と日本語、簡体と繁体の中国語をサポート
+- 日本語の関西弁、東北弁版を同梱
+- 言語ファイルでのあらゆる言語をサポート **(WtProgram/Language)**
 - 再起動なしで言語を変更可能
 - トレイメニューから言語を変更可能
 
@@ -265,9 +267,14 @@ WindowTabs をスタートアップ時に起動:
 
 ### 日本語のリソース
 
-[C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー](https://ja.stackoverflow.com/questions/53770/windowtabs-%E3%81%A8%E3%81%84%E3%81%86%E3%82%AA%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%82%92%E6%94%B9%E8%89%AF%E3%81%97%E3%81%A6%E3%81%BF%E3%81%9F%E3%81%84%E3%81%AE%E3%81%A7%E3%81%99%E3%81%8C%E3%83%93%E3%83%AB%E3%83%89%E3%81%8C%E3%81%A7%E3%81%8D%E3%81%BE%E3%81%9B%E3%82%93-%E4%BD%95%E3%81%8B%E5%BF%85%E8%A6%81%E3%81%AA%E3%82%82%E3%81%AE%E3%81%8C%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%81%8B)
+- [どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜](https://forest.watch.impress.co.jp/docs/news/2067165.html
+)
 
-[全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita](https://qiita.com/standard-software/items/dd25270fa3895365fced)
+- [WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト](https://www.gigafree.net/utility/window/WindowTabs.html)
+
+- [C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー](https://ja.stackoverflow.com/questions/53770/windowtabs-%E3%81%A8%E3%81%84%E3%81%86%E3%82%AA%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%82%92%E6%94%B9%E8%89%AF%E3%81%97%E3%81%A6%E3%81%BF%E3%81%9F%E3%81%84%E3%81%AE%E3%81%A7%E3%81%99%E3%81%8C%E3%83%93%E3%83%AB%E3%83%89%E3%81%8C%E3%81%A7%E3%81%8D%E3%81%BE%E3%81%9B%E3%82%93-%E4%BD%95%E3%81%8B%E5%BF%85%E8%A6%81%E3%81%AA%E3%82%82%E3%81%AE%E3%81%8C%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%81%8B)
+
+- [全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita](https://qiita.com/standard-software/items/dd25270fa3895365fced)
 
 ## ライセンス
 
