@@ -4,6 +4,10 @@
 - update README
 - build_release_zip.bat,build_installer.bat support VS2026
 - Support JSONC format for all JSON files (FileList.json, language files, settings) - allows // and /* */ comments
+- Add multi-language support
+  - Add Chinese Simplified and Chinese Traditional language support
+  - Add Japanese Kansai and Tohoku dialect language files
+  - Language files can be customized to support any language
 
 ## version ss_jp_2025.11.24
 - Added "Disable" checkbox menu item in tray icon context menu
