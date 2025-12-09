@@ -84,6 +84,7 @@
   "HideOnDoubleClick": "双击活动标签页时隐藏",
   "Title": "标题",
   "Workspace": "工作区",
-  "Font": "Microsoft YaHei",
+  "Font": "Microsoft YaHei UI",
   "MenuDarkMode": "菜单使用深色模式"
 }
+
