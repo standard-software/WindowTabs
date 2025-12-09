@@ -51,7 +51,7 @@
   "NewWindow": "新規ウィンドウ",
   "MakeTabsWider": "タブの幅を拡張する",
   "MakeTabsNarrower": "タブの幅を縮める",
-  "makeTabsNarrowerByDefault": "アクティブなタブアイコンをダブルクリックで幅を切り替え",
+  "makeTabsNarrowerByDefault": "アクティブなタブアイコンをダブルクリックで幅を変更",
   "tabPositionByDefault": "タブの位置",
   "TabPosition": "タブの位置",
   "RenameTab": "タブの名前を変更",
@@ -87,3 +87,4 @@
   "Font": "Yu Gothic UI",
   "MenuDarkMode": "ダークモードメニュー"
 }
+
