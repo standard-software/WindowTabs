@@ -163,7 +163,9 @@ While light mode is the default, dark mode is also supported for context menus (
 
 ### Multi-Language Support
 
-- English and Japanese language support
+- English, Japanese, Chinese Simplified, and Chinese Traditional language support
+- Japanese Kansai and Tohoku dialect files included
+- Language files can be customized to support any language
 - Runtime language switching without restart
 - Switch languages via tray menu
 
