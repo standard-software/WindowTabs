@@ -25,7 +25,7 @@ This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorpo
 
 ## Version
 
-Latest version **ss_jp_2025.11.24**
+Latest version **ss_jp_2025.12.09**
 
 For detailed version history and changelog, see [version.md](version.md).
 
