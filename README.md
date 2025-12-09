@@ -24,11 +24,12 @@ And Mr./Ms. payaneco forked the source code. See the repositories here:
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
 
-And Mr./Ms. leafOfTree also forked the source code. See the repositories here:
+Mr./Ms. leafOfTree also created a fork with various improvements:
 - https://github.com/leafOfTree/WindowTabs
 - https://github.com/leafOfTree/WindowTabs/network/members
 
-And I (Satoshi Yamamoto@standard-software) also forked the source code and compiled it with VS2022 Community Edition.
+This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by Satoshi Yamamoto (standard-software). Can be compiled with Visual Studio 2022 or 2026 Community Edition.
+- https://github.com/standard-software/WindowTabs
 
 ## Index
 - [Version](#Version)
