@@ -123,13 +123,13 @@ type NotifyIconPlugin() as this =
         let exeDir = Path.GetDirectoryName(exePath)
         Path.Combine(exeDir, "Language")
 
-    // Returns list of (displayName, fileName) tuples
+    // Returns list of (displayName, fileName) tuples (supports JSONC format with comments)
     member this.getLanguageListFromFileList() : (string * string) list =
         try
             let fileListPath = Path.Combine(this.getLanguageFolder(), "FileList.json")
             if File.Exists(fileListPath) then
-                let json = File.ReadAllText(fileListPath)
-                let arr = JArray.Parse(json)
+                let rawJson = File.ReadAllText(fileListPath)
+                let arr = parseJsoncArray(rawJson)
                 arr
                 |> Seq.map (fun t ->
                     let obj = t :?> JObject

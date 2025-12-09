@@ -54,11 +54,11 @@ type Settings(isStandAlone) as this =
                 System.Diagnostics.Debug.WriteLine(sprintf "Failed to save settings: %s" ex.Message)
             
     member this.settingsJson
-        with get() = 
+        with get() =
             try
-                this.settingsString.map(fun s -> 
+                this.settingsString.map(fun s ->
                     try
-                        JObject.Parse(s)
+                        parseJsoncObject(s)
                     with
                     | _ -> JObject()  // Return empty JObject if parsing fails
                 ).def(JObject())

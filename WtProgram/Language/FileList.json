@@ -1,8 +1,8 @@
 [
   { "name": "English", "fileName": "English.json" },
   { "name": "Japanese", "fileName": "Japanese.json" },
-  { "name": "Japanese 関西弁", "fileName": "Japanese_Kansai.json" },
-  { "name": "Japanese 東北弁", "fileName": "Japanese_Tohoku.json" },
+  // { "name": "Japanese 関西弁", "fileName": "Japanese_Kansai.json" },
+  // { "name": "Japanese 東北弁", "fileName": "Japanese_Tohoku.json" },
   { "name": "Chinese Simplified", "fileName": "Chinese_Simplified.json" },
   { "name": "Chinese Traditional", "fileName": "Chinese_Traditional.json" }
 ]

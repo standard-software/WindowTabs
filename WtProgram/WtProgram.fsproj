@@ -105,6 +105,7 @@ if $(ConfigurationName) == Release (
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Localization\Localization_English.fs" />
+    <Compile Include="Localization\JsoncHelper.fs" />
     <Compile Include="Localization\Localization.fs" />
     <Compile Include="Shared/Operators.fs" />
     <Compile Include="Shared/Dynamic.fs" />

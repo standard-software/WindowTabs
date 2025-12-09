@@ -27,13 +27,13 @@ module Localization =
         let exeDir = Path.GetDirectoryName(exePath)
         Path.Combine(exeDir, "Language")
 
-    // Load language strings from JSON file
+    // Load language strings from JSON file (supports JSONC format with comments)
     let loadLanguageFromJson(langName: string) =
         try
             let jsonPath = Path.Combine(getLanguageFolder(), langName + ".json")
             if File.Exists(jsonPath) then
                 let json = File.ReadAllText(jsonPath)
-                let jobj = JObject.Parse(json)
+                let jobj = parseJsoncObject(json)
                 let dict = Dictionary<string, string>()
                 for prop in jobj.Properties() do
                     dict.[prop.Name] <- prop.Value.ToString()
