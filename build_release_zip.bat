@@ -79,6 +79,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Copy Language folder
+echo Copying Language folder...
+mkdir "%OUTPUT_DIR%\Language"
+xcopy /Y /E "WtProgram\bin\Release\Language\*" "%OUTPUT_DIR%\Language\" >nul
+if errorlevel 1 (
+    echo ERROR: Failed to copy Language folder
+    exit /b 1
+)
+
 echo Files copied successfully.
 echo.
 
