@@ -50,7 +50,7 @@
   "CloseAllTabs": "このグループのタブをすべて閉じる",
   "NewWindow": "新規ウィンドウ",
   "MakeTabsWider": "タブの幅を拡張する",
-  "MakeTabsNarrower": "タブの幅を縮める",
+  "MakeTabsNarrower": "タブの幅を縮小する",
   "makeTabsNarrowerByDefault": "アクティブなタブアイコンをダブルクリックで幅を変更",
   "tabPositionByDefault": "タブの位置",
   "TabPosition": "タブの位置",
@@ -87,4 +87,5 @@
   "Font": "Yu Gothic UI",
   "MenuDarkMode": "ダークモードメニュー"
 }
+
 
