@@ -249,11 +249,20 @@ Simply run the desired batch file to create the distribution packages.
 
 ### Japanese Resources
 
-c# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー  
-https://ja.stackoverflow.com/questions/53770/windowtabs-というオープンソースを改良してみたいのですがビルドができません-何か必要なものがありますか
+どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生（窓の杜） - Yahoo!ニュース
+https://news.yahoo.co.jp/articles/523e4c5b9db424bb1edfc582d647c1624a9b7502
+
+どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜
+https://forest.watch.impress.co.jp/docs/news/2067165.html
+
+WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト
+https://www.gigafree.net/utility/window/WindowTabs.html
 
 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
 https://qiita.com/standard-software/items/dd25270fa3895365fced
+
+c# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー  
+https://ja.stackoverflow.com/questions/53770/windowtabs-というオープンソースを改良してみたいのですがビルドができません-何か必要なものがありますか
 
 ## License
 
