@@ -29,7 +29,10 @@ leafOfTree 氏も様々な改良を加えたフォーク作成しています:
 - https://github.com/leafOfTree/WindowTabs
 - https://github.com/leafOfTree/WindowTabs/network/members
 
-このバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。Visual Studio 2022 または 2026 Community Edition でコンパイルできます。
+このバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
+
+Visual Studio 2022 または 2026 Community Edition でコンパイルできます。
+- https://github.com/standard-software/WindowTabs
 
 ## 目次
 - [バージョン](#バージョン)
