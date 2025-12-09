@@ -25,7 +25,7 @@ payaneco 氏のソースコードをフォークしたリポジトリ:
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
 
-leafOfTree 氏も様々な改良を加えたフォーク作成しています:
+leafOfTree 氏も様々な改良を加えたフォークを作成しています:
 - https://github.com/leafOfTree/WindowTabs
 - https://github.com/leafOfTree/WindowTabs/network/members
 
