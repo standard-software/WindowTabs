@@ -25,11 +25,11 @@ payaneco 氏のソースコードをフォークしたリポジトリ:
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
 
-leafOfTree 氏のソースコードをフォークしたリポジトリ:
+leafOfTree 氏も様々な改良を加えたフォーク作成しています:
 - https://github.com/leafOfTree/WindowTabs
 - https://github.com/leafOfTree/WindowTabs/network/members
 
-そして私 (Satoshi Yamamoto@standard-software) がソースコードをフォークし、VS 2022 Community Edition でコンパイルを行っています。
+このバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、Satoshi Yamamoto (standard-software) が行っています。Visual Studio 2022 または 2026 Community Edition でコンパイルできます。
 
 ## 目次
 - [バージョン](#バージョン)
