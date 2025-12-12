@@ -84,6 +84,7 @@
   "HideOnDoubleClick": "雙擊活動分頁時隱藏",
   "Title": "標題",
   "Workspace": "工作區",
-  "Font": "Microsoft JhengHei",
+  "Font": "Microsoft JhengHei UI",
   "MenuDarkMode": "選單使用深色模式"
 }
+
