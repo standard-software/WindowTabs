@@ -2,24 +2,22 @@
 
 # WindowTabs
 
-**Language:** [日本語](README_ja-JP.md)
+**Language:** [Japanese/日本語](README_Japanese.md)
 
 WindowTabs is a utility that enables tabbed UI for Windows applications that don't have a tab interface, as well as between different executables. You can manage Chrome and Edge with tabs, or manage multiple Excel windows or Excel and Word with tabs.
 
 ![Tabs](README_Image/Tabs.png)
 
-It was originally developed by Maurice Flanagan in 2009 and was back then provided as a free and paid version.
+It was originally developed by Maurice Flanagan in 2009 and was provided back then as both free and paid versions.
 The author has now open-sourced the utility.
 
-**⚠ 404 Not Found**
-- https://github.com/mauricef/WindowTabs
+- https://github.com/mauricef/WindowTabs (404 Not Found)
 
-And Mr./Ms. redgis forked and migrated to VS2017 / .NET 4.0. The forked repository.
+Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
 
-**⚠ 404 Not Found**
-- https://github.com/redgis/WindowTabs
+- https://github.com/redgis/WindowTabs (404 Not Found)
 
-And Mr./Ms. payaneco forked the source code. See the repositories here:
+Mr./Ms. payaneco forked the source code.
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
@@ -270,14 +268,23 @@ Simply run the desired batch file to create the distribution packages.
 
 ### Japanese Resources
 
-- [どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜](https://forest.watch.impress.co.jp/docs/news/2067165.html
-)
+- WindowTabs のダウンロード・使い方 - フリーソフト100  
+  https://freesoft-100.com/review/windowtabs.html
 
-- [WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト](https://www.gigafree.net/utility/window/WindowTabs.html)
+- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生（窓の杜） - Yahoo!ニュース  
+  https://news.yahoo.co.jp/articles/523e4c5b9db424bb1edfc582d647c1624a9b7502 (404 Not Found)
 
-- [C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー](https://ja.stackoverflow.com/questions/53770/windowtabs-%E3%81%A8%E3%81%84%E3%81%86%E3%82%AA%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%82%92%E6%94%B9%E8%89%AF%E3%81%97%E3%81%A6%E3%81%BF%E3%81%9F%E3%81%84%E3%81%AE%E3%81%A7%E3%81%99%E3%81%8C%E3%83%93%E3%83%AB%E3%83%89%E3%81%8C%E3%81%A7%E3%81%8D%E3%81%BE%E3%81%9B%E3%82%93-%E4%BD%95%E3%81%8B%E5%BF%85%E8%A6%81%E3%81%AA%E3%82%82%E3%81%AE%E3%81%8C%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%81%8B)
+- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜  
+  https://forest.watch.impress.co.jp/docs/news/2067165.html
 
-- [全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita](https://qiita.com/standard-software/items/dd25270fa3895365fced)
+- WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト  
+  https://www.gigafree.net/utility/window/WindowTabs.html
+
+- C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー  
+  https://ja.stackoverflow.com/questions/53770/windowtabs-というオープンソースを改良してみたいのですがビルドができません-何か必要なものがありますか
+
+- 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
+  https://qiita.com/standard-software/items/dd25270fa3895365fced
 
 ## License
 
