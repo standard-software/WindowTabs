@@ -12,13 +12,11 @@ WindowTabs はインターフェースを持たない Windows アプリケーシ
 
 開発者は現在、このユーティリティをオープンソース化しています:
 
-**⚠ 404 Not Found**
-- https://github.com/mauricef/WindowTabs
+- https://github.com/mauricef/WindowTabs (unavailable)
 
 redgis 氏による VS2017 / .NET 4.0 に移行したフォーク:
 
-**⚠ 404 Not Found**
-- https://github.com/redgis/WindowTabs
+- https://github.com/redgis/WindowTabs (unavailable)
 
 payaneco 氏のソースコードをフォークしたリポジトリ:
 - https://github.com/payaneco/WindowTabs
