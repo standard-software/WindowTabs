@@ -8,17 +8,16 @@ WindowTabs はインターフェースを持たない Windows アプリケーシ
 
 ![Tabs](README_Image/Tabs.png)
 
-元々は Maurice Flanagan 氏によって開発され、当時は無料版と有料版が提供されていました。
-
-開発者は現在、このユーティリティをオープンソース化しています:
+元々は Maurice Flanagan 氏によって2009年に開発され、当時は無料版と有料版が提供されていました。
+開発者は現在、このユーティリティをオープンソース化しています。
 
 - https://github.com/mauricef/WindowTabs (404 Not Found)
 
-redgis 氏による VS2017 / .NET 4.0 に移行したフォーク:
+redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
 
 - https://github.com/redgis/WindowTabs (404 Not Found)
 
-payaneco 氏のソースコードをフォークしたリポジトリ:
+payaneco 氏がソースコードをフォークしました。
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
@@ -77,7 +76,7 @@ Visual Studio 2022 または 2026 Community Edition でコンパイルできま�
 
 ### ポータブル版の使用方法 (WindowTabs.zip)
 
-1. [Releases](https://github.com/standard-software/WindowTabs/releases) ページから `WtSetup.msi` をダウンロード
+1. [Releases](https://github.com/standard-software/WindowTabs/releases) ページから `WindowTabs.zip` をダウンロード
 2. アーカイブを任意の場所に展開します
 3. `WindowTabs.exe` を実行
 4. WindowTabs がバックグラウンドで実行され、トレイアイコンが表示されます
