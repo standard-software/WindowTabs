@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2025.12.09_next_1
+
 ## version ss_jp_2025.12.09
 - update README
 - build_release_zip.bat,build_installer.bat support VS2026
