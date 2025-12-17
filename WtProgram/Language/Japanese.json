@@ -1,9 +1,9 @@
 {
   "Appearance": "外観",
-  "Background Active": "アクティブ時の背景",
-  "Background Flash": "点滅時の背景",
-  "Background Highlight": "強調時の背景",
-  "Background Normal": "通常時の背景",
+  "Background Active": "アクティブ時の背景色",
+  "Background Flash": "点滅時の背景色",
+  "Background Highlight": "強調時の背景色",
+  "Background Normal": "通常時の背景色",
   "Behavior": "動作",
   "Border": "枠線",
   "RestartWindowTabs": "WindowTabs の再起動",
