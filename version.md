@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2025.12.09_next_1
+- Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
 
 ## version ss_jp_2025.12.09
 - update README

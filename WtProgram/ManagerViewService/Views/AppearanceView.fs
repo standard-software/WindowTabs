@@ -78,12 +78,24 @@ type AppearanceView() as this =
         panel.RowCount <- properties.length + 2  // +1 for checkbox, +1 for buttons
         List2([0..properties.length + 1]).iter <| fun row ->
             panel.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
-        panel.ColumnCount <- 2
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore
+        panel.ColumnCount <- 3
+        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 200.0f)).ignore
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
+        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 100.0f)).ignore
         panel
 
    
+    let getDefaultValue key =
+        let defaultAppearance = Services.program.defaultTabAppearanceInfo
+        Serialize.readField defaultAppearance key
+
+    let formatDefaultValue key =
+        let value = getDefaultValue key
+        match value with
+        | :? int as i -> sprintf "%3d" i  // 3-digit right-aligned
+        | :? Color as c -> sprintf "#%06X" (c.ToArgb() &&& 0xFFFFFF)
+        | _ -> value.ToString()
+
     let editors = properties.enumerate.fold (Map2()) <| fun editors (i,prop) ->
         let label =
             let label = Label()
@@ -91,7 +103,7 @@ type AppearanceView() as this =
             label.Text <- Localization.getString(prop.displayText)
             label.TextAlign <- ContentAlignment.MiddleLeft
             label
-        let editor = 
+        let editor =
             match prop.propertyType with
             | ColorProperty -> ColorEditor() :> IPropEditor
             | IntProperty -> IntEditor() :> IPropEditor
@@ -106,6 +118,31 @@ type AppearanceView() as this =
         panel.SetColumn(label, 0)
         panel.SetRow(editor.control, i)
         panel.SetColumn(editor.control, 1)
+
+        // Add reset button only for IntProperty, expand ColorProperty to span 2 columns
+        match prop.propertyType with
+        | IntProperty ->
+            let resetBtn =
+                let btn = Button()
+                btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
+                btn.Font <- Font("Consolas", 9f)  // Monospace font for aligned numbers
+                btn.Dock <- DockStyle.Fill
+                btn.Margin <- Padding(5,5,0,5)
+                btn.Click.Add <| fun _ ->
+                    suppressEvents <- true
+                    let defaultValue = getDefaultValue prop.key
+                    editor.value <- defaultValue
+                    this.applyAppearance()
+                    suppressEvents <- false
+                btn
+            panel.Controls.Add(resetBtn)
+            panel.SetRow(resetBtn, i)
+            panel.SetColumn(resetBtn, 2)
+        | ColorProperty ->
+            // Expand color editor to span columns 1 and 2
+            panel.SetColumnSpan(editor.control, 2)
+        | _ -> ()
+
         editors.add prop.key editor
 
     let setEditorValues appearance =
@@ -126,32 +163,6 @@ type AppearanceView() as this =
         container.WrapContents <- false
         container.Anchor <- AnchorStyles.Right
 
-        let resetBtn = Button()
-        resetBtn.Text <- Localization.getString("Reset")
-        resetBtn.Font <- font
-        resetBtn.Click.Add <| fun _ ->
-            suppressEvents <- true
-            let defaultAppearance = Services.program.defaultTabAppearanceInfo
-            // Reset only size settings, keep current colors
-            let currentAppearance = Services.program.tabAppearanceInfo
-            let mergedAppearance = {
-                tabHeight = defaultAppearance.tabHeight
-                tabMaxWidth = defaultAppearance.tabMaxWidth
-                tabOverlap = defaultAppearance.tabOverlap
-                tabHeightOffset = defaultAppearance.tabHeightOffset
-                tabIndentFlipped = defaultAppearance.tabIndentFlipped
-                tabIndentNormal = defaultAppearance.tabIndentNormal
-                tabTextColor = currentAppearance.tabTextColor
-                tabNormalBgColor = currentAppearance.tabNormalBgColor
-                tabHighlightBgColor = currentAppearance.tabHighlightBgColor
-                tabActiveBgColor = currentAppearance.tabActiveBgColor
-                tabFlashBgColor = currentAppearance.tabFlashBgColor
-                tabBorderColor = currentAppearance.tabBorderColor
-            }
-            Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            setEditorValues mergedAppearance
-            suppressEvents <- false
-        
         let lightBtn = Button()
         lightBtn.Text <- Localization.getString("LightColor")
         lightBtn.Font <- font
@@ -185,14 +196,14 @@ type AppearanceView() as this =
             suppressEvents <- true
             let currentAppearance = Services.program.tabAppearanceInfo
             let darkAppearance = Services.program.darkModeTabAppearanceInfo
-            // Merge color settings with current size settings
+            // Apply only color settings from dark theme, keep size settings
             let mergedAppearance = {
-                tabHeight = if darkAppearance.tabHeight = -1 then currentAppearance.tabHeight else darkAppearance.tabHeight
-                tabMaxWidth = if darkAppearance.tabMaxWidth = -1 then currentAppearance.tabMaxWidth else darkAppearance.tabMaxWidth
-                tabOverlap = if darkAppearance.tabOverlap = -1 then currentAppearance.tabOverlap else darkAppearance.tabOverlap
-                tabHeightOffset = if darkAppearance.tabHeightOffset = -1 then currentAppearance.tabHeightOffset else darkAppearance.tabHeightOffset
-                tabIndentFlipped = if darkAppearance.tabIndentFlipped = -1 then currentAppearance.tabIndentFlipped else darkAppearance.tabIndentFlipped
-                tabIndentNormal = if darkAppearance.tabIndentNormal = -1 then currentAppearance.tabIndentNormal else darkAppearance.tabIndentNormal
+                tabHeight = currentAppearance.tabHeight
+                tabMaxWidth = currentAppearance.tabMaxWidth
+                tabOverlap = currentAppearance.tabOverlap
+                tabHeightOffset = currentAppearance.tabHeightOffset
+                tabIndentFlipped = currentAppearance.tabIndentFlipped
+                tabIndentNormal = currentAppearance.tabIndentNormal
                 tabTextColor = darkAppearance.tabTextColor
                 tabNormalBgColor = darkAppearance.tabNormalBgColor
                 tabHighlightBgColor = darkAppearance.tabHighlightBgColor
@@ -200,9 +211,7 @@ type AppearanceView() as this =
                 tabFlashBgColor = darkAppearance.tabFlashBgColor
                 tabBorderColor = darkAppearance.tabBorderColor
             }
-            // Apply settings first
             Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            // Then update UI
             setEditorValues mergedAppearance
             suppressEvents <- false
 
@@ -213,14 +222,14 @@ type AppearanceView() as this =
             suppressEvents <- true
             let currentAppearance = Services.program.tabAppearanceInfo
             let blueAppearance = Services.program.darkModeBlueTabAppearanceInfo
-            // Merge color settings with current size settings
+            // Apply only color settings from dark blue theme, keep size settings
             let mergedAppearance = {
-                tabHeight = if blueAppearance.tabHeight = -1 then currentAppearance.tabHeight else blueAppearance.tabHeight
-                tabMaxWidth = if blueAppearance.tabMaxWidth = -1 then currentAppearance.tabMaxWidth else blueAppearance.tabMaxWidth
-                tabOverlap = if blueAppearance.tabOverlap = -1 then currentAppearance.tabOverlap else blueAppearance.tabOverlap
-                tabHeightOffset = if blueAppearance.tabHeightOffset = -1 then currentAppearance.tabHeightOffset else blueAppearance.tabHeightOffset
-                tabIndentFlipped = if blueAppearance.tabIndentFlipped = -1 then currentAppearance.tabIndentFlipped else blueAppearance.tabIndentFlipped
-                tabIndentNormal = if blueAppearance.tabIndentNormal = -1 then currentAppearance.tabIndentNormal else blueAppearance.tabIndentNormal
+                tabHeight = currentAppearance.tabHeight
+                tabMaxWidth = currentAppearance.tabMaxWidth
+                tabOverlap = currentAppearance.tabOverlap
+                tabHeightOffset = currentAppearance.tabHeightOffset
+                tabIndentFlipped = currentAppearance.tabIndentFlipped
+                tabIndentNormal = currentAppearance.tabIndentNormal
                 tabTextColor = blueAppearance.tabTextColor
                 tabNormalBgColor = blueAppearance.tabNormalBgColor
                 tabHighlightBgColor = blueAppearance.tabHighlightBgColor
@@ -228,16 +237,13 @@ type AppearanceView() as this =
                 tabFlashBgColor = blueAppearance.tabFlashBgColor
                 tabBorderColor = blueAppearance.tabBorderColor
             }
-            // Apply settings first
             Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            // Then update UI
             setEditorValues mergedAppearance
             suppressEvents <- false
         
         container.Controls.Add(darkBtn)
         container.Controls.Add(darkBlueBtn)
         container.Controls.Add(lightBtn)
-        container.Controls.Add(resetBtn)
         container
 
     do
