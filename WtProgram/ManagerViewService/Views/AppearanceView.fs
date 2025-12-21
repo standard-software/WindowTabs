@@ -55,12 +55,16 @@ type AppearanceView() as this =
 
     let settingsCheckboxBool key defaultValue = checkBox(settingsPropertyBool key defaultValue)
 
-    let properties = List2([
+    // Separate int and color properties for cleaner UI layout
+    let intProperties = List2([
         intConfig "tabHeight" "Height"
         intConfig "tabMaxWidth" "Max Width"
         intConfig "tabOverlap" "Overlap"
         intConfig "tabIndentNormal" "Indent Normal"
         intConfig "tabIndentFlipped" "Indent Flipped"
+        ])
+
+    let colorProperties = List2([
         colorConfig "tabTextColor" "Text Color"
         colorConfig "tabNormalBgColor" "Background Normal"
         colorConfig "tabHighlightBgColor" "Background Highlight"
@@ -69,14 +73,20 @@ type AppearanceView() as this =
         colorConfig "tabBorderColor" "Border"
         ])
 
+    // Combined list for iteration (used by setEditorValues and applyAppearance)
+    let allProperties = List2(intProperties.list @ colorProperties.list)
+
+    // Layout: int properties + dark mode checkbox + color properties + buttons
+    let totalRows = intProperties.length + 1 + colorProperties.length + 1
+
     let panel =
         let panel = TableLayoutPanel()
         panel.AutoScroll <- true
         panel.Dock <- DockStyle.Fill
         panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         panel.Padding <- Padding(10)
-        panel.RowCount <- properties.length + 2  // +1 for checkbox, +1 for buttons
-        List2([0..properties.length + 1]).iter <| fun row ->
+        panel.RowCount <- totalRows
+        List2([0..totalRows - 1]).iter <| fun row ->
             panel.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
         panel.ColumnCount <- 3
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 200.0f)).ignore
@@ -96,12 +106,14 @@ type AppearanceView() as this =
         | :? Color as c -> sprintf "#%06X" (c.ToArgb() &&& 0xFFFFFF)
         | _ -> value.ToString()
 
-    let editors = properties.enumerate.fold (Map2()) <| fun editors (i,prop) ->
+    // Helper to create and place an editor at a specific row
+    let createEditorAt (prop: AppearanceProperty) (row: int) =
         let label =
             let label = Label()
             label.AutoSize <- true
             label.Text <- Localization.getString(prop.displayText)
             label.TextAlign <- ContentAlignment.MiddleLeft
+            label.Margin <- Padding(0,5,0,5)
             label
         let editor =
             match prop.propertyType with
@@ -111,21 +123,19 @@ type AppearanceView() as this =
 
         editor.control.Dock <- DockStyle.Fill
         editor.control.Margin <- Padding(0,5,0,5)
-        label.Margin <- Padding(0,5,0,5)
         panel.Controls.Add(label)
         panel.Controls.Add(editor.control)
-        panel.SetRow(label, i)
+        panel.SetRow(label, row)
         panel.SetColumn(label, 0)
-        panel.SetRow(editor.control, i)
+        panel.SetRow(editor.control, row)
         panel.SetColumn(editor.control, 1)
 
-        // Add reset button only for IntProperty, expand ColorProperty to span 2 columns
         match prop.propertyType with
         | IntProperty ->
             let resetBtn =
                 let btn = Button()
                 btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
-                btn.Font <- Font("Consolas", 9f)  // Monospace font for aligned numbers
+                btn.Font <- Font("Consolas", 9f)
                 btn.Dock <- DockStyle.Fill
                 btn.Margin <- Padding(5,5,0,5)
                 btn.Click.Add <| fun _ ->
@@ -136,17 +146,47 @@ type AppearanceView() as this =
                     suppressEvents <- false
                 btn
             panel.Controls.Add(resetBtn)
-            panel.SetRow(resetBtn, i)
+            panel.SetRow(resetBtn, row)
             panel.SetColumn(resetBtn, 2)
         | ColorProperty ->
-            // Expand color editor to span columns 1 and 2
             panel.SetColumnSpan(editor.control, 2)
         | _ -> ()
 
-        editors.add prop.key editor
+        (prop.key, editor)
+
+    // Row indices for each section
+    let darkModeRow = intProperties.length
+    let colorStartRow = darkModeRow + 1
+    let buttonRow = colorStartRow + colorProperties.length
+
+    // Create editors in natural order: int properties, then color properties
+    let editors : Map2<string, IPropEditor> =
+        let intEditors = intProperties.enumerate.map (fun (i, prop) -> createEditorAt prop i)
+        let colorEditors = colorProperties.enumerate.map (fun (i, prop) -> createEditorAt prop (colorStartRow + i))
+        (intEditors.list @ colorEditors.list) |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
+
+    // Create dark mode checkbox at its designated row
+    let darkModeLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("MenuDarkMode")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Margin <- Padding(0,5,0,5)
+        panel.Controls.Add(label)
+        panel.SetRow(label, darkModeRow)
+        panel.SetColumn(label, 0)
+        label
+
+    let darkModeCheckbox =
+        let checkbox = settingsCheckboxBool "enableMenuDarkMode" false
+        checkbox.Margin <- Padding(0,5,0,5)
+        panel.Controls.Add(checkbox)
+        panel.SetRow(checkbox, darkModeRow)
+        panel.SetColumn(checkbox, 1)
+        checkbox
 
     let setEditorValues appearance =
-        properties.iter <| fun prop ->
+        allProperties.iter <| fun prop ->
             let editor = editors.find prop.key
             try
                 editor.value <- Serialize.readField appearance prop.key
@@ -247,29 +287,12 @@ type AppearanceView() as this =
         container
 
     do
-        // Add dark mode checkbox after border color (last property)
-        let darkModeLabel = Label()
-        darkModeLabel.AutoSize <- true
-        darkModeLabel.Text <- Localization.getString("MenuDarkMode")
-        darkModeLabel.TextAlign <- ContentAlignment.MiddleLeft
-        darkModeLabel.Margin <- Padding(0,5,0,5)
-
-        let darkModeCheckbox = settingsCheckboxBool "enableMenuDarkMode" false
-        darkModeCheckbox.Margin <- Padding(0,5,0,5)
-
-        let checkboxRow = properties.length
-        panel.Controls.Add(darkModeLabel)
-        panel.Controls.Add(darkModeCheckbox)
-        panel.SetRow(darkModeLabel, checkboxRow)
-        panel.SetColumn(darkModeLabel, 0)
-        panel.SetRow(darkModeCheckbox, checkboxRow)
-        panel.SetColumn(darkModeCheckbox, 1)
-
-        // Add button panel
+        // Add button panel at the designated row
         panel.Controls.Add(buttonPanel)
-        let btnRow = properties.length + 1
-        panel.SetRow(buttonPanel, btnRow)
+        panel.SetRow(buttonPanel, buttonRow)
         panel.SetColumn(buttonPanel, 1)
+
+        // Initialize editor values and set up change handlers
         setEditorValues appearance
         editors.items.map(snd).iter <| fun editor ->
             editor.changed.Add <| fun() ->
