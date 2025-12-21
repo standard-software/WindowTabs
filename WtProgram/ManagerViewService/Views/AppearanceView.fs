@@ -2,6 +2,7 @@
 open System
 open System.Drawing
 open System.IO
+open System.Text.RegularExpressions
 open System.Windows.Forms
 open Bemo.Win32
 open Bemo.Win32.Forms
@@ -76,8 +77,8 @@ type AppearanceView() as this =
     // Combined list for iteration (used by setEditorValues and applyAppearance)
     let allProperties = List2(intProperties.list @ colorProperties.list)
 
-    // Layout: int properties + dark mode checkbox + color properties + buttons
-    let totalRows = intProperties.length + 1 + colorProperties.length + 1
+    // Layout: int properties + dark mode checkbox + color properties + copy/paste buttons + preset buttons
+    let totalRows = intProperties.length + 1 + colorProperties.length + 1 + 1
 
     let panel =
         let panel = TableLayoutPanel()
@@ -157,7 +158,8 @@ type AppearanceView() as this =
     // Row indices for each section
     let darkModeRow = intProperties.length
     let colorStartRow = darkModeRow + 1
-    let buttonRow = colorStartRow + colorProperties.length
+    let copyPasteButtonRow = colorStartRow + colorProperties.length
+    let presetButtonRow = copyPasteButtonRow + 1
 
     // Create editors in natural order: int properties, then color properties
     let editors : Map2<string, IPropEditor> =
@@ -195,6 +197,70 @@ type AppearanceView() as this =
     let appearance = Services.program.tabAppearanceInfo
 
     let font = Font(Localization.getString("Font"), 9f)
+
+    // Color key mapping for clipboard operations
+    let colorKeyMap = [
+        ("tabTextColor", "TextColor")
+        ("tabNormalBgColor", "NormalBgColor")
+        ("tabHighlightBgColor", "HighlightBgColor")
+        ("tabActiveBgColor", "ActiveBgColor")
+        ("tabFlashBgColor", "FlashBgColor")
+        ("tabBorderColor", "BorderColor")
+    ]
+
+    let copyPasteButtonPanel =
+        let container = new FlowLayoutPanel()
+        container.FlowDirection <- FlowDirection.LeftToRight
+        container.AutoSize <- true
+        container.WrapContents <- false
+        container.Anchor <- AnchorStyles.Left
+
+        let copyBtn = Button()
+        copyBtn.Text <- Localization.getString("CopyColorSettings")
+        copyBtn.Font <- font
+        copyBtn.AutoSize <- true
+        copyBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        copyBtn.Click.Add <| fun _ ->
+            try
+                // Build clipboard text from current color values
+                let lines = colorKeyMap |> List.map (fun (editorKey, clipboardKey) ->
+                    let editor = editors.find editorKey
+                    let color = unbox<Color>(editor.value)
+                    sprintf "%s=#%06X" clipboardKey (color.ToArgb() &&& 0xFFFFFF)
+                )
+                let clipboardText = String.Join("\n", lines)
+                if not (String.IsNullOrEmpty(clipboardText)) then
+                    Clipboard.SetText(clipboardText)
+            with | _ -> ()
+
+        let pasteBtn = Button()
+        pasteBtn.Text <- Localization.getString("PasteColorSettings")
+        pasteBtn.Font <- font
+        pasteBtn.AutoSize <- true
+        pasteBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        pasteBtn.Click.Add <| fun _ ->
+            try
+                if Clipboard.ContainsText() then
+                    let clipboardText = Clipboard.GetText()
+                    suppressEvents <- true
+                    // Parse clipboard text and apply colors
+                    colorKeyMap |> List.iter (fun (editorKey, clipboardKey) ->
+                        let pattern = sprintf @"%s=#([0-9A-Fa-f]{6})" clipboardKey
+                        let m = Regex.Match(clipboardText, pattern)
+                        if m.Success then
+                            let hexValue = m.Groups.[1].Value
+                            let colorValue = Int32.Parse(hexValue, System.Globalization.NumberStyles.HexNumber)
+                            let color = Color.FromArgb(255, Color.FromArgb(colorValue))
+                            let editor = editors.find editorKey
+                            editor.value <- box(color)
+                    )
+                    this.applyAppearance()
+                    suppressEvents <- false
+            with | _ -> ()
+
+        container.Controls.Add(copyBtn)
+        container.Controls.Add(pasteBtn)
+        container
 
     let buttonPanel =
         let container = new FlowLayoutPanel()
@@ -287,9 +353,14 @@ type AppearanceView() as this =
         container
 
     do
-        // Add button panel at the designated row
+        // Add copy/paste button panel
+        panel.Controls.Add(copyPasteButtonPanel)
+        panel.SetRow(copyPasteButtonPanel, copyPasteButtonRow)
+        panel.SetColumn(copyPasteButtonPanel, 1)
+
+        // Add preset button panel at the designated row
         panel.Controls.Add(buttonPanel)
-        panel.SetRow(buttonPanel, buttonRow)
+        panel.SetRow(buttonPanel, presetButtonRow)
         panel.SetColumn(buttonPanel, 1)
 
         // Initialize editor values and set up change handlers

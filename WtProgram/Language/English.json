@@ -85,6 +85,8 @@
   "Title": "Title",
   "Workspace": "Workspace",
   "Font": "Segoe UI",
-  "MenuDarkMode": "Menu Dark Mode"
+  "MenuDarkMode": "Menu Dark Mode",
+  "CopyColorSettings": "Copy Color Settings",
+  "PasteColorSettings": "Paste Color Settings"
 }
 

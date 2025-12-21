@@ -394,9 +394,13 @@ type Program() as this =
             | :? IDisposable as d -> d.Dispose()
             | _ -> ()
 
-let program = Program()
-program.run(List2<obj>([
-    InputManagerPlugin(Set2(List2([WindowMessages.WM_MOUSEWHEEL])))
-    NotifyIconPlugin()
-    ExceptionHandlerPlugin()
-]).map(fun o -> o.cast<IPlugin>()))
+[<STAThread>]
+[<EntryPoint>]
+let main argv =
+    let program = Program()
+    program.run(List2<obj>([
+        InputManagerPlugin(Set2(List2([WindowMessages.WM_MOUSEWHEEL])))
+        NotifyIconPlugin()
+        ExceptionHandlerPlugin()
+    ]).map(fun o -> o.cast<IPlugin>()))
+    0

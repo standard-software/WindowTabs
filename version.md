@@ -2,8 +2,8 @@
 
 ## version ss_jp_2025.12.09_next_1
 - Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
-- Fix English label "Color" to "Text Color" in Appearance settings
 - Move Menu Dark Mode checkbox above color properties in Appearance settings
+- Add Copy/Paste color settings buttons in Appearance settings
 
 ## version ss_jp_2025.12.09
 - update README
