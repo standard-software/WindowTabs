@@ -85,5 +85,13 @@
   "Title": "タイトル",
   "Workspace": "ワークスペース",
   "Font": "Yu Gothic UI",
-  "MenuDarkMode": "メニューをダークモードにするで"
+  "MenuDarkMode": "メニューをダークモードにするで",
+  "CopyColorSettings": "カラー設定のコピーやで",
+  "PasteColorSettings": "カラー設定の貼り付けやで",
+  "ColorTheme": "カラーテーマ",
+  "SaveAs": "名前を付けて保存するで",
+  "Rename": "名前の変更やで",
+  "EnterThemeName": "テーマ名を入力してや:",
+  "ThemeNameTitle": "カラーテーマ名",
+  "DeleteThemeHint": "名前を空にしてOKを押したらテーマ削除できるで。"
 }

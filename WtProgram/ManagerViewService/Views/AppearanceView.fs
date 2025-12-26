@@ -7,6 +7,7 @@ open System.Windows.Forms
 open Bemo.Win32
 open Bemo.Win32.Forms
 open Microsoft.FSharp.Reflection
+open Newtonsoft.Json.Linq
 
 type AppearanceProperty = {
     displayText : string
@@ -18,6 +19,23 @@ and AppearancePropertyType =
     | HotKeyProperty
     | IntProperty
     | ColorProperty
+
+// Custom theme type for storage
+type ColorThemeData = {
+    name: string
+    textColor: int
+    normalBgColor: int
+    highlightBgColor: int
+    activeBgColor: int
+    flashBgColor: int
+    borderColor: int
+}
+
+// ComboBox item types
+type ThemeItem =
+    | Preset of string
+    | CustomTheme of string
+    | UnsavedCustom
 
 type AppearanceView() as this =
     let settingsPropertyBool name (defaultValue:bool) =
@@ -77,8 +95,8 @@ type AppearanceView() as this =
     // Combined list for iteration (used by setEditorValues and applyAppearance)
     let allProperties = List2(intProperties.list @ colorProperties.list)
 
-    // Layout: int properties + dark mode checkbox + color properties + copy/paste buttons + preset buttons
-    let totalRows = intProperties.length + 1 + colorProperties.length + 1 + 1
+    // Layout: int properties + dark mode checkbox + color properties + copy/paste row + theme row
+    let totalRows = intProperties.length + 1 + colorProperties.length + 2
 
     let panel =
         let panel = TableLayoutPanel()
@@ -156,10 +174,11 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
+    // Layout: int properties -> dark mode -> theme -> color properties -> copy/paste
     let darkModeRow = intProperties.length
-    let colorStartRow = darkModeRow + 1
+    let themeRow = darkModeRow + 1
+    let colorStartRow = themeRow + 1
     let copyPasteButtonRow = colorStartRow + colorProperties.length
-    let presetButtonRow = copyPasteButtonRow + 1
 
     // Create editors in natural order: int properties, then color properties
     let editors : Map2<string, IPropEditor> =
@@ -208,27 +227,380 @@ type AppearanceView() as this =
         ("tabBorderColor", "BorderColor")
     ]
 
+    // Load custom themes from settings
+    let loadCustomThemes() : ColorThemeData list =
+        try
+            let json = Services.settings.root
+            match json.getObjectArray("customColorThemes") with
+            | Some(arr) ->
+                arr.list |> List.choose (fun item ->
+                    try
+                        Some {
+                            name = item.getString("name") |> Option.defaultValue ""
+                            textColor = item.getInt32("textColor") |> Option.defaultValue 0
+                            normalBgColor = item.getInt32("normalBgColor") |> Option.defaultValue 0
+                            highlightBgColor = item.getInt32("highlightBgColor") |> Option.defaultValue 0
+                            activeBgColor = item.getInt32("activeBgColor") |> Option.defaultValue 0
+                            flashBgColor = item.getInt32("flashBgColor") |> Option.defaultValue 0
+                            borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
+                        }
+                    with | _ -> None
+                )
+            | None -> []
+        with | _ -> []
+
+    // Save custom themes to settings
+    let saveCustomThemes (themes: ColorThemeData list) =
+        let json = Services.settings.root
+        let arr = themes |> List.map (fun t ->
+            let item = JObject()
+            item.setString("name", t.name)
+            item.setInt32("textColor", t.textColor)
+            item.setInt32("normalBgColor", t.normalBgColor)
+            item.setInt32("highlightBgColor", t.highlightBgColor)
+            item.setInt32("activeBgColor", t.activeBgColor)
+            item.setInt32("flashBgColor", t.flashBgColor)
+            item.setInt32("borderColor", t.borderColor)
+            item
+        )
+        json.setObjectArray("customColorThemes", List2(arr))
+        Services.settings.root <- json
+
+    // Mutable list of custom themes
+    let mutable customThemes = loadCustomThemes()
+
+    // Preset themes (built-in)
+    let presetThemes = ["Light"; "Dark"; "Dark Blue"]
+
+    // Load saved Custom theme colors from settings
+    let loadSavedCustomColors() : ColorThemeData option =
+        try
+            let json = Services.settings.root
+            match json.getObject("savedCustomColors") with
+            | Some(item) ->
+                // Check if item has required fields
+                match item.getInt32("textColor") with
+                | Some _ ->
+                    Some {
+                        name = "Custom"
+                        textColor = item.getInt32("textColor") |> Option.defaultValue 0
+                        normalBgColor = item.getInt32("normalBgColor") |> Option.defaultValue 0
+                        highlightBgColor = item.getInt32("highlightBgColor") |> Option.defaultValue 0
+                        activeBgColor = item.getInt32("activeBgColor") |> Option.defaultValue 0
+                        flashBgColor = item.getInt32("flashBgColor") |> Option.defaultValue 0
+                        borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
+                    }
+                | None -> None
+            | None -> None
+        with | _ -> None
+
+    // Save saved Custom theme colors to settings
+    let saveSavedCustomColors (colors: ColorThemeData option) =
+        let json = Services.settings.root
+        match colors with
+        | Some c ->
+            let item = JObject()
+            item.setInt32("textColor", c.textColor)
+            item.setInt32("normalBgColor", c.normalBgColor)
+            item.setInt32("highlightBgColor", c.highlightBgColor)
+            item.setInt32("activeBgColor", c.activeBgColor)
+            item.setInt32("flashBgColor", c.flashBgColor)
+            item.setInt32("borderColor", c.borderColor)
+            json.setObject("savedCustomColors", item)
+        | None ->
+            // Remove the key if None
+            json.Remove("savedCustomColors") |> ignore
+        Services.settings.root <- json
+
+    // Saved Custom theme colors (for restoring when Custom is selected)
+    // Load from settings on initialization
+    let mutable savedCustomColors : ColorThemeData option = loadSavedCustomColors()
+
+    // Build ComboBox items list (no separator items - separators are drawn in DrawItem)
+    // UnsavedCustom is only added when savedCustomColors has a value
+    let buildThemeItems() =
+        let items = ResizeArray<ThemeItem>()
+        // Presets
+        presetThemes |> List.iter (fun name -> items.Add(Preset name))
+        // Custom themes
+        customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
+        // Only add UnsavedCustom if there are saved custom colors
+        if savedCustomColors.IsSome then
+            items.Add(UnsavedCustom)
+        items.ToArray() |> Array.toList
+
+    let mutable themeItems = buildThemeItems()
+
+    // Color theme ComboBox with owner-draw for separator lines
+    let colorThemeComboBox =
+        let combo = new ComboBox()
+        combo.Font <- font
+        combo.DropDownStyle <- ComboBoxStyle.DropDownList
+        combo.DrawMode <- DrawMode.OwnerDrawVariable
+        combo.ItemHeight <- 20
+        combo.Margin <- Padding(0, 0, 3, 0)  // Remove left margin, small right margin
+        combo
+
+    // Save/Rename button (created early so we can reference it)
+    let saveRenameBtn = new Button()
+
+    // Refresh ComboBox items
+    let refreshComboBoxItems() =
+        themeItems <- buildThemeItems()
+        suppressEvents <- true
+        colorThemeComboBox.Items.Clear()
+        themeItems |> List.iter (fun item ->
+            match item with
+            | Preset name -> colorThemeComboBox.Items.Add(name) |> ignore
+            | CustomTheme name -> colorThemeComboBox.Items.Add(name) |> ignore
+            | UnsavedCustom -> colorThemeComboBox.Items.Add("Custom") |> ignore
+        )
+        suppressEvents <- false
+
+    // Initialize ComboBox items
+    do refreshComboBoxItems()
+
+    // Get current colors as ColorThemeData
+    let getCurrentColors() =
+        let getColor key =
+            let editor = editors.find key
+            let c = unbox<Color>(editor.value)
+            c.ToArgb() &&& 0xFFFFFF
+        {
+            name = ""
+            textColor = getColor "tabTextColor"
+            normalBgColor = getColor "tabNormalBgColor"
+            highlightBgColor = getColor "tabHighlightBgColor"
+            activeBgColor = getColor "tabActiveBgColor"
+            flashBgColor = getColor "tabFlashBgColor"
+            borderColor = getColor "tabBorderColor"
+        }
+
+    // Check if colors match a theme
+    let colorsMatch (theme: ColorThemeData) (current: ColorThemeData) =
+        theme.textColor = current.textColor &&
+        theme.normalBgColor = current.normalBgColor &&
+        theme.highlightBgColor = current.highlightBgColor &&
+        theme.activeBgColor = current.activeBgColor &&
+        theme.flashBgColor = current.flashBgColor &&
+        theme.borderColor = current.borderColor
+
+    // Get preset theme colors
+    let getPresetColors (name: string) =
+        let appearance =
+            match name with
+            | "Light" -> Services.program.defaultTabAppearanceInfo
+            | "Dark" -> Services.program.darkModeTabAppearanceInfo
+            | "Dark Blue" -> Services.program.darkModeBlueTabAppearanceInfo
+            | _ -> Services.program.defaultTabAppearanceInfo
+        {
+            name = name
+            textColor = appearance.tabTextColor.ToArgb() &&& 0xFFFFFF
+            normalBgColor = appearance.tabNormalBgColor.ToArgb() &&& 0xFFFFFF
+            highlightBgColor = appearance.tabHighlightBgColor.ToArgb() &&& 0xFFFFFF
+            activeBgColor = appearance.tabActiveBgColor.ToArgb() &&& 0xFFFFFF
+            flashBgColor = appearance.tabFlashBgColor.ToArgb() &&& 0xFFFFFF
+            borderColor = appearance.tabBorderColor.ToArgb() &&& 0xFFFFFF
+        }
+
+    // Find matching theme index
+    let findMatchingTheme() =
+        let current = getCurrentColors()
+        let mutable found = -1
+        themeItems |> List.iteri (fun i item ->
+            if found < 0 then
+                match item with
+                | Preset name ->
+                    if colorsMatch (getPresetColors name) current then found <- i
+                | CustomTheme name ->
+                    match customThemes |> List.tryFind (fun t -> t.name = name) with
+                    | Some theme -> if colorsMatch theme current then found <- i
+                    | None -> ()
+                | _ -> ()
+        )
+        found
+
+    // Update button state based on selection
+    let updateButtonState() =
+        if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+            match themeItems.[colorThemeComboBox.SelectedIndex] with
+            | Preset _ ->
+                saveRenameBtn.Text <- Localization.getString("Rename")
+                saveRenameBtn.Enabled <- false
+            | CustomTheme _ ->
+                saveRenameBtn.Text <- Localization.getString("Rename")
+                saveRenameBtn.Enabled <- true
+            | UnsavedCustom ->
+                saveRenameBtn.Text <- Localization.getString("SaveAs")
+                saveRenameBtn.Enabled <- true
+
+    // Helper function to apply color preset
+    let applyColorPreset (presetAppearance: TabAppearanceInfo) =
+        suppressEvents <- true
+        let currentAppearance = Services.program.tabAppearanceInfo
+        let mergedAppearance = {
+            tabHeight = currentAppearance.tabHeight
+            tabMaxWidth = currentAppearance.tabMaxWidth
+            tabOverlap = currentAppearance.tabOverlap
+            tabHeightOffset = currentAppearance.tabHeightOffset
+            tabIndentFlipped = currentAppearance.tabIndentFlipped
+            tabIndentNormal = currentAppearance.tabIndentNormal
+            tabTextColor = presetAppearance.tabTextColor
+            tabNormalBgColor = presetAppearance.tabNormalBgColor
+            tabHighlightBgColor = presetAppearance.tabHighlightBgColor
+            tabActiveBgColor = presetAppearance.tabActiveBgColor
+            tabFlashBgColor = presetAppearance.tabFlashBgColor
+            tabBorderColor = presetAppearance.tabBorderColor
+        }
+        Services.settings.setValue("tabAppearance", box(mergedAppearance))
+        setEditorValues mergedAppearance
+        suppressEvents <- false
+
+    // Apply custom theme colors
+    let applyCustomTheme (theme: ColorThemeData) =
+        suppressEvents <- true
+        let currentAppearance = Services.program.tabAppearanceInfo
+        let toColor value = Color.FromArgb(255, Color.FromArgb(value))
+        let mergedAppearance = {
+            tabHeight = currentAppearance.tabHeight
+            tabMaxWidth = currentAppearance.tabMaxWidth
+            tabOverlap = currentAppearance.tabOverlap
+            tabHeightOffset = currentAppearance.tabHeightOffset
+            tabIndentFlipped = currentAppearance.tabIndentFlipped
+            tabIndentNormal = currentAppearance.tabIndentNormal
+            tabTextColor = toColor theme.textColor
+            tabNormalBgColor = toColor theme.normalBgColor
+            tabHighlightBgColor = toColor theme.highlightBgColor
+            tabActiveBgColor = toColor theme.activeBgColor
+            tabFlashBgColor = toColor theme.flashBgColor
+            tabBorderColor = toColor theme.borderColor
+        }
+        Services.settings.setValue("tabAppearance", box(mergedAppearance))
+        setEditorValues mergedAppearance
+        suppressEvents <- false
+
+    // Set up ComboBox measure event - all items have same height
+    do
+        colorThemeComboBox.MeasureItem.Add <| fun e ->
+            e.ItemHeight <- 20
+
+    // Helper to check if separator should be drawn below an item
+    let shouldDrawSeparatorBelow (index: int) =
+        if index < 0 || index >= themeItems.Length then false
+        else
+            match themeItems.[index] with
+            | Preset "Dark Blue" -> true  // Always draw separator after Dark Blue
+            | CustomTheme _ ->
+                // Draw separator after last custom theme (before UnsavedCustom)
+                if index + 1 < themeItems.Length then
+                    match themeItems.[index + 1] with
+                    | UnsavedCustom -> true
+                    | _ -> false
+                else false
+            | _ -> false
+
+    // Set up ComboBox draw event for separator lines
+    do
+        colorThemeComboBox.DrawItem.Add <| fun e ->
+            e.DrawBackground()
+            if e.Index >= 0 && e.Index < themeItems.Length then
+                match themeItems.[e.Index] with
+                | Preset name | CustomTheme name ->
+                    use brush = new SolidBrush(e.ForeColor)
+                    e.Graphics.DrawString(name, e.Font, brush, float32 e.Bounds.Left, float32 e.Bounds.Top)
+                | UnsavedCustom ->
+                    use brush = new SolidBrush(e.ForeColor)
+                    e.Graphics.DrawString("Custom", e.Font, brush, float32 e.Bounds.Left, float32 e.Bounds.Top)
+                // Draw separator line below if needed
+                if shouldDrawSeparatorBelow e.Index then
+                    let y = e.Bounds.Bottom - 1
+                    use pen = new Pen(Color.Gray, 1.0f)
+                    e.Graphics.DrawLine(pen, e.Bounds.Left + 2, y, e.Bounds.Right - 2, y)
+            e.DrawFocusRectangle()
+
+    // Set up ComboBox event handler
+    do
+        colorThemeComboBox.SelectedIndexChanged.Add <| fun _ ->
+            if not suppressEvents then
+                let currentIndex = colorThemeComboBox.SelectedIndex
+                if currentIndex >= 0 && currentIndex < themeItems.Length then
+                    match themeItems.[currentIndex] with
+                    | Preset "Light" ->
+                        applyColorPreset(Services.program.defaultTabAppearanceInfo)
+                    | Preset "Dark" ->
+                        applyColorPreset(Services.program.darkModeTabAppearanceInfo)
+                    | Preset "Dark Blue" ->
+                        applyColorPreset(Services.program.darkModeBlueTabAppearanceInfo)
+                    | Preset _ -> ()
+                    | CustomTheme name ->
+                        match customThemes |> List.tryFind (fun t -> t.name = name) with
+                        | Some theme -> applyCustomTheme theme
+                        | None -> ()
+                    | UnsavedCustom ->
+                        // Restore saved Custom colors if available
+                        match savedCustomColors with
+                        | Some colors -> applyCustomTheme colors
+                        | None -> ()
+                updateButtonState()
+
+    // Helper to switch to Custom when colors are manually changed
+    let switchToCustom() =
+        if not suppressEvents then
+            // First check if current colors match any theme
+            let matchIndex = findMatchingTheme()
+            if matchIndex >= 0 then
+                suppressEvents <- true
+                colorThemeComboBox.SelectedIndex <- matchIndex
+                suppressEvents <- false
+            else
+                // Save current colors as Custom theme
+                savedCustomColors <- Some(getCurrentColors())
+                // Persist to settings file
+                saveSavedCustomColors savedCustomColors
+                // Refresh ComboBox items to include UnsavedCustom
+                refreshComboBoxItems()
+                // Switch to Custom (last item)
+                let customIndex = themeItems.Length - 1
+                if colorThemeComboBox.SelectedIndex <> customIndex then
+                    suppressEvents <- true
+                    colorThemeComboBox.SelectedIndex <- customIndex
+                    suppressEvents <- false
+            updateButtonState()
+
+    // Row 1: Copy/Paste buttons
     let copyPasteButtonPanel =
         let container = new FlowLayoutPanel()
         container.FlowDirection <- FlowDirection.LeftToRight
         container.AutoSize <- true
         container.WrapContents <- false
-        container.Anchor <- AnchorStyles.Left
+        container.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+        container.Dock <- DockStyle.Top
+        container.Margin <- Padding(0, 0, 0, 0)
 
         let copyBtn = Button()
         copyBtn.Text <- Localization.getString("CopyColorSettings")
         copyBtn.Font <- font
         copyBtn.AutoSize <- true
         copyBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        copyBtn.Margin <- Padding(0, 0, 3, 0)  // Remove left margin
         copyBtn.Click.Add <| fun _ ->
             try
-                // Build clipboard text from current color values
-                let lines = colorKeyMap |> List.map (fun (editorKey, clipboardKey) ->
+                // Get current theme name from ComboBox selection
+                let themeName =
+                    if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+                        match themeItems.[colorThemeComboBox.SelectedIndex] with
+                        | Preset name -> name
+                        | CustomTheme name -> name
+                        | UnsavedCustom -> "Custom"
+                    else
+                        "Custom"
+                // Build clipboard text with theme name at the beginning
+                let colorLines = colorKeyMap |> List.map (fun (editorKey, clipboardKey) ->
                     let editor = editors.find editorKey
                     let color = unbox<Color>(editor.value)
                     sprintf "%s=#%06X" clipboardKey (color.ToArgb() &&& 0xFFFFFF)
                 )
-                let clipboardText = String.Join("\n", lines)
+                let clipboardText = "ThemaName=" + themeName + "\n" + String.Join("\n", colorLines)
                 if not (String.IsNullOrEmpty(clipboardText)) then
                     Clipboard.SetText(clipboardText)
             with | _ -> ()
@@ -238,6 +610,7 @@ type AppearanceView() as this =
         pasteBtn.Font <- font
         pasteBtn.AutoSize <- true
         pasteBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        pasteBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with copyBtn
         pasteBtn.Click.Add <| fun _ ->
             try
                 if Clipboard.ContainsText() then
@@ -255,6 +628,7 @@ type AppearanceView() as this =
                             editor.value <- box(color)
                     )
                     this.applyAppearance()
+                    switchToCustom()
                     suppressEvents <- false
             with | _ -> ()
 
@@ -262,106 +636,165 @@ type AppearanceView() as this =
         container.Controls.Add(pasteBtn)
         container
 
-    let buttonPanel =
+    // Show input dialog for theme name
+    // Returns: Some(name) if OK pressed, None if cancelled
+    // For rename mode: showDeleteHint=true shows hint about deleting by clearing name
+    let showNameInputDialog (title: string) (defaultValue: string) (showDeleteHint: bool) =
+        use form = new Form()
+        form.Text <- title
+        form.Size <- Size(350, if showDeleteHint then 170 else 150)
+        form.StartPosition <- FormStartPosition.CenterParent
+        form.FormBorderStyle <- FormBorderStyle.FixedDialog
+        form.MaximizeBox <- false
+        form.MinimizeBox <- false
+        form.TopMost <- true  // Ensure dialog appears in front of settings dialog
+
+        let label = new Label()
+        label.Text <- Localization.getString("EnterThemeName")
+        label.Location <- Point(10, 20)
+        label.AutoSize <- true
+
+        let hintLabel = new Label()
+        if showDeleteHint then
+            hintLabel.Text <- Localization.getString("DeleteThemeHint")
+            hintLabel.Location <- Point(10, 40)
+            hintLabel.AutoSize <- true
+            hintLabel.ForeColor <- Color.Gray
+
+        let textBox = new TextBox()
+        textBox.Text <- defaultValue
+        textBox.Location <- Point(10, if showDeleteHint then 65 else 45)
+        textBox.Size <- Size(310, 25)
+
+        let okBtn = new Button()
+        okBtn.Text <- "OK"
+        okBtn.DialogResult <- DialogResult.OK
+        okBtn.Location <- Point(160, if showDeleteHint then 100 else 80)
+        okBtn.Size <- Size(75, 25)
+
+        let cancelBtn = new Button()
+        cancelBtn.Text <- "Cancel"
+        cancelBtn.DialogResult <- DialogResult.Cancel
+        cancelBtn.Location <- Point(245, if showDeleteHint then 100 else 80)
+        cancelBtn.Size <- Size(75, 25)
+
+        form.Controls.Add(label)
+        if showDeleteHint then
+            form.Controls.Add(hintLabel)
+        form.Controls.Add(textBox)
+        form.Controls.Add(okBtn)
+        form.Controls.Add(cancelBtn)
+        form.AcceptButton <- okBtn
+        form.CancelButton <- cancelBtn
+
+        // Get parent form from panel to show dialog as modal child
+        let parentForm = panel.FindForm()
+        let result =
+            if parentForm <> null then
+                form.ShowDialog(parentForm)
+            else
+                form.ShowDialog()
+        if result = DialogResult.OK then
+            Some(textBox.Text.Trim())
+        else
+            None
+
+    // Color Theme label (placed in column 0)
+    let themeLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("ColorTheme")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Margin <- Padding(0, 10, 0, 5)  // Add top margin
+        label
+
+    // Color Theme dropdown and Save/Rename button (placed in column 1)
+    let themePanel =
         let container = new FlowLayoutPanel()
         container.FlowDirection <- FlowDirection.LeftToRight
         container.AutoSize <- true
         container.WrapContents <- false
-        container.Anchor <- AnchorStyles.Right
+        container.Dock <- DockStyle.Top
+        container.Margin <- Padding(0, 8, 0, 0)  // Add top margin
+        container.Padding <- Padding(0, 0, 0, 0)
 
-        let lightBtn = Button()
-        lightBtn.Text <- Localization.getString("LightColor")
-        lightBtn.Font <- font
-        lightBtn.Click.Add <| fun _ ->
-            suppressEvents <- true
-            let currentAppearance = Services.program.tabAppearanceInfo
-            let defaultAppearance = Services.program.defaultTabAppearanceInfo
-            // Apply only color settings from default, keep size settings
-            let mergedAppearance = {
-                tabHeight = currentAppearance.tabHeight
-                tabMaxWidth = currentAppearance.tabMaxWidth
-                tabOverlap = currentAppearance.tabOverlap
-                tabHeightOffset = currentAppearance.tabHeightOffset
-                tabIndentFlipped = currentAppearance.tabIndentFlipped
-                tabIndentNormal = currentAppearance.tabIndentNormal
-                tabTextColor = defaultAppearance.tabTextColor
-                tabNormalBgColor = defaultAppearance.tabNormalBgColor
-                tabHighlightBgColor = defaultAppearance.tabHighlightBgColor
-                tabActiveBgColor = defaultAppearance.tabActiveBgColor
-                tabFlashBgColor = defaultAppearance.tabFlashBgColor
-                tabBorderColor = defaultAppearance.tabBorderColor
-            }
-            Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            setEditorValues mergedAppearance
-            suppressEvents <- false
-        
-        let darkBtn = Button()
-        darkBtn.Text <- Localization.getString("DarkColor")
-        darkBtn.Font <- font
-        darkBtn.Click.Add <| fun _ ->
-            suppressEvents <- true
-            let currentAppearance = Services.program.tabAppearanceInfo
-            let darkAppearance = Services.program.darkModeTabAppearanceInfo
-            // Apply only color settings from dark theme, keep size settings
-            let mergedAppearance = {
-                tabHeight = currentAppearance.tabHeight
-                tabMaxWidth = currentAppearance.tabMaxWidth
-                tabOverlap = currentAppearance.tabOverlap
-                tabHeightOffset = currentAppearance.tabHeightOffset
-                tabIndentFlipped = currentAppearance.tabIndentFlipped
-                tabIndentNormal = currentAppearance.tabIndentNormal
-                tabTextColor = darkAppearance.tabTextColor
-                tabNormalBgColor = darkAppearance.tabNormalBgColor
-                tabHighlightBgColor = darkAppearance.tabHighlightBgColor
-                tabActiveBgColor = darkAppearance.tabActiveBgColor
-                tabFlashBgColor = darkAppearance.tabFlashBgColor
-                tabBorderColor = darkAppearance.tabBorderColor
-            }
-            Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            setEditorValues mergedAppearance
-            suppressEvents <- false
+        // Configure saveRenameBtn (already created earlier)
+        saveRenameBtn.Text <- Localization.getString("Rename")
+        saveRenameBtn.Font <- font
+        saveRenameBtn.AutoSize <- true
+        saveRenameBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        saveRenameBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with ComboBox
+        saveRenameBtn.Enabled <- false
 
-        let darkBlueBtn = Button()
-        darkBlueBtn.Text <- Localization.getString("DarkBlueColor")
-        darkBlueBtn.Font <- font
-        darkBlueBtn.Click.Add <| fun _ ->
-            suppressEvents <- true
-            let currentAppearance = Services.program.tabAppearanceInfo
-            let blueAppearance = Services.program.darkModeBlueTabAppearanceInfo
-            // Apply only color settings from dark blue theme, keep size settings
-            let mergedAppearance = {
-                tabHeight = currentAppearance.tabHeight
-                tabMaxWidth = currentAppearance.tabMaxWidth
-                tabOverlap = currentAppearance.tabOverlap
-                tabHeightOffset = currentAppearance.tabHeightOffset
-                tabIndentFlipped = currentAppearance.tabIndentFlipped
-                tabIndentNormal = currentAppearance.tabIndentNormal
-                tabTextColor = blueAppearance.tabTextColor
-                tabNormalBgColor = blueAppearance.tabNormalBgColor
-                tabHighlightBgColor = blueAppearance.tabHighlightBgColor
-                tabActiveBgColor = blueAppearance.tabActiveBgColor
-                tabFlashBgColor = blueAppearance.tabFlashBgColor
-                tabBorderColor = blueAppearance.tabBorderColor
-            }
-            Services.settings.setValue("tabAppearance", box(mergedAppearance))
-            setEditorValues mergedAppearance
-            suppressEvents <- false
-        
-        container.Controls.Add(darkBtn)
-        container.Controls.Add(darkBlueBtn)
-        container.Controls.Add(lightBtn)
+        saveRenameBtn.Click.Add <| fun _ ->
+            if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+                match themeItems.[colorThemeComboBox.SelectedIndex] with
+                | UnsavedCustom ->
+                    // Save As - create new custom theme (no delete hint for new theme)
+                    match showNameInputDialog (Localization.getString("ThemeNameTitle")) "" false with
+                    | Some name when not (String.IsNullOrWhiteSpace(name)) ->
+                        let newTheme = { getCurrentColors() with name = name }
+                        customThemes <- customThemes @ [newTheme]
+                        saveCustomThemes customThemes
+                        refreshComboBoxItems()
+                        // Select the newly created theme
+                        let newIndex = themeItems |> List.findIndex (fun item ->
+                            match item with
+                            | CustomTheme n -> n = name
+                            | _ -> false
+                        )
+                        colorThemeComboBox.SelectedIndex <- newIndex
+                        updateButtonState()
+                    | _ -> ()
+                | CustomTheme currentName ->
+                    // Rename existing custom theme (show delete hint)
+                    match showNameInputDialog (Localization.getString("ThemeNameTitle")) currentName true with
+                    | Some newName when String.IsNullOrWhiteSpace(newName) ->
+                        // Empty name means delete the theme
+                        customThemes <- customThemes |> List.filter (fun t -> t.name <> currentName)
+                        saveCustomThemes customThemes
+                        refreshComboBoxItems()
+                        // Select first preset (Light)
+                        colorThemeComboBox.SelectedIndex <- 0
+                        updateButtonState()
+                    | Some newName ->
+                        // Rename the theme
+                        customThemes <- customThemes |> List.map (fun t ->
+                            if t.name = currentName then { t with name = newName }
+                            else t
+                        )
+                        saveCustomThemes customThemes
+                        refreshComboBoxItems()
+                        // Select the renamed theme
+                        let newIndex = themeItems |> List.findIndex (fun item ->
+                            match item with
+                            | CustomTheme n -> n = newName
+                            | _ -> false
+                        )
+                        colorThemeComboBox.SelectedIndex <- newIndex
+                        updateButtonState()
+                    | None -> ()
+                | _ -> ()
+
+        container.Controls.Add(colorThemeComboBox)
+        container.Controls.Add(saveRenameBtn)
         container
 
     do
-        // Add copy/paste button panel
+        // Add theme label and panel (after dark mode, before color properties)
+        // Increase themeRow height to add bottom margin between theme and color properties
+        panel.RowStyles.[themeRow].Height <- 45.0f
+        panel.Controls.Add(themeLabel)
+        panel.SetRow(themeLabel, themeRow)
+        panel.SetColumn(themeLabel, 0)
+        panel.Controls.Add(themePanel)
+        panel.SetRow(themePanel, themeRow)
+        panel.SetColumn(themePanel, 1)
+
+        // Add copy/paste button panel (after color properties)
         panel.Controls.Add(copyPasteButtonPanel)
         panel.SetRow(copyPasteButtonPanel, copyPasteButtonRow)
         panel.SetColumn(copyPasteButtonPanel, 1)
-
-        // Add preset button panel at the designated row
-        panel.Controls.Add(buttonPanel)
-        panel.SetRow(buttonPanel, presetButtonRow)
-        panel.SetColumn(buttonPanel, 1)
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
@@ -369,6 +802,21 @@ type AppearanceView() as this =
             editor.changed.Add <| fun() ->
                 if not suppressEvents then
                     this.applyAppearance()
+                    switchToCustom()
+
+        // Set initial ComboBox selection based on current colors
+        let matchIndex = findMatchingTheme()
+        if matchIndex >= 0 then
+            colorThemeComboBox.SelectedIndex <- matchIndex
+        else
+            // Current colors don't match any preset or custom theme
+            // Save them as Custom colors and add UnsavedCustom to the list
+            savedCustomColors <- Some(getCurrentColors())
+            // Persist to settings file so Custom option remains after dialog close/reopen
+            saveSavedCustomColors savedCustomColors
+            refreshComboBoxItems()
+            colorThemeComboBox.SelectedIndex <- themeItems.Length - 1  // Custom
+        updateButtonState()
         
     member this.applyAppearance() =
         // Get all current values from UI editors

@@ -85,6 +85,14 @@
   "Title": "标题",
   "Workspace": "工作区",
   "Font": "Microsoft YaHei UI",
-  "MenuDarkMode": "菜单使用深色模式"
+  "MenuDarkMode": "菜单使用深色模式",
+  "CopyColorSettings": "复制颜色设置",
+  "PasteColorSettings": "粘贴颜色设置",
+  "ColorTheme": "颜色主题",
+  "SaveAs": "另存为",
+  "Rename": "重命名",
+  "EnterThemeName": "请输入主题名称:",
+  "ThemeNameTitle": "颜色主题名称",
+  "DeleteThemeHint": "清空名称并按确定可删除此主题。"
 }
 

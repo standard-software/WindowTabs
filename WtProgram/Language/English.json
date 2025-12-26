@@ -87,6 +87,12 @@
   "Font": "Segoe UI",
   "MenuDarkMode": "Menu Dark Mode",
   "CopyColorSettings": "Copy Color Settings",
-  "PasteColorSettings": "Paste Color Settings"
+  "PasteColorSettings": "Paste Color Settings",
+  "ColorTheme": "Color Theme",
+  "SaveAs": "Save As",
+  "Rename": "Rename",
+  "EnterThemeName": "Enter theme name:",
+  "ThemeNameTitle": "Color Theme Name",
+  "DeleteThemeHint": "Clear the name and press OK to delete this theme."
 }
 

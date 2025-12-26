@@ -2,8 +2,8 @@
 
 ## version ss_jp_2025.12.09_next_1
 - Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
-- Move Menu Dark Mode checkbox above color properties in Appearance settings
-- Add Copy/Paste color settings buttons in Appearance settings
+- Add Copy/Paste color settings buttons with ThemaName=<name> format
+- Add Color Theme dropdown (Light/Dark/Dark Blue/Custom) with Save/Rename button for custom themes
 
 ## version ss_jp_2025.12.09
 - update README

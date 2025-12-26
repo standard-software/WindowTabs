@@ -87,5 +87,11 @@
   "Font": "Yu Gothic UI",
   "MenuDarkMode": "メニューをダークモードにする",
   "CopyColorSettings": "カラー設定のコピー",
-  "PasteColorSettings": "カラー設定の貼り付け"
+  "PasteColorSettings": "カラー設定の貼り付け",
+  "ColorTheme": "カラーテーマ",
+  "SaveAs": "名前を付けて保存",
+  "Rename": "名前の変更",
+  "EnterThemeName": "テーマ名を入力してください:",
+  "ThemeNameTitle": "カラーテーマ名",
+  "DeleteThemeHint": "名前を空にしてOKを押すとテーマを削除できます。"
 }

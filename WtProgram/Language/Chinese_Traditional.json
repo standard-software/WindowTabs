@@ -85,6 +85,14 @@
   "Title": "標題",
   "Workspace": "工作區",
   "Font": "Microsoft JhengHei UI",
-  "MenuDarkMode": "選單使用深色模式"
+  "MenuDarkMode": "選單使用深色模式",
+  "CopyColorSettings": "複製顏色設定",
+  "PasteColorSettings": "貼上顏色設定",
+  "ColorTheme": "顏色主題",
+  "SaveAs": "另存新檔",
+  "Rename": "重新命名",
+  "EnterThemeName": "請輸入主題名稱:",
+  "ThemeNameTitle": "顏色主題名稱",
+  "DeleteThemeHint": "清空名稱並按確定可刪除此主題。"
 }
 
