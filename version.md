@@ -3,7 +3,9 @@
 ## version ss_jp_2025.12.09_next_1
 - Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
 - Add Copy/Paste color settings buttons with ThemaName=<name> format
-- Add Color Theme dropdown (Light/Dark/Dark Blue/Custom) with Save/Rename button for custom themes
+- Add Color Theme feature with preset themes (Light/Dark/Dark Blue) and custom theme support
+  - Save/Rename/Delete custom themes, reorder with [↑][↓] buttons
+  - ComboBox-based Save As dialog for overwriting existing themes
 
 ## version ss_jp_2025.12.09
 - update README

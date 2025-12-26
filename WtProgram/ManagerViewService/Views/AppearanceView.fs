@@ -341,8 +341,10 @@ type AppearanceView() as this =
         combo.Margin <- Padding(0, 0, 3, 0)  // Remove left margin, small right margin
         combo
 
-    // Save/Rename button (created early so we can reference it)
+    // Save/Rename button and Up/Down buttons (created early so we can reference them)
     let saveRenameBtn = new Button()
+    let upBtn = new Button()
+    let downBtn = new Button()
 
     // Refresh ComboBox items
     let refreshComboBoxItems() =
@@ -420,19 +422,39 @@ type AppearanceView() as this =
         )
         found
 
+    // Get custom theme index in customThemes list by name
+    let getCustomThemeIndex (name: string) =
+        customThemes |> List.tryFindIndex (fun t -> t.name = name)
+
     // Update button state based on selection
     let updateButtonState() =
         if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
             match themeItems.[colorThemeComboBox.SelectedIndex] with
             | Preset _ ->
-                saveRenameBtn.Text <- Localization.getString("Rename")
-                saveRenameBtn.Enabled <- false
-            | CustomTheme _ ->
+                // Hide all buttons for preset themes
+                saveRenameBtn.Visible <- false
+                upBtn.Visible <- false
+                downBtn.Visible <- false
+            | CustomTheme name ->
                 saveRenameBtn.Text <- Localization.getString("Rename")
                 saveRenameBtn.Enabled <- true
+                saveRenameBtn.Visible <- true
+                upBtn.Visible <- true
+                downBtn.Visible <- true
+                // Enable/disable up/down buttons based on position
+                match getCustomThemeIndex name with
+                | Some idx ->
+                    upBtn.Enabled <- idx > 0
+                    downBtn.Enabled <- idx < customThemes.Length - 1
+                | None ->
+                    upBtn.Enabled <- false
+                    downBtn.Enabled <- false
             | UnsavedCustom ->
                 saveRenameBtn.Text <- Localization.getString("SaveAs")
                 saveRenameBtn.Enabled <- true
+                saveRenameBtn.Visible <- true
+                upBtn.Visible <- false
+                downBtn.Visible <- false
 
     // Helper function to apply color preset
     let applyColorPreset (presetAppearance: TabAppearanceInfo) =
@@ -636,7 +658,11 @@ type AppearanceView() as this =
         container.Controls.Add(pasteBtn)
         container
 
-    // Show input dialog for theme name
+    // Reserved theme names that cannot be used for custom themes
+    // Note: Light, Dark, Dark Blue can be used as custom theme names (will create a custom theme with that name)
+    let reservedThemeNames = ["Custom"]
+
+    // Show input dialog for theme name (used for Rename)
     // Returns: Some(name) if OK pressed, None if cancelled
     // For rename mode: showDeleteHint=true shows hint about deleting by clearing name
     let showNameInputDialog (title: string) (defaultValue: string) (showDeleteHint: bool) =
@@ -699,6 +725,73 @@ type AppearanceView() as this =
         else
             None
 
+    // Show Save As dialog with ComboBox for theme name selection (used for Save As)
+    // Returns: Some(name, isOverwrite) if OK pressed, None if cancelled
+    let showSaveAsDialog (title: string) =
+        use form = new Form()
+        form.Text <- title
+        form.Size <- Size(350, 150)
+        form.StartPosition <- FormStartPosition.CenterParent
+        form.FormBorderStyle <- FormBorderStyle.FixedDialog
+        form.MaximizeBox <- false
+        form.MinimizeBox <- false
+        form.TopMost <- true
+
+        let label = new Label()
+        label.Text <- Localization.getString("EnterThemeName")
+        label.Location <- Point(10, 20)
+        label.AutoSize <- true
+
+        let comboBox = new ComboBox()
+        comboBox.Location <- Point(10, 45)
+        comboBox.Size <- Size(310, 25)
+        comboBox.DropDownStyle <- ComboBoxStyle.DropDown  // Allow text input
+        // Add existing custom theme names to ComboBox
+        customThemes |> List.iter (fun t -> comboBox.Items.Add(t.name) |> ignore)
+
+        let okBtn = new Button()
+        okBtn.Text <- "OK"
+        okBtn.DialogResult <- DialogResult.OK
+        okBtn.Location <- Point(160, 80)
+        okBtn.Size <- Size(75, 25)
+        okBtn.Enabled <- false  // Initially disabled
+
+        let cancelBtn = new Button()
+        cancelBtn.Text <- "Cancel"
+        cancelBtn.DialogResult <- DialogResult.Cancel
+        cancelBtn.Location <- Point(245, 80)
+        cancelBtn.Size <- Size(75, 25)
+
+        // Validate input and update OK button state
+        let validateInput() =
+            let text = comboBox.Text.Trim()
+            let isReserved = reservedThemeNames |> List.exists (fun n ->
+                String.Equals(n, text, StringComparison.OrdinalIgnoreCase))
+            okBtn.Enabled <- not (String.IsNullOrWhiteSpace(text)) && not isReserved
+
+        comboBox.TextChanged.Add(fun _ -> validateInput())
+        comboBox.SelectedIndexChanged.Add(fun _ -> validateInput())
+
+        form.Controls.Add(label)
+        form.Controls.Add(comboBox)
+        form.Controls.Add(okBtn)
+        form.Controls.Add(cancelBtn)
+        form.AcceptButton <- okBtn
+        form.CancelButton <- cancelBtn
+
+        let parentForm = panel.FindForm()
+        let result =
+            if parentForm <> null then
+                form.ShowDialog(parentForm)
+            else
+                form.ShowDialog()
+        if result = DialogResult.OK then
+            let name = comboBox.Text.Trim()
+            let isOverwrite = customThemes |> List.exists (fun t -> t.name = name)
+            Some(name, isOverwrite)
+        else
+            None
+
     // Color Theme label (placed in column 0)
     let themeLabel =
         let label = Label()
@@ -730,14 +823,21 @@ type AppearanceView() as this =
             if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
                 match themeItems.[colorThemeComboBox.SelectedIndex] with
                 | UnsavedCustom ->
-                    // Save As - create new custom theme (no delete hint for new theme)
-                    match showNameInputDialog (Localization.getString("ThemeNameTitle")) "" false with
-                    | Some name when not (String.IsNullOrWhiteSpace(name)) ->
+                    // Save As - use ComboBox dialog for theme name selection
+                    match showSaveAsDialog (Localization.getString("ThemeNameTitle")) with
+                    | Some (name, isOverwrite) ->
                         let newTheme = { getCurrentColors() with name = name }
-                        customThemes <- customThemes @ [newTheme]
+                        if isOverwrite then
+                            // Overwrite existing theme with same name
+                            customThemes <- customThemes |> List.map (fun t ->
+                                if t.name = name then newTheme else t
+                            )
+                        else
+                            // Add new theme
+                            customThemes <- customThemes @ [newTheme]
                         saveCustomThemes customThemes
                         refreshComboBoxItems()
-                        // Select the newly created theme
+                        // Select the saved theme
                         let newIndex = themeItems |> List.findIndex (fun item ->
                             match item with
                             | CustomTheme n -> n = name
@@ -745,7 +845,7 @@ type AppearanceView() as this =
                         )
                         colorThemeComboBox.SelectedIndex <- newIndex
                         updateButtonState()
-                    | _ -> ()
+                    | None -> ()
                 | CustomTheme currentName ->
                     // Rename existing custom theme (show delete hint)
                     match showNameInputDialog (Localization.getString("ThemeNameTitle")) currentName true with
@@ -753,9 +853,14 @@ type AppearanceView() as this =
                         // Empty name means delete the theme
                         customThemes <- customThemes |> List.filter (fun t -> t.name <> currentName)
                         saveCustomThemes customThemes
+                        // Ensure Custom item exists (save current colors if needed)
+                        if savedCustomColors.IsNone then
+                            savedCustomColors <- Some(getCurrentColors())
+                            saveSavedCustomColors savedCustomColors
                         refreshComboBoxItems()
-                        // Select first preset (Light)
-                        colorThemeComboBox.SelectedIndex <- 0
+                        // Switch to Custom (last item) - colors remain unchanged from current
+                        let customIndex = themeItems.Length - 1
+                        colorThemeComboBox.SelectedIndex <- customIndex
                         updateButtonState()
                     | Some newName ->
                         // Rename the theme
@@ -776,8 +881,80 @@ type AppearanceView() as this =
                     | None -> ()
                 | _ -> ()
 
+        // Configure upBtn
+        upBtn.Text <- "↑"
+        upBtn.Font <- font
+        upBtn.Size <- Size(30, 23)
+        upBtn.Margin <- Padding(3, 0, 0, 0)
+        upBtn.Enabled <- false
+        upBtn.Visible <- false
+
+        upBtn.Click.Add <| fun _ ->
+            if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+                match themeItems.[colorThemeComboBox.SelectedIndex] with
+                | CustomTheme name ->
+                    match getCustomThemeIndex name with
+                    | Some idx when idx > 0 ->
+                        // Swap with previous theme
+                        let prev = customThemes.[idx - 1]
+                        let curr = customThemes.[idx]
+                        customThemes <- customThemes |> List.mapi (fun i t ->
+                            if i = idx - 1 then curr
+                            elif i = idx then prev
+                            else t
+                        )
+                        saveCustomThemes customThemes
+                        refreshComboBoxItems()
+                        // Select the moved theme
+                        let newIndex = themeItems |> List.findIndex (fun item ->
+                            match item with
+                            | CustomTheme n -> n = name
+                            | _ -> false
+                        )
+                        colorThemeComboBox.SelectedIndex <- newIndex
+                        updateButtonState()
+                    | _ -> ()
+                | _ -> ()
+
+        // Configure downBtn
+        downBtn.Text <- "↓"
+        downBtn.Font <- font
+        downBtn.Size <- Size(30, 23)
+        downBtn.Margin <- Padding(3, 0, 0, 0)
+        downBtn.Enabled <- false
+        downBtn.Visible <- false
+
+        downBtn.Click.Add <| fun _ ->
+            if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+                match themeItems.[colorThemeComboBox.SelectedIndex] with
+                | CustomTheme name ->
+                    match getCustomThemeIndex name with
+                    | Some idx when idx < customThemes.Length - 1 ->
+                        // Swap with next theme
+                        let curr = customThemes.[idx]
+                        let next = customThemes.[idx + 1]
+                        customThemes <- customThemes |> List.mapi (fun i t ->
+                            if i = idx then next
+                            elif i = idx + 1 then curr
+                            else t
+                        )
+                        saveCustomThemes customThemes
+                        refreshComboBoxItems()
+                        // Select the moved theme
+                        let newIndex = themeItems |> List.findIndex (fun item ->
+                            match item with
+                            | CustomTheme n -> n = name
+                            | _ -> false
+                        )
+                        colorThemeComboBox.SelectedIndex <- newIndex
+                        updateButtonState()
+                    | _ -> ()
+                | _ -> ()
+
         container.Controls.Add(colorThemeComboBox)
         container.Controls.Add(saveRenameBtn)
+        container.Controls.Add(upBtn)
+        container.Controls.Add(downBtn)
         container
 
     do
