@@ -4,6 +4,7 @@ open System.Drawing
 open System.IO
 open System.Text.RegularExpressions
 open System.Windows.Forms
+open System.Windows.Forms.VisualStyles
 open Bemo.Win32
 open Bemo.Win32.Forms
 open Microsoft.FSharp.Reflection
@@ -613,7 +614,7 @@ type AppearanceView() as this =
         copySelectedBtn.Text <- Localization.getString("CopySelectedTheme")
         copySelectedBtn.AutoSize <- true
         copySelectedBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        copySelectedBtn.Margin <- Padding(0, 0, 3, 0)
+        copySelectedBtn.Margin <- Padding(0, 0, 0, 0)  // No right margin - connects to dropdown button
         copySelectedBtn.Click.Add <| fun _ ->
             try
                 let currentColors = getCurrentColors()
@@ -631,33 +632,76 @@ type AppearanceView() as this =
                     Clipboard.SetText(jsonText)
             with | _ -> ()
 
-        // Button 2: Copy Saved Themes
-        let copySavedBtn = Button()
-        copySavedBtn.Text <- Localization.getString("CopySavedThemes")
-        copySavedBtn.AutoSize <- true
-        copySavedBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        copySavedBtn.Margin <- Padding(3, 0, 3, 0)
-        copySavedBtn.Click.Add <| fun _ ->
+        // Dropdown button with ContextMenuStrip for additional copy options
+        let copyDropdownMenu = new ContextMenuStrip()
+
+        // Menu item: Copy Saved Themes
+        let copySavedMenuItem = new ToolStripMenuItem(Localization.getString("CopySavedThemes"))
+        copySavedMenuItem.Click.Add <| fun _ ->
             try
                 if customThemes.Length > 0 then
                     let jsonText = themesToJson customThemes
                     if not (String.IsNullOrEmpty(jsonText)) then
                         Clipboard.SetText(jsonText)
             with | _ -> ()
+        copyDropdownMenu.Items.Add(copySavedMenuItem) |> ignore
 
-        // Button 3: Copy Preset Themes
-        let copyPresetBtn = Button()
-        copyPresetBtn.Text <- Localization.getString("CopyPresetThemes")
-        copyPresetBtn.AutoSize <- true
-        copyPresetBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        copyPresetBtn.Margin <- Padding(3, 0, 3, 0)
-        copyPresetBtn.Click.Add <| fun _ ->
+        // Menu item: Copy Preset Themes
+        let copyPresetMenuItem = new ToolStripMenuItem(Localization.getString("CopyPresetThemes"))
+        copyPresetMenuItem.Click.Add <| fun _ ->
             try
                 let presetThemesList = presetThemes |> List.map getPresetColors
                 let jsonText = themesToJson presetThemesList
                 if not (String.IsNullOrEmpty(jsonText)) then
                     Clipboard.SetText(jsonText)
             with | _ -> ()
+        copyDropdownMenu.Items.Add(copyPresetMenuItem) |> ignore
+
+        // Dropdown button (▼) - custom painted to look like ComboBox dropdown
+        let copyDropdownBtn = Button()
+        copyDropdownBtn.Text <- ""  // No text - custom painted
+        copyDropdownBtn.Width <- 17  // Standard ComboBox dropdown button width
+        copyDropdownBtn.FlatStyle <- FlatStyle.Flat
+        copyDropdownBtn.FlatAppearance.BorderSize <- 0
+        copyDropdownBtn.Margin <- Padding(0, 0, 3, 0)
+
+        // Track mouse state for proper visual feedback
+        let mutable isMouseOver = false
+        let mutable isMouseDown = false
+
+        copyDropdownBtn.MouseEnter.Add <| fun _ ->
+            isMouseOver <- true
+            copyDropdownBtn.Invalidate()
+        copyDropdownBtn.MouseLeave.Add <| fun _ ->
+            isMouseOver <- false
+            isMouseDown <- false
+            copyDropdownBtn.Invalidate()
+        copyDropdownBtn.MouseDown.Add <| fun _ ->
+            isMouseDown <- true
+            copyDropdownBtn.Invalidate()
+        copyDropdownBtn.MouseUp.Add <| fun _ ->
+            isMouseDown <- false
+            copyDropdownBtn.Invalidate()
+
+        // Custom paint to draw ComboBox-style dropdown button
+        copyDropdownBtn.Paint.Add <| fun e ->
+            let state =
+                if not copyDropdownBtn.Enabled then ComboBoxState.Disabled
+                elif isMouseDown then ComboBoxState.Pressed
+                elif isMouseOver then ComboBoxState.Hot
+                else ComboBoxState.Normal
+
+            // Draw the ComboBox dropdown button
+            if ComboBoxRenderer.IsSupported then
+                ComboBoxRenderer.DrawDropDownButton(e.Graphics, copyDropdownBtn.ClientRectangle, state)
+            else
+                // Fallback for non-visual-styles
+                ControlPaint.DrawComboButton(e.Graphics, copyDropdownBtn.ClientRectangle,
+                    if isMouseDown then ButtonState.Pushed else ButtonState.Normal)
+
+        copyDropdownBtn.Click.Add <| fun _ ->
+            // Show dropdown menu below the main copy button (not the dropdown button)
+            copyDropdownMenu.Show(copySelectedBtn, Point(0, copySelectedBtn.Height))
 
         // Button 4: Paste Themes (JSON format)
         let pasteBtn = Button()
@@ -751,8 +795,7 @@ type AppearanceView() as this =
             with | _ -> ()
 
         container.Controls.Add(copySelectedBtn)
-        container.Controls.Add(copySavedBtn)
-        container.Controls.Add(copyPresetBtn)
+        container.Controls.Add(copyDropdownBtn)
         container.Controls.Add(pasteBtn)
         container
 

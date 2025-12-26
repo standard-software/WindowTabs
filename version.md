@@ -7,6 +7,7 @@
   - Select from preset themes (Light/Dark/Dark Blue) or custom themes
   - Save, rename, delete, and reorder custom themes
   - Copy/Paste themes in JSON format for backup and sharing
+  - Consolidate copy buttons into a single split button with dropdown menu
 
 ## version ss_jp_2025.12.09
 - update README
