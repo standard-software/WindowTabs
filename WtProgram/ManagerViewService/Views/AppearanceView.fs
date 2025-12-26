@@ -591,7 +591,7 @@ type AppearanceView() as this =
 
     // Helper function to convert theme to JSON object string
     let themeToJsonObject (theme: ColorThemeData) =
-        sprintf "  {\n    \"ThemaName\": \"%s\",\n    \"TextColor\": \"#%06X\",\n    \"NormalBgColor\": \"#%06X\",\n    \"HighlightBgColor\": \"#%06X\",\n    \"ActiveBgColor\": \"#%06X\",\n    \"FlashBgColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.textColor theme.normalBgColor theme.highlightBgColor theme.activeBgColor theme.flashBgColor theme.borderColor
+        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"TextColor\": \"#%06X\",\n    \"NormalBgColor\": \"#%06X\",\n    \"HighlightBgColor\": \"#%06X\",\n    \"ActiveBgColor\": \"#%06X\",\n    \"FlashBgColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.textColor theme.normalBgColor theme.highlightBgColor theme.activeBgColor theme.flashBgColor theme.borderColor
 
     // Helper function to convert themes list to JSON array string
     let themesToJson (themes: ColorThemeData list) =
@@ -675,57 +675,60 @@ type AppearanceView() as this =
                     let mutable lastAppliedTheme : ColorThemeData option = None
                     for item in jsonArray do
                         let jObj = item :?> JObject
-                        let themeName = jObj.getString("ThemaName") |> Option.defaultValue ""
-                        if not (String.IsNullOrWhiteSpace(themeName)) then
-                            // Parse colors (optional - only apply if present)
-                            let parseColor (key: string) (existing: int) =
-                                match jObj.getString(key) with
-                                | Some hex when hex.StartsWith("#") && hex.Length = 7 ->
-                                    try
-                                        Int32.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber)
-                                    with | _ -> existing
-                                | _ -> existing
+                        // If ThemeName is missing or empty, treat as "Custom"
+                        let themeName =
+                            match jObj.getString("ThemeName") with
+                            | Some name when not (String.IsNullOrWhiteSpace(name)) -> name
+                            | _ -> "Custom"
+                        // Parse colors (optional - only apply if present)
+                        let parseColor (key: string) (existing: int) =
+                            match jObj.getString(key) with
+                            | Some hex when hex.StartsWith("#") && hex.Length = 7 ->
+                                try
+                                    Int32.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber)
+                                with | _ -> existing
+                            | _ -> existing
 
-                            // Get base colors (current Custom colors or zeros)
-                            let baseColors = savedCustomColors |> Option.defaultValue {
-                                name = ""
-                                textColor = 0
-                                normalBgColor = 0
-                                highlightBgColor = 0
-                                activeBgColor = 0
-                                flashBgColor = 0
-                                borderColor = 0
-                            }
+                        // Get base colors (current Custom colors or zeros)
+                        let baseColors = savedCustomColors |> Option.defaultValue {
+                            name = ""
+                            textColor = 0
+                            normalBgColor = 0
+                            highlightBgColor = 0
+                            activeBgColor = 0
+                            flashBgColor = 0
+                            borderColor = 0
+                        }
 
-                            let newTheme = {
-                                name = themeName
-                                textColor = parseColor "TextColor" baseColors.textColor
-                                normalBgColor = parseColor "NormalBgColor" baseColors.normalBgColor
-                                highlightBgColor = parseColor "HighlightBgColor" baseColors.highlightBgColor
-                                activeBgColor = parseColor "ActiveBgColor" baseColors.activeBgColor
-                                flashBgColor = parseColor "FlashBgColor" baseColors.flashBgColor
-                                borderColor = parseColor "BorderColor" baseColors.borderColor
-                            }
+                        let newTheme = {
+                            name = themeName
+                            textColor = parseColor "TextColor" baseColors.textColor
+                            normalBgColor = parseColor "NormalBgColor" baseColors.normalBgColor
+                            highlightBgColor = parseColor "HighlightBgColor" baseColors.highlightBgColor
+                            activeBgColor = parseColor "ActiveBgColor" baseColors.activeBgColor
+                            flashBgColor = parseColor "FlashBgColor" baseColors.flashBgColor
+                            borderColor = parseColor "BorderColor" baseColors.borderColor
+                        }
 
-                            if themeName = "Custom" then
-                                // Apply to Custom (unsaved)
-                                savedCustomColors <- Some newTheme
-                                saveSavedCustomColors savedCustomColors
-                                lastAppliedTheme <- Some newTheme
-                            else
-                                // Check if theme with this name exists
-                                let existingIndex = customThemes |> List.tryFindIndex (fun t -> t.name = themeName)
-                                match existingIndex with
-                                | Some idx ->
-                                    // Overwrite existing theme
-                                    customThemes <- customThemes |> List.mapi (fun i t ->
-                                        if i = idx then newTheme else t
-                                    )
-                                | None ->
-                                    // Add new theme
-                                    customThemes <- customThemes @ [newTheme]
-                                saveCustomThemes customThemes
-                                lastAppliedTheme <- Some newTheme
+                        if themeName = "Custom" then
+                            // Apply to Custom (unsaved)
+                            savedCustomColors <- Some newTheme
+                            saveSavedCustomColors savedCustomColors
+                            lastAppliedTheme <- Some newTheme
+                        else
+                            // Check if theme with this name exists
+                            let existingIndex = customThemes |> List.tryFindIndex (fun t -> t.name = themeName)
+                            match existingIndex with
+                            | Some idx ->
+                                // Overwrite existing theme
+                                customThemes <- customThemes |> List.mapi (fun i t ->
+                                    if i = idx then newTheme else t
+                                )
+                            | None ->
+                                // Add new theme
+                                customThemes <- customThemes @ [newTheme]
+                            saveCustomThemes customThemes
+                            lastAppliedTheme <- Some newTheme
 
                     // Refresh UI and apply last theme
                     refreshComboBoxItems()
