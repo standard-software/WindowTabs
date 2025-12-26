@@ -6,6 +6,7 @@
 - Add Color Theme feature with preset themes (Light/Dark/Dark Blue) and custom theme support
   - Save/Rename/Delete custom themes, reorder with [↑][↓] buttons
   - ComboBox-based Save As dialog for overwriting existing themes
+- Remove custom font setting feature from language files
 
 ## version ss_jp_2025.12.09
 - update README

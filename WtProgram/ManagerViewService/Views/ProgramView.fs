@@ -104,7 +104,7 @@ type ProgramView() as this=
             control)
         tree.Model <- model
         tree,model
-    let panel = 
+    let panel =
         let panel = Panel()
         toolBar.Dock <- DockStyle.Top
         tree.Dock <- DockStyle.Fill

@@ -55,7 +55,7 @@ type DiagnosticsView() as this =
         sb.Text <- "Ready"
         sb.Dock <- DockStyle.Bottom
         sb
-    let panel = 
+    let panel =
         let p = Panel()
         p.Controls.Add(textBox)
         p.Controls.Add(toolBar)

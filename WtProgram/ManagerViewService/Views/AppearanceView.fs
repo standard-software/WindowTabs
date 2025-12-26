@@ -121,7 +121,7 @@ type AppearanceView() as this =
     let formatDefaultValue key =
         let value = getDefaultValue key
         match value with
-        | :? int as i -> sprintf "%3d" i  // 3-digit right-aligned
+        | :? int as i -> sprintf "%d" i
         | :? Color as c -> sprintf "#%06X" (c.ToArgb() &&& 0xFFFFFF)
         | _ -> value.ToString()
 
@@ -154,8 +154,8 @@ type AppearanceView() as this =
             let resetBtn =
                 let btn = Button()
                 btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
-                btn.Font <- Font("Consolas", 9f)
                 btn.Dock <- DockStyle.Fill
+                btn.TextAlign <- ContentAlignment.MiddleLeft
                 btn.Margin <- Padding(5,5,0,5)
                 btn.Click.Add <| fun _ ->
                     suppressEvents <- true
@@ -215,7 +215,6 @@ type AppearanceView() as this =
 
     let appearance = Services.program.tabAppearanceInfo
 
-    let font = Font(Localization.getString("Font"), 9f)
 
     // Color key mapping for clipboard operations
     let colorKeyMap = [
@@ -334,7 +333,6 @@ type AppearanceView() as this =
     // Color theme ComboBox with owner-draw for separator lines
     let colorThemeComboBox =
         let combo = new ComboBox()
-        combo.Font <- font
         combo.DropDownStyle <- ComboBoxStyle.DropDownList
         combo.DrawMode <- DrawMode.OwnerDrawVariable
         combo.ItemHeight <- 20
@@ -813,7 +811,6 @@ type AppearanceView() as this =
 
         // Configure saveRenameBtn (already created earlier)
         saveRenameBtn.Text <- Localization.getString("Rename")
-        saveRenameBtn.Font <- font
         saveRenameBtn.AutoSize <- true
         saveRenameBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         saveRenameBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with ComboBox
@@ -883,9 +880,11 @@ type AppearanceView() as this =
 
         // Configure upBtn
         upBtn.Text <- "↑"
-        upBtn.Font <- font
-        upBtn.Size <- Size(30, 23)
-        upBtn.Margin <- Padding(3, 0, 0, 0)
+        upBtn.AutoSize <- true
+        upBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        upBtn.MinimumSize <- Size(30, 0)
+        upBtn.TextAlign <- ContentAlignment.MiddleCenter
+        upBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveRenameBtn
         upBtn.Enabled <- false
         upBtn.Visible <- false
 
@@ -918,9 +917,11 @@ type AppearanceView() as this =
 
         // Configure downBtn
         downBtn.Text <- "↓"
-        downBtn.Font <- font
-        downBtn.Size <- Size(30, 23)
-        downBtn.Margin <- Padding(3, 0, 0, 0)
+        downBtn.AutoSize <- true
+        downBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        downBtn.MinimumSize <- Size(30, 0)
+        downBtn.TextAlign <- ContentAlignment.MiddleCenter
+        downBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveRenameBtn
         downBtn.Enabled <- false
         downBtn.Visible <- false
 

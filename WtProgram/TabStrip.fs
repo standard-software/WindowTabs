@@ -80,7 +80,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         
         tooltipLabel.ForeColor <- Color.White
         tooltipLabel.BackColor <- Color.FromArgb(40, 40, 40)
-        tooltipLabel.Font <- new Font(Localization.getString("Font"), 9.0f, FontStyle.Regular)
+        tooltipLabel.Font <- SystemFonts.MenuFont
         tooltipLabel.TextAlign <- ContentAlignment.TopLeft  // Top-left aligned for proper wrapping
         tooltipLabel.AutoSize <- false  // Keep false for proper width control
         tooltipLabel.MaximumSize <- new Size(maxWidth, 0)
@@ -179,7 +179,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     bgColor = tabBgColor.value.tryFind(tab)
                     TabDisplayInfo.text = ti.text
                     icon = ti.iconSmall
-                    textFont = 
+                    textFont =
                         let font = SystemFonts.MenuFont
                         if ti.isRenamed then Font(font, FontStyle.Italic) else font
                     textBrush = SystemBrushes.MenuText
