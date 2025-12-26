@@ -213,7 +213,9 @@ type Settings(isStandAlone) as this =
             let appearanceObject =
                 let appearance = settings.tabAppearance
                 let obj = JObject()
-                let props = appearance.GetType().GetProperties()
+                // Use FSharpType.GetRecordFields to get properties in definition order
+                // This matches the order of FSharpValue.GetRecordFields values
+                let props = FSharpType.GetRecordFields(appearance.GetType())
                 let values = FSharpValue.GetRecordFields(appearance)
                 List2(Seq.zip props values).iter <| fun (prop, value) ->
                     let key = prop.Name

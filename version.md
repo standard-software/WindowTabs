@@ -8,6 +8,7 @@
   - Save, rename, delete, and reorder custom themes
   - Copy/Paste themes in JSON format for backup and sharing
   - Consolidate copy buttons into a single split button with dropdown menu
+- Fix color settings corruption after force termination
 
 ## version ss_jp_2025.12.09
 - update README
