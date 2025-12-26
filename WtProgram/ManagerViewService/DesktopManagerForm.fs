@@ -17,7 +17,7 @@ type DesktopManagerForm() =
         AppearanceView() :> ISettingsView
         HotKeyView() :> ISettingsView
         WorkspaceView() :> ISettingsView
-        DiagnosticsView() :> ISettingsView
+        // DiagnosticsView() :> ISettingsView  // Scan tab hidden
         ])
     let tabControl : TabControl = {
         new TabControl() with
