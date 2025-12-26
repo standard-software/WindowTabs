@@ -524,18 +524,20 @@ type AppearanceView() as this =
         colorThemeComboBox.DrawItem.Add <| fun e ->
             e.DrawBackground()
             if e.Index >= 0 && e.Index < themeItems.Length then
-                match themeItems.[e.Index] with
-                | Preset name | CustomTheme name ->
-                    use brush = new SolidBrush(e.ForeColor)
-                    e.Graphics.DrawString(name, e.Font, brush, float32 e.Bounds.Left, float32 e.Bounds.Top)
-                | UnsavedCustom ->
-                    use brush = new SolidBrush(e.ForeColor)
-                    e.Graphics.DrawString("Custom", e.Font, brush, float32 e.Bounds.Left, float32 e.Bounds.Top)
+                let text =
+                    match themeItems.[e.Index] with
+                    | Preset name | CustomTheme name -> name
+                    | UnsavedCustom -> "Custom"
+                use brush = new SolidBrush(e.ForeColor)
+                // Calculate vertical center position for text
+                let textSize = e.Graphics.MeasureString(text, e.Font)
+                let y = float32 e.Bounds.Top + (float32 e.Bounds.Height - textSize.Height) / 2.0f
+                e.Graphics.DrawString(text, e.Font, brush, float32 e.Bounds.Left + 2.0f, y)
                 // Draw separator line below if needed
                 if shouldDrawSeparatorBelow e.Index then
-                    let y = e.Bounds.Bottom - 1
+                    let lineY = e.Bounds.Bottom - 1
                     use pen = new Pen(Color.Gray, 1.0f)
-                    e.Graphics.DrawLine(pen, e.Bounds.Left + 2, y, e.Bounds.Right - 2, y)
+                    e.Graphics.DrawLine(pen, e.Bounds.Left + 2, lineY, e.Bounds.Right - 2, lineY)
             e.DrawFocusRectangle()
 
     // Set up ComboBox event handler
@@ -587,6 +589,15 @@ type AppearanceView() as this =
                     suppressEvents <- false
             updateButtonState()
 
+    // Helper function to convert theme to JSON object string
+    let themeToJsonObject (theme: ColorThemeData) =
+        sprintf "  {\n    \"ThemaName\": \"%s\",\n    \"TextColor\": \"#%06X\",\n    \"NormalBgColor\": \"#%06X\",\n    \"HighlightBgColor\": \"#%06X\",\n    \"ActiveBgColor\": \"#%06X\",\n    \"FlashBgColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.textColor theme.normalBgColor theme.highlightBgColor theme.activeBgColor theme.flashBgColor theme.borderColor
+
+    // Helper function to convert themes list to JSON array string
+    let themesToJson (themes: ColorThemeData list) =
+        let jsonObjects = themes |> List.map themeToJsonObject
+        "[\n" + String.Join(",\n", jsonObjects) + "\n]"
+
     // Row 1: Copy/Paste buttons
     let copyPasteButtonPanel =
         let container = new FlowLayoutPanel()
@@ -597,15 +608,15 @@ type AppearanceView() as this =
         container.Dock <- DockStyle.Top
         container.Margin <- Padding(0, 0, 0, 0)
 
-        let copyBtn = Button()
-        copyBtn.Text <- Localization.getString("CopyColorSettings")
-        copyBtn.Font <- font
-        copyBtn.AutoSize <- true
-        copyBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        copyBtn.Margin <- Padding(0, 0, 3, 0)  // Remove left margin
-        copyBtn.Click.Add <| fun _ ->
+        // Button 1: Copy Selected Theme
+        let copySelectedBtn = Button()
+        copySelectedBtn.Text <- Localization.getString("CopySelectedTheme")
+        copySelectedBtn.AutoSize <- true
+        copySelectedBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        copySelectedBtn.Margin <- Padding(0, 0, 3, 0)
+        copySelectedBtn.Click.Add <| fun _ ->
             try
-                // Get current theme name from ComboBox selection
+                let currentColors = getCurrentColors()
                 let themeName =
                     if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
                         match themeItems.[colorThemeComboBox.SelectedIndex] with
@@ -614,45 +625,131 @@ type AppearanceView() as this =
                         | UnsavedCustom -> "Custom"
                     else
                         "Custom"
-                // Build clipboard text with theme name at the beginning
-                let colorLines = colorKeyMap |> List.map (fun (editorKey, clipboardKey) ->
-                    let editor = editors.find editorKey
-                    let color = unbox<Color>(editor.value)
-                    sprintf "%s=#%06X" clipboardKey (color.ToArgb() &&& 0xFFFFFF)
-                )
-                let clipboardText = "ThemaName=" + themeName + "\n" + String.Join("\n", colorLines)
-                if not (String.IsNullOrEmpty(clipboardText)) then
-                    Clipboard.SetText(clipboardText)
+                let theme = { currentColors with name = themeName }
+                let jsonText = themesToJson [theme]
+                if not (String.IsNullOrEmpty(jsonText)) then
+                    Clipboard.SetText(jsonText)
             with | _ -> ()
 
+        // Button 2: Copy Saved Themes
+        let copySavedBtn = Button()
+        copySavedBtn.Text <- Localization.getString("CopySavedThemes")
+        copySavedBtn.AutoSize <- true
+        copySavedBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        copySavedBtn.Margin <- Padding(3, 0, 3, 0)
+        copySavedBtn.Click.Add <| fun _ ->
+            try
+                if customThemes.Length > 0 then
+                    let jsonText = themesToJson customThemes
+                    if not (String.IsNullOrEmpty(jsonText)) then
+                        Clipboard.SetText(jsonText)
+            with | _ -> ()
+
+        // Button 3: Copy Preset Themes
+        let copyPresetBtn = Button()
+        copyPresetBtn.Text <- Localization.getString("CopyPresetThemes")
+        copyPresetBtn.AutoSize <- true
+        copyPresetBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        copyPresetBtn.Margin <- Padding(3, 0, 3, 0)
+        copyPresetBtn.Click.Add <| fun _ ->
+            try
+                let presetThemesList = presetThemes |> List.map getPresetColors
+                let jsonText = themesToJson presetThemesList
+                if not (String.IsNullOrEmpty(jsonText)) then
+                    Clipboard.SetText(jsonText)
+            with | _ -> ()
+
+        // Button 4: Paste Themes (JSON format)
         let pasteBtn = Button()
-        pasteBtn.Text <- Localization.getString("PasteColorSettings")
-        pasteBtn.Font <- font
+        pasteBtn.Text <- Localization.getString("PasteThemes")
         pasteBtn.AutoSize <- true
         pasteBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        pasteBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with copyBtn
+        pasteBtn.Margin <- Padding(3, 0, 0, 0)
         pasteBtn.Click.Add <| fun _ ->
             try
                 if Clipboard.ContainsText() then
                     let clipboardText = Clipboard.GetText()
+                    // Try to parse as JSON array
+                    let jsonArray = JArray.Parse(clipboardText)
                     suppressEvents <- true
-                    // Parse clipboard text and apply colors
-                    colorKeyMap |> List.iter (fun (editorKey, clipboardKey) ->
-                        let pattern = sprintf @"%s=#([0-9A-Fa-f]{6})" clipboardKey
-                        let m = Regex.Match(clipboardText, pattern)
-                        if m.Success then
-                            let hexValue = m.Groups.[1].Value
-                            let colorValue = Int32.Parse(hexValue, System.Globalization.NumberStyles.HexNumber)
-                            let color = Color.FromArgb(255, Color.FromArgb(colorValue))
-                            let editor = editors.find editorKey
-                            editor.value <- box(color)
-                    )
-                    this.applyAppearance()
-                    switchToCustom()
+                    let mutable lastAppliedTheme : ColorThemeData option = None
+                    for item in jsonArray do
+                        let jObj = item :?> JObject
+                        let themeName = jObj.getString("ThemaName") |> Option.defaultValue ""
+                        if not (String.IsNullOrWhiteSpace(themeName)) then
+                            // Parse colors (optional - only apply if present)
+                            let parseColor (key: string) (existing: int) =
+                                match jObj.getString(key) with
+                                | Some hex when hex.StartsWith("#") && hex.Length = 7 ->
+                                    try
+                                        Int32.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber)
+                                    with | _ -> existing
+                                | _ -> existing
+
+                            // Get base colors (current Custom colors or zeros)
+                            let baseColors = savedCustomColors |> Option.defaultValue {
+                                name = ""
+                                textColor = 0
+                                normalBgColor = 0
+                                highlightBgColor = 0
+                                activeBgColor = 0
+                                flashBgColor = 0
+                                borderColor = 0
+                            }
+
+                            let newTheme = {
+                                name = themeName
+                                textColor = parseColor "TextColor" baseColors.textColor
+                                normalBgColor = parseColor "NormalBgColor" baseColors.normalBgColor
+                                highlightBgColor = parseColor "HighlightBgColor" baseColors.highlightBgColor
+                                activeBgColor = parseColor "ActiveBgColor" baseColors.activeBgColor
+                                flashBgColor = parseColor "FlashBgColor" baseColors.flashBgColor
+                                borderColor = parseColor "BorderColor" baseColors.borderColor
+                            }
+
+                            if themeName = "Custom" then
+                                // Apply to Custom (unsaved)
+                                savedCustomColors <- Some newTheme
+                                saveSavedCustomColors savedCustomColors
+                                lastAppliedTheme <- Some newTheme
+                            else
+                                // Check if theme with this name exists
+                                let existingIndex = customThemes |> List.tryFindIndex (fun t -> t.name = themeName)
+                                match existingIndex with
+                                | Some idx ->
+                                    // Overwrite existing theme
+                                    customThemes <- customThemes |> List.mapi (fun i t ->
+                                        if i = idx then newTheme else t
+                                    )
+                                | None ->
+                                    // Add new theme
+                                    customThemes <- customThemes @ [newTheme]
+                                saveCustomThemes customThemes
+                                lastAppliedTheme <- Some newTheme
+
+                    // Refresh UI and apply last theme
+                    refreshComboBoxItems()
+                    match lastAppliedTheme with
+                    | Some theme ->
+                        applyCustomTheme theme
+                        // Select the theme in ComboBox
+                        let themeIndex = themeItems |> List.tryFindIndex (fun item ->
+                            match item with
+                            | CustomTheme n -> n = theme.name
+                            | UnsavedCustom -> theme.name = "Custom"
+                            | _ -> false
+                        )
+                        match themeIndex with
+                        | Some idx -> colorThemeComboBox.SelectedIndex <- idx
+                        | None -> ()
+                    | None -> ()
                     suppressEvents <- false
+                    updateButtonState()
             with | _ -> ()
 
-        container.Controls.Add(copyBtn)
+        container.Controls.Add(copySelectedBtn)
+        container.Controls.Add(copySavedBtn)
+        container.Controls.Add(copyPresetBtn)
         container.Controls.Add(pasteBtn)
         container
 
@@ -813,7 +910,7 @@ type AppearanceView() as this =
         saveRenameBtn.Text <- Localization.getString("Rename")
         saveRenameBtn.AutoSize <- true
         saveRenameBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        saveRenameBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with ComboBox
+        saveRenameBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
         saveRenameBtn.Enabled <- false
 
         saveRenameBtn.Click.Add <| fun _ ->
@@ -973,6 +1070,7 @@ type AppearanceView() as this =
         panel.Controls.Add(copyPasteButtonPanel)
         panel.SetRow(copyPasteButtonPanel, copyPasteButtonRow)
         panel.SetColumn(copyPasteButtonPanel, 1)
+        panel.SetColumnSpan(copyPasteButtonPanel, 2)  // Span across both columns for full width
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
