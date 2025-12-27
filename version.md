@@ -3,6 +3,7 @@
 ## version ss_jp_2025.12.09_next_1
 - Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
 - Hide Diagnostics (Scan) tab from Settings dialog
+- Move delay input next to "Hide after specified time" radio button in Behavior tab
 - Remove custom font setting feature from language files
 - Add Color Theme feature
   - Select from preset themes (Light/Dark/Dark Blue) or custom themes

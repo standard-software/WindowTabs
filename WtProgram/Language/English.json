@@ -78,7 +78,7 @@
   "AlignRight": "Right",
   "hideTabsWhenDownByDefault": "Hide tabs when positioned at bottom",
   "HideTabsWhenDown": "Hide tabs when positioned at bottom",
-  "hideTabsDelayMilliseconds": "Hide tabs when positioned at bottom - wait time (milliseconds)",
+  "hideTabsDelayMilliseconds": "Wait time (ms)",
   "HideNever": "Never hide",
   "HideWhenDown": "Hide after specified time",
   "HideOnDoubleClick": "Hide when double-clicking active tab",

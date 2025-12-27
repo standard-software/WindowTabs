@@ -78,7 +78,7 @@
   "AlignRight": "靠右對齊",
   "hideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
   "HideTabsWhenDown": "分頁在下方時隱藏功能",
-  "hideTabsDelayMilliseconds": "分頁在下方時隱藏功能 等待時間(毫秒)",
+  "hideTabsDelayMilliseconds": "等待時間(毫秒)",
   "HideNever": "不隱藏",
   "HideWhenDown": "指定時間後隱藏",
   "HideOnDoubleClick": "雙擊活動分頁時隱藏",

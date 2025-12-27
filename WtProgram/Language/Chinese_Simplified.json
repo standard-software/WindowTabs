@@ -78,7 +78,7 @@
   "AlignRight": "右对齐",
   "hideTabsWhenDownByDefault": "标签页在下方时隐藏功能",
   "HideTabsWhenDown": "标签页在下方时隐藏功能",
-  "hideTabsDelayMilliseconds": "标签页在下方时隐藏功能 等待时间(毫秒)",
+  "hideTabsDelayMilliseconds": "等待时间(毫秒)",
   "HideNever": "不隐藏",
   "HideWhenDown": "指定时间后隐藏",
   "HideOnDoubleClick": "双击活动标签页时隐藏",

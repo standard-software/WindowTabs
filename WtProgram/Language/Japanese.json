@@ -78,7 +78,7 @@
   "AlignRight": "右",
   "hideTabsWhenDownByDefault": "下方向タブの非表示機能",
   "HideTabsWhenDown": "下方向タブの非表示機能",
-  "hideTabsDelayMilliseconds": "下方向タブの非表示機能 - 待機時間 (ミリ秒)",
+  "hideTabsDelayMilliseconds": "待機時間 (ミリ秒)",
   "HideNever": "非表示にしない",
   "HideWhenDown": "指定した時間で非表示",
   "HideOnDoubleClick": "アクティブなタブをダブルクリックで非表示",

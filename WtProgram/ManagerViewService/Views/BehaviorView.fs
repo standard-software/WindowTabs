@@ -115,12 +115,18 @@ type HotKeyView() =
             textBox
 
         let hideTabsRadio =
-            let panel = new FlowLayoutPanel()
-            panel.FlowDirection <- FlowDirection.TopDown
-            panel.AutoSize <- true
-            panel.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            panel.Margin <- Padding(0)
-            panel.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+            // Use TableLayoutPanel to keep all RadioButtons in same container (for proper grouping)
+            // while allowing delay label and textbox next to radioDown
+            let table = new TableLayoutPanel()
+            table.AutoSize <- true
+            table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+            table.Margin <- Padding(0)
+            table.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+            table.ColumnCount <- 3
+            table.RowCount <- 3
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // RadioButton column
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // Label column
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // TextBox column
 
             let currentMode =
                 let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -161,10 +167,24 @@ type HotKeyView() =
                     hideTabsDelay.Enabled <- false
             )
 
-            panel.Controls.Add(radioNever)
-            panel.Controls.Add(radioDown)
-            panel.Controls.Add(radioDoubleClick)
-            panel
+            let delayLabel = new Label()
+            delayLabel.Text <- Localization.getString("hideTabsDelayMilliseconds")
+            delayLabel.AutoSize <- true
+            delayLabel.Margin <- Padding(10, 5, 3, 0)  // Left margin to separate from radio, top margin to align with textbox
+
+            hideTabsDelay.Width <- 60
+            hideTabsDelay.Margin <- Padding(0, 2, 0, 0)
+
+            // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
+            table.Controls.Add(radioNever, 0, 0)
+            // Row 1: radioDown + delayLabel + hideTabsDelay
+            table.Controls.Add(radioDown, 0, 1)
+            table.Controls.Add(delayLabel, 1, 1)
+            table.Controls.Add(hideTabsDelay, 2, 1)
+            // Row 2: radioDoubleClick
+            table.Controls.Add(radioDoubleClick, 0, 2)
+
+            table
 
         let fields = hotKeys.map <| fun(key,text) ->
             let editor = editors.find key
@@ -179,15 +199,15 @@ type HotKeyView() =
             ("makeTabsNarrowerByDefault", settingsCheckbox "makeTabsNarrowerByDefault")
             ("tabPositionByDefault", defaultTabPositionRadio :> Control)
             ("hideTabsWhenDownByDefault", hideTabsRadio :> Control)
-            ("hideTabsDelayMilliseconds", hideTabsDelay :> Control)
+            // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
         ]))
 
         let formPanel = UIHelper.form fields
 
         // Adjust row heights for radio button groups
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled, 3=enableCtrlNumber,
-        //            4=enableHover, 5=makeTabsNarrower, 6=tabPosition, 7=hideTabsWhenDown, 8=hideTabsDelay,
-        //            9+=hotkeys
+        //            4=enableHover, 5=makeTabsNarrower, 6=tabPosition, 7=hideTabsWhenDown,
+        //            8+=hotkeys
         let tabPositionRowIndex = 6
         let hideTabsRowIndex = 7
 
