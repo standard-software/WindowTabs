@@ -33,6 +33,7 @@ type SettingsRec = {
     tabPositionByDefault: string
     hideTabsWhenDownByDefault: string
     hideTabsDelayMilliseconds: int
+    hideTabsOnFullscreen: bool
     }
 
 type ILicenseManager =

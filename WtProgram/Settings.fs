@@ -148,6 +148,7 @@ type Settings(isStandAlone) as this =
                                 with
                                 | _ -> "never"
                         hideTabsDelayMilliseconds = settingsJson.getInt32("hideTabsDelayMilliseconds").def(3000)
+                        hideTabsOnFullscreen = settingsJson.getBool("hideTabsOnFullscreen").def(true)
                         version = settingsJson.getString("version").def(String.Empty)
                         tabAppearance =
                             try
@@ -185,6 +186,7 @@ type Settings(isStandAlone) as this =
                         tabPositionByDefault = "right"
                         hideTabsWhenDownByDefault = "never"
                         hideTabsDelayMilliseconds = 3000
+                        hideTabsOnFullscreen = true
                         version = String.Empty
                         tabAppearance = this.defaultTabAppearance
                     }
@@ -207,6 +209,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setString("tabPositionByDefault", settings.tabPositionByDefault)
             settingsJson.setString("hideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
             settingsJson.setInt32("hideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)
+            settingsJson.setBool("hideTabsOnFullscreen", settings.hideTabsOnFullscreen)
             settingsJson.setStringArray("includedPaths", settings.includedPaths.items)
             settingsJson.setStringArray("excludedPaths", settings.excludedPaths.items)
             settingsJson.setStringArray("autoGroupingPaths", settings.autoGroupingPaths.items)

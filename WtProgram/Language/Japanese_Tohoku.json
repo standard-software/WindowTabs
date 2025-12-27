@@ -96,5 +96,6 @@
   "Rename": "名前の変更だべ",
   "EnterThemeName": "テーマ名を入力すっぺ:",
   "ThemeNameTitle": "カラーテーマ名",
-  "DeleteThemeHint": "名前を空にしてOKを押すとテーマ削除できっぺ。"
+  "DeleteThemeHint": "名前を空にしてOKを押すとテーマ削除できっぺ。",
+  "hideTabsOnFullscreen": "全画面ウィンドウの時はタブ隠すべ"
 }

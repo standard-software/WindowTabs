@@ -298,6 +298,21 @@ and
 
     member this.isMaximized = WinUserApi.IsZoomed(hwnd)
 
+    // Check if window is fullscreen (covers entire monitor, not just maximized)
+    member this.isFullscreen =
+        if this.isMinimized then false
+        else
+            match this.mon with
+            | Some(monitor) ->
+                let windowBounds : Rect = this.bounds
+                let monitorBounds : Rect = monitor.displayRect
+                // Window is fullscreen if it covers the entire monitor display area
+                windowBounds.x <= monitorBounds.x &&
+                windowBounds.y <= monitorBounds.y &&
+                windowBounds.x + windowBounds.width >= monitorBounds.x + monitorBounds.width &&
+                windowBounds.y + windowBounds.height >= monitorBounds.y + monitorBounds.height
+            | None -> false
+
     member this.isOwned = WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_HWNDPARENT) <> IntPtr.Zero
 
     member this.bounds = Win32Helper.GetWindowRectangle(hwnd).Rect  

@@ -11,6 +11,7 @@
   - Copy/Paste themes in JSON format for backup and sharing
   - Consolidate copy buttons into a single split button with dropdown menu
 - Fix color settings corruption after force termination
+- Add "Hide tabs when window is fullscreen" option in Behavior tab
 
 ## version ss_jp_2025.12.09
 - update README

@@ -200,6 +200,7 @@ type HotKeyView() =
             ("tabPositionByDefault", defaultTabPositionRadio :> Control)
             ("hideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
+            ("hideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
         ]))
 
         let formPanel = UIHelper.form fields

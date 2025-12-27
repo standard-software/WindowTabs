@@ -178,12 +178,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.updateTsSlide() =
         this.ts.slide <- this.tabSlide
 
-    member private this.updateTsPlacement() = 
+    member private this.updateTsPlacement() =
         if group.bounds.value.IsNone then
             this.ts.visible <- false
         else
             this.ts.setPlacement(this.placement)
-            this.ts.visible <- true
+            // Check if tabs should be hidden due to fullscreen window
+            let hideForFullscreen =
+                try
+                    let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
+                    hideTabsOnFullscreen && group.isFullscreen.value
+                with _ -> false
+            this.ts.visible <- not hideForFullscreen
             
             // Handle UWP application tab visibility
             let hasUWPWindow = group.windows.items.any(fun hwnd ->
@@ -1401,13 +1407,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let updateAutoHide() =
             // Update isWindowInside based on current tab position
             isWindowInside.value <- this.ts.showInside
-            
+
             // Handle double-click mode separately
             if autoHideDoubleClickCell.value && this.ts.direction = TabDown then
-                
+
                 // Check if protection period has expired
                 let protectionExpired = System.DateTime.Now > !doubleClickProtectUntil
-                
+
                 // In double-click mode, only show tabs when mouse is over and hidden
                 if this.ts.isShrunk && isMouseOver.value && not isDraggingCell.value then
                     // Check if we should show tabs (protection period expired OR mouse left and returned)
@@ -1422,10 +1428,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         hiddenByDoubleClick := false
             else
                 // Normal auto-hide logic for other modes
-                let shrink = 
+                let shrink =
                     ((isWindowInside.value && autoHideCell.value) ||
-                     (group.isMaximized.value && autoHideMaximizedCell.value)) && 
-                    isMouseOver.value.not && 
+                     (group.isMaximized.value && autoHideMaximizedCell.value)) &&
+                    isMouseOver.value.not &&
                     isDraggingCell.value.not &&
                     contextMenuVisibleCell.value.not &&
                     renamingTabCell.value.not &&
@@ -1445,7 +1451,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // When hideDelayCell value changes via notifyValue, restart timer if running
         Services.settings.notifyValue "hideTabsDelayMilliseconds" <| fun value ->
             group.invokeAsync <| fun() ->
-                hideDelayCell.value <- 
+                hideDelayCell.value <-
                     try
                         value :?> int
                     with

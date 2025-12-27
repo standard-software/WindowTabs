@@ -96,6 +96,7 @@
   "Rename": "重新命名",
   "EnterThemeName": "請輸入主題名稱:",
   "ThemeNameTitle": "顏色主題名稱",
-  "DeleteThemeHint": "清空名稱並按確定可刪除此主題。"
+  "DeleteThemeHint": "清空名稱並按確定可刪除此主題。",
+  "hideTabsOnFullscreen": "全螢幕視窗時隱藏分頁"
 }
 
