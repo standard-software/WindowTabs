@@ -93,6 +93,9 @@
   "Rename": "Rename",
   "EnterThemeName": "Enter theme name:",
   "ThemeNameTitle": "Color Theme Name",
+  "SaveThemeTitle": "Save Color Theme",
+  "EditThemeTitle": "Edit Color Theme",
+  "EditThemePrompt": "Enter a new theme name:",
   "DeleteThemeHint": "Clear the name and press OK to delete this theme.",
   "hideTabsOnFullscreen": "Hide tabs when window is fullscreen"
 }

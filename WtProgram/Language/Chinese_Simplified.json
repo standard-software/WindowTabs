@@ -93,6 +93,9 @@
   "Rename": "重命名",
   "EnterThemeName": "请输入主题名称:",
   "ThemeNameTitle": "颜色主题名称",
+  "SaveThemeTitle": "保存颜色主题",
+  "EditThemeTitle": "编辑颜色主题",
+  "EditThemePrompt": "请输入新的主题名称:",
   "DeleteThemeHint": "清空名称并按确定可删除此主题。",
   "hideTabsOnFullscreen": "全屏窗口时隐藏标签页"
 }

@@ -340,8 +340,9 @@ type AppearanceView() as this =
         combo.Margin <- Padding(0, 0, 3, 0)  // Remove left margin, small right margin
         combo
 
-    // Save/Rename button and Up/Down buttons (created early so we can reference them)
-    let saveRenameBtn = new Button()
+    // Save button, Edit button, and Up/Down buttons (created early so we can reference them)
+    let saveBtn = new Button()
+    let editBtn = new Button()
     let upBtn = new Button()
     let downBtn = new Button()
 
@@ -431,13 +432,15 @@ type AppearanceView() as this =
             match themeItems.[colorThemeComboBox.SelectedIndex] with
             | Preset _ ->
                 // Hide all buttons for preset themes
-                saveRenameBtn.Visible <- false
+                saveBtn.Visible <- false
+                editBtn.Visible <- false
                 upBtn.Visible <- false
                 downBtn.Visible <- false
             | CustomTheme name ->
-                saveRenameBtn.Text <- Localization.getString("Rename")
-                saveRenameBtn.Enabled <- true
-                saveRenameBtn.Visible <- true
+                // Show edit button for custom themes
+                saveBtn.Visible <- false
+                editBtn.Visible <- true
+                editBtn.Enabled <- true
                 upBtn.Visible <- true
                 downBtn.Visible <- true
                 // Enable/disable up/down buttons based on position
@@ -449,9 +452,10 @@ type AppearanceView() as this =
                     upBtn.Enabled <- false
                     downBtn.Enabled <- false
             | UnsavedCustom ->
-                saveRenameBtn.Text <- Localization.getString("SaveAs")
-                saveRenameBtn.Enabled <- true
-                saveRenameBtn.Visible <- true
+                // Show save button for unsaved custom
+                saveBtn.Visible <- true
+                saveBtn.Enabled <- true
+                editBtn.Visible <- false
                 upBtn.Visible <- false
                 downBtn.Visible <- false
 
@@ -803,58 +807,61 @@ type AppearanceView() as this =
     // Note: Light, Dark, Dark Blue can be used as custom theme names (will create a custom theme with that name)
     let reservedThemeNames = ["Custom"]
 
-    // Show input dialog for theme name (used for Rename)
+    // Show Edit Theme dialog for renaming or deleting custom themes
     // Returns: Some(name) if OK pressed, None if cancelled
-    // For rename mode: showDeleteHint=true shows hint about deleting by clearing name
-    let showNameInputDialog (title: string) (defaultValue: string) (showDeleteHint: bool) =
+    // Empty name means delete the theme
+    // OK button is disabled until text is changed from current value
+    let showEditThemeDialog (currentName: string) =
         use form = new Form()
-        form.Text <- title
-        form.Size <- Size(350, if showDeleteHint then 170 else 150)
+        form.Text <- Localization.getString("EditThemeTitle")
+        form.Size <- Size(350, 170)
         form.StartPosition <- FormStartPosition.CenterParent
         form.FormBorderStyle <- FormBorderStyle.FixedDialog
         form.MaximizeBox <- false
         form.MinimizeBox <- false
-        form.TopMost <- true  // Ensure dialog appears in front of settings dialog
+        form.TopMost <- true
 
         let label = new Label()
-        label.Text <- Localization.getString("EnterThemeName")
+        label.Text <- Localization.getString("EditThemePrompt")
         label.Location <- Point(10, 20)
         label.AutoSize <- true
 
         let hintLabel = new Label()
-        if showDeleteHint then
-            hintLabel.Text <- Localization.getString("DeleteThemeHint")
-            hintLabel.Location <- Point(10, 40)
-            hintLabel.AutoSize <- true
-            hintLabel.ForeColor <- Color.Gray
+        hintLabel.Text <- Localization.getString("DeleteThemeHint")
+        hintLabel.Location <- Point(10, 40)
+        hintLabel.AutoSize <- true
+        hintLabel.ForeColor <- Color.Gray
 
         let textBox = new TextBox()
-        textBox.Text <- defaultValue
-        textBox.Location <- Point(10, if showDeleteHint then 65 else 45)
+        textBox.Text <- currentName
+        textBox.Location <- Point(10, 65)
         textBox.Size <- Size(310, 25)
 
         let okBtn = new Button()
         okBtn.Text <- "OK"
         okBtn.DialogResult <- DialogResult.OK
-        okBtn.Location <- Point(160, if showDeleteHint then 100 else 80)
+        okBtn.Location <- Point(160, 100)
         okBtn.Size <- Size(75, 25)
+        okBtn.Enabled <- false  // Disabled until text changes
 
         let cancelBtn = new Button()
         cancelBtn.Text <- "Cancel"
         cancelBtn.DialogResult <- DialogResult.Cancel
-        cancelBtn.Location <- Point(245, if showDeleteHint then 100 else 80)
+        cancelBtn.Location <- Point(245, 100)
         cancelBtn.Size <- Size(75, 25)
 
+        // Enable OK button when text changes from current value
+        textBox.TextChanged.Add <| fun _ ->
+            okBtn.Enabled <- textBox.Text <> currentName
+
         form.Controls.Add(label)
-        if showDeleteHint then
-            form.Controls.Add(hintLabel)
+        form.Controls.Add(hintLabel)
         form.Controls.Add(textBox)
         form.Controls.Add(okBtn)
         form.Controls.Add(cancelBtn)
         form.AcceptButton <- okBtn
         form.CancelButton <- cancelBtn
 
-        // Get parent form from panel to show dialog as modal child
         let parentForm = panel.FindForm()
         let result =
             if parentForm <> null then
@@ -952,19 +959,20 @@ type AppearanceView() as this =
         container.Margin <- Padding(0, 8, 0, 0)  // Add top margin
         container.Padding <- Padding(0, 0, 0, 0)
 
-        // Configure saveRenameBtn (already created earlier)
-        saveRenameBtn.Text <- Localization.getString("Rename")
-        saveRenameBtn.AutoSize <- true
-        saveRenameBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        saveRenameBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
-        saveRenameBtn.Enabled <- false
+        // Configure saveBtn (for UnsavedCustom - Save As)
+        saveBtn.Text <- Localization.getString("SaveAs")
+        saveBtn.AutoSize <- true
+        saveBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        saveBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
+        saveBtn.Enabled <- false
+        saveBtn.Visible <- false
 
-        saveRenameBtn.Click.Add <| fun _ ->
+        saveBtn.Click.Add <| fun _ ->
             if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
                 match themeItems.[colorThemeComboBox.SelectedIndex] with
                 | UnsavedCustom ->
                     // Save As - use ComboBox dialog for theme name selection
-                    match showSaveAsDialog (Localization.getString("ThemeNameTitle")) with
+                    match showSaveAsDialog (Localization.getString("SaveThemeTitle")) with
                     | Some (name, isOverwrite) ->
                         let newTheme = { getCurrentColors() with name = name }
                         if isOverwrite then
@@ -986,9 +994,22 @@ type AppearanceView() as this =
                         colorThemeComboBox.SelectedIndex <- newIndex
                         updateButtonState()
                     | None -> ()
+                | _ -> ()
+
+        // Configure editBtn (for CustomTheme - Edit/Rename/Delete)
+        editBtn.Text <- Localization.getString("Edit")
+        editBtn.AutoSize <- true
+        editBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        editBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
+        editBtn.Enabled <- false
+        editBtn.Visible <- false
+
+        editBtn.Click.Add <| fun _ ->
+            if colorThemeComboBox.SelectedIndex >= 0 && colorThemeComboBox.SelectedIndex < themeItems.Length then
+                match themeItems.[colorThemeComboBox.SelectedIndex] with
                 | CustomTheme currentName ->
-                    // Rename existing custom theme (show delete hint)
-                    match showNameInputDialog (Localization.getString("ThemeNameTitle")) currentName true with
+                    // Edit existing custom theme
+                    match showEditThemeDialog currentName with
                     | Some newName when String.IsNullOrWhiteSpace(newName) ->
                         // Empty name means delete the theme
                         customThemes <- customThemes |> List.filter (fun t -> t.name <> currentName)
@@ -1027,7 +1048,7 @@ type AppearanceView() as this =
         upBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         upBtn.MinimumSize <- Size(30, 0)
         upBtn.TextAlign <- ContentAlignment.MiddleCenter
-        upBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveRenameBtn
+        upBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveEditBtn
         upBtn.Enabled <- false
         upBtn.Visible <- false
 
@@ -1064,7 +1085,7 @@ type AppearanceView() as this =
         downBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         downBtn.MinimumSize <- Size(30, 0)
         downBtn.TextAlign <- ContentAlignment.MiddleCenter
-        downBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveRenameBtn
+        downBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveEditBtn
         downBtn.Enabled <- false
         downBtn.Visible <- false
 
@@ -1096,7 +1117,8 @@ type AppearanceView() as this =
                 | _ -> ()
 
         container.Controls.Add(colorThemeComboBox)
-        container.Controls.Add(saveRenameBtn)
+        container.Controls.Add(saveBtn)
+        container.Controls.Add(editBtn)
         container.Controls.Add(upBtn)
         container.Controls.Add(downBtn)
         container

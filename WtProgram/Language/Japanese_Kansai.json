@@ -93,6 +93,9 @@
   "Rename": "名前の変更やで",
   "EnterThemeName": "テーマ名を入力してや:",
   "ThemeNameTitle": "カラーテーマ名",
-  "DeleteThemeHint": "名前を空にしてOKを押したらテーマ削除できるで。",
+  "SaveThemeTitle": "カラーテーマ 保存やで",
+  "EditThemeTitle": "カラーテーマ 編集やで",
+  "EditThemePrompt": "新しいテーマ名を入力してや:",
+  "DeleteThemeHint": "空欄にしてOKを押したらテーマ削除できるで。",
   "hideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示にするで"
 }

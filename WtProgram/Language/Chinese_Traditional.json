@@ -93,6 +93,9 @@
   "Rename": "重新命名",
   "EnterThemeName": "請輸入主題名稱:",
   "ThemeNameTitle": "顏色主題名稱",
+  "SaveThemeTitle": "儲存顏色主題",
+  "EditThemeTitle": "編輯顏色主題",
+  "EditThemePrompt": "請輸入新的主題名稱:",
   "DeleteThemeHint": "清空名稱並按確定可刪除此主題。",
   "hideTabsOnFullscreen": "全螢幕視窗時隱藏分頁"
 }
