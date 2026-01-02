@@ -96,8 +96,8 @@ type AppearanceView() as this =
     // Combined list for iteration (used by setEditorValues and applyAppearance)
     let allProperties = List2(intProperties.list @ colorProperties.list)
 
-    // Layout: int properties + dark mode checkbox + color properties + copy/paste row + theme row
-    let totalRows = intProperties.length + 1 + colorProperties.length + 2
+    // Layout: int properties + dark mode checkbox + theme row + color properties
+    let totalRows = intProperties.length + 1 + 1 + colorProperties.length
 
     let panel =
         let panel = TableLayoutPanel()
@@ -111,7 +111,7 @@ type AppearanceView() as this =
         panel.ColumnCount <- 3
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 200.0f)).ignore
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 100.0f)).ignore
+        panel.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
         panel
 
    
@@ -133,6 +133,7 @@ type AppearanceView() as this =
             label.AutoSize <- true
             label.Text <- Localization.getString(prop.displayText)
             label.TextAlign <- ContentAlignment.MiddleLeft
+            label.Anchor <- AnchorStyles.Left
             label.Margin <- Padding(0,5,0,5)
             label
         let editor =
@@ -141,7 +142,7 @@ type AppearanceView() as this =
             | IntProperty -> IntEditor() :> IPropEditor
             | HotKeyProperty -> HotKeyEditor() :> IPropEditor
 
-        editor.control.Dock <- DockStyle.Fill
+        editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         editor.control.Margin <- Padding(0,5,0,5)
         panel.Controls.Add(label)
         panel.Controls.Add(editor.control)
@@ -175,11 +176,10 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
-    // Layout: int properties -> dark mode -> theme -> color properties -> copy/paste
+    // Layout: int properties -> dark mode -> theme -> color properties
     let darkModeRow = intProperties.length
     let themeRow = darkModeRow + 1
     let colorStartRow = themeRow + 1
-    let copyPasteButtonRow = colorStartRow + colorProperties.length
 
     // Create editors in natural order: int properties, then color properties
     let editors : Map2<string, IPropEditor> =
@@ -612,23 +612,109 @@ type AppearanceView() as this =
         let jsonObjects = themes |> List.map themeToJsonObject
         "[\n" + String.Join(",\n", jsonObjects) + "\n]"
 
-    // Row 1: Copy/Paste buttons
-    let copyPasteButtonPanel =
-        let container = new FlowLayoutPanel()
-        container.FlowDirection <- FlowDirection.LeftToRight
+    // Clipboard operations dropdown - ComboBox style (panel + label + dropdown icon)
+    let clipboardDropdownBtn =
+        // Container panel with border to look like ComboBox
+        let container = new TableLayoutPanel()
+        container.RowCount <- 1
+        container.ColumnCount <- 2
+        container.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        container.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+        container.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 17.0f)) |> ignore
         container.AutoSize <- true
-        container.WrapContents <- false
-        container.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
-        container.Dock <- DockStyle.Top
+        container.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         container.Margin <- Padding(0, 0, 0, 0)
+        container.Padding <- Padding(0)
+        container.Anchor <- AnchorStyles.Right
+        container.BackColor <- SystemColors.Window
+        container.BorderStyle <- BorderStyle.FixedSingle
+        container.Cursor <- Cursors.Hand
 
-        // Button 1: Copy Selected Theme
-        let copySelectedBtn = Button()
-        copySelectedBtn.Text <- Localization.getString("CopySelectedTheme")
-        copySelectedBtn.AutoSize <- true
-        copySelectedBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        copySelectedBtn.Margin <- Padding(0, 0, 0, 0)  // No right margin - connects to dropdown button
-        copySelectedBtn.Click.Add <| fun _ ->
+        // Text label (left side)
+        let textLabel = new Label()
+        textLabel.Text <- Localization.getString("ClipboardOperations")
+        textLabel.AutoSize <- true
+        textLabel.TextAlign <- ContentAlignment.MiddleLeft
+        textLabel.Margin <- Padding(3, 3, 0, 3)
+        textLabel.BackColor <- Color.Transparent
+        textLabel.Cursor <- Cursors.Hand
+
+        // Dropdown icon button (right side, ComboBox style)
+        let dropdownBtn = new Button()
+        dropdownBtn.Text <- ""
+        dropdownBtn.Width <- 17
+        dropdownBtn.Dock <- DockStyle.Fill
+        dropdownBtn.FlatStyle <- FlatStyle.Flat
+        dropdownBtn.FlatAppearance.BorderSize <- 0
+        dropdownBtn.Margin <- Padding(0, 0, 0, 0)
+        dropdownBtn.Cursor <- Cursors.Hand
+        dropdownBtn.TabStop <- true  // Allow focus via keyboard
+
+        // Track mouse, focus and menu state for proper visual feedback
+        let mutable isMouseOver = false
+        let mutable isMouseDown = false
+        let mutable isMenuOpen = false
+        let mutable isFocused = false
+
+        // Focus visual feedback - change label background when focused
+        dropdownBtn.GotFocus.Add <| fun _ ->
+            isFocused <- true
+            textLabel.BackColor <- SystemColors.Highlight
+            textLabel.ForeColor <- SystemColors.HighlightText
+        dropdownBtn.LostFocus.Add <| fun _ ->
+            isFocused <- false
+            textLabel.BackColor <- Color.Transparent
+            textLabel.ForeColor <- SystemColors.ControlText
+
+        dropdownBtn.MouseEnter.Add <| fun _ ->
+            isMouseOver <- true
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseLeave.Add <| fun _ ->
+            isMouseOver <- false
+            if not isMenuOpen then isMouseDown <- false
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseDown.Add <| fun _ ->
+            isMouseDown <- true
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseUp.Add <| fun _ ->
+            if not isMenuOpen then isMouseDown <- false
+            dropdownBtn.Invalidate()
+
+        // Custom paint to draw ComboBox-style dropdown button
+        dropdownBtn.Paint.Add <| fun e ->
+            let state =
+                if not dropdownBtn.Enabled then ComboBoxState.Disabled
+                elif isMenuOpen || isMouseDown then ComboBoxState.Pressed
+                elif isMouseOver then ComboBoxState.Hot
+                else ComboBoxState.Normal
+
+            if ComboBoxRenderer.IsSupported then
+                ComboBoxRenderer.DrawDropDownButton(e.Graphics, dropdownBtn.ClientRectangle, state)
+            else
+                ControlPaint.DrawComboButton(e.Graphics, dropdownBtn.ClientRectangle,
+                    if isMenuOpen || isMouseDown then ButtonState.Pushed else ButtonState.Normal)
+
+        // Create dropdown menu
+        let menu = new ContextMenuStrip()
+
+        // Handle keyboard events for the menu
+        // - Prevent Alt key alone from closing the menu
+        // - Alt+Up or Alt+Down closes the menu (toggle behavior)
+        menu.PreviewKeyDown.Add <| fun e ->
+            if e.KeyCode = Keys.Menu then  // Alt key alone
+                e.IsInputKey <- true  // Mark as input key to prevent default handling
+            elif e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.IsInputKey <- true  // Mark as input key to handle it ourselves
+
+        menu.KeyDown.Add <| fun e ->
+            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.Handled <- true
+                e.SuppressKeyPress <- true
+                menu.Close()  // Close menu on Alt+Up or Alt+Down
+
+        // Menu item 1: Copy Selected Theme
+        let copySelectedMenuItem = new ToolStripMenuItem(Localization.getString("CopySelectedTheme"))
+        copySelectedMenuItem.Click.Add <| fun _ ->
             try
                 let currentColors = getCurrentColors()
                 let themeName =
@@ -644,23 +730,13 @@ type AppearanceView() as this =
                 if not (String.IsNullOrEmpty(jsonText)) then
                     Clipboard.SetText(jsonText)
             with | _ -> ()
+        menu.Items.Add(copySelectedMenuItem) |> ignore
 
-        // Dropdown button with ContextMenuStrip for additional copy options
-        let copyDropdownMenu = new ContextMenuStrip()
+        // Separator 1
+        menu.Items.Add(new ToolStripSeparator()) |> ignore
 
-        // Menu item: Copy Saved Themes
-        let copySavedMenuItem = new ToolStripMenuItem(Localization.getString("CopySavedThemes"))
-        copySavedMenuItem.Click.Add <| fun _ ->
-            try
-                if customThemes.Length > 0 then
-                    let jsonText = themesToJson customThemes
-                    if not (String.IsNullOrEmpty(jsonText)) then
-                        Clipboard.SetText(jsonText)
-            with | _ -> ()
-        copyDropdownMenu.Items.Add(copySavedMenuItem) |> ignore
-
-        // Menu item: Copy Preset Themes
-        let copyPresetMenuItem = new ToolStripMenuItem(Localization.getString("CopyPresetThemes"))
+        // Menu item 2: Copy All Preset Themes
+        let copyPresetMenuItem = new ToolStripMenuItem(Localization.getString("CopyAllPresetThemes"))
         copyPresetMenuItem.Click.Add <| fun _ ->
             try
                 let presetThemesList = presetThemes |> List.map getPresetColors
@@ -668,61 +744,25 @@ type AppearanceView() as this =
                 if not (String.IsNullOrEmpty(jsonText)) then
                     Clipboard.SetText(jsonText)
             with | _ -> ()
-        copyDropdownMenu.Items.Add(copyPresetMenuItem) |> ignore
+        menu.Items.Add(copyPresetMenuItem) |> ignore
 
-        // Dropdown button (▼) - custom painted to look like ComboBox dropdown
-        let copyDropdownBtn = Button()
-        copyDropdownBtn.Text <- ""  // No text - custom painted
-        copyDropdownBtn.Width <- 17  // Standard ComboBox dropdown button width
-        copyDropdownBtn.FlatStyle <- FlatStyle.Flat
-        copyDropdownBtn.FlatAppearance.BorderSize <- 0
-        copyDropdownBtn.Margin <- Padding(0, 0, 3, 0)
+        // Menu item 3: Copy All Saved Themes
+        let copySavedMenuItem = new ToolStripMenuItem(Localization.getString("CopyAllSavedThemes"))
+        copySavedMenuItem.Click.Add <| fun _ ->
+            try
+                if customThemes.Length > 0 then
+                    let jsonText = themesToJson customThemes
+                    if not (String.IsNullOrEmpty(jsonText)) then
+                        Clipboard.SetText(jsonText)
+            with | _ -> ()
+        menu.Items.Add(copySavedMenuItem) |> ignore
 
-        // Track mouse state for proper visual feedback
-        let mutable isMouseOver = false
-        let mutable isMouseDown = false
+        // Separator 2
+        menu.Items.Add(new ToolStripSeparator()) |> ignore
 
-        copyDropdownBtn.MouseEnter.Add <| fun _ ->
-            isMouseOver <- true
-            copyDropdownBtn.Invalidate()
-        copyDropdownBtn.MouseLeave.Add <| fun _ ->
-            isMouseOver <- false
-            isMouseDown <- false
-            copyDropdownBtn.Invalidate()
-        copyDropdownBtn.MouseDown.Add <| fun _ ->
-            isMouseDown <- true
-            copyDropdownBtn.Invalidate()
-        copyDropdownBtn.MouseUp.Add <| fun _ ->
-            isMouseDown <- false
-            copyDropdownBtn.Invalidate()
-
-        // Custom paint to draw ComboBox-style dropdown button
-        copyDropdownBtn.Paint.Add <| fun e ->
-            let state =
-                if not copyDropdownBtn.Enabled then ComboBoxState.Disabled
-                elif isMouseDown then ComboBoxState.Pressed
-                elif isMouseOver then ComboBoxState.Hot
-                else ComboBoxState.Normal
-
-            // Draw the ComboBox dropdown button
-            if ComboBoxRenderer.IsSupported then
-                ComboBoxRenderer.DrawDropDownButton(e.Graphics, copyDropdownBtn.ClientRectangle, state)
-            else
-                // Fallback for non-visual-styles
-                ControlPaint.DrawComboButton(e.Graphics, copyDropdownBtn.ClientRectangle,
-                    if isMouseDown then ButtonState.Pushed else ButtonState.Normal)
-
-        copyDropdownBtn.Click.Add <| fun _ ->
-            // Show dropdown menu below the main copy button (not the dropdown button)
-            copyDropdownMenu.Show(copySelectedBtn, Point(0, copySelectedBtn.Height))
-
-        // Button 4: Paste Themes (JSON format)
-        let pasteBtn = Button()
-        pasteBtn.Text <- Localization.getString("PasteThemes")
-        pasteBtn.AutoSize <- true
-        pasteBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        pasteBtn.Margin <- Padding(3, 0, 0, 0)
-        pasteBtn.Click.Add <| fun _ ->
+        // Menu item 4: Paste Themes
+        let pasteMenuItem = new ToolStripMenuItem(Localization.getString("PasteThemes"))
+        pasteMenuItem.Click.Add <| fun _ ->
             try
                 if Clipboard.ContainsText() then
                     let clipboardText = Clipboard.GetText()
@@ -806,10 +846,53 @@ type AppearanceView() as this =
                     suppressEvents <- false
                     updateButtonState()
             with | _ -> ()
+        menu.Items.Add(pasteMenuItem) |> ignore
 
-        container.Controls.Add(copySelectedBtn)
-        container.Controls.Add(copyDropdownBtn)
-        container.Controls.Add(pasteBtn)
+        // Track menu state for toggle behavior and visual feedback
+        // Use timestamp to prevent reopening immediately after auto-close
+        let mutable menuClosedTime = DateTime.MinValue
+
+        menu.Opened.Add <| fun _ ->
+            isMenuOpen <- true
+            dropdownBtn.Invalidate()
+        menu.Closed.Add <| fun _ ->
+            isMenuOpen <- false
+            isMouseDown <- false
+            menuClosedTime <- DateTime.Now
+            dropdownBtn.Invalidate()
+
+        // Toggle menu on MouseDown - close if open, open if closed
+        // Skip opening if menu was just closed (within 200ms) to prevent reopen on same click
+        let handleMouseDown () =
+            if isMenuOpen then
+                menu.Close()
+            else
+                let elapsed = (DateTime.Now - menuClosedTime).TotalMilliseconds
+                if elapsed > 200.0 then
+                    menu.Show(container, Point(0, container.Height))
+
+        // All clickable areas toggle the dropdown menu on MouseDown
+        container.MouseDown.Add <| fun _ -> handleMouseDown()
+        textLabel.MouseDown.Add <| fun _ -> handleMouseDown()
+        dropdownBtn.MouseDown.Add <| fun _ -> handleMouseDown()
+
+        // Keyboard support: Alt+Down or Alt+Up toggles menu
+        dropdownBtn.KeyDown.Add <| fun e ->
+            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.Handled <- true
+                e.SuppressKeyPress <- true
+                if isMenuOpen then
+                    menu.Close()
+                else
+                    menu.Show(container, Point(0, container.Height))
+
+        // Add controls to container
+        container.Controls.Add(textLabel)
+        container.SetRow(textLabel, 0)
+        container.SetColumn(textLabel, 0)
+        container.Controls.Add(dropdownBtn)
+        container.SetRow(dropdownBtn, 0)
+        container.SetColumn(dropdownBtn, 1)
         container
 
     // Reserved theme names that cannot be used for custom themes
@@ -1143,11 +1226,10 @@ type AppearanceView() as this =
         panel.SetRow(themePanel, themeRow)
         panel.SetColumn(themePanel, 1)
 
-        // Add copy/paste button panel (after color properties)
-        panel.Controls.Add(copyPasteButtonPanel)
-        panel.SetRow(copyPasteButtonPanel, copyPasteButtonRow)
-        panel.SetColumn(copyPasteButtonPanel, 1)
-        panel.SetColumnSpan(copyPasteButtonPanel, 2)  // Span across both columns for full width
+        // Add clipboard operations button (right-aligned in theme row)
+        panel.Controls.Add(clipboardDropdownBtn)
+        panel.SetRow(clipboardDropdownBtn, themeRow)
+        panel.SetColumn(clipboardDropdownBtn, 2)
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
