@@ -6,7 +6,7 @@
 - Move delay input next to "Hide after specified time" radio button in Behavior tab
 - Remove custom font setting feature from language files
 - Add Color Theme feature
-  - Select from preset themes (Light/Dark/Dark Blue) or custom themes
+  - Select from preset themes (Light/Light Mono/Dark/Dark Blue/Dark Mono/Dark Red Frame) or custom themes
   - Save, edit, delete, and reorder custom themes
   - Copy/Paste themes in JSON format for backup and sharing
 - Fix color settings corruption after force termination

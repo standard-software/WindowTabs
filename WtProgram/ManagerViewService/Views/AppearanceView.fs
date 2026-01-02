@@ -270,7 +270,7 @@ type AppearanceView() as this =
     let mutable customThemes = loadCustomThemes()
 
     // Preset themes (built-in)
-    let presetThemes = ["Light"; "Dark"; "Dark Blue"]
+    let presetThemes = ["Light"; "Light Mono"; "Dark"; "Dark Blue"; "Dark Mono"; "Dark Red Frame"]
 
     // Load saved Custom theme colors from settings
     let loadSavedCustomColors() : ColorThemeData option =
@@ -392,8 +392,11 @@ type AppearanceView() as this =
         let appearance =
             match name with
             | "Light" -> Services.program.defaultTabAppearanceInfo
+            | "Light Mono" -> Services.program.lightMonoTabAppearanceInfo
             | "Dark" -> Services.program.darkModeTabAppearanceInfo
             | "Dark Blue" -> Services.program.darkModeBlueTabAppearanceInfo
+            | "Dark Mono" -> Services.program.darkMonoTabAppearanceInfo
+            | "Dark Red Frame" -> Services.program.darkRedFrameTabAppearanceInfo
             | _ -> Services.program.defaultTabAppearanceInfo
         {
             name = name
@@ -514,7 +517,7 @@ type AppearanceView() as this =
         if index < 0 || index >= themeItems.Length then false
         else
             match themeItems.[index] with
-            | Preset "Dark Blue" -> true  // Always draw separator after Dark Blue
+            | Preset "Dark Red Frame" -> true  // Always draw separator after Dark Red Frame
             | CustomTheme _ ->
                 // Draw separator after last custom theme (before UnsavedCustom)
                 if index + 1 < themeItems.Length then
@@ -554,10 +557,16 @@ type AppearanceView() as this =
                     match themeItems.[currentIndex] with
                     | Preset "Light" ->
                         applyColorPreset(Services.program.defaultTabAppearanceInfo)
+                    | Preset "Light Mono" ->
+                        applyColorPreset(Services.program.lightMonoTabAppearanceInfo)
                     | Preset "Dark" ->
                         applyColorPreset(Services.program.darkModeTabAppearanceInfo)
                     | Preset "Dark Blue" ->
                         applyColorPreset(Services.program.darkModeBlueTabAppearanceInfo)
+                    | Preset "Dark Mono" ->
+                        applyColorPreset(Services.program.darkMonoTabAppearanceInfo)
+                    | Preset "Dark Red Frame" ->
+                        applyColorPreset(Services.program.darkRedFrameTabAppearanceInfo)
                     | Preset _ -> ()
                     | CustomTheme name ->
                         match customThemes |> List.tryFind (fun t -> t.name = name) with

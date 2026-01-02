@@ -106,12 +106,60 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0xE0E0E0)         
-            tabNormalBgColor = Color.FromRGB(0x111827)    
-            tabHighlightBgColor = Color.FromRGB(0x4B5970)  
-            tabActiveBgColor = Color.FromRGB(0x273548)     
-            tabFlashBgColor = Color.FromRGB(0x991B1B)      
-            tabBorderColor = Color.FromRGB(0x374151)       
+            tabTextColor = Color.FromRGB(0xE0E0E0)
+            tabNormalBgColor = Color.FromRGB(0x111827)
+            tabHighlightBgColor = Color.FromRGB(0x4B5970)
+            tabActiveBgColor = Color.FromRGB(0x273548)
+            tabFlashBgColor = Color.FromRGB(0x991B1B)
+            tabBorderColor = Color.FromRGB(0x374151)
+        }
+
+    member this.lightMonoTabAppearance =
+        {
+            tabHeight = -1
+            tabMaxWidth = -1
+            tabOverlap = -1
+            tabHeightOffset = -1
+            tabIndentFlipped = -1
+            tabIndentNormal = -1
+            tabTextColor = Color.FromRGB(0x000000)
+            tabNormalBgColor = Color.FromRGB(0xA0A0A0)
+            tabHighlightBgColor = Color.FromRGB(0xD0D0D0)
+            tabActiveBgColor = Color.FromRGB(0xFFFFFF)
+            tabFlashBgColor = Color.FromRGB(0xD4D4D4)
+            tabBorderColor = Color.FromRGB(0x252525)
+        }
+
+    member this.darkMonoTabAppearance =
+        {
+            tabHeight = -1
+            tabMaxWidth = -1
+            tabOverlap = -1
+            tabHeightOffset = -1
+            tabIndentFlipped = -1
+            tabIndentNormal = -1
+            tabTextColor = Color.FromRGB(0xFFFFFF)
+            tabNormalBgColor = Color.FromRGB(0x0D0D0D)
+            tabHighlightBgColor = Color.FromRGB(0x353535)
+            tabActiveBgColor = Color.FromRGB(0x575757)
+            tabFlashBgColor = Color.FromRGB(0x4D4D4D)
+            tabBorderColor = Color.FromRGB(0x787878)
+        }
+
+    member this.darkRedFrameTabAppearance =
+        {
+            tabHeight = -1
+            tabMaxWidth = -1
+            tabOverlap = -1
+            tabHeightOffset = -1
+            tabIndentFlipped = -1
+            tabIndentNormal = -1
+            tabTextColor = Color.FromRGB(0xFFFFFF)
+            tabNormalBgColor = Color.FromRGB(0x0D0D0D)
+            tabHighlightBgColor = Color.FromRGB(0x353535)
+            tabActiveBgColor = Color.FromRGB(0x575757)
+            tabFlashBgColor = Color.FromRGB(0x772222)
+            tabBorderColor = Color.FromRGB(0xB13A3A)
         }
 
     member this.update f = this.settings <- f(this.settings)

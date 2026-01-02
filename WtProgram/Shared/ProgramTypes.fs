@@ -95,6 +95,9 @@ type IProgram =
     abstract member defaultTabAppearanceInfo : TabAppearanceInfo
     abstract member darkModeTabAppearanceInfo : TabAppearanceInfo
     abstract member darkModeBlueTabAppearanceInfo : TabAppearanceInfo
+    abstract member lightMonoTabAppearanceInfo : TabAppearanceInfo
+    abstract member darkMonoTabAppearanceInfo : TabAppearanceInfo
+    abstract member darkRedFrameTabAppearanceInfo : TabAppearanceInfo
     [<ServiceMethod(async=true)>]
     abstract member ping : unit -> unit
     abstract member setHotKey: string -> int -> unit
