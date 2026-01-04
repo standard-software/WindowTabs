@@ -612,109 +612,12 @@ type AppearanceView() as this =
         let jsonObjects = themes |> List.map themeToJsonObject
         "[\n" + String.Join(",\n", jsonObjects) + "\n]"
 
-    // Clipboard operations dropdown - ComboBox style (panel + label + dropdown icon)
+    // Clipboard operations dropdown using DropdownButton component
     let clipboardDropdownBtn =
-        // Container panel with border to look like ComboBox
-        let container = new TableLayoutPanel()
-        container.RowCount <- 1
-        container.ColumnCount <- 2
-        container.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-        container.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
-        container.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 17.0f)) |> ignore
-        container.AutoSize <- true
-        container.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        container.Margin <- Padding(0, 0, 0, 0)
-        container.Padding <- Padding(0)
-        container.Anchor <- AnchorStyles.Right
-        container.BackColor <- SystemColors.Window
-        container.BorderStyle <- BorderStyle.FixedSingle
-        container.Cursor <- Cursors.Hand
-
-        // Text label (left side)
-        let textLabel = new Label()
-        textLabel.Text <- Localization.getString("ClipboardOperations")
-        textLabel.AutoSize <- true
-        textLabel.TextAlign <- ContentAlignment.MiddleLeft
-        textLabel.Margin <- Padding(3, 3, 0, 3)
-        textLabel.BackColor <- Color.Transparent
-        textLabel.Cursor <- Cursors.Hand
-
-        // Dropdown icon button (right side, ComboBox style)
-        let dropdownBtn = new Button()
-        dropdownBtn.Text <- ""
-        dropdownBtn.Width <- 17
-        dropdownBtn.Dock <- DockStyle.Fill
-        dropdownBtn.FlatStyle <- FlatStyle.Flat
-        dropdownBtn.FlatAppearance.BorderSize <- 0
-        dropdownBtn.Margin <- Padding(0, 0, 0, 0)
-        dropdownBtn.Cursor <- Cursors.Hand
-        dropdownBtn.TabStop <- true  // Allow focus via keyboard
-
-        // Track mouse, focus and menu state for proper visual feedback
-        let mutable isMouseOver = false
-        let mutable isMouseDown = false
-        let mutable isMenuOpen = false
-        let mutable isFocused = false
-
-        // Focus visual feedback - change label background when focused
-        dropdownBtn.GotFocus.Add <| fun _ ->
-            isFocused <- true
-            textLabel.BackColor <- SystemColors.Highlight
-            textLabel.ForeColor <- SystemColors.HighlightText
-        dropdownBtn.LostFocus.Add <| fun _ ->
-            isFocused <- false
-            textLabel.BackColor <- Color.Transparent
-            textLabel.ForeColor <- SystemColors.ControlText
-
-        dropdownBtn.MouseEnter.Add <| fun _ ->
-            isMouseOver <- true
-            dropdownBtn.Invalidate()
-        dropdownBtn.MouseLeave.Add <| fun _ ->
-            isMouseOver <- false
-            if not isMenuOpen then isMouseDown <- false
-            dropdownBtn.Invalidate()
-        dropdownBtn.MouseDown.Add <| fun _ ->
-            isMouseDown <- true
-            dropdownBtn.Invalidate()
-        dropdownBtn.MouseUp.Add <| fun _ ->
-            if not isMenuOpen then isMouseDown <- false
-            dropdownBtn.Invalidate()
-
-        // Custom paint to draw ComboBox-style dropdown button
-        dropdownBtn.Paint.Add <| fun e ->
-            let state =
-                if not dropdownBtn.Enabled then ComboBoxState.Disabled
-                elif isMenuOpen || isMouseDown then ComboBoxState.Pressed
-                elif isMouseOver then ComboBoxState.Hot
-                else ComboBoxState.Normal
-
-            if ComboBoxRenderer.IsSupported then
-                ComboBoxRenderer.DrawDropDownButton(e.Graphics, dropdownBtn.ClientRectangle, state)
-            else
-                ControlPaint.DrawComboButton(e.Graphics, dropdownBtn.ClientRectangle,
-                    if isMenuOpen || isMouseDown then ButtonState.Pushed else ButtonState.Normal)
-
-        // Create dropdown menu
-        let menu = new ContextMenuStrip()
-
-        // Handle keyboard events for the menu
-        // - Prevent Alt key alone from closing the menu
-        // - Alt+Up or Alt+Down closes the menu (toggle behavior)
-        menu.PreviewKeyDown.Add <| fun e ->
-            if e.KeyCode = Keys.Menu then  // Alt key alone
-                e.IsInputKey <- true  // Mark as input key to prevent default handling
-            elif e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
-                e.IsInputKey <- true  // Mark as input key to handle it ourselves
-
-        menu.KeyDown.Add <| fun e ->
-            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
-                e.Handled <- true
-                e.SuppressKeyPress <- true
-                menu.Close()  // Close menu on Alt+Up or Alt+Down
+        let dropdown = DropdownButton(Localization.getString("ClipboardOperations"), DropdownButtonColor)
 
         // Menu item 1: Copy Selected Theme
-        let copySelectedMenuItem = new ToolStripMenuItem(Localization.getString("CopySelectedTheme"))
-        copySelectedMenuItem.Click.Add <| fun _ ->
+        dropdown.AddItem(Localization.getString("CopySelectedTheme"), fun () ->
             try
                 let currentColors = getCurrentColors()
                 let themeName =
@@ -730,39 +633,36 @@ type AppearanceView() as this =
                 if not (String.IsNullOrEmpty(jsonText)) then
                     Clipboard.SetText(jsonText)
             with | _ -> ()
-        menu.Items.Add(copySelectedMenuItem) |> ignore
+        ) |> ignore
 
         // Separator 1
-        menu.Items.Add(new ToolStripSeparator()) |> ignore
+        dropdown.AddSeparator()
 
         // Menu item 2: Copy All Preset Themes
-        let copyPresetMenuItem = new ToolStripMenuItem(Localization.getString("CopyAllPresetThemes"))
-        copyPresetMenuItem.Click.Add <| fun _ ->
+        dropdown.AddItem(Localization.getString("CopyAllPresetThemes"), fun () ->
             try
                 let presetThemesList = presetThemes |> List.map getPresetColors
                 let jsonText = themesToJson presetThemesList
                 if not (String.IsNullOrEmpty(jsonText)) then
                     Clipboard.SetText(jsonText)
             with | _ -> ()
-        menu.Items.Add(copyPresetMenuItem) |> ignore
+        ) |> ignore
 
         // Menu item 3: Copy All Saved Themes
-        let copySavedMenuItem = new ToolStripMenuItem(Localization.getString("CopyAllSavedThemes"))
-        copySavedMenuItem.Click.Add <| fun _ ->
+        dropdown.AddItem(Localization.getString("CopyAllSavedThemes"), fun () ->
             try
                 if customThemes.Length > 0 then
                     let jsonText = themesToJson customThemes
                     if not (String.IsNullOrEmpty(jsonText)) then
                         Clipboard.SetText(jsonText)
             with | _ -> ()
-        menu.Items.Add(copySavedMenuItem) |> ignore
+        ) |> ignore
 
         // Separator 2
-        menu.Items.Add(new ToolStripSeparator()) |> ignore
+        dropdown.AddSeparator()
 
         // Menu item 4: Paste Themes
-        let pasteMenuItem = new ToolStripMenuItem(Localization.getString("PasteThemes"))
-        pasteMenuItem.Click.Add <| fun _ ->
+        dropdown.AddItem(Localization.getString("PasteThemes"), fun () ->
             try
                 if Clipboard.ContainsText() then
                     let clipboardText = Clipboard.GetText()
@@ -846,54 +746,9 @@ type AppearanceView() as this =
                     suppressEvents <- false
                     updateButtonState()
             with | _ -> ()
-        menu.Items.Add(pasteMenuItem) |> ignore
+        ) |> ignore
 
-        // Track menu state for toggle behavior and visual feedback
-        // Use timestamp to prevent reopening immediately after auto-close
-        let mutable menuClosedTime = DateTime.MinValue
-
-        menu.Opened.Add <| fun _ ->
-            isMenuOpen <- true
-            dropdownBtn.Invalidate()
-        menu.Closed.Add <| fun _ ->
-            isMenuOpen <- false
-            isMouseDown <- false
-            menuClosedTime <- DateTime.Now
-            dropdownBtn.Invalidate()
-
-        // Toggle menu on MouseDown - close if open, open if closed
-        // Skip opening if menu was just closed (within 200ms) to prevent reopen on same click
-        let handleMouseDown () =
-            if isMenuOpen then
-                menu.Close()
-            else
-                let elapsed = (DateTime.Now - menuClosedTime).TotalMilliseconds
-                if elapsed > 200.0 then
-                    menu.Show(container, Point(0, container.Height))
-
-        // All clickable areas toggle the dropdown menu on MouseDown
-        container.MouseDown.Add <| fun _ -> handleMouseDown()
-        textLabel.MouseDown.Add <| fun _ -> handleMouseDown()
-        dropdownBtn.MouseDown.Add <| fun _ -> handleMouseDown()
-
-        // Keyboard support: Alt+Down or Alt+Up toggles menu
-        dropdownBtn.KeyDown.Add <| fun e ->
-            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
-                e.Handled <- true
-                e.SuppressKeyPress <- true
-                if isMenuOpen then
-                    menu.Close()
-                else
-                    menu.Show(container, Point(0, container.Height))
-
-        // Add controls to container
-        container.Controls.Add(textLabel)
-        container.SetRow(textLabel, 0)
-        container.SetColumn(textLabel, 0)
-        container.Controls.Add(dropdownBtn)
-        container.SetRow(dropdownBtn, 0)
-        container.SetColumn(dropdownBtn, 1)
-        container
+        dropdown.Control
 
     // Reserved theme names that cannot be used for custom themes
     // Note: Light, Dark, Dark Blue can be used as custom theme names (will create a custom theme with that name)

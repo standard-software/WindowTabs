@@ -223,6 +223,210 @@ type HotKeyOnlyEditor() as this =
         member this.control = textBox :> Control
         member this.changed = hkChanged.Publish
 
+open System.Windows.Forms.VisualStyles
+
+/// Color mode for DropdownButton focus highlighting
+type DropdownButtonColorMode =
+    /// ComboBox style: label highlights blue when focused AND menu is closed
+    | ComboboxColor
+    /// Button style: label never highlights, dropdown button shows hover state when focused
+    | DropdownButtonColor
+
+/// ComboBox-style dropdown button with label and dropdown icon
+/// Supports keyboard navigation (Alt+Up/Down), focus highlighting, and toggle behavior
+type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
+    let colorMode = defaultArg colorMode ComboboxColor
+    let changedEvent = Event<_>()
+
+    // Container panel with border to look like ComboBox
+    let container = new TableLayoutPanel()
+    let textLabel = new Label()
+    let dropdownBtn = new Button()
+    let menu = new ContextMenuStrip()
+
+    // Track mouse, focus and menu state for proper visual feedback
+    let mutable isMouseOver = false
+    let mutable isMouseDown = false
+    let mutable isMenuOpen = false
+    let mutable isFocused = false
+    let mutable menuClosedTime = DateTime.MinValue
+
+    do
+        // Configure container
+        container.RowCount <- 1
+        container.ColumnCount <- 2
+        container.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        container.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+        container.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 17.0f)) |> ignore
+        container.AutoSize <- true
+        container.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        container.Margin <- Padding(0, 0, 0, 0)
+        container.Padding <- Padding(0)
+        container.Anchor <- AnchorStyles.Right
+        container.BackColor <- SystemColors.Window
+        container.BorderStyle <- BorderStyle.FixedSingle
+        container.Cursor <- Cursors.Hand
+
+        // Configure text label
+        textLabel.Text <- text
+        textLabel.AutoSize <- true
+        textLabel.TextAlign <- ContentAlignment.MiddleLeft
+        textLabel.Margin <- Padding(3, 3, 0, 3)
+        textLabel.BackColor <- Color.Transparent
+        textLabel.Cursor <- Cursors.Hand
+
+        // Configure dropdown button
+        dropdownBtn.Text <- ""
+        dropdownBtn.Width <- 17
+        dropdownBtn.Dock <- DockStyle.Fill
+        dropdownBtn.FlatStyle <- FlatStyle.Flat
+        dropdownBtn.FlatAppearance.BorderSize <- 0
+        dropdownBtn.Margin <- Padding(0, 0, 0, 0)
+        dropdownBtn.Cursor <- Cursors.Hand
+        dropdownBtn.TabStop <- true
+
+        // Helper to update label highlight state based on color mode
+        let updateLabelHighlight () =
+            match colorMode with
+            | ComboboxColor ->
+                // ComboBox style: highlight label when focused AND menu is closed
+                if isFocused && not isMenuOpen then
+                    textLabel.BackColor <- SystemColors.Highlight
+                    textLabel.ForeColor <- SystemColors.HighlightText
+                else
+                    textLabel.BackColor <- Color.Transparent
+                    textLabel.ForeColor <- SystemColors.ControlText
+            | DropdownButtonColor ->
+                // Button style: label never highlights
+                textLabel.BackColor <- Color.Transparent
+                textLabel.ForeColor <- SystemColors.ControlText
+            // Invalidate dropdown button to update its visual state
+            dropdownBtn.Invalidate()
+
+        // Focus visual feedback
+        dropdownBtn.GotFocus.Add <| fun _ ->
+            isFocused <- true
+            updateLabelHighlight()
+        dropdownBtn.LostFocus.Add <| fun _ ->
+            isFocused <- false
+            updateLabelHighlight()
+
+        // Mouse events
+        dropdownBtn.MouseEnter.Add <| fun _ ->
+            isMouseOver <- true
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseLeave.Add <| fun _ ->
+            isMouseOver <- false
+            if not isMenuOpen then isMouseDown <- false
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseDown.Add <| fun _ ->
+            isMouseDown <- true
+            dropdownBtn.Invalidate()
+        dropdownBtn.MouseUp.Add <| fun _ ->
+            if not isMenuOpen then isMouseDown <- false
+            dropdownBtn.Invalidate()
+
+        // Custom paint to draw ComboBox-style dropdown button
+        dropdownBtn.Paint.Add <| fun e ->
+            let state =
+                if not dropdownBtn.Enabled then ComboBoxState.Disabled
+                elif isMenuOpen || isMouseDown then ComboBoxState.Pressed
+                elif isMouseOver then ComboBoxState.Hot
+                elif colorMode = DropdownButtonColor && isFocused then ComboBoxState.Hot
+                else ComboBoxState.Normal
+            if ComboBoxRenderer.IsSupported then
+                ComboBoxRenderer.DrawDropDownButton(e.Graphics, dropdownBtn.ClientRectangle, state)
+            else
+                ControlPaint.DrawComboButton(e.Graphics, dropdownBtn.ClientRectangle,
+                    if isMenuOpen || isMouseDown then ButtonState.Pushed else ButtonState.Normal)
+
+        // Menu keyboard events
+        menu.PreviewKeyDown.Add <| fun e ->
+            if e.KeyCode = Keys.Menu then
+                e.IsInputKey <- true
+            elif e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.IsInputKey <- true
+
+        menu.KeyDown.Add <| fun e ->
+            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.Handled <- true
+                e.SuppressKeyPress <- true
+                menu.Close()
+
+        // Menu state tracking
+        menu.Opened.Add <| fun _ ->
+            isMenuOpen <- true
+            updateLabelHighlight()
+            dropdownBtn.Invalidate()
+        menu.Closed.Add <| fun _ ->
+            isMenuOpen <- false
+            isMouseDown <- false
+            menuClosedTime <- DateTime.Now
+            updateLabelHighlight()
+            dropdownBtn.Invalidate()
+
+        // Toggle menu handler
+        let handleMouseDown () =
+            if isMenuOpen then
+                menu.Close()
+            else
+                let elapsed = (DateTime.Now - menuClosedTime).TotalMilliseconds
+                if elapsed > 200.0 then
+                    menu.Show(container, Point(0, container.Height))
+
+        // Click handlers
+        // Focus the dropdown button when label or container is clicked (like ComboBox)
+        container.MouseDown.Add <| fun _ ->
+            dropdownBtn.Focus() |> ignore
+            handleMouseDown()
+        textLabel.MouseDown.Add <| fun _ ->
+            dropdownBtn.Focus() |> ignore
+            handleMouseDown()
+        dropdownBtn.MouseDown.Add <| fun _ -> handleMouseDown()
+
+        // Keyboard handler
+        dropdownBtn.KeyDown.Add <| fun e ->
+            if e.Alt && (e.KeyCode = Keys.Down || e.KeyCode = Keys.Up) then
+                e.Handled <- true
+                e.SuppressKeyPress <- true
+                if isMenuOpen then
+                    menu.Close()
+                else
+                    menu.Show(container, Point(0, container.Height))
+
+        // Add controls to container
+        container.Controls.Add(textLabel)
+        container.SetRow(textLabel, 0)
+        container.SetColumn(textLabel, 0)
+        container.Controls.Add(dropdownBtn)
+        container.SetRow(dropdownBtn, 0)
+        container.SetColumn(dropdownBtn, 1)
+
+    /// Add a menu item with click handler
+    member this.AddItem(itemText: string, handler: unit -> unit) =
+        let item = new ToolStripMenuItem(itemText)
+        item.Click.Add <| fun _ -> handler()
+        menu.Items.Add(item) |> ignore
+        item
+
+    /// Add a separator to the menu
+    member this.AddSeparator() =
+        menu.Items.Add(new ToolStripSeparator()) |> ignore
+
+    /// Get the container control (for adding to parent)
+    member this.Control = container :> Control
+
+    /// Get the ContextMenuStrip (for advanced customization)
+    member this.Menu = menu
+
+    /// Get/Set the button text
+    member this.Text
+        with get() = textLabel.Text
+        and set(value) = textLabel.Text <- value
+
+    /// Check if menu is currently open
+    member this.IsMenuOpen = isMenuOpen
+
 module UIHelper =
     open System.Resources
     open System.Reflection
