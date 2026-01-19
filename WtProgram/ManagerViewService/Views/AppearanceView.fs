@@ -170,6 +170,11 @@ type AppearanceView() as this =
             panel.SetRow(resetBtn, row)
             panel.SetColumn(resetBtn, 2)
         | ColorProperty ->
+            // Use Anchor instead of Dock.Fill to prevent vertical stretching on last row
+            editor.control.Dock <- DockStyle.None
+            editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right ||| AnchorStyles.Top
+            // Also align label to top
+            label.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
             panel.SetColumnSpan(editor.control, 2)
         | _ -> ()
 

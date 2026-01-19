@@ -77,10 +77,10 @@ type EnumEditor<'e when 'e :> Enum>() as this =
 
 type ColorEditor() as this =
     let changedEvent = Event<_>()
-    let chooserButton = 
+    let chooserButton =
         let btn = Button()
-        btn.Width <- btn.Height
-        btn.Click.Add <| fun _ -> 
+        btn.Size <- Size(23, 23)
+        btn.Click.Add <| fun _ ->
             let dlg = System.Windows.Forms.ColorDialog()
             dlg.Color <- this.color
             dlg.FullOpen <- true
@@ -90,7 +90,8 @@ type ColorEditor() as this =
                 changedEvent.Trigger()
         btn.Padding <- Padding(0)
         btn.Margin <- Padding(0)
-        btn.Dock <- DockStyle.Right
+        btn.Dock <- DockStyle.None
+        btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Right
         btn
         
     let textBox = 
