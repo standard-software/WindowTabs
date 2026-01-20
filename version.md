@@ -1,15 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2025.12.09_next_1
-- Add individual reset buttons for size properties in Appearance settings (e.g., "Reset: 25")
-- Hide Diagnostics (Scan) tab from Settings dialog
-- Move delay input next to "Hide after specified time" radio button in Behavior tab
-- Remove custom font setting feature from language files
-- Add Color Theme feature
-  - Select from preset themes (Light/Light Mono/Dark/Dark Blue/Dark Mono/Dark Red Frame) or custom themes
-  - Save, edit, delete, and reorder custom themes
-  - Copy/Paste themes in JSON format for backup and sharing
-- Fix color settings corruption after force termination
+- Separate reset buttons per control in Appearance tab settings
+- Change color theme switching UI
 - Add "Hide tabs when window is fullscreen" option in Behavior tab
 
 ## version ss_jp_2025.12.09
