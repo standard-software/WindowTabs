@@ -328,8 +328,8 @@ type AppearanceView() as this =
         let items = ResizeArray<ThemeItem>()
         // Presets
         presetThemes |> List.iter (fun name -> items.Add(Preset name))
-        // Custom themes
-        customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
+        // // Custom themes - temporarily disabled
+        // customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
         // Only add UnsavedCustom if there are saved custom colors
         if savedCustomColors.IsSome then
             items.Add(UnsavedCustom)
@@ -461,9 +461,10 @@ type AppearanceView() as this =
                     upBtn.Enabled <- false
                     downBtn.Enabled <- false
             | UnsavedCustom ->
-                // Show save button for unsaved custom
-                saveBtn.Visible <- true
-                saveBtn.Enabled <- true
+                // // Show save button for unsaved custom - temporarily disabled
+                // saveBtn.Visible <- true
+                // saveBtn.Enabled <- true
+                saveBtn.Visible <- false
                 editBtn.Visible <- false
                 upBtn.Visible <- false
                 downBtn.Visible <- false
@@ -1087,10 +1088,10 @@ type AppearanceView() as this =
         panel.SetRow(themePanel, themeRow)
         panel.SetColumn(themePanel, 1)
 
-        // Add clipboard operations button (right-aligned in theme row)
-        panel.Controls.Add(clipboardDropdownBtn)
-        panel.SetRow(clipboardDropdownBtn, themeRow)
-        panel.SetColumn(clipboardDropdownBtn, 2)
+        // // Add clipboard operations button (right-aligned in theme row) - temporarily disabled
+        // panel.Controls.Add(clipboardDropdownBtn)
+        // panel.SetRow(clipboardDropdownBtn, themeRow)
+        // panel.SetColumn(clipboardDropdownBtn, 2)
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
