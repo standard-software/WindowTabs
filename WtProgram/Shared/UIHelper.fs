@@ -462,7 +462,7 @@ module UIHelper =
             let caption = Localization.getString text
             let label = label caption
             control.Dock <- DockStyle.Fill
-            label.Margin <- Padding(0,5,0,5)
+            label.Margin <- Padding(0,8,0,5)
             panel.Controls.Add(label)
             panel.Controls.Add(control)
             panel.SetRow(label, i)

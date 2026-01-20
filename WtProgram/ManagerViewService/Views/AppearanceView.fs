@@ -199,7 +199,7 @@ type AppearanceView() as this =
         label.AutoSize <- true
         label.Text <- Localization.getString("MenuDarkMode")
         label.TextAlign <- ContentAlignment.MiddleLeft
-        label.Margin <- Padding(0,5,0,5)
+        label.Margin <- Padding(0,8,0,5)
         panel.Controls.Add(label)
         panel.SetRow(label, darkModeRow)
         panel.SetColumn(label, 0)
