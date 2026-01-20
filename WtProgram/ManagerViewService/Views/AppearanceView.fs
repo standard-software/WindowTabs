@@ -173,8 +173,9 @@ type AppearanceView() as this =
             // Use Anchor instead of Dock.Fill to prevent vertical stretching on last row
             editor.control.Dock <- DockStyle.None
             editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right ||| AnchorStyles.Top
-            // Also align label to top
+            // Also align label to top with 2px additional top margin
             label.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+            label.Margin <- Padding(0, 7, 0, 5)
             panel.SetColumnSpan(editor.control, 2)
         | _ -> ()
 

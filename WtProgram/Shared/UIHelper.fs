@@ -102,7 +102,7 @@ type ColorEditor() as this =
             changedEvent.Trigger()
         tb.Dock <- DockStyle.Fill
         tb.CharacterCasing <- CharacterCasing.Upper
-        tb.Margin <- Padding(0)
+        tb.Margin <- Padding(0, 2, 0, 0)
         tb.KeyPress.Add <| fun e ->
             try
                 if e.KeyChar = (char)Keys.Enter then
