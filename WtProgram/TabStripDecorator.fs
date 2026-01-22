@@ -819,22 +819,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let closeRightTabsItem =
             let currentTab = Tab(hwnd)
             let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-            let rightTabCount = 
+            let rightTabCount =
                 tabIndex |> Option.map(fun index -> this.ts.lorder.count - index - 1) |> Option.defaultValue 0
-            let displayText = 
-                if rightTabCount = 0 then
-                    Localization.getString("CloseTabsToTheRight")
-                else
-                    let formatKey = "CloseTabsToTheRightFormat"
-                    let formatString = Localization.getString(formatKey)
-                    if formatString = null then
-                        failwithf "Resource string '%s' not found" formatKey
-                    let tabWord = 
-                        if rightTabCount = 1 then 
-                            Localization.getString("TabSingular")
-                        else 
-                            Localization.getString("TabPlural")
-                    String.Format(formatString, rightTabCount, tabWord)
+            let displayText =
+                let formatKey = "CloseTabsToTheRightFormat"
+                let formatString = Localization.getString(formatKey)
+                if formatString = null then
+                    failwithf "Resource string '%s' not found" formatKey
+                let tabWord =
+                    if rightTabCount = 1 then
+                        Localization.getString("TabSingular")
+                    else
+                        Localization.getString("TabPlural")
+                String.Format(formatString, rightTabCount, tabWord)
             CmiRegular({
                 text = displayText
                 image = None
@@ -845,22 +842,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let closeLeftTabsItem =
             let currentTab = Tab(hwnd)
             let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-            let leftTabCount = 
+            let leftTabCount =
                 tabIndex |> Option.defaultValue 0
-            let displayText = 
-                if leftTabCount = 0 then
-                    Localization.getString("CloseTabsToTheLeft")
-                else
-                    let formatKey = "CloseTabsToTheLeftFormat"
-                    let formatString = Localization.getString(formatKey)
-                    if formatString = null then
-                        failwithf "Resource string '%s' not found" formatKey
-                    let tabWord = 
-                        if leftTabCount = 1 then 
-                            Localization.getString("TabSingular")
-                        else 
-                            Localization.getString("TabPlural")
-                    String.Format(formatString, leftTabCount, tabWord)
+            let displayText =
+                let formatKey = "CloseTabsToTheLeftFormat"
+                let formatString = Localization.getString(formatKey)
+                if formatString = null then
+                    failwithf "Resource string '%s' not found" formatKey
+                let tabWord =
+                    if leftTabCount = 1 then
+                        Localization.getString("TabSingular")
+                    else
+                        Localization.getString("TabPlural")
+                String.Format(formatString, leftTabCount, tabWord)
             CmiRegular({
                 text = displayText
                 image = None
