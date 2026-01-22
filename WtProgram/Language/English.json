@@ -1,7 +1,7 @@
 {
   "Appearance": "Appearance",
-  "Background Active": "Background Active Color",
-  "Background Flash": "Background FlashColor",
+  "Background Active": "Active Background Color",
+  "Background Flash": "Flash Background Color",
   "Background Highlight": "Mouse Hover Background Color",
   "Background Normal": "Inactive Background Color",
   "Behavior": "Behavior",
