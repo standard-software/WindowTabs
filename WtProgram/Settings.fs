@@ -141,8 +141,8 @@ type Settings(isStandAlone) as this =
             tabTextColor = Color.FromRGB(0xFFFFFF)
             tabNormalBgColor = Color.FromRGB(0x0D0D0D)
             tabHighlightBgColor = Color.FromRGB(0x353535)
-            tabActiveBgColor = Color.FromRGB(0x575757)
-            tabFlashBgColor = Color.FromRGB(0x4D4D4D)
+            tabActiveBgColor = Color.FromRGB(0x6A6A6A)
+            tabFlashBgColor = Color.FromRGB(0x808080)
             tabBorderColor = Color.FromRGB(0x787878)
         }
 
