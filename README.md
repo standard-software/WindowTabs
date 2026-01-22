@@ -44,7 +44,7 @@ Can be compiled with Visual Studio 2022 or 2026 Community Edition.
 
 ## Version
 
-Latest version: **ss_jp_2025.12.09**
+Latest version: **ss_jp_2026.01.23**
 
 For detailed version history and changelog, see [version.md](version.md).
 
@@ -106,13 +106,14 @@ This feature remains unchanged from the original WindowTabs functionality.
 ### Tab Management
 
 - **Tab Context Menu**: Right-click on tabs to access various options
-  - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
   - New window
+  - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
   - Make tabs wider / Make tabs narrower
   - Rename tab
+  - ---
   - Detach and reposition tab
-  - Reposition tab group
   - Detach and link tab to another group
+  - Reposition tab group
   - Link tab group to another group
   - Settings
 
@@ -214,13 +215,14 @@ Configure which programs should use tabs and auto-grouping behavior.
 ### Appearance Tab
 
 Customize the visual appearance of tabs:
-- Height, width, and overlap settings
+- Height, width, and overlap settings (with separate reset buttons per control)
 - Border and text color
-- Background colors (active, normal, highlight, flash)
-- Color theme presets (Light Color, Dark Color, Dark Blue Color)
+- Background colors (active, inactive, mouse hover, flash)
+- Color theme dropdown with preset and custom themes
 - Distance from edge settings
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
+![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
 
 ### Behavior Tab
 
@@ -230,6 +232,7 @@ Configure tab behavior:
 - Toggle tab width on active tab icon double-click
 - Hide tabs when positioned at bottom (never/always/double-click)
 - Delay before hiding tabs
+- Hide tabs when window is fullscreen
 - Auto-grouping settings
 - Hotkey settings (Ctrl+1...+9 for tab activation)
 - Mouse hover activation
