@@ -1224,8 +1224,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
             Some(CmiSeparator)
             detachTabSubMenu
-            moveTabGroupSubMenu
-            // Build "Move tab to another group" menu
+            // Build "Detach this tab and link to another group" menu
             (
                 let moveTabMenu =
                     // Update all group infos before building menu
@@ -1366,6 +1365,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                 moveTabMenu
             )
+            Some(CmiSeparator)
+            moveTabGroupSubMenu
             Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             Some(managerItem)

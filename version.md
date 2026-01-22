@@ -5,6 +5,7 @@
 - Change color theme switching UI
 - Add "Hide tabs when window is fullscreen" option in Behavior tab
 - Rename background color labels for clarity (Normal → Inactive, Highlight → Mouse Over)
+- Reorganize tab context menu structure (tab operations first, then separator, then tab group operations)
 
 ## version ss_jp_2025.12.09
 - update README
