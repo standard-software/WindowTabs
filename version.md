@@ -6,6 +6,7 @@
 - Add "Hide tabs when window is fullscreen" option in Behavior tab
 - Rename background color labels for clarity (Normal → Inactive, Highlight → Mouse Over)
 - Reorganize tab context menu structure (tab operations first, then separator, then tab group operations)
+- Installer: Backup Language folder with timestamp (Backup_Language_YYYY-MM-DD_HH-MM-SS) before install
 
 ## version ss_jp_2025.12.09
 - update README

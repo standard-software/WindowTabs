@@ -158,6 +158,26 @@
                               TerminateProcess="0"
                               Timeout="5" />
 
+      <!-- Backup Language folder before upgrade using PowerShell -->
+      <!-- Property name MUST match CustomAction Id for WixQuietExec64 -->
+      <SetProperty Id="BackupLanguageFolder"
+                   Value="&quot;powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -Command &quot;cd '[INSTALLFOLDER]'; if(Test-Path Language){ren Language ('Backup_Language_'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'))}&quot;"
+                   Before="BackupLanguageFolder"
+                   Sequence="execute" />
+
+      <CustomAction Id="BackupLanguageFolder"
+                    BinaryKey="WixCA"
+                    DllEntry="CAQuietExec64"
+                    Execute="deferred"
+                    Impersonate="no"
+                    Return="ignore" />
+
+      <InstallExecuteSequence>
+         <Custom Action="BackupLanguageFolder" Before="InstallFiles">
+            NOT REMOVE
+         </Custom>
+      </InstallExecuteSequence>
+
       <!-- Features -->
       <Feature Id="MainApplication"
                Title="WindowTabs"
