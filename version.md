@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.01.24_next_1
+
 ## version ss_jp_2026.01.24
 - Separate reset buttons per control in Appearance tab settings
 - Change color theme switching UI
