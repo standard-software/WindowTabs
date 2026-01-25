@@ -81,6 +81,7 @@
   "RenameTab": "Rename tab",
   "RestoreTabName": "Restore tab name",
 
+  "TabDetachAndSplit": "Tab Detach and Split",
   "DetachAndMovePosTab": "Detach this tab and reposition",
   "DetachTabSamePosition": "Same position",
   "DetachTabMoveRight": "Display right edge",
@@ -94,6 +95,10 @@
   "Down": "Down",
   "Main": "Main",
   "DetachAndDockingTabToGroup": "Detach this tab and link to another group",
+  "SplitRightTabsToPositionFormat": "Split right side ({0} tabs) and reposition",
+  "SplitRightTabsToGroupFormat": "Split right side ({0} tabs) and link to group",
+  "SplitLeftTabsToPositionFormat": "Split left side ({0} tabs) and reposition",
+  "SplitLeftTabsToGroupFormat": "Split left side ({0} tabs) and link to group",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "MovePosTabGroup": "Reposition this tab group",
   "DockingTabGroupToGroup": "Link this tab group to another group",

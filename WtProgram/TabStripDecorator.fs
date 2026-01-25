@@ -620,6 +620,478 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (ThreadHelper.cancelablePostBack 200 <| fun() ->
                 Services.program.resumeTabMonitoring()) |> ignore
 
+    member private this.splitRightTabsToPosition(hwnd: IntPtr, position: Option<string>) =
+        // Split tabs from current tab to right and move to specified position
+        // [A,B,C,D] with B selected -> [A] stays, [B,C,D] moves to new position
+        // Approach: First detach the first tab to position (this creates a new group),
+        // then move remaining tabs to that new group using moveTabToGroup
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index > 0 && this.ts.lorder.count > 1 ->
+            // Get tabs to split (from current tab to right, including current)
+            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let screen = this.getCurrentScreenForWindow(firstHwnd)
+
+                // Step 1: Detach the first tab and move to position (with suspend/resume)
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    window.setPositionOnly bounds.location.x bounds.location.y
+
+                    let (newX, newY) = this.calculatePositionInWorkArea(
+                        position,
+                        screen.WorkingArea,
+                        bounds.location.x,
+                        bounds.location.y,
+                        bounds.size.width,
+                        bounds.size.height)
+
+                    if newX <> bounds.location.x || newY <> bounds.location.y then
+                        window.setPositionOnly newX newY
+
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Step 2: Wait for the new group to be created by WindowTabs
+                // The new group is created asynchronously after notifyDetached
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50 // 50 * 20ms = 1 second max wait
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Step 3: Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None ->
+                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+        | _ -> ()
+
+    member private this.splitLeftTabsToPosition(hwnd: IntPtr, position: Option<string>) =
+        // Split tabs from left to current tab and move to specified position
+        // [A,B,C,D] with B selected -> [C,D] stays, [A,B] moves to new position
+        // Approach: First detach the first tab to position (this creates a new group),
+        // then move remaining tabs to that new group
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+            // Get tabs to split (from left to current tab, including current)
+            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let screen = this.getCurrentScreenForWindow(firstHwnd)
+
+                // Step 1: Detach the first tab and move to position (with suspend/resume)
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    window.setPositionOnly bounds.location.x bounds.location.y
+
+                    let (newX, newY) = this.calculatePositionInWorkArea(
+                        position,
+                        screen.WorkingArea,
+                        bounds.location.x,
+                        bounds.location.y,
+                        bounds.size.width,
+                        bounds.size.height)
+
+                    if newX <> bounds.location.x || newY <> bounds.location.y then
+                        window.setPositionOnly newX newY
+
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Step 2: Wait for the new group to be created by WindowTabs
+                // The new group is created asynchronously after notifyDetached
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50 // 50 * 20ms = 1 second max wait
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Step 3: Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None ->
+                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+        | _ -> ()
+
+    member private this.splitRightTabsToGroup(hwnd: IntPtr, targetGroup: WindowGroup) =
+        // Split tabs from current tab to right and move to target group
+        // [A,B,C,D] with B selected -> [A] stays, [B,C,D] moves to target group
+        if targetGroup.hwnd <> group.hwnd then
+            let currentTab = Tab(hwnd)
+            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+            match tabIndex with
+            | Some index when index > 0 && this.ts.lorder.count > 1 ->
+                // Get tabs to split (from current tab to right, including current)
+                let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+
+                if tabsToSplit.Length > 0 then
+                    Services.program.suspendTabMonitoring()
+
+                    try
+                        tabsToSplit |> List.iter (fun tabHwnd ->
+                            this.moveTabToGroup(tabHwnd, targetGroup)
+                        )
+                    finally
+                        Services.program.resumeTabMonitoring()
+            | _ -> ()
+
+    member private this.splitLeftTabsToGroup(hwnd: IntPtr, targetGroup: WindowGroup) =
+        // Split tabs from left to current tab and move to target group
+        // [A,B,C,D] with B selected -> [C,D] stays, [A,B] moves to target group
+        if targetGroup.hwnd <> group.hwnd then
+            let currentTab = Tab(hwnd)
+            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+            match tabIndex with
+            | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+                // Get tabs to split (from left to current tab, including current)
+                let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+
+                if tabsToSplit.Length > 0 then
+                    Services.program.suspendTabMonitoring()
+
+                    try
+                        tabsToSplit |> List.iter (fun tabHwnd ->
+                            this.moveTabToGroup(tabHwnd, targetGroup)
+                        )
+                    finally
+                        Services.program.resumeTabMonitoring()
+            | _ -> ()
+
+    member private this.splitRightTabsToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
+        // Split tabs from current tab to right and move to specified screen and position
+        // Approach: First detach the first tab to screen position (this creates a new group),
+        // then move remaining tabs to that new group
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index > 0 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let sourceScreen = this.getCurrentScreenForWindow(firstHwnd)
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+                let topPercent = float(bounds.location.y - sourceWorkArea.Top) / float(sourceWorkArea.Height)
+
+                // Step 1: Detach the first tab and move to screen position (with suspend/resume)
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let targetWorkArea = targetScreen.WorkingArea
+                    let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                    let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+                    let leftPercent = float(bounds.location.x - sourceWorkArea.Left) / float(sourceWorkArea.Width)
+                    let currentX = targetWorkArea.Left + int(float(targetWorkArea.Width) * leftPercent)
+                    let currentY = targetWorkArea.Top + int(float(targetWorkArea.Height) * topPercent)
+
+                    let newLeft, newTop = this.calculatePositionInWorkArea(
+                        position,
+                        targetWorkArea,
+                        currentX,
+                        currentY,
+                        newWidth,
+                        newHeight)
+
+                    let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
+                    let finalY = max targetWorkArea.Top (min newTop (targetWorkArea.Bottom - newHeight))
+
+                    let initialDpi = WinUserApi.GetDpiForWindow(firstHwnd)
+                    window.setPositionOnly finalX finalY
+
+                    let mutable currentDpi = initialDpi
+                    let mutable elapsed = 0
+                    while elapsed < 200 && currentDpi = initialDpi do
+                        System.Threading.Thread.Sleep(10)
+                        elapsed <- elapsed + 10
+                        currentDpi <- WinUserApi.GetDpiForWindow(firstHwnd)
+
+                    if currentDpi <> initialDpi then
+                        System.Threading.Thread.Sleep(20)
+
+                    window.move (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Step 2: Wait for the new group to be created by WindowTabs
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50 // 50 * 20ms = 1 second max wait
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Step 3: Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None ->
+                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+        | _ -> ()
+
+    member private this.splitLeftTabsToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
+        // Split tabs from left to current tab and move to specified screen and position
+        // Approach: First detach the first tab to screen position (this creates a new group),
+        // then move remaining tabs to that new group
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let sourceScreen = this.getCurrentScreenForWindow(firstHwnd)
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+                let topPercent = float(bounds.location.y - sourceWorkArea.Top) / float(sourceWorkArea.Height)
+
+                // Step 1: Detach the first tab and move to screen position (with suspend/resume)
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let targetWorkArea = targetScreen.WorkingArea
+                    let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                    let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+                    let leftPercent = float(bounds.location.x - sourceWorkArea.Left) / float(sourceWorkArea.Width)
+                    let currentX = targetWorkArea.Left + int(float(targetWorkArea.Width) * leftPercent)
+                    let currentY = targetWorkArea.Top + int(float(targetWorkArea.Height) * topPercent)
+
+                    let newLeft, newTop = this.calculatePositionInWorkArea(
+                        position,
+                        targetWorkArea,
+                        currentX,
+                        currentY,
+                        newWidth,
+                        newHeight)
+
+                    let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
+                    let finalY = max targetWorkArea.Top (min newTop (targetWorkArea.Bottom - newHeight))
+
+                    let initialDpi = WinUserApi.GetDpiForWindow(firstHwnd)
+                    window.setPositionOnly finalX finalY
+
+                    let mutable currentDpi = initialDpi
+                    let mutable elapsed = 0
+                    while elapsed < 200 && currentDpi = initialDpi do
+                        System.Threading.Thread.Sleep(10)
+                        elapsed <- elapsed + 10
+                        currentDpi <- WinUserApi.GetDpiForWindow(firstHwnd)
+
+                    if currentDpi <> initialDpi then
+                        System.Threading.Thread.Sleep(20)
+
+                    window.move (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Step 2: Wait for the new group to be created by WindowTabs
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50 // 50 * 20ms = 1 second max wait
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Step 3: Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None ->
+                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+        | _ -> ()
+
     member private this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
         // Move the entire tab group to the specified position
         // Always use the active window (topWindow) as the reference point
@@ -985,6 +1457,240 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
             }))
 
+        // Split right tabs to position submenu
+        let splitRightTabsToPositionSubMenu =
+            let currentTab = Tab(hwnd)
+            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let totalTabs = this.ts.lorder.count
+
+            // Calculate right tab count (from current tab to rightmost, including current)
+            let rightTabCount =
+                match tabIndex with
+                | Some index -> totalTabs - index
+                | None -> 0
+
+            // Enabled when: more than 1 tab total, not at leftmost position (index > 0), and not at rightmost position
+            let isEnabled =
+                match tabIndex with
+                | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                | None -> false
+
+            let allScreens = this.getAllScreensSorted()
+            let currentScreen = this.getCurrentScreenForWindow(hwnd)
+
+            let menuText = String.Format(Localization.getString("SplitRightTabsToPositionFormat"), rightTabCount)
+
+            let baseMenuItems = [
+                CmiRegular({
+                    text = Localization.getString("DetachTabSamePosition")
+                    image = None
+                    click = fun() -> this.splitRightTabsToPosition(hwnd, None)
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveRight")
+                    image = None
+                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "right")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveLeft")
+                    image = None
+                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "left")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveTop")
+                    image = None
+                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "top")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveBottom")
+                    image = None
+                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottom")
+                    flags = List2()
+                })
+            ]
+
+            let menuItems =
+                if allScreens.Length > 1 then
+                    let screenSubMenus =
+                        allScreens
+                        |> Array.map (fun screen ->
+                            let screenName = this.getScreenName(screen)
+                            let isCurrentScreen = screen.Equals(currentScreen)
+
+                            let screenItems = [
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabSamePosition")
+                                    image = None
+                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, None)
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveRight")
+                                    image = None
+                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "right")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveLeft")
+                                    image = None
+                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "left")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveTop")
+                                    image = None
+                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "top")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveBottom")
+                                    image = None
+                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottom")
+                                    flags = List2()
+                                })
+                            ]
+
+                            CmiPopUp({
+                                text = screenName
+                                image = None
+                                items = List2(screenItems)
+                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
+                            })
+                        )
+                        |> Array.toList
+
+                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
+                else
+                    baseMenuItems
+
+            Some(CmiPopUp({
+                text = menuText
+                image = None
+                items = List2(menuItems)
+                flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
+            }))
+
+        // Split left tabs to position submenu
+        let splitLeftTabsToPositionSubMenu =
+            let currentTab = Tab(hwnd)
+            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let totalTabs = this.ts.lorder.count
+
+            // Calculate left tab count (from leftmost to current tab, including current)
+            let leftTabCount =
+                match tabIndex with
+                | Some index -> index + 1
+                | None -> 0
+
+            // Enabled when: more than 1 tab total, not at leftmost position, and not at rightmost position (index < totalTabs - 1)
+            let isEnabled =
+                match tabIndex with
+                | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                | None -> false
+
+            let allScreens = this.getAllScreensSorted()
+            let currentScreen = this.getCurrentScreenForWindow(hwnd)
+
+            let menuText = String.Format(Localization.getString("SplitLeftTabsToPositionFormat"), leftTabCount)
+
+            let baseMenuItems = [
+                CmiRegular({
+                    text = Localization.getString("DetachTabSamePosition")
+                    image = None
+                    click = fun() -> this.splitLeftTabsToPosition(hwnd, None)
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveRight")
+                    image = None
+                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "right")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveLeft")
+                    image = None
+                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "left")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveTop")
+                    image = None
+                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "top")
+                    flags = List2()
+                })
+                CmiRegular({
+                    text = Localization.getString("DetachTabMoveBottom")
+                    image = None
+                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottom")
+                    flags = List2()
+                })
+            ]
+
+            let menuItems =
+                if allScreens.Length > 1 then
+                    let screenSubMenus =
+                        allScreens
+                        |> Array.map (fun screen ->
+                            let screenName = this.getScreenName(screen)
+                            let isCurrentScreen = screen.Equals(currentScreen)
+
+                            let screenItems = [
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabSamePosition")
+                                    image = None
+                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, None)
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveRight")
+                                    image = None
+                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "right")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveLeft")
+                                    image = None
+                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "left")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveTop")
+                                    image = None
+                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "top")
+                                    flags = List2()
+                                })
+                                CmiRegular({
+                                    text = Localization.getString("DetachTabMoveBottom")
+                                    image = None
+                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottom")
+                                    flags = List2()
+                                })
+                            ]
+
+                            CmiPopUp({
+                                text = screenName
+                                image = None
+                                items = List2(screenItems)
+                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
+                            })
+                        )
+                        |> Array.toList
+
+                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
+                else
+                    baseMenuItems
+
+            Some(CmiPopUp({
+                text = menuText
+                image = None
+                items = List2(menuItems)
+                flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
+            }))
+
         let moveTabGroupSubMenu =
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
@@ -1217,56 +1923,55 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(renameTabItem)
             (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
             Some(CmiSeparator)
-            detachTabSubMenu
-            // Build "Detach this tab and link to another group" menu
+            // Tab Detach and Split submenu containing both detach and link menus
             (
-                let moveTabMenu =
-                    // Update all group infos before building menu
-                    let allDecorators = lock decorators (fun () ->
-                        decorators.Values
-                        |> List.ofSeq
-                        |> List.filter (fun d ->
-                            // Filter out invalid decorators
+                // Update all group infos before building menus (shared by moveTabMenu and split menus)
+                let allDecorators = lock decorators (fun () ->
+                    decorators.Values
+                    |> List.ofSeq
+                    |> List.filter (fun d ->
+                        // Filter out invalid decorators
+                        try
+                            d.ts.hwnd <> IntPtr.Zero &&
+                            WinUserApi.IsWindow(d.group.hwnd) &&
+                            WinUserApi.IsWindow(d.ts.hwnd)
+                        with _ -> false
+                    )
+                )
+
+                // First, update the current group's info synchronously
+                this.updateGroupInfo()
+
+                // Update all other decorators' group info and wait for completion
+                let updateTasks =
+                    allDecorators
+                    |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
+                    |> List.map (fun d ->
+                        async {
                             try
-                                d.ts.hwnd <> IntPtr.Zero &&
-                                WinUserApi.IsWindow(d.group.hwnd) &&
-                                WinUserApi.IsWindow(d.ts.hwnd)
-                            with _ -> false
-                        )
+                                // Double check the window is still valid
+                                if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
+                                    d.group.invokeSync(fun () -> d.updateGroupInfo())
+                            with _ -> ()
+                        }
                     )
 
-                    // First, update the current group's info synchronously
-                    this.updateGroupInfo()
+                // Wait for all updates to complete
+                updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
 
-                    // Update all other decorators' group info and wait for completion
-                    let updateTasks =
-                        allDecorators
-                        |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
-                        |> List.map (fun d ->
-                            async {
-                                try
-                                    // Double check the window is still valid
-                                    if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
-                                        d.group.invokeSync(fun () -> d.updateGroupInfo())
-                                with _ -> ()
-                            }
-                        )
-
-                    // Wait for all updates to complete
-                    updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
-
-                    // Now get the updated group infos
-                    let allGroupInfos = lock groupInfos (fun () ->
-                        groupInfos.Values
-                        |> List.ofSeq
-                        |> List.filter (fun info ->
-                            info.hwnd <> group.hwnd && // Not current group
-                            info.tabCount > 0 && // Has at least one tab
-                            // Don't show groups that contain the tab we're moving
-                            not (info.tabHwnds |> List.contains hwnd)
-                        )
+                // Now get the updated group infos (shared by all menus that need group info)
+                let allGroupInfos = lock groupInfos (fun () ->
+                    groupInfos.Values
+                    |> List.ofSeq
+                    |> List.filter (fun info ->
+                        info.hwnd <> group.hwnd && // Not current group
+                        info.tabCount > 0 && // Has at least one tab
+                        // Don't show groups that contain the tab we're moving
+                        not (info.tabHwnds |> List.contains hwnd)
                     )
+                )
 
+                let moveTabMenu =
                     if not (List.isEmpty allGroupInfos) then
                         // Build menu items for each other group
                         // Use distinctBy to prevent duplicates
@@ -1357,7 +2062,181 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         // No other groups available
                         None
 
-                moveTabMenu
+                // Build split right tabs to group menu
+                let splitRightTabsToGroupMenu =
+                    let currentTab = Tab(hwnd)
+                    let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+                    let totalTabs = this.ts.lorder.count
+
+                    let rightTabCount =
+                        match tabIndex with
+                        | Some index -> totalTabs - index
+                        | None -> 0
+
+                    let isEnabled =
+                        match tabIndex with
+                        | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                        | None -> false
+
+                    let menuText = String.Format(Localization.getString("SplitRightTabsToGroupFormat"), rightTabCount)
+
+                    if not (List.isEmpty allGroupInfos) && isEnabled then
+                        let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
+                        let menuItems =
+                            uniqueGroupInfos
+                            |> List.choose (fun info ->
+                                try
+                                    let targetDecorator = lock decorators (fun () ->
+                                        decorators.Values |> Seq.tryFind (fun d ->
+                                            d.group.hwnd = info.hwnd &&
+                                            WinUserApi.IsWindow(d.group.hwnd) &&
+                                            WinUserApi.IsWindow(d.ts.hwnd)
+                                        )
+                                    )
+
+                                    match targetDecorator with
+                                    | Some decorator ->
+                                        let fullNameString =
+                                            if info.tabCount = 1 then
+                                                let tabName = info.tabNames |> List.head
+                                                if tabName.Length > 22 then tabName.Substring(0, 22) + "..." else tabName
+                                            elif info.tabCount = 2 then
+                                                let tabNames = info.tabNames |> List.take 2
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 9 then name.Substring(0, 9) + "..." else name)
+                                                String.Join(" ", truncatedNames)
+                                            else
+                                                let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 5 then name.Substring(0, 5) + "..." else name)
+                                                String.Join(" ", truncatedNames)
+
+                                        let formatString = Localization.getString("MoveTabGroupFormat")
+                                        let tabWord = if info.tabCount = 1 then Localization.getString("TabSingular") else Localization.getString("TabPlural")
+                                        let itemText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
+
+                                        Some(CmiRegular({
+                                            text = itemText
+                                            image = info.firstTabIcon
+                                            click = fun() -> this.splitRightTabsToGroup(hwnd, decorator.group)
+                                            flags = List2()
+                                        }))
+                                    | None -> None
+                                with _ -> None
+                            )
+
+                        Some(CmiPopUp({
+                            text = menuText
+                            image = None
+                            items = List2(menuItems)
+                            flags = List2()
+                        }))
+                    else
+                        Some(CmiPopUp({
+                            text = menuText
+                            image = None
+                            items = List2([])
+                            flags = List2([MenuFlags.MF_GRAYED])
+                        }))
+
+                // Build split left tabs to group menu
+                let splitLeftTabsToGroupMenu =
+                    let currentTab = Tab(hwnd)
+                    let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+                    let totalTabs = this.ts.lorder.count
+
+                    let leftTabCount =
+                        match tabIndex with
+                        | Some index -> index + 1
+                        | None -> 0
+
+                    let isEnabled =
+                        match tabIndex with
+                        | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                        | None -> false
+
+                    let menuText = String.Format(Localization.getString("SplitLeftTabsToGroupFormat"), leftTabCount)
+
+                    if not (List.isEmpty allGroupInfos) && isEnabled then
+                        let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
+                        let menuItems =
+                            uniqueGroupInfos
+                            |> List.choose (fun info ->
+                                try
+                                    let targetDecorator = lock decorators (fun () ->
+                                        decorators.Values |> Seq.tryFind (fun d ->
+                                            d.group.hwnd = info.hwnd &&
+                                            WinUserApi.IsWindow(d.group.hwnd) &&
+                                            WinUserApi.IsWindow(d.ts.hwnd)
+                                        )
+                                    )
+
+                                    match targetDecorator with
+                                    | Some decorator ->
+                                        let fullNameString =
+                                            if info.tabCount = 1 then
+                                                let tabName = info.tabNames |> List.head
+                                                if tabName.Length > 22 then tabName.Substring(0, 22) + "..." else tabName
+                                            elif info.tabCount = 2 then
+                                                let tabNames = info.tabNames |> List.take 2
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 9 then name.Substring(0, 9) + "..." else name)
+                                                String.Join(" ", truncatedNames)
+                                            else
+                                                let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
+                                                let truncatedNames = tabNames |> List.map (fun name ->
+                                                    if name.Length > 5 then name.Substring(0, 5) + "..." else name)
+                                                String.Join(" ", truncatedNames)
+
+                                        let formatString = Localization.getString("MoveTabGroupFormat")
+                                        let tabWord = if info.tabCount = 1 then Localization.getString("TabSingular") else Localization.getString("TabPlural")
+                                        let itemText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
+
+                                        Some(CmiRegular({
+                                            text = itemText
+                                            image = info.firstTabIcon
+                                            click = fun() -> this.splitLeftTabsToGroup(hwnd, decorator.group)
+                                            flags = List2()
+                                        }))
+                                    | None -> None
+                                with _ -> None
+                            )
+
+                        Some(CmiPopUp({
+                            text = menuText
+                            image = None
+                            items = List2(menuItems)
+                            flags = List2()
+                        }))
+                    else
+                        Some(CmiPopUp({
+                            text = menuText
+                            image = None
+                            items = List2([])
+                            flags = List2([MenuFlags.MF_GRAYED])
+                        }))
+
+                // Wrap all detach/split menus in parent submenu
+                let subMenuItems =
+                    [
+                        detachTabSubMenu
+                        moveTabMenu
+                        Some(CmiSeparator)
+                        splitRightTabsToPositionSubMenu
+                        splitRightTabsToGroupMenu
+                        Some(CmiSeparator)
+                        splitLeftTabsToPositionSubMenu
+                        splitLeftTabsToGroupMenu
+                    ] |> List.choose id
+
+                if subMenuItems.IsEmpty then None
+                else
+                    Some(CmiPopUp({
+                        text = Localization.getString("TabDetachAndSplit")
+                        image = None
+                        items = List2(subMenuItems)
+                        flags = List2()
+                    }))
             )
             Some(CmiSeparator)
             moveTabGroupSubMenu

@@ -81,6 +81,7 @@
   "RenameTab": "重新命名分頁",
   "RestoreTabName": "還原分頁名稱",
 
+  "TabDetachAndSplit": "分離和拆分分頁",
   "DetachAndMovePosTab": "分離此分頁並移動",
   "DetachTabSamePosition": "在原位置分離",
   "DetachTabMoveRight": "移到顯示器右邊緣",
@@ -94,6 +95,10 @@
   "Down": "下",
   "Main": "主",
   "DetachAndDockingTabToGroup": "分離此分頁並連結到其他群組",
+  "SplitRightTabsToPositionFormat": "拆分右側({0}個分頁)並移動",
+  "SplitRightTabsToGroupFormat": "拆分右側({0}個分頁)並連結到其他群組",
+  "SplitLeftTabsToPositionFormat": "拆分左側({0}個分頁)並移動",
+  "SplitLeftTabsToGroupFormat": "拆分左側({0}個分頁)並連結到其他群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
   "MovePosTabGroup": "移動此分頁群組位置",
   "DockingTabGroupToGroup": "將此分頁群組連結到其他群組",

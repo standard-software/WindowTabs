@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.01.24_next_1
+- Add "Tab Detach and Split" parent submenu in tab context menu
+  - Add tab split functionality (split tabs from selected tab to right/left and reposition or link to another group)
 
 ## version ss_jp_2026.01.24
 - Separate reset buttons per control in Appearance tab settings

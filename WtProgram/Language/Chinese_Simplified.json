@@ -81,6 +81,7 @@
   "RenameTab": "重命名标签页",
   "RestoreTabName": "恢复标签页名称",
 
+  "TabDetachAndSplit": "分离和拆分标签页",
   "DetachAndMovePosTab": "分离此标签页并移动",
   "DetachTabSamePosition": "在原位置分离",
   "DetachTabMoveRight": "移到显示器右边缘",
@@ -94,6 +95,10 @@
   "Down": "下",
   "Main": "主",
   "DetachAndDockingTabToGroup": "分离此标签页并连接到其他组",
+  "SplitRightTabsToPositionFormat": "拆分右侧({0}个标签页)并移动",
+  "SplitRightTabsToGroupFormat": "拆分右侧({0}个标签页)并连接到其他组",
+  "SplitLeftTabsToPositionFormat": "拆分左侧({0}个标签页)并移动",
+  "SplitLeftTabsToGroupFormat": "拆分左侧({0}个标签页)并连接到其他组",
   "MoveTabGroupFormat": "{0}{1}: {2}",
   "MovePosTabGroup": "移动此标签组位置",
   "DockingTabGroupToGroup": "将此标签组连接到其他组",

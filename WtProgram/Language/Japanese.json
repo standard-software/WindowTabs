@@ -81,6 +81,7 @@
   "RenameTab": "タブの名前を変更",
   "RestoreTabName": "タブの名前を復元",
 
+  "TabDetachAndSplit": "タブの分離と分割",
   "DetachAndMovePosTab": "このタブを分離して位置移動",
   "DetachTabSamePosition": "同じ位置",
   "DetachTabMoveRight": "ディスプレイの右端",
@@ -94,6 +95,10 @@
   "Down": "下",
   "Main": "メイン",
   "DetachAndDockingTabToGroup": "このタブを分離して他のグループへ連結",
+  "SplitRightTabsToPositionFormat": "このタブから右側({0}タブ)を分割して位置移動",
+  "SplitRightTabsToGroupFormat": "このタブから右側({0}タブ)を分割して他のグループへ連結",
+  "SplitLeftTabsToPositionFormat": "このタブから左側({0}タブ)を分割して位置移動",
+  "SplitLeftTabsToGroupFormat": "このタブから左側({0}タブ)を分割して他のグループへ連結",
   "MoveTabGroupFormat": "{0}{1}: {2}",
   "MovePosTabGroup": "このタブグループを位置移動",
   "DockingTabGroupToGroup": "このタブグループを他のグループへ連結",
