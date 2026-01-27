@@ -35,7 +35,17 @@ namespace Bemo
         public const int DWMWA_HAS_ICONIC_BITMAP                = 10;
         public const int DWMWA_DISALLOW_PEEK                    = 11;
         public const int DWMWA_EXCLUDED_FROM_PEEK               = 12;
-        public const int DWMWA_LAST                             = 13;
+        public const int DWMWA_CLOAK                            = 13;
+        public const int DWMWA_CLOAKED                          = 14;
+        public const int DWMWA_LAST                             = 15;
+    }
+
+    // DWMWA_CLOAKED values
+    public sealed class DWM_CLOAKED
+    {
+        public const int DWM_CLOAKED_APP       = 0x00000001;  // Cloaked by its owner app
+        public const int DWM_CLOAKED_SHELL     = 0x00000002;  // Cloaked by the shell
+        public const int DWM_CLOAKED_INHERITED = 0x00000004;  // Inherited from owner window
     }
     public sealed class DWMNCRENDERINGPOLICY
     {
@@ -56,6 +66,8 @@ namespace Bemo
 
     public sealed class DwmApi
     {
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
         [DllImport("dwmapi.dll")]

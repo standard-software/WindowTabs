@@ -292,6 +292,16 @@ and
 
     member this.isVisible = WinUserApi.IsWindowVisible(hwnd)
 
+    // Check if window is cloaked (UWP apps, virtual desktops, suspended apps)
+    // Cloaked windows have WS_VISIBLE style but are not actually rendered on screen
+    member this.isCloaked =
+        let mutable cloaked = 0
+        let result = DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, &cloaked, sizeof<int>)
+        result = 0 && cloaked <> 0
+
+    // Check if window is truly visible (visible and not cloaked)
+    member this.isVisibleOnScreen = this.isVisible && not this.isCloaked
+
     member this.isMinimized = WinUserApi.IsIconic(hwnd)
 
     member this.showWindow(cmd:int) = WinUserApi.ShowWindow(hwnd, cmd).ignore

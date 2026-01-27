@@ -40,7 +40,7 @@ type FilterService() as this =
             fun() -> this.isAppWindowStyle(window)
             fun() -> window.pid.isCurrentProcess.not
             fun() -> window.isWindow
-            fun() -> window.isVisible
+            fun() -> window.isVisibleOnScreen
             fun() -> window.isTopMost.not
             fun() -> this.isValidOwner(window)
             //Win32 Dialogue class
