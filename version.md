@@ -6,6 +6,8 @@
 - Fix WindowTabs tabs appearing for invisible UWP apps (Settings, etc.)
   - Add cloaked window detection using DwmGetWindowAttribute API
   - UWP apps in cloaked state (suspended, virtual desktop, etc.) are now properly excluded
+- Fix virtual desktop switch causing return to previous desktop
+  - Skip "activate next tab" when window is cloaked (moved to another virtual desktop)
 
 ## version ss_jp_2026.01.27
 - Add "Tab Detach and Split" parent submenu in tab context menu

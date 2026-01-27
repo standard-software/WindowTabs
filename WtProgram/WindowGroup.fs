@@ -610,9 +610,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             let closingTab = Tab(hwnd)
             let closingIndex = allTabs.tryFindIndex((=) closingTab)
 
-            // Skip active tab switching during shutdown, restart, or disable
-            // to avoid excessive window switching during bulk close operations
-            let skipActivation = Services.program.isShuttingDown || Services.program.isDisabled
+            // Skip active tab switching during shutdown, restart, disable, or when window is cloaked
+            // (cloaked = window moved to another virtual desktop, not actually closed)
+            // to avoid excessive window switching during bulk close operations or virtual desktop switches
+            let window = this.os.windowFromHwnd(hwnd)
+            let skipActivation = Services.program.isShuttingDown || Services.program.isDisabled || window.isCloaked
 
             // Determine which tab to activate if this was the active window
             let tabToActivate =
@@ -631,8 +633,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Activate the next tab before removing the window
             tabToActivate.iter <| fun tab ->
                 this.tabActivate(tab, true)
-            
-            let window = this.os.windowFromHwnd(hwnd)
+
             this.ts.removeTab(Tab(hwnd))
             this.setWindows(this.windows.remove hwnd)
             hookCleanup.value.find(hwnd).Dispose()
