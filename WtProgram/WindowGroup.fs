@@ -704,7 +704,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         
         window.setForegroundOrRestore(force)
         window.bringToTop()
-        
+        // Update WindowGroup's internal zorder state immediately
+        this.bringToTop(hwnd)
+
         // Remove TOPMOST after the window switch for non-UWP windows
         if isTabInside && not isUWP then
             // Use a small delay to ensure the window switch is complete
