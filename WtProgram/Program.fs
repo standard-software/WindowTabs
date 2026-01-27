@@ -78,6 +78,8 @@ type Program() as this =
     let inShutdown = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
+    // Temporary storage for tab group configuration (used during disable/enable)
+    let savedTabGroups = Cell.create<List2<List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
@@ -348,7 +350,6 @@ type Program() as this =
         member x.isDisabled = isDisabledCell.value
         member x.isShuttingDown = inShutdown.value
         member x.setDisabled(value) =
-            isDisabledCell.set(value)
             // Save disabled state to settings
             try
                 let json = settingsManager.settingsJson
@@ -356,12 +357,45 @@ type Program() as this =
                 settingsManager.settingsJson <- json
             with
             | ex -> ()  // Ignore errors when saving settings
+
             if value then
-                // When disabled, destroy all tab groups to hide them
+                // When disabling, save current tab group configuration first
+                let groupConfigs = this.desktop.groups.map <| fun gi -> gi.lorder
+                savedTabGroups.set(groupConfigs)
+
+                // Set disabled state before destroying groups
+                isDisabledCell.set(true)
+
+                // Destroy all tab groups to hide them
                 this.desktop.groups.iter <| fun gi ->
                     gi.windows.iter <| fun window ->
                         gi.removeWindow window
                     gi.destroy()
+            else
+                // When enabling, restore saved tab group configuration
+                isDisabledCell.set(false)
+
+                // Suspend tab monitoring to prevent auto-grouping during restore
+                this.isTabMonitoringSuspended <- true
+
+                // Restore saved tab groups
+                savedTabGroups.value.iter <| fun hwnds ->
+                    // Filter out windows that no longer exist or are not visible
+                    let validHwnds = hwnds.where <| fun hwnd ->
+                        let window = os.windowFromHwnd(hwnd)
+                        window.isWindow && window.isVisibleOnScreen
+
+                    if validHwnds.count > 0 then
+                        let group = Services.desktop.createGroup(false)
+                        validHwnds.iter <| fun hwnd ->
+                            group.addWindow(hwnd, false)
+
+                // Clear saved configuration
+                savedTabGroups.set(List2())
+
+                // Resume tab monitoring
+                this.isTabMonitoringSuspended <- false
+
             this.refresh()
 
     interface IDesktopNotification with

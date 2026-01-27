@@ -57,8 +57,9 @@ type GroupInfo(enableSuperBar) as this =
 
     interface IGroup with
         member x.hwnd = this.hwnd
-        member x.windows 
+        member x.windows
             with get() = this.windows
+        member x.lorder = this.windows  // Use windowsCell which maintains order via added/moved events
         member x.destroy() = this.destroy()
         member x.addWindow(hwnd, delay) = this.addWindow(hwnd, delay)
         member x.removeWindow hwnd = this.removeWindow hwnd
