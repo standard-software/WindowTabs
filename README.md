@@ -108,55 +108,61 @@ This feature remains unchanged from the original WindowTabs functionality.
 - **Tab Context Menu**: Right-click on tabs to access various options
   - New window
   - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
+  ---
   - Make tabs wider / Make tabs narrower
   - Rename tab
-  - ---
-  - Detach and reposition tab
-  - Detach and link tab to another group
-  - Reposition tab group
-  - Link tab group to another group
+  ---
+  - Tab Detach and Split (submenu)
+    - Detach this tab and reposition
+    - Detach this tab and link to another group
+    ---
+    - Split right / left side and reposition
+    - Split right / left side and link to group
+  ---
+  - Reposition this tab group
+  - Link this tab group to another group
+  ---
   - Settings
 
 ![Popup Menu](README_Image/PopupMenu.png)
 
-### Detach and reposition tab
+### Tab Detach and Split
 
-Detach a tab from group and reposition it with multi-display support:
-- Detach at same position
-- Move to display edges (right/left/top/bottom)
-- DPI-aware percentage-based positioning for correct placement across different DPI displays
+The "Tab Detach and Split" submenu provides powerful tab management options:
 
-![Detach Tab](README_Image/DetachTab.png)
+![Tab Detach and Split](README_Image/DetachTab.png)
 
-### Reposition tab group
+#### Reposition
 
-Move entire tab group to different display positions:
+- For detach and split operations, same position option is available
 - Move to current display edges (right/left/top/bottom)
 - Move to other displays with edge positioning options
-- DPI-aware positioning for correct placement across different DPI displays
-- Maintains tab group integrity while repositioning
+- DPI-aware percentage-based positioning for correct placement across different DPI displays
 
-![Reposition tab group](README_Image/MoveTabGroup.png)
+#### Link to another group
 
-### Detach and link tab to another group
-
-Detach a single tab from current group and link it to another existing group:
+Link a tab or tabs to another existing group:
 - Shows other groups with tab names and counts
-- Adaptive tab name truncation for easy identification
-- Display application icons for group recognition
-- Disabled when tab group has only one tab
+- Displays the application icon of the first tab in each group
 
-![Detach and link tab to another group](README_Image/MoveTab.png)
+![Link to another group](README_Image/MoveTab.png)
 
-### Link tab group to another group
+#### Detach this tab
 
-Transfer all tabs from current group to another existing group:
-- Shows other groups with tab names and counts
-- Transfers all tabs at once from current group to target group
-- Adaptive tab name truncation for easy identification
-- Display application icons for group recognition
+Detach a single tab from the tab group.
 
-![Link tab group to another group](README_Image/MoveTabGroupToGroup.png)
+#### Split right/left side
+
+Split tab groups with 3 or more tabs:
+- Split tabs to the right or left, including the selected tab
+- Supports reposition and link to another group operations
+
+#### This tab group
+
+Operates on the entire tab group:
+- Supports reposition and link to another group operations
+
+![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
 
 ### Menu Dark Mode / Light Mode
