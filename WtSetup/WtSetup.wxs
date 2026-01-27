@@ -17,9 +17,10 @@
       <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
 
       <!-- Upgrade settings: Remove all previous versions -->
+      <!-- AllowSameVersionUpgrades="yes" allows reinstall of same version -->
       <MajorUpgrade DowngradeErrorMessage="A newer version of WindowTabs is already installed."
                     Schedule="afterInstallInitialize"
-                    AllowSameVersionUpgrades="no"
+                    AllowSameVersionUpgrades="yes"
                     RemoveFeatures="ALL" />
 
       <!-- Installation directory structure -->
@@ -158,22 +159,19 @@
                               TerminateProcess="0"
                               Timeout="5" />
 
-      <!-- Backup Language folder before upgrade using PowerShell -->
-      <!-- Property name MUST match CustomAction Id for WixQuietExec64 -->
-      <SetProperty Id="BackupLanguageFolder"
-                   Value="&quot;powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -Command &quot;cd '[INSTALLFOLDER]'; if(Test-Path Language){ren Language ('Backup_Language_'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'))}&quot;"
-                   Before="BackupLanguageFolder"
-                   Sequence="execute" />
+      <!-- Backup Language folder before install/upgrade using PowerShell -->
+      <!-- Read InstallPath from registry and backup Language folder if exists -->
+      <!-- Runs on both upgrade and reinstall (NOT REMOVE = not uninstall) -->
+      <Property Id="POWERSHELLEXE" Value="powershell.exe" />
 
       <CustomAction Id="BackupLanguageFolder"
-                    BinaryKey="WixCA"
-                    DllEntry="CAQuietExec64"
-                    Execute="deferred"
-                    Impersonate="no"
+                    Property="POWERSHELLEXE"
+                    ExeCommand="-NoProfile -ExecutionPolicy Bypass -Command &quot;$p=(Get-ItemProperty -Path 'HKCU:\Software\WindowTabs' -Name 'InstallPath' -EA SilentlyContinue).InstallPath; if($p -and (Test-Path (Join-Path $p 'Language'))){Rename-Item (Join-Path $p 'Language') ('Backup_Language_'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'))}&quot;"
+                    Execute="immediate"
                     Return="ignore" />
 
       <InstallExecuteSequence>
-         <Custom Action="BackupLanguageFolder" Before="InstallFiles">
+         <Custom Action="BackupLanguageFolder" Before="InstallInitialize">
             NOT REMOVE
          </Custom>
       </InstallExecuteSequence>
