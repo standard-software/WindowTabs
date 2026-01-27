@@ -2381,26 +2381,26 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let currentTab = Tab(hwnd)
             let allTabs = this.ts.lorder
             let currentIndex = allTabs.tryFindIndex((=) currentTab)
-            
+
             // Check if this is the active tab
             let isActiveTab = (group.topWindow = hwnd)
-            
+
             // If closing the active tab and there are more tabs, activate the next one
             if isActiveTab && allTabs.count > 1 then
                 currentIndex.iter <| fun index ->
                     // Determine which tab to activate
-                    let nextTab = 
+                    let nextTab =
                         if index < allTabs.count - 1 then
                             Some(allTabs.at(index + 1))  // Next tab
                         elif index > 0 then
                             Some(allTabs.at(index - 1))  // Previous tab
                         else
                             None
-                    
+
                     // Activate the next tab before closing
                     nextTab.iter <| fun tab ->
                         group.tabActivate(tab, true)
-            
+
             // Close the window
             os.windowFromHwnd(hwnd).close()
 

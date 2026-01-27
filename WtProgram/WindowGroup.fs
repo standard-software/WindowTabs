@@ -609,10 +609,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             let allTabs = this.ts.lorder
             let closingTab = Tab(hwnd)
             let closingIndex = allTabs.tryFindIndex((=) closingTab)
-            
+
+            // Skip active tab switching during shutdown, restart, or disable
+            // to avoid excessive window switching during bulk close operations
+            let skipActivation = Services.program.isShuttingDown || Services.program.isDisabled
+
             // Determine which tab to activate if this was the active window
-            let tabToActivate = 
-                if wasActiveWindow && allTabs.count > 1 then
+            let tabToActivate =
+                if wasActiveWindow && allTabs.count > 1 && not skipActivation then
                     closingIndex.bind <| fun index ->
                         // Get the next tab (or previous if it's the last tab)
                         if index < allTabs.count - 1 then
@@ -623,7 +627,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                             None
                 else
                     None
-            
+
             // Activate the next tab before removing the window
             tabToActivate.iter <| fun tab ->
                 this.tabActivate(tab, true)

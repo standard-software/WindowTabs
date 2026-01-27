@@ -110,6 +110,7 @@ type IProgram =
     abstract member llMouse : IEvent<int32 * IntPtr>
     abstract member isDisabled : bool
     abstract member setDisabled : bool -> unit
+    abstract member isShuttingDown : bool
 
 type IGroup =
     abstract member hwnd : IntPtr

@@ -346,6 +346,7 @@ type Program() as this =
         member x.newVersion = notifyNewVersionEvt.Publish
         member x.llMouse = llMouseEvent.Publish
         member x.isDisabled = isDisabledCell.value
+        member x.isShuttingDown = inShutdown.value
         member x.setDisabled(value) =
             isDisabledCell.set(value)
             // Save disabled state to settings
