@@ -483,7 +483,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 try
                     // First ensure the window is not in the target group already
                     if targetGroup.windows.contains hwnd then
-                        System.Diagnostics.Debug.WriteLine(sprintf "Window %A is already in target group %A, skipping move" hwnd targetGroup.hwnd)
                         ()
                     else
                         // Store original window state
@@ -518,8 +517,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     // Show window again (target group will handle positioning)
                                     window.showWindow(ShowWindowCommands.SW_SHOW)
                                     moveCompleted := true
-                                else
-                                    System.Diagnostics.Debug.WriteLine(sprintf "Window %A already in target during sync, skipping" hwnd)
                             with ex ->
                                 moveException := Some ex
                         )
@@ -534,14 +531,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             raise ex
                         | None when not !moveCompleted ->
                             // Move didn't complete, restore
-                            System.Diagnostics.Debug.WriteLine("Move didn't complete, restoring to original group")
                             group.addWindow(hwnd, false)
                             window.showWindow(ShowWindowCommands.SW_SHOW)
                         | None ->
-                            // Move successful
-                            System.Diagnostics.Debug.WriteLine(sprintf "Successfully moved tab %A from group %A to group %A" hwnd group.hwnd targetGroup.hwnd)
-
-                            // Wait a bit for UI to update
+                            // Move successful - wait a bit for UI to update
                             System.Threading.Thread.Sleep(100)
 
                             // Move successful - no need to update group info here
@@ -570,8 +563,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     tabsToMove |> List.iter (fun hwnd ->
                         this.moveTabToGroup(hwnd, targetGroup)
                     )
-
-                    System.Diagnostics.Debug.WriteLine(sprintf "Successfully moved %d tabs from group %A to group %A" tabsToMove.Length group.hwnd targetGroup.hwnd)
                 finally
                     // Resume tab monitoring
                     Services.program.resumeTabMonitoring()
@@ -712,8 +703,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             )
                         finally
                             Services.program.resumeTabMonitoring()
-                    | None ->
-                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+                    | None -> ()
         | _ -> ()
 
     member private this.splitLeftTabsToPosition(hwnd: IntPtr, position: Option<string>) =
@@ -808,8 +798,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             )
                         finally
                             Services.program.resumeTabMonitoring()
-                    | None ->
-                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+                    | None -> ()
         | _ -> ()
 
     member private this.splitRightTabsToGroup(hwnd: IntPtr, targetGroup: WindowGroup) =
@@ -971,8 +960,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             )
                         finally
                             Services.program.resumeTabMonitoring()
-                    | None ->
-                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+                    | None -> ()
         | _ -> ()
 
     member private this.splitLeftTabsToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
@@ -1088,8 +1076,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             )
                         finally
                             Services.program.resumeTabMonitoring()
-                    | None ->
-                        System.Diagnostics.Debug.WriteLine("Could not find new group for split tabs after waiting")
+                    | None -> ()
         | _ -> ()
 
     member private this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =

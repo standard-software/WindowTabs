@@ -69,22 +69,17 @@ module DarkMode =
             // Always try to apply dark mode on Windows (don't check version)
             // First set the window theme
             if enabled then
-                let themeResult = SetWindowTheme(handle, "DarkMode_Explorer", null)
-                System.Diagnostics.Debug.WriteLine(sprintf "SetWindowTheme result: %d" themeResult)
+                SetWindowTheme(handle, "DarkMode_Explorer", null) |> ignore
 
             // Try both attribute values to ensure compatibility
             let mutable value = if enabled then 1 else 0
 
             // Try the newer attribute first (Windows 11/10 20H1+)
             let result1 = DwmSetWindowAttributeNative(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof<int>)
-            System.Diagnostics.Debug.WriteLine(sprintf "DwmSetWindowAttribute (20): result=%d" result1)
 
             // Also try the older attribute (Windows 10 older builds)
             let result2 = DwmSetWindowAttributeNative(handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, &value, sizeof<int>)
-            System.Diagnostics.Debug.WriteLine(sprintf "DwmSetWindowAttribute (19): result=%d" result2)
 
             result1 = 0 || result2 = 0
         with
-        | ex ->
-            System.Diagnostics.Debug.WriteLine(sprintf "DarkMode exception: %s" ex.Message)
-            false
+        | _ -> false
