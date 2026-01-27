@@ -24,6 +24,11 @@ echo.
 
 gh release create %TAG% "exe\installer\WtSetup.msi" "exe\zip\WindowTabs.zip" --title "%TITLE%" --notes "%NOTES%"
 
-echo.
-echo Release created successfully!
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo Release failed! Please check authentication with: gh auth login
+) else (
+    echo.
+    echo Release created successfully!
+)
 pause
