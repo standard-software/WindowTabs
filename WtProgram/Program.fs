@@ -46,7 +46,7 @@ type ProgramVersion(parts:List2<int>)=
 
 type Program() as this =
     let version = "ss_jp_2026.01.27_next_1"
-    let isStandAlone = System.Diagnostics.Debugger.IsAttached 
+    let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
     let Cell = CellScope()
@@ -54,6 +54,8 @@ type Program() as this =
     let invoker = InvokerService.invoker
     let isTabMonitoringSuspendedCell = Cell.create(false)
     let isDisabledCell = Cell.create(false)
+    let isRestoringTabGroups = Cell.create(false)
+    let needsRestoreOnStartup = Cell.create(false)
     let llMouseEvent = Event<_>()
 
     // case 727 outlook calendar items appear behind outlook main window
@@ -156,6 +158,11 @@ type Program() as this =
 
     member this.updateAppWindows() =
         if this.desktop.isDragging.not then
+            // If restoration is needed on startup, do it first before auto-grouping
+            if needsRestoreOnStartup.value then
+                this.restoreTabGroupsFromSettings()
+                needsRestoreOnStartup.set(false)
+
             if inShutdown.value.not && isDisabledCell.value.not then
                 os.windowsInZorder.iter <| fun window ->
                     this.ensureWindowIsSubscribed(window)
@@ -258,8 +265,88 @@ type Program() as this =
         this.desktop.groups.any(fun group -> group.windows.contains((=)hwnd))
 
     member this.notifyNewVersion = notifyNewVersionEvt.Publish
-    
+
     member this.refresh() = this.receive(Timer)
+
+    // Save tab group configuration to settings file for restoration on next startup
+    member this.saveTabGroupsToSettings() =
+        try
+            let json = settingsManager.settingsJson
+            let groupsArray = JArray()
+            this.desktop.groups.iter <| fun gi ->
+                let windowsArray = JArray()
+                gi.lorder.iter <| fun hwnd ->
+                    let window = os.windowFromHwnd(hwnd)
+                    if window.isWindow then
+                        let windowObj = JObject()
+                        windowObj.setString("processPath", window.pid.processPath)
+                        windowObj.setString("title", window.text)
+                        windowsArray.Add(windowObj)
+                if windowsArray.Count > 0 then
+                    groupsArray.Add(windowsArray)
+            json.["savedTabGroupsForRestart"] <- groupsArray
+            settingsManager.settingsJson <- json
+        with
+        | _ -> ()
+
+    // Clear saved tab groups from settings file
+    member this.clearSavedTabGroups() =
+        try
+            let json = settingsManager.settingsJson
+            json.Remove("savedTabGroupsForRestart") |> ignore
+            settingsManager.settingsJson <- json
+        with
+        | _ -> ()
+
+    // Restore tab groups from settings file on startup
+    member this.restoreTabGroupsFromSettings() =
+        try
+            let json = settingsManager.settingsJson
+            match json.["savedTabGroupsForRestart"] with
+            | :? JArray as groupsArray when groupsArray.Count > 0 ->
+                isRestoringTabGroups.set(true)
+
+                // Get all current windows
+                let currentWindows = os.windowsInZorder.where(fun w ->
+                    this.isTabbableWindow(w) && w.pid.isCurrentProcess.not)
+
+                // For each saved group, try to find matching windows and recreate the group
+                // Track all matched hwnds globally across all groups to prevent same window matching multiple times
+                let mutable globalMatchedHwnds = List2<IntPtr>()
+                for groupToken in groupsArray do
+                    match groupToken with
+                    | :? JArray as windowsArray ->
+                        let mutable groupMatchedHwnds = List2<IntPtr>()
+                        for windowToken in windowsArray do
+                            match windowToken with
+                            | :? JObject as windowObj ->
+                                let savedPath = windowObj.getString("processPath").def("")
+                                let savedTitle = windowObj.getString("title").def("")
+                                // Find a matching window (check against global list to prevent cross-group duplicates)
+                                let matchedWindow = currentWindows.tryFind <| fun w ->
+                                    w.pid.processPath = savedPath &&
+                                    w.text = savedTitle &&
+                                    globalMatchedHwnds.contains((=) w.hwnd).not
+                                match matchedWindow with
+                                | Some(w) ->
+                                    groupMatchedHwnds <- groupMatchedHwnds.append(w.hwnd)
+                                    globalMatchedHwnds <- globalMatchedHwnds.append(w.hwnd)
+                                | None -> ()
+                            | _ -> ()
+                        // Create group with matched windows (including single-tab groups)
+                        if groupMatchedHwnds.count >= 1 then
+                            let group = Services.desktop.createGroup(false)
+                            groupMatchedHwnds.iter <| fun hwnd ->
+                                group.addWindow(hwnd, false)
+                    | _ -> ()
+
+                isRestoringTabGroups.set(false)
+
+                // Clear saved data after restoration
+                this.clearSavedTabGroups()
+            | _ -> ()
+        with
+        | _ -> isRestoringTabGroups.set(false)
 
     interface IProgram with
         member x.version = version
@@ -274,6 +361,8 @@ type Program() as this =
             this.refresh()
 
         member x.shutdown() =
+            // Save tab group configuration before shutdown
+            this.saveTabGroupsToSettings()
             inShutdown.set(true)
             this.desktop.groups.iter <| fun gi ->
                 gi.windows.iter <| fun window ->
@@ -423,6 +512,20 @@ type Program() as this =
                 exit(0)
 
         Application.EnableVisualStyles()
+
+        // Check if there are saved tab groups to restore
+        let hasSavedTabGroups =
+            try
+                let json = settingsManager.settingsJson
+                match json.["savedTabGroupsForRestart"] with
+                | null -> false
+                | :? JArray as arr -> arr.Count > 0
+                | _ -> false
+            with _ -> false
+
+        // If saved tab groups exist, set flag to restore before auto-grouping
+        if hasSavedTabGroups then
+            needsRestoreOnStartup.set(true)
 
         Services.register(this :> IProgram)
         Services.register(FilterService() :> IFilterService)

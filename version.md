@@ -10,6 +10,8 @@
   - Skip "activate next tab" when window is cloaked (moved to another virtual desktop)
 - Preserve tab group configuration when disabling/enabling WindowTabs
   - Tab order and separate groups are now restored after re-enabling
+- Preserve tab group configuration across WindowTabs restart
+  - Tab groups are saved on exit and restored on next startup
 
 ## version ss_jp_2026.01.27
 - Add "Tab Detach and Split" parent submenu in tab context menu
