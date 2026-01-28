@@ -7,6 +7,105 @@ open System.Diagnostics
 open System.IO
 open System.Threading
 
+// Watchdog module to detect UI thread freeze and auto-restart
+module Watchdog =
+    let mutable private watchdogThread: Thread option = None
+    let mutable private stopRequested = false
+    let mutable private uiThreadInvoker: Invoker option = None  // Store UI thread's invoker
+    let private freezeTimeout = 10000  // 10 seconds timeout for freeze detection
+    let private checkInterval = 5000   // Check every 5 seconds
+    let private requiredConsecutiveFailures = 1  // Restart after 1 timeout (10 seconds unresponsive)
+
+    // Use AutoResetEvent for more reliable signaling
+    let private pingResponse = new AutoResetEvent(false)
+
+    let respondToPing() =
+        pingResponse.Set() |> ignore
+
+    let private trySaveAndRestart() =
+        try
+            // Try to save tab groups before restart
+            let saveComplete = new ManualResetEvent(false)
+            try
+                match uiThreadInvoker with
+                | Some invoker ->
+                    invoker.asyncInvoke(fun () ->
+                        try
+                            Services.program.saveTabGroupsBeforeExit()
+                        with _ -> ()
+                        saveComplete.Set() |> ignore
+                    )
+                | None -> ()
+                // Wait max 2 seconds for save
+                saveComplete.WaitOne(2000) |> ignore
+            with _ -> ()
+
+            // Start new process and exit
+            let exePath = Assembly.GetExecutingAssembly().Location
+            let startInfo = ProcessStartInfo()
+            startInfo.FileName <- "cmd.exe"
+            startInfo.Arguments <- sprintf "/c timeout /t 2 /nobreak >nul && start \"\" \"%s\"" exePath
+            startInfo.WindowStyle <- ProcessWindowStyle.Hidden
+            startInfo.CreateNoWindow <- true
+            Process.Start(startInfo) |> ignore
+            ForceExitState.isForceExiting <- true
+            Environment.Exit(0)
+        with _ ->
+            Environment.Exit(1)
+
+    let private watchdogLoop() =
+        // Wait before starting monitoring to allow app to initialize
+        Thread.Sleep(10000)
+
+        let mutable consecutiveFailures = 0
+
+        while not stopRequested do
+            try
+                // Send ping to UI thread using the stored UI thread invoker
+                match uiThreadInvoker with
+                | Some invoker ->
+                    try
+                        invoker.asyncInvoke(fun () -> respondToPing())
+                    with _ -> ()
+                | None -> ()
+
+                // Wait for response with timeout
+                let responded = pingResponse.WaitOne(freezeTimeout)
+
+                if responded then
+                    // UI thread responded, reset failure count
+                    consecutiveFailures <- 0
+                else
+                    // UI thread did not respond
+                    consecutiveFailures <- consecutiveFailures + 1
+
+                    if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
+                        // UI thread is frozen (confirmed by multiple consecutive failures), force restart
+                        trySaveAndRestart()
+
+                // Wait before next check
+                Thread.Sleep(checkInterval)
+            with _ ->
+                Thread.Sleep(checkInterval)
+
+    let start() =
+        // Don't start watchdog when debugger is attached (prevents false positives during debugging)
+        if Debugger.IsAttached then
+            ()
+        elif watchdogThread.IsNone then
+            // Capture UI thread's invoker (must be called from UI thread)
+            uiThreadInvoker <- Some(InvokerService.invoker)
+            stopRequested <- false
+            let thread = new Thread(ThreadStart(watchdogLoop))
+            thread.IsBackground <- true
+            thread.Name <- "WindowTabs Watchdog"
+            thread.Start()
+            watchdogThread <- Some(thread)
+
+    let stop() =
+        stopRequested <- true
+        pingResponse.Set() |> ignore  // Unblock any waiting
+
 type NotifyIconPlugin() as this =
     let Cell = CellScope()
 
@@ -104,6 +203,7 @@ type NotifyIconPlugin() as this =
             ToolTipIcon.Info
         )
 
+    // Restart application using normal shutdown
     member this.restartApplication() =
         let exePath = Assembly.GetExecutingAssembly().Location
         // Start new process with a delay using cmd
@@ -215,5 +315,10 @@ type NotifyIconPlugin() as this =
 
             Services.program.newVersion.Add this.onNewVersion
 
+            // Start watchdog to detect UI freeze and auto-restart
+            Watchdog.start()
+
     interface IDisposable with
-        member this.Dispose() = this.icon.Dispose()
+        member this.Dispose() =
+            Watchdog.stop()
+            this.icon.Dispose()

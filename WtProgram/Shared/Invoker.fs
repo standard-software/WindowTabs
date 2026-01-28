@@ -3,28 +3,32 @@ open System
 open System.Threading
 open System.Windows.Forms
 
+// Global flag to indicate force exit is in progress (used by watchdog)
+module ForceExitState =
+    let mutable isForceExiting = false
+
 type InvokeDelegate<'a> = delegate of unit -> 'a
 [<AllowNullLiteral>]
 type Invoker() as this =
-    let form = 
+    let form =
         let f = new Form()
         f.Handle.ignore
         f
 
-    let lockDispose f = lock this <| fun() -> if form.IsDisposed.not then f()
+    let lockDispose f = lock this <| fun() -> if form.IsDisposed.not && form.IsHandleCreated then f()
 
     do
         printfn "Invoker for %d" (System.Threading.Thread.CurrentThread.ManagedThreadId)
-    
+
     member this.invokeRequired = form.InvokeRequired
 
-    member this.invoke f= 
+    member this.invoke f=
         if this.invokeRequired then
             form.Invoke(InvokeDelegate(fun() -> f()), null) :?> 'a
         else
             f()
 
-    member this.asyncInvoke f = 
+    member this.asyncInvoke f =
         lockDispose <| fun() ->
             form.BeginInvoke(MethodInvoker(fun() -> f())).ignore
 

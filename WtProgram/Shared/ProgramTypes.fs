@@ -111,6 +111,7 @@ type IProgram =
     abstract member isDisabled : bool
     abstract member setDisabled : bool -> unit
     abstract member isShuttingDown : bool
+    abstract member saveTabGroupsBeforeExit : unit -> unit
 
 type IGroup =
     abstract member hwnd : IntPtr

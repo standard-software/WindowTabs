@@ -438,6 +438,7 @@ type Program() as this =
         member x.llMouse = llMouseEvent.Publish
         member x.isDisabled = isDisabledCell.value
         member x.isShuttingDown = inShutdown.value
+        member x.saveTabGroupsBeforeExit() = this.saveTabGroupsToSettings()
         member x.setDisabled(value) =
             // Save disabled state to settings
             try
