@@ -289,15 +289,6 @@ type Program() as this =
         with
         | _ -> ()
 
-    // Clear saved tab groups from settings file
-    member this.clearSavedTabGroups() =
-        try
-            let json = settingsManager.settingsJson
-            json.Remove("savedTabGroupsForRestart") |> ignore
-            settingsManager.settingsJson <- json
-        with
-        | _ -> ()
-
     // Restore tab groups from settings file on startup
     member this.restoreTabGroupsFromSettings() =
         try
@@ -341,9 +332,8 @@ type Program() as this =
                     | _ -> ()
 
                 isRestoringTabGroups.set(false)
-
-                // Clear saved data after restoration
-                this.clearSavedTabGroups()
+                // Do NOT clear saved data here - keep it for watchdog restart scenarios
+                // Data will be overwritten on normal shutdown/restart
             | _ -> ()
         with
         | _ -> isRestoringTabGroups.set(false)

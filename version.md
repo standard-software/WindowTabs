@@ -5,6 +5,7 @@
   - Monitors UI thread responsiveness every 10 seconds
   - Auto-restarts WindowTabs if UI is frozen for 30 seconds
   - Preserves tab group configuration before restart when possible
+  - On watchdog restart, restores last saved state from previous normal shutdown
 
 ## version ss_jp_2026.01.28
 - Fix excessive window switching when closing/restarting/disabling WindowTabs
