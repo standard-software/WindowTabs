@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.01.28_next_1
+## version ss_jp_2026.01.29
 - Add watchdog to detect UI freeze and auto-restart
   - Monitors UI thread responsiveness every 10 seconds
   - Auto-restarts WindowTabs if UI is frozen for 30 seconds
