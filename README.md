@@ -218,6 +218,15 @@ WindowTabs preserves your tab group configuration across restarts and disabling:
 - **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
   - Re-enabling restores your previous tab configuration
 
+### Watchdog Auto-Restart
+
+- WindowTabs may occasionally freeze in certain situations:
+  - Switching monitors
+  - Waking from sleep or hibernate
+  - Changing Windows display settings
+- A watchdog mechanism automatically detects unresponsive states and restarts the application
+- Tab group configuration is preserved and restored after restart
+
 ## Settings
 
 Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
