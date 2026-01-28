@@ -1,5 +1,9 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.01.28_next_1
+
+
+
 ## version ss_jp_2026.01.28
 - Fix excessive window switching when closing/restarting/disabling WindowTabs
   - Skip "activate next tab" behavior during shutdown/restart/disable operations
