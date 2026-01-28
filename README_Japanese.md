@@ -28,7 +28,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 このバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
 
-Visual Studio 2022 または 2026 Community Edition でコンパイルできます。
+Visual Studio 2026 Community Edition でコンパイルできます。
 - https://github.com/standard-software/WindowTabs
 
 ## 目次
@@ -268,7 +268,7 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 ### 前提条件
 
-- Visual Studio 2022 Community Edition (またはそれ以降)
+- Visual Studio 2026 Community Edition
 - WiX Toolset v3.11 またはそれ以降 (MSI インストーラー版のビルド)
 
 ### ビルドスクリプト
