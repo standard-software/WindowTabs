@@ -25,9 +25,14 @@ type Settings(isStandAlone) as this =
 
     member this.path =
         let path = 
-            if isStandAlone then "."
-            else Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
         Path.Combine(path, "WindowTabsSettings.txt")
+    // // debug: use local settings file
+    // member this.path =
+    //     let path = 
+    //         if isStandAlone then "."
+    //         else Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+    //     Path.Combine(path, "WindowTabsSettings.txt")
 
     member this.fileExists : bool = File.Exists(this.path) 
 
