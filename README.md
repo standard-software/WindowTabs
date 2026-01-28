@@ -197,16 +197,6 @@ While light mode is the default, dark mode is also supported for context menus (
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
-### Tab Group Persistence
-
-WindowTabs preserves your tab group configuration across restarts and disabling:
-
-- **Restart Persistence**: Tab groups are automatically saved when WindowTabs exits and restored on next startup
-  - Tab order and grouping are preserved
-  - Windows are matched by process path and window title
-- **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
-  - Re-enabling restores your previous tab configuration
-
 ### Disable Feature
 
 Temporarily disable WindowTabs functionality via tray menu:
@@ -217,6 +207,16 @@ Temporarily disable WindowTabs functionality via tray menu:
   - Disables Settings menu to prevent configuration changes
 - When re-enabled:
   - Restores your previous tab group configuration
+
+### Tab Group Persistence
+
+WindowTabs preserves your tab group configuration across restarts and disabling:
+
+- **Restart Persistence**: Tab groups are automatically saved when WindowTabs exits and restored on next startup
+  - Tab order and grouping are preserved
+  - Windows are matched by process path and window title
+- **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
+  - Re-enabling restores your previous tab configuration
 
 ## Settings
 
