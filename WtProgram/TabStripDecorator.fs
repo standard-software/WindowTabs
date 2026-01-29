@@ -1194,11 +1194,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                         match launchCommand with
                         | Some(cmd) ->
-                            // Use alternative launch command for known UWP apps
-                            Process.Start(cmd) |> ignore
+                            // Use alternative launch command for known UWP apps and dock to current group
+                            Services.program.launchNewWindow group.hwnd cmd
                         | None ->
-                            // Try normal launch
-                            Process.Start(processPath) |> ignore
+                            // Launch new window and dock to current group (regardless of auto-grouping settings)
+                            Services.program.launchNewWindow group.hwnd processPath
                     with
                     | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
                         // UWP app that we don't have an alternative for

@@ -80,6 +80,8 @@ type Program() as this =
     let inShutdown = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
+    // Track pending new window launches: process path -> (target group hwnd, timestamp)
+    let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * DateTime>())
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
@@ -142,6 +144,22 @@ type Program() as this =
 
     member this.tryDropped(window:Window) =
         if isDroppedAndAwaitingGrouping.value.contains(window.hwnd) then Some(None) else None
+
+    member this.tryNewWindowLaunch(window:Window) =
+        let processPath = window.pid.processPath
+        match pendingNewWindowLaunches.value.tryFind(processPath) with
+        | Some((groupHwnd, timestamp)) ->
+            // Remove the pending launch (only match once)
+            pendingNewWindowLaunches.map(fun m -> m.remove processPath)
+            // Check if the launch is still recent (within 30 seconds)
+            if (DateTime.Now - timestamp).TotalSeconds < 30.0 then
+                // Find the target group
+                match this.desktop.groups.tryFind(fun g -> g.hwnd = groupHwnd) with
+                | Some(group) -> Some(Some(group))
+                | None -> None
+            else
+                None
+        | None -> None
 
     member this.tryAutoGroup(window:Window) =
         if (this :> IProgram).getAutoGroupingEnabled(window.pid.processPath) then
@@ -207,6 +225,7 @@ type Program() as this =
         let handlers = List2([
             this.tryDropped
             launcher.findGroup
+            this.tryNewWindowLaunch
             this.tryAutoGroup
             ])
         handlers.tryPick(fun f -> f(window)).def(None)
@@ -477,6 +496,20 @@ type Program() as this =
                 this.isTabMonitoringSuspended <- false
 
             this.refresh()
+
+        member x.launchNewWindow(groupHwnd)(processPath) =
+            // Register the pending launch: new window with this process path should dock to this group
+            pendingNewWindowLaunches.map(fun m -> m.add processPath (groupHwnd, DateTime.Now))
+            // Start the process
+            try
+                let psi = ProcessStartInfo()
+                psi.UseShellExecute <- true
+                psi.FileName <- processPath
+                Process.Start(psi) |> ignore
+            with
+            | _ ->
+                // If launch fails, remove the pending entry
+                pendingNewWindowLaunches.map(fun m -> m.remove processPath)
 
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =

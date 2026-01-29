@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.01.29_next1
+- New Window from tab menu now always docks to current group
+  - Regardless of auto-grouping settings, new window launched from tab context menu will dock to the same tab group
 
 ## version ss_jp_2026.01.29
 - Add watchdog to detect UI freeze and auto-restart
