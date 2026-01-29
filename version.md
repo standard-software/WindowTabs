@@ -5,6 +5,7 @@
   - Regardless of auto-grouping settings, new window launched from tab context menu will dock to the same tab group
 - Renamed tab names are now preserved across WindowTabs restart
   - User-defined tab names are saved to settings and restored on startup
+- Rename "New Window" menu item to "New Tab" in tab context menu
 
 ## version ss_jp_2026.01.29
 - Add watchdog to detect UI freeze and auto-restart

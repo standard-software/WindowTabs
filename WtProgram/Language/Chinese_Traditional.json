@@ -67,7 +67,7 @@
   "Diagnostics": "診斷",
   "Reset": "重設",
 
-  "NewWindow": "新增視窗",
+  "NewTab": "新增分頁",
   "CloseTab": "關閉此分頁",
   "CloseTabsToTheRightFormat": "關閉右側分頁({0}個)",
   "CloseTabsToTheLeftFormat": "關閉左側分頁({0}個)",

@@ -70,7 +70,7 @@ module Localization_English =
         ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")
 
-        ("NewWindow", "New window")
+        ("NewTab", "New tab")
         ("CloseTab", "Close tab")
         ("CloseTabsToTheRightFormat", "Close tabs to the right ({0} {1})")
         ("CloseTabsToTheLeftFormat", "Close tabs to the left ({0} {1})")

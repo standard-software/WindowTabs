@@ -1180,7 +1180,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let newWindowItem =
             CmiRegular({
-                text = Localization.getString("NewWindow")
+                text = Localization.getString("NewTab")
                 flags = List2()
                 image = None
                 click = fun() ->
@@ -1213,8 +1213,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
                     | :? System.ComponentModel.Win32Exception as ex ->
                         // Non-UWP app error
-                        let message = sprintf "Failed to start new window:\n%s\n\nPath: %s\nError: %s"
-                                              (Localization.getString("NewWindow"))
+                        let message = sprintf "Failed to start new tab:\n%s\n\nPath: %s\nError: %s"
+                                              (Localization.getString("NewTab"))
                                               processPath
                                               ex.Message
                         MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
