@@ -24,11 +24,11 @@ and AppearancePropertyType =
 // Custom theme type for storage
 type ColorThemeData = {
     name: string
-    textColor: int
-    normalBgColor: int
-    highlightBgColor: int
-    activeBgColor: int
-    flashBgColor: int
+    inactiveTextColor: int
+    inactiveTabColor: int
+    mouseOverTabColor: int
+    activeTabColor: int
+    flashTabColor: int
     borderColor: int
 }
 
@@ -85,11 +85,11 @@ type AppearanceView() as this =
         ])
 
     let colorProperties = List2([
-        colorConfig "tabTextColor" "Text Color"
-        colorConfig "tabNormalBgColor" "Background Normal"
-        colorConfig "tabHighlightBgColor" "Background Highlight"
-        colorConfig "tabActiveBgColor" "Background Active"
-        colorConfig "tabFlashBgColor" "Background Flash"
+        colorConfig "tabInactiveTextColor" "Text Color"
+        colorConfig "tabInactiveTabColor" "Background Normal"
+        colorConfig "tabMouseOverTabColor" "Background Highlight"
+        colorConfig "tabActiveTabColor" "Background Active"
+        colorConfig "tabFlashTabColor" "Background Flash"
         colorConfig "tabBorderColor" "Border"
         ])
 
@@ -225,11 +225,11 @@ type AppearanceView() as this =
 
     // Color key mapping for clipboard operations
     let colorKeyMap = [
-        ("tabTextColor", "TextColor")
-        ("tabNormalBgColor", "NormalBgColor")
-        ("tabHighlightBgColor", "HighlightBgColor")
-        ("tabActiveBgColor", "ActiveBgColor")
-        ("tabFlashBgColor", "FlashBgColor")
+        ("tabInactiveTextColor", "InactiveTextColor")
+        ("tabInactiveTabColor", "InactiveTabColor")
+        ("tabMouseOverTabColor", "MouseOverTabColor")
+        ("tabActiveTabColor", "ActiveTabColor")
+        ("tabFlashTabColor", "FlashTabColor")
         ("tabBorderColor", "BorderColor")
     ]
 
@@ -243,11 +243,11 @@ type AppearanceView() as this =
                     try
                         Some {
                             name = item.getString("name") |> Option.defaultValue ""
-                            textColor = item.getInt32("textColor") |> Option.defaultValue 0
-                            normalBgColor = item.getInt32("normalBgColor") |> Option.defaultValue 0
-                            highlightBgColor = item.getInt32("highlightBgColor") |> Option.defaultValue 0
-                            activeBgColor = item.getInt32("activeBgColor") |> Option.defaultValue 0
-                            flashBgColor = item.getInt32("flashBgColor") |> Option.defaultValue 0
+                            inactiveTextColor = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                            inactiveTabColor = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
+                            mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                            activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
+                            flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
                             borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
                         }
                     with | _ -> None
@@ -261,11 +261,11 @@ type AppearanceView() as this =
         let arr = themes |> List.map (fun t ->
             let item = JObject()
             item.setString("name", t.name)
-            item.setInt32("textColor", t.textColor)
-            item.setInt32("normalBgColor", t.normalBgColor)
-            item.setInt32("highlightBgColor", t.highlightBgColor)
-            item.setInt32("activeBgColor", t.activeBgColor)
-            item.setInt32("flashBgColor", t.flashBgColor)
+            item.setInt32("inactiveTextColor", t.inactiveTextColor)
+            item.setInt32("inactiveTabColor", t.inactiveTabColor)
+            item.setInt32("mouseOverTabColor", t.mouseOverTabColor)
+            item.setInt32("activeTabColor", t.activeTabColor)
+            item.setInt32("flashTabColor", t.flashTabColor)
             item.setInt32("borderColor", t.borderColor)
             item
         )
@@ -285,15 +285,15 @@ type AppearanceView() as this =
             match json.getObject("savedCustomColors") with
             | Some(item) ->
                 // Check if item has required fields
-                match item.getInt32("textColor") with
+                match item.getInt32("inactiveTextColor") with
                 | Some _ ->
                     Some {
                         name = "Custom"
-                        textColor = item.getInt32("textColor") |> Option.defaultValue 0
-                        normalBgColor = item.getInt32("normalBgColor") |> Option.defaultValue 0
-                        highlightBgColor = item.getInt32("highlightBgColor") |> Option.defaultValue 0
-                        activeBgColor = item.getInt32("activeBgColor") |> Option.defaultValue 0
-                        flashBgColor = item.getInt32("flashBgColor") |> Option.defaultValue 0
+                        inactiveTextColor = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                        inactiveTabColor = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
+                        mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                        activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
+                        flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
                         borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
                     }
                 | None -> None
@@ -306,11 +306,11 @@ type AppearanceView() as this =
         match colors with
         | Some c ->
             let item = JObject()
-            item.setInt32("textColor", c.textColor)
-            item.setInt32("normalBgColor", c.normalBgColor)
-            item.setInt32("highlightBgColor", c.highlightBgColor)
-            item.setInt32("activeBgColor", c.activeBgColor)
-            item.setInt32("flashBgColor", c.flashBgColor)
+            item.setInt32("inactiveTextColor", c.inactiveTextColor)
+            item.setInt32("inactiveTabColor", c.inactiveTabColor)
+            item.setInt32("mouseOverTabColor", c.mouseOverTabColor)
+            item.setInt32("activeTabColor", c.activeTabColor)
+            item.setInt32("flashTabColor", c.flashTabColor)
             item.setInt32("borderColor", c.borderColor)
             json.setObject("savedCustomColors", item)
         | None ->
@@ -376,21 +376,21 @@ type AppearanceView() as this =
             c.ToArgb() &&& 0xFFFFFF
         {
             name = ""
-            textColor = getColor "tabTextColor"
-            normalBgColor = getColor "tabNormalBgColor"
-            highlightBgColor = getColor "tabHighlightBgColor"
-            activeBgColor = getColor "tabActiveBgColor"
-            flashBgColor = getColor "tabFlashBgColor"
+            inactiveTextColor = getColor "tabInactiveTextColor"
+            inactiveTabColor = getColor "tabInactiveTabColor"
+            mouseOverTabColor = getColor "tabMouseOverTabColor"
+            activeTabColor = getColor "tabActiveTabColor"
+            flashTabColor = getColor "tabFlashTabColor"
             borderColor = getColor "tabBorderColor"
         }
 
     // Check if colors match a theme
     let colorsMatch (theme: ColorThemeData) (current: ColorThemeData) =
-        theme.textColor = current.textColor &&
-        theme.normalBgColor = current.normalBgColor &&
-        theme.highlightBgColor = current.highlightBgColor &&
-        theme.activeBgColor = current.activeBgColor &&
-        theme.flashBgColor = current.flashBgColor &&
+        theme.inactiveTextColor = current.inactiveTextColor &&
+        theme.inactiveTabColor = current.inactiveTabColor &&
+        theme.mouseOverTabColor = current.mouseOverTabColor &&
+        theme.activeTabColor = current.activeTabColor &&
+        theme.flashTabColor = current.flashTabColor &&
         theme.borderColor = current.borderColor
 
     // Get preset theme colors
@@ -406,11 +406,11 @@ type AppearanceView() as this =
             | _ -> Services.program.defaultTabAppearanceInfo
         {
             name = name
-            textColor = appearance.tabTextColor.ToArgb() &&& 0xFFFFFF
-            normalBgColor = appearance.tabNormalBgColor.ToArgb() &&& 0xFFFFFF
-            highlightBgColor = appearance.tabHighlightBgColor.ToArgb() &&& 0xFFFFFF
-            activeBgColor = appearance.tabActiveBgColor.ToArgb() &&& 0xFFFFFF
-            flashBgColor = appearance.tabFlashBgColor.ToArgb() &&& 0xFFFFFF
+            inactiveTextColor = appearance.tabInactiveTextColor.ToArgb() &&& 0xFFFFFF
+            inactiveTabColor = appearance.tabInactiveTabColor.ToArgb() &&& 0xFFFFFF
+            mouseOverTabColor = appearance.tabMouseOverTabColor.ToArgb() &&& 0xFFFFFF
+            activeTabColor = appearance.tabActiveTabColor.ToArgb() &&& 0xFFFFFF
+            flashTabColor = appearance.tabFlashTabColor.ToArgb() &&& 0xFFFFFF
             borderColor = appearance.tabBorderColor.ToArgb() &&& 0xFFFFFF
         }
 
@@ -480,11 +480,11 @@ type AppearanceView() as this =
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
             tabIndentNormal = currentAppearance.tabIndentNormal
-            tabTextColor = presetAppearance.tabTextColor
-            tabNormalBgColor = presetAppearance.tabNormalBgColor
-            tabHighlightBgColor = presetAppearance.tabHighlightBgColor
-            tabActiveBgColor = presetAppearance.tabActiveBgColor
-            tabFlashBgColor = presetAppearance.tabFlashBgColor
+            tabInactiveTextColor = presetAppearance.tabInactiveTextColor
+            tabInactiveTabColor = presetAppearance.tabInactiveTabColor
+            tabMouseOverTabColor = presetAppearance.tabMouseOverTabColor
+            tabActiveTabColor = presetAppearance.tabActiveTabColor
+            tabFlashTabColor = presetAppearance.tabFlashTabColor
             tabBorderColor = presetAppearance.tabBorderColor
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
@@ -503,11 +503,11 @@ type AppearanceView() as this =
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
             tabIndentNormal = currentAppearance.tabIndentNormal
-            tabTextColor = toColor theme.textColor
-            tabNormalBgColor = toColor theme.normalBgColor
-            tabHighlightBgColor = toColor theme.highlightBgColor
-            tabActiveBgColor = toColor theme.activeBgColor
-            tabFlashBgColor = toColor theme.flashBgColor
+            tabInactiveTextColor = toColor theme.inactiveTextColor
+            tabInactiveTabColor = toColor theme.inactiveTabColor
+            tabMouseOverTabColor = toColor theme.mouseOverTabColor
+            tabActiveTabColor = toColor theme.activeTabColor
+            tabFlashTabColor = toColor theme.flashTabColor
             tabBorderColor = toColor theme.borderColor
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
@@ -612,7 +612,7 @@ type AppearanceView() as this =
 
     // Helper function to convert theme to JSON object string
     let themeToJsonObject (theme: ColorThemeData) =
-        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"TextColor\": \"#%06X\",\n    \"NormalBgColor\": \"#%06X\",\n    \"HighlightBgColor\": \"#%06X\",\n    \"ActiveBgColor\": \"#%06X\",\n    \"FlashBgColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.textColor theme.normalBgColor theme.highlightBgColor theme.activeBgColor theme.flashBgColor theme.borderColor
+        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"InactiveTextColor\": \"#%06X\",\n    \"InactiveTabColor\": \"#%06X\",\n    \"MouseOverTabColor\": \"#%06X\",\n    \"ActiveTabColor\": \"#%06X\",\n    \"FlashTabColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.inactiveTextColor theme.inactiveTabColor theme.mouseOverTabColor theme.activeTabColor theme.flashTabColor theme.borderColor
 
     // Helper function to convert themes list to JSON array string
     let themesToJson (themes: ColorThemeData list) =
@@ -696,21 +696,21 @@ type AppearanceView() as this =
                         // Get base colors (current Custom colors or zeros)
                         let baseColors = savedCustomColors |> Option.defaultValue {
                             name = ""
-                            textColor = 0
-                            normalBgColor = 0
-                            highlightBgColor = 0
-                            activeBgColor = 0
-                            flashBgColor = 0
+                            inactiveTextColor = 0
+                            inactiveTabColor = 0
+                            mouseOverTabColor = 0
+                            activeTabColor = 0
+                            flashTabColor = 0
                             borderColor = 0
                         }
 
                         let newTheme = {
                             name = themeName
-                            textColor = parseColor "TextColor" baseColors.textColor
-                            normalBgColor = parseColor "NormalBgColor" baseColors.normalBgColor
-                            highlightBgColor = parseColor "HighlightBgColor" baseColors.highlightBgColor
-                            activeBgColor = parseColor "ActiveBgColor" baseColors.activeBgColor
-                            flashBgColor = parseColor "FlashBgColor" baseColors.flashBgColor
+                            inactiveTextColor = parseColor "InactiveTextColor" baseColors.inactiveTextColor
+                            inactiveTabColor = parseColor "InactiveTabColor" baseColors.inactiveTabColor
+                            mouseOverTabColor = parseColor "MouseOverTabColor" baseColors.mouseOverTabColor
+                            activeTabColor = parseColor "ActiveTabColor" baseColors.activeTabColor
+                            flashTabColor = parseColor "FlashTabColor" baseColors.flashTabColor
                             borderColor = parseColor "BorderColor" baseColors.borderColor
                         }
 
@@ -1130,11 +1130,11 @@ type AppearanceView() as this =
             tabHeightOffset = currentAppearance.tabHeightOffset  // Keep internal value
             tabIndentFlipped = unbox(getValue "tabIndentFlipped")
             tabIndentNormal = unbox(getValue "tabIndentNormal")
-            tabTextColor = unbox(getValue "tabTextColor")
-            tabNormalBgColor = unbox(getValue "tabNormalBgColor")
-            tabHighlightBgColor = unbox(getValue "tabHighlightBgColor")
-            tabActiveBgColor = unbox(getValue "tabActiveBgColor")
-            tabFlashBgColor = unbox(getValue "tabFlashBgColor")
+            tabInactiveTextColor = unbox(getValue "tabInactiveTextColor")
+            tabInactiveTabColor = unbox(getValue "tabInactiveTabColor")
+            tabMouseOverTabColor = unbox(getValue "tabMouseOverTabColor")
+            tabActiveTabColor = unbox(getValue "tabActiveTabColor")
+            tabFlashTabColor = unbox(getValue "tabFlashTabColor")
             tabBorderColor = unbox(getValue "tabBorderColor")
         }
         

@@ -1,7 +1,12 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.01.30_next_1
-
+- Rename color theme property keys for clarity
+  - TextColor → InactiveTextColor
+  - NormalBgColor → InactiveTabColor
+  - HighlightBgColor → MouseOverTabColor
+  - ActiveBgColor → ActiveTabColor
+  - FlashBgColor → FlashTabColor
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group

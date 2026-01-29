@@ -79,11 +79,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = 1
             tabIndentFlipped = 150
             tabIndentNormal = 4
-            tabTextColor = Color.FromRGB(0x000000)
-            tabNormalBgColor = Color.FromRGB(0x9FC4F0)
-            tabHighlightBgColor = Color.FromRGB(0xBDD5F4)
-            tabActiveBgColor = Color.FromRGB(0xFAFCFE)
-            tabFlashBgColor = Color.FromRGB(0xFFBBBB)
+            tabInactiveTextColor = Color.FromRGB(0x000000)
+            tabInactiveTabColor = Color.FromRGB(0x9FC4F0)
+            tabMouseOverTabColor = Color.FromRGB(0xBDD5F4)
+            tabActiveTabColor = Color.FromRGB(0xFAFCFE)
+            tabFlashTabColor = Color.FromRGB(0xFFBBBB)
             tabBorderColor = Color.FromRGB(0x3A70B1)
         }
  
@@ -95,11 +95,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0xFFFFFF)         
-            tabNormalBgColor = Color.FromRGB(0x0D0D0D)     
-            tabHighlightBgColor = Color.FromRGB(0x1E1E1E)  
-            tabActiveBgColor = Color.FromRGB(0x2D2D2D)     
-            tabFlashBgColor = Color.FromRGB(0x772222)      
+            tabInactiveTextColor = Color.FromRGB(0xFFFFFF)         
+            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)     
+            tabMouseOverTabColor = Color.FromRGB(0x1E1E1E)  
+            tabActiveTabColor = Color.FromRGB(0x2D2D2D)     
+            tabFlashTabColor = Color.FromRGB(0x772222)      
             tabBorderColor = Color.FromRGB(0x333333)       
         }
 
@@ -111,11 +111,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0xE0E0E0)
-            tabNormalBgColor = Color.FromRGB(0x111827)
-            tabHighlightBgColor = Color.FromRGB(0x4B5970)
-            tabActiveBgColor = Color.FromRGB(0x273548)
-            tabFlashBgColor = Color.FromRGB(0x991B1B)
+            tabInactiveTextColor = Color.FromRGB(0xE0E0E0)
+            tabInactiveTabColor = Color.FromRGB(0x111827)
+            tabMouseOverTabColor = Color.FromRGB(0x4B5970)
+            tabActiveTabColor = Color.FromRGB(0x273548)
+            tabFlashTabColor = Color.FromRGB(0x991B1B)
             tabBorderColor = Color.FromRGB(0x374151)
         }
 
@@ -127,11 +127,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0x000000)
-            tabNormalBgColor = Color.FromRGB(0xA0A0A0)
-            tabHighlightBgColor = Color.FromRGB(0xD0D0D0)
-            tabActiveBgColor = Color.FromRGB(0xFFFFFF)
-            tabFlashBgColor = Color.FromRGB(0xD4D4D4)
+            tabInactiveTextColor = Color.FromRGB(0x000000)
+            tabInactiveTabColor = Color.FromRGB(0xA0A0A0)
+            tabMouseOverTabColor = Color.FromRGB(0xD0D0D0)
+            tabActiveTabColor = Color.FromRGB(0xFFFFFF)
+            tabFlashTabColor = Color.FromRGB(0xD4D4D4)
             tabBorderColor = Color.FromRGB(0x252525)
         }
 
@@ -143,11 +143,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0xFFFFFF)
-            tabNormalBgColor = Color.FromRGB(0x0D0D0D)
-            tabHighlightBgColor = Color.FromRGB(0x353535)
-            tabActiveBgColor = Color.FromRGB(0x6A6A6A)
-            tabFlashBgColor = Color.FromRGB(0x808080)
+            tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
+            tabMouseOverTabColor = Color.FromRGB(0x353535)
+            tabActiveTabColor = Color.FromRGB(0x6A6A6A)
+            tabFlashTabColor = Color.FromRGB(0x808080)
             tabBorderColor = Color.FromRGB(0x787878)
         }
 
@@ -159,11 +159,11 @@ type Settings(isStandAlone) as this =
             tabHeightOffset = -1
             tabIndentFlipped = -1
             tabIndentNormal = -1
-            tabTextColor = Color.FromRGB(0xFFFFFF)
-            tabNormalBgColor = Color.FromRGB(0x0D0D0D)
-            tabHighlightBgColor = Color.FromRGB(0x353535)
-            tabActiveBgColor = Color.FromRGB(0x575757)
-            tabFlashBgColor = Color.FromRGB(0x772222)
+            tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
+            tabMouseOverTabColor = Color.FromRGB(0x353535)
+            tabActiveTabColor = Color.FromRGB(0x575757)
+            tabFlashTabColor = Color.FromRGB(0x772222)
             tabBorderColor = Color.FromRGB(0xB13A3A)
         }
 

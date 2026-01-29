@@ -51,10 +51,10 @@ and TabAppearanceInfo = {
     tabHeightOffset : int
     tabIndentFlipped : int
     tabIndentNormal : int
-    tabTextColor : Color
-    tabNormalBgColor: Color
-    tabHighlightBgColor: Color
-    tabActiveBgColor: Color
-    tabFlashBgColor: Color
+    tabInactiveTextColor : Color
+    tabInactiveTabColor: Color
+    tabMouseOverTabColor: Color
+    tabActiveTabColor: Color
+    tabFlashTabColor: Color
     tabBorderColor: Color
     }

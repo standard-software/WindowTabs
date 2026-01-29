@@ -410,7 +410,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.flashTab(tab, flash) =
         flashEvent.Trigger(tab, flash)
-        this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearance.tabFlashBgColor) else None)
+        this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearance.tabFlashTabColor) else None)
         
     member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() ->
         Cell.beginUpdate()

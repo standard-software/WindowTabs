@@ -111,9 +111,9 @@ type TabSprite<'id> = {
             match this.displayInfo.bgColor with
             | Some(color) -> color
             | None ->
-                let active = this.appearance.tabActiveBgColor
-                let inactive = this.appearance.tabNormalBgColor
-                let highlight = this.appearance.tabHighlightBgColor
+                let active = this.appearance.tabActiveTabColor
+                let inactive = this.appearance.tabInactiveTabColor
+                let highlight = this.appearance.tabMouseOverTabColor
                 if this.isTop then active
                 elif this.hover.IsSome || this.captured.IsSome then highlight
                 else inactive
@@ -159,7 +159,7 @@ type TabSprite<'id> = {
         Sz(width, this.size.height)
 
     member this.tabTextBrush = 
-        new SolidBrush(this.appearance.tabTextColor)
+        new SolidBrush(this.appearance.tabInactiveTextColor)
 
     interface ISprite with
         member this.image =
