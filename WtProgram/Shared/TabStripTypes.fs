@@ -52,6 +52,9 @@ and TabAppearanceInfo = {
     tabIndentFlipped : int
     tabIndentNormal : int
     tabInactiveTextColor : Color
+    tabMouseOverTextColor : Color
+    tabActiveTextColor : Color
+    tabFlashTextColor : Color
     tabInactiveTabColor: Color
     tabMouseOverTabColor: Color
     tabActiveTabColor: Color
