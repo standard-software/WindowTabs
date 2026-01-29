@@ -330,27 +330,49 @@ type Program() as this =
                 for groupToken in groupsArray do
                     match groupToken with
                     | :? JArray as windowsArray ->
+                        // First, collect all saved window info for this group
+                        let savedWindowsList =
+                            windowsArray
+                            |> Seq.choose (fun t ->
+                                match t with
+                                | :? JObject as obj ->
+                                    Some(obj.getString("processPath").def(""),
+                                         obj.getString("title").def(""),
+                                         obj.getString("renamedTabName"))
+                                | _ -> None)
+                            |> List.ofSeq
+
+                        // Build a map of (processPath, title) -> list of candidate windows (sorted by hwnd for consistency)
+                        let mutable candidatesByKey = Map.empty<string * string, Window list>
+                        for (savedPath, savedTitle, _) in savedWindowsList do
+                            let key = (savedPath, savedTitle)
+                            if not (Map.containsKey key candidatesByKey) then
+                                let candidates =
+                                    currentWindows
+                                        .where(fun w ->
+                                            w.pid.processPath = savedPath &&
+                                            w.text = savedTitle &&
+                                            globalMatchedHwnds.contains((=) w.hwnd).not)
+                                        .sortBy(fun w -> w.hwnd.ToInt64())
+                                        .list  // Convert List2 to F# list
+                                candidatesByKey <- Map.add key candidates candidatesByKey
+
+                        // Match saved windows in order, consuming from candidates
                         let mutable groupMatchedHwnds = List2<IntPtr>()
-                        // Collect matched windows with their renamed tab names
                         let mutable groupMatchedInfo = List2<IntPtr * Option<string>>()
-                        for windowToken in windowsArray do
-                            match windowToken with
-                            | :? JObject as windowObj ->
-                                let savedPath = windowObj.getString("processPath").def("")
-                                let savedTitle = windowObj.getString("title").def("")
-                                let savedRenamedTabName = windowObj.getString("renamedTabName")
-                                // Find a matching window (check against global list to prevent cross-group duplicates)
-                                let matchedWindow = currentWindows.tryFind <| fun w ->
-                                    w.pid.processPath = savedPath &&
-                                    w.text = savedTitle &&
-                                    globalMatchedHwnds.contains((=) w.hwnd).not
-                                match matchedWindow with
-                                | Some(w) ->
-                                    groupMatchedHwnds <- groupMatchedHwnds.append(w.hwnd)
-                                    globalMatchedHwnds <- globalMatchedHwnds.append(w.hwnd)
-                                    groupMatchedInfo <- groupMatchedInfo.append((w.hwnd, savedRenamedTabName))
-                                | None -> ()
-                            | _ -> ()
+                        let mutable usedCandidates = candidatesByKey
+
+                        for (savedPath, savedTitle, savedRenamedTabName) in savedWindowsList do
+                            let key = (savedPath, savedTitle)
+                            match Map.tryFind key usedCandidates with
+                            | Some(w :: rest) ->
+                                groupMatchedHwnds <- groupMatchedHwnds.append(w.hwnd)
+                                globalMatchedHwnds <- globalMatchedHwnds.append(w.hwnd)
+                                groupMatchedInfo <- groupMatchedInfo.append((w.hwnd, savedRenamedTabName))
+                                usedCandidates <- Map.add key rest usedCandidates
+                            | Some([]) -> ()
+                            | None -> ()
+
                         // Create group with matched windows (including single-tab groups)
                         if groupMatchedHwnds.count >= 1 then
                             let group = Services.desktop.createGroup(false)
