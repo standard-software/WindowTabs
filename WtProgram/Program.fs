@@ -300,6 +300,10 @@ type Program() as this =
                         let windowObj = JObject()
                         windowObj.setString("processPath", window.pid.processPath)
                         windowObj.setString("title", window.text)
+                        // Save renamed tab name if exists
+                        match windowNameOverride.value.tryFind(hwnd) with
+                        | Some(Some(name)) -> windowObj.setString("renamedTabName", name)
+                        | _ -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     groupsArray.Add(windowsArray)
@@ -327,11 +331,14 @@ type Program() as this =
                     match groupToken with
                     | :? JArray as windowsArray ->
                         let mutable groupMatchedHwnds = List2<IntPtr>()
+                        // Collect matched windows with their renamed tab names
+                        let mutable groupMatchedInfo = List2<IntPtr * Option<string>>()
                         for windowToken in windowsArray do
                             match windowToken with
                             | :? JObject as windowObj ->
                                 let savedPath = windowObj.getString("processPath").def("")
                                 let savedTitle = windowObj.getString("title").def("")
+                                let savedRenamedTabName = windowObj.getString("renamedTabName")
                                 // Find a matching window (check against global list to prevent cross-group duplicates)
                                 let matchedWindow = currentWindows.tryFind <| fun w ->
                                     w.pid.processPath = savedPath &&
@@ -341,6 +348,7 @@ type Program() as this =
                                 | Some(w) ->
                                     groupMatchedHwnds <- groupMatchedHwnds.append(w.hwnd)
                                     globalMatchedHwnds <- globalMatchedHwnds.append(w.hwnd)
+                                    groupMatchedInfo <- groupMatchedInfo.append((w.hwnd, savedRenamedTabName))
                                 | None -> ()
                             | _ -> ()
                         // Create group with matched windows (including single-tab groups)
@@ -348,6 +356,11 @@ type Program() as this =
                             let group = Services.desktop.createGroup(false)
                             groupMatchedHwnds.iter <| fun hwnd ->
                                 group.addWindow(hwnd, false)
+                            // Restore renamed tab names
+                            groupMatchedInfo.iter <| fun (hwnd, renamedTabName) ->
+                                match renamedTabName with
+                                | Some(name) -> windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
+                                | None -> ()
                     | _ -> ()
 
                 isRestoringTabGroups.set(false)
