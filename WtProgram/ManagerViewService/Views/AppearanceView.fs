@@ -110,10 +110,10 @@ type AppearanceView() as this =
 
     // Layout structure:
     // - Main panel (2 rows): upper section + color grid section
-    // - Upper panel: int properties + dark mode + theme row (3 columns: label, input, reset)
-    // - Color panel: color grid (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 1 + 1  // int props + dark mode + theme
-    let colorGridRowCount = 5  // header + 4 state rows
+    // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
+    // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
+    let upperRowCount = intProperties.length + 1  // int props + dark mode (theme moved to colorPanel)
+    let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
     let panel =
@@ -223,12 +223,12 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
-    // Upper panel: int properties -> dark mode -> theme
+    // Upper panel: int properties -> dark mode
     let darkModeRow = intProperties.length
-    let themeRow = darkModeRow + 1
-    // Color panel: header row (0) -> state rows (1-4)
-    let colorHeaderRow = 0
-    let colorStateStartRow = 1
+    // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
+    let themeRow = 0  // Now in colorPanel
+    let colorHeaderRow = 1
+    let colorStateStartRow = 2
 
     // Create int property editors
     let intEditors =
@@ -457,8 +457,8 @@ type AppearanceView() as this =
         let items = ResizeArray<ThemeItem>()
         // Presets
         presetThemes |> List.iter (fun name -> items.Add(Preset name))
-        // // Custom themes - temporarily disabled
-        // customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
+        // Custom themes
+        customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
         // Only add UnsavedCustom if there are saved custom colors
         if savedCustomColors.IsSome then
             items.Add(UnsavedCustom)
@@ -608,10 +608,9 @@ type AppearanceView() as this =
                     upBtn.Enabled <- false
                     downBtn.Enabled <- false
             | UnsavedCustom ->
-                // // Show save button for unsaved custom - temporarily disabled
-                // saveBtn.Visible <- true
-                // saveBtn.Enabled <- true
-                saveBtn.Visible <- false
+                // Show save button for unsaved custom
+                saveBtn.Visible <- true
+                saveBtn.Enabled <- true
                 editBtn.Visible <- false
                 upBtn.Visible <- false
                 downBtn.Visible <- false
@@ -1074,14 +1073,15 @@ type AppearanceView() as this =
         label.Margin <- Padding(0, 10, 0, 5)  // Add top margin
         label
 
-    // Color Theme dropdown and Save/Rename button (placed in column 1)
+    // Color Theme dropdown and Save/Rename button (placed in colorPanel column 1)
+    // Simple FlowLayoutPanel for ComboBox and buttons
     let themePanel =
         let container = new FlowLayoutPanel()
         container.FlowDirection <- FlowDirection.LeftToRight
         container.AutoSize <- true
         container.WrapContents <- false
-        container.Dock <- DockStyle.Top
-        container.Margin <- Padding(0, 8, 0, 0)  // Add top margin
+        container.Dock <- DockStyle.Left
+        container.Margin <- Padding(0, 5, 0, 5)
         container.Padding <- Padding(0, 0, 0, 0)
 
         // Configure saveBtn (for UnsavedCustom - Save As)
@@ -1241,23 +1241,31 @@ type AppearanceView() as this =
                     | _ -> ()
                 | _ -> ()
 
+        // Add controls to themePanel (FlowLayoutPanel)
         container.Controls.Add(colorThemeComboBox)
         container.Controls.Add(saveBtn)
         container.Controls.Add(editBtn)
         container.Controls.Add(upBtn)
         container.Controls.Add(downBtn)
+
         container
 
     do
-        // Add theme label and panel (after dark mode) in upperPanel
-        // Increase themeRow height to add bottom margin between theme and color properties
-        upperPanel.RowStyles.[themeRow].Height <- 45.0f
-        upperPanel.Controls.Add(themeLabel)
-        upperPanel.SetRow(themeLabel, themeRow)
-        upperPanel.SetColumn(themeLabel, 0)
-        upperPanel.Controls.Add(themePanel)
-        upperPanel.SetRow(themePanel, themeRow)
-        upperPanel.SetColumn(themePanel, 1)
+        // Add theme controls to colorPanel (row 0)
+        // themeLabel in column 0
+        colorPanel.Controls.Add(themeLabel)
+        colorPanel.SetRow(themeLabel, themeRow)
+        colorPanel.SetColumn(themeLabel, 0)
+        // themePanel (ComboBox + buttons) in column 1 (Tab Color column)
+        colorPanel.Controls.Add(themePanel)
+        colorPanel.SetRow(themePanel, themeRow)
+        colorPanel.SetColumn(themePanel, 1)
+        // clipboardDropdownBtn in column 3 (Border Color column)
+        clipboardDropdownBtn.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+        clipboardDropdownBtn.Margin <- Padding(0, 5, 0, 5)
+        colorPanel.Controls.Add(clipboardDropdownBtn)
+        colorPanel.SetRow(clipboardDropdownBtn, themeRow)
+        colorPanel.SetColumn(clipboardDropdownBtn, 3)
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
