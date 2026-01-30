@@ -158,8 +158,18 @@ type TabSprite<'id> = {
         let width = max 1 width
         Sz(width, this.size.height)
 
-    member this.tabTextBrush = 
-        new SolidBrush(this.appearance.tabInactiveTextColor)
+    member this.tabTextBrush =
+        let color =
+            match this.displayInfo.bgColor with
+            | Some(_) -> this.appearance.tabFlashTextColor  // Flash state uses flash text color
+            | None ->
+                let active = this.appearance.tabActiveTextColor
+                let inactive = this.appearance.tabInactiveTextColor
+                let highlight = this.appearance.tabMouseOverTextColor
+                if this.isTop then active
+                elif this.hover.IsSome || this.captured.IsSome then highlight
+                else inactive
+        new SolidBrush(color)
 
     interface ISprite with
         member this.image =
