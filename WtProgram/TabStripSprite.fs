@@ -119,7 +119,18 @@ type TabSprite<'id> = {
                 else inactive
         SolidBrush(color)
 
-    member private this.borderPen = new Pen(new SolidBrush(this.appearance.tabBorderColor), 1.0f)
+    member private this.borderPen =
+        let color =
+            match this.displayInfo.bgColor with
+            | Some(_) -> this.appearance.tabFlashBorderColor
+            | None ->
+                let active = this.appearance.tabActiveBorderColor
+                let inactive = this.appearance.tabInactiveBorderColor
+                let highlight = this.appearance.tabMouseOverBorderColor
+                if this.isTop then active
+                elif this.hover.IsSome || this.captured.IsSome then highlight
+                else inactive
+        new Pen(new SolidBrush(color), 1.0f)
 
     member private this.borderPath =
         let path = new GraphicsPath()

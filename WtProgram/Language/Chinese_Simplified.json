@@ -35,7 +35,10 @@
   "MouseOver Tab Color": "鼠标悬停标签页颜色",
   "Active Tab Color": "激活时标签页颜色",
   "Flash Tab Color": "闪烁时标签页颜色",
-  "Border": "边框颜色",
+  "Inactive Border Color": "非活动边框颜色",
+  "MouseOver Border Color": "鼠标悬停边框颜色",
+  "Active Border Color": "激活时边框颜色",
+  "Flash Border Color": "闪烁时边框颜色",
 
   "Behavior": "行为",
   "runAtStartup": "开机时启动 WindowTabs",

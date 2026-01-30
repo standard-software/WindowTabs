@@ -9,6 +9,9 @@
   - FlashBgColor → FlashTabColor
 - Add new text color properties for each tab state
   - MouseOverTextColor, ActiveTextColor, FlashTextColor
+- Add state-dependent border colors
+  - InactiveBorderColor, MouseOverBorderColor, ActiveBorderColor, FlashBorderColor
+  - Border color now changes based on tab state (active, hover, flash, inactive)
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group

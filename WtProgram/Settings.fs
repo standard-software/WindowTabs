@@ -87,9 +87,12 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0xBDD5F4)
             tabActiveTabColor = Color.FromRGB(0xFAFCFE)
             tabFlashTabColor = Color.FromRGB(0xFFBBBB)
-            tabBorderColor = Color.FromRGB(0x3A70B1)
+            tabInactiveBorderColor = Color.FromRGB(0x3A70B1)
+            tabMouseOverBorderColor = Color.FromRGB(0x3A70B1)
+            tabActiveBorderColor = Color.FromRGB(0x3A70B1)
+            tabFlashBorderColor = Color.FromRGB(0x3A70B1)
         }
- 
+
     member this.darkModeTabAppearance =
         {
             tabHeight = -1
@@ -106,7 +109,10 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0x1E1E1E)
             tabActiveTabColor = Color.FromRGB(0x2D2D2D)
             tabFlashTabColor = Color.FromRGB(0x772222)
-            tabBorderColor = Color.FromRGB(0x333333)
+            tabInactiveBorderColor = Color.FromRGB(0x333333)
+            tabMouseOverBorderColor = Color.FromRGB(0x333333)
+            tabActiveBorderColor = Color.FromRGB(0x333333)
+            tabFlashBorderColor = Color.FromRGB(0x333333)
         }
 
     member this.darkModeBlueTabAppearance =
@@ -125,7 +131,10 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0x4B5970)
             tabActiveTabColor = Color.FromRGB(0x273548)
             tabFlashTabColor = Color.FromRGB(0x991B1B)
-            tabBorderColor = Color.FromRGB(0x374151)
+            tabInactiveBorderColor = Color.FromRGB(0x374151)
+            tabMouseOverBorderColor = Color.FromRGB(0x374151)
+            tabActiveBorderColor = Color.FromRGB(0x374151)
+            tabFlashBorderColor = Color.FromRGB(0x374151)
         }
 
     member this.lightMonoTabAppearance =
@@ -144,7 +153,10 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0xD0D0D0)
             tabActiveTabColor = Color.FromRGB(0xFFFFFF)
             tabFlashTabColor = Color.FromRGB(0xD4D4D4)
-            tabBorderColor = Color.FromRGB(0x252525)
+            tabInactiveBorderColor = Color.FromRGB(0x252525)
+            tabMouseOverBorderColor = Color.FromRGB(0x252525)
+            tabActiveBorderColor = Color.FromRGB(0x252525)
+            tabFlashBorderColor = Color.FromRGB(0x252525)
         }
 
     member this.darkMonoTabAppearance =
@@ -163,7 +175,10 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0x353535)
             tabActiveTabColor = Color.FromRGB(0x6A6A6A)
             tabFlashTabColor = Color.FromRGB(0x808080)
-            tabBorderColor = Color.FromRGB(0x787878)
+            tabInactiveBorderColor = Color.FromRGB(0x787878)
+            tabMouseOverBorderColor = Color.FromRGB(0x787878)
+            tabActiveBorderColor = Color.FromRGB(0x787878)
+            tabFlashBorderColor = Color.FromRGB(0x787878)
         }
 
     member this.darkRedFrameTabAppearance =
@@ -182,7 +197,10 @@ type Settings(isStandAlone) as this =
             tabMouseOverTabColor = Color.FromRGB(0x353535)
             tabActiveTabColor = Color.FromRGB(0x575757)
             tabFlashTabColor = Color.FromRGB(0x772222)
-            tabBorderColor = Color.FromRGB(0xB13A3A)
+            tabInactiveBorderColor = Color.FromRGB(0xB13A3A)
+            tabMouseOverBorderColor = Color.FromRGB(0xB13A3A)
+            tabActiveBorderColor = Color.FromRGB(0xB13A3A)
+            tabFlashBorderColor = Color.FromRGB(0xB13A3A)
         }
 
     member this.update f = this.settings <- f(this.settings)

@@ -35,7 +35,10 @@
   "MouseOver Tab Color": "滑鼠懸停分頁顏色",
   "Active Tab Color": "活動時分頁顏色",
   "Flash Tab Color": "閃爍時分頁顏色",
-  "Border": "邊框顏色",
+  "Inactive Border Color": "非活動邊框顏色",
+  "MouseOver Border Color": "滑鼠懸停邊框顏色",
+  "Active Border Color": "活動時邊框顏色",
+  "Flash Border Color": "閃爍時邊框顏色",
 
   "Behavior": "行為",
   "runAtStartup": "開機時啟動 WindowTabs",

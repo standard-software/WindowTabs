@@ -32,7 +32,10 @@ type ColorThemeData = {
     mouseOverTabColor: int
     activeTabColor: int
     flashTabColor: int
-    borderColor: int
+    inactiveBorderColor: int
+    mouseOverBorderColor: int
+    activeBorderColor: int
+    flashBorderColor: int
 }
 
 // ComboBox item types
@@ -96,7 +99,10 @@ type AppearanceView() as this =
         colorConfig "tabMouseOverTabColor" "MouseOver Tab Color"
         colorConfig "tabActiveTabColor" "Active Tab Color"
         colorConfig "tabFlashTabColor" "Flash Tab Color"
-        colorConfig "tabBorderColor" "Border"
+        colorConfig "tabInactiveBorderColor" "Inactive Border Color"
+        colorConfig "tabMouseOverBorderColor" "MouseOver Border Color"
+        colorConfig "tabActiveBorderColor" "Active Border Color"
+        colorConfig "tabFlashBorderColor" "Flash Border Color"
         ])
 
     // Combined list for iteration (used by setEditorValues and applyAppearance)
@@ -239,7 +245,10 @@ type AppearanceView() as this =
         ("tabMouseOverTabColor", "MouseOverTabColor")
         ("tabActiveTabColor", "ActiveTabColor")
         ("tabFlashTabColor", "FlashTabColor")
-        ("tabBorderColor", "BorderColor")
+        ("tabInactiveBorderColor", "InactiveBorderColor")
+        ("tabMouseOverBorderColor", "MouseOverBorderColor")
+        ("tabActiveBorderColor", "ActiveBorderColor")
+        ("tabFlashBorderColor", "FlashBorderColor")
     ]
 
     // Load custom themes from settings
@@ -260,7 +269,10 @@ type AppearanceView() as this =
                             mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
                             activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
                             flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
-                            borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
+                            inactiveBorderColor = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                            mouseOverBorderColor = item.getInt32("mouseOverBorderColor") |> Option.defaultValue 0
+                            activeBorderColor = item.getInt32("activeBorderColor") |> Option.defaultValue 0
+                            flashBorderColor = item.getInt32("flashBorderColor") |> Option.defaultValue 0
                         }
                     with | _ -> None
                 )
@@ -281,7 +293,10 @@ type AppearanceView() as this =
             item.setInt32("mouseOverTabColor", t.mouseOverTabColor)
             item.setInt32("activeTabColor", t.activeTabColor)
             item.setInt32("flashTabColor", t.flashTabColor)
-            item.setInt32("borderColor", t.borderColor)
+            item.setInt32("inactiveBorderColor", t.inactiveBorderColor)
+            item.setInt32("mouseOverBorderColor", t.mouseOverBorderColor)
+            item.setInt32("activeBorderColor", t.activeBorderColor)
+            item.setInt32("flashBorderColor", t.flashBorderColor)
             item
         )
         json.setObjectArray("customColorThemes", List2(arr))
@@ -312,7 +327,10 @@ type AppearanceView() as this =
                         mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
                         activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
                         flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
-                        borderColor = item.getInt32("borderColor") |> Option.defaultValue 0
+                        inactiveBorderColor = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                        mouseOverBorderColor = item.getInt32("mouseOverBorderColor") |> Option.defaultValue 0
+                        activeBorderColor = item.getInt32("activeBorderColor") |> Option.defaultValue 0
+                        flashBorderColor = item.getInt32("flashBorderColor") |> Option.defaultValue 0
                     }
                 | None -> None
             | None -> None
@@ -332,7 +350,10 @@ type AppearanceView() as this =
             item.setInt32("mouseOverTabColor", c.mouseOverTabColor)
             item.setInt32("activeTabColor", c.activeTabColor)
             item.setInt32("flashTabColor", c.flashTabColor)
-            item.setInt32("borderColor", c.borderColor)
+            item.setInt32("inactiveBorderColor", c.inactiveBorderColor)
+            item.setInt32("mouseOverBorderColor", c.mouseOverBorderColor)
+            item.setInt32("activeBorderColor", c.activeBorderColor)
+            item.setInt32("flashBorderColor", c.flashBorderColor)
             json.setObject("savedCustomColors", item)
         | None ->
             // Remove the key if None
@@ -405,7 +426,10 @@ type AppearanceView() as this =
             mouseOverTabColor = getColor "tabMouseOverTabColor"
             activeTabColor = getColor "tabActiveTabColor"
             flashTabColor = getColor "tabFlashTabColor"
-            borderColor = getColor "tabBorderColor"
+            inactiveBorderColor = getColor "tabInactiveBorderColor"
+            mouseOverBorderColor = getColor "tabMouseOverBorderColor"
+            activeBorderColor = getColor "tabActiveBorderColor"
+            flashBorderColor = getColor "tabFlashBorderColor"
         }
 
     // Check if colors match a theme
@@ -418,7 +442,10 @@ type AppearanceView() as this =
         theme.mouseOverTabColor = current.mouseOverTabColor &&
         theme.activeTabColor = current.activeTabColor &&
         theme.flashTabColor = current.flashTabColor &&
-        theme.borderColor = current.borderColor
+        theme.inactiveBorderColor = current.inactiveBorderColor &&
+        theme.mouseOverBorderColor = current.mouseOverBorderColor &&
+        theme.activeBorderColor = current.activeBorderColor &&
+        theme.flashBorderColor = current.flashBorderColor
 
     // Get preset theme colors
     let getPresetColors (name: string) =
@@ -441,7 +468,10 @@ type AppearanceView() as this =
             mouseOverTabColor = appearance.tabMouseOverTabColor.ToArgb() &&& 0xFFFFFF
             activeTabColor = appearance.tabActiveTabColor.ToArgb() &&& 0xFFFFFF
             flashTabColor = appearance.tabFlashTabColor.ToArgb() &&& 0xFFFFFF
-            borderColor = appearance.tabBorderColor.ToArgb() &&& 0xFFFFFF
+            inactiveBorderColor = appearance.tabInactiveBorderColor.ToArgb() &&& 0xFFFFFF
+            mouseOverBorderColor = appearance.tabMouseOverBorderColor.ToArgb() &&& 0xFFFFFF
+            activeBorderColor = appearance.tabActiveBorderColor.ToArgb() &&& 0xFFFFFF
+            flashBorderColor = appearance.tabFlashBorderColor.ToArgb() &&& 0xFFFFFF
         }
 
     // Find matching theme index
@@ -518,7 +548,10 @@ type AppearanceView() as this =
             tabMouseOverTabColor = presetAppearance.tabMouseOverTabColor
             tabActiveTabColor = presetAppearance.tabActiveTabColor
             tabFlashTabColor = presetAppearance.tabFlashTabColor
-            tabBorderColor = presetAppearance.tabBorderColor
+            tabInactiveBorderColor = presetAppearance.tabInactiveBorderColor
+            tabMouseOverBorderColor = presetAppearance.tabMouseOverBorderColor
+            tabActiveBorderColor = presetAppearance.tabActiveBorderColor
+            tabFlashBorderColor = presetAppearance.tabFlashBorderColor
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
         setEditorValues mergedAppearance
@@ -544,7 +577,10 @@ type AppearanceView() as this =
             tabMouseOverTabColor = toColor theme.mouseOverTabColor
             tabActiveTabColor = toColor theme.activeTabColor
             tabFlashTabColor = toColor theme.flashTabColor
-            tabBorderColor = toColor theme.borderColor
+            tabInactiveBorderColor = toColor theme.inactiveBorderColor
+            tabMouseOverBorderColor = toColor theme.mouseOverBorderColor
+            tabActiveBorderColor = toColor theme.activeBorderColor
+            tabFlashBorderColor = toColor theme.flashBorderColor
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
         setEditorValues mergedAppearance
@@ -648,7 +684,7 @@ type AppearanceView() as this =
 
     // Helper function to convert theme to JSON object string
     let themeToJsonObject (theme: ColorThemeData) =
-        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"InactiveTextColor\": \"#%06X\",\n    \"MouseOverTextColor\": \"#%06X\",\n    \"ActiveTextColor\": \"#%06X\",\n    \"FlashTextColor\": \"#%06X\",\n    \"InactiveTabColor\": \"#%06X\",\n    \"MouseOverTabColor\": \"#%06X\",\n    \"ActiveTabColor\": \"#%06X\",\n    \"FlashTabColor\": \"#%06X\",\n    \"BorderColor\": \"#%06X\"\n  }" theme.name theme.inactiveTextColor theme.mouseOverTextColor theme.activeTextColor theme.flashTextColor theme.inactiveTabColor theme.mouseOverTabColor theme.activeTabColor theme.flashTabColor theme.borderColor
+        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"InactiveTextColor\": \"#%06X\",\n    \"MouseOverTextColor\": \"#%06X\",\n    \"ActiveTextColor\": \"#%06X\",\n    \"FlashTextColor\": \"#%06X\",\n    \"InactiveTabColor\": \"#%06X\",\n    \"MouseOverTabColor\": \"#%06X\",\n    \"ActiveTabColor\": \"#%06X\",\n    \"FlashTabColor\": \"#%06X\",\n    \"InactiveBorderColor\": \"#%06X\",\n    \"MouseOverBorderColor\": \"#%06X\",\n    \"ActiveBorderColor\": \"#%06X\",\n    \"FlashBorderColor\": \"#%06X\"\n  }" theme.name theme.inactiveTextColor theme.mouseOverTextColor theme.activeTextColor theme.flashTextColor theme.inactiveTabColor theme.mouseOverTabColor theme.activeTabColor theme.flashTabColor theme.inactiveBorderColor theme.mouseOverBorderColor theme.activeBorderColor theme.flashBorderColor
 
     // Helper function to convert themes list to JSON array string
     let themesToJson (themes: ColorThemeData list) =
@@ -740,7 +776,10 @@ type AppearanceView() as this =
                             mouseOverTabColor = 0
                             activeTabColor = 0
                             flashTabColor = 0
-                            borderColor = 0
+                            inactiveBorderColor = 0
+                            mouseOverBorderColor = 0
+                            activeBorderColor = 0
+                            flashBorderColor = 0
                         }
 
                         let newTheme = {
@@ -753,7 +792,10 @@ type AppearanceView() as this =
                             mouseOverTabColor = parseColor "MouseOverTabColor" baseColors.mouseOverTabColor
                             activeTabColor = parseColor "ActiveTabColor" baseColors.activeTabColor
                             flashTabColor = parseColor "FlashTabColor" baseColors.flashTabColor
-                            borderColor = parseColor "BorderColor" baseColors.borderColor
+                            inactiveBorderColor = parseColor "InactiveBorderColor" baseColors.inactiveBorderColor
+                            mouseOverBorderColor = parseColor "MouseOverBorderColor" baseColors.mouseOverBorderColor
+                            activeBorderColor = parseColor "ActiveBorderColor" baseColors.activeBorderColor
+                            flashBorderColor = parseColor "FlashBorderColor" baseColors.flashBorderColor
                         }
 
                         if themeName = "Custom" then
@@ -1180,7 +1222,10 @@ type AppearanceView() as this =
             tabMouseOverTabColor = unbox(getValue "tabMouseOverTabColor")
             tabActiveTabColor = unbox(getValue "tabActiveTabColor")
             tabFlashTabColor = unbox(getValue "tabFlashTabColor")
-            tabBorderColor = unbox(getValue "tabBorderColor")
+            tabInactiveBorderColor = unbox(getValue "tabInactiveBorderColor")
+            tabMouseOverBorderColor = unbox(getValue "tabMouseOverBorderColor")
+            tabActiveBorderColor = unbox(getValue "tabActiveBorderColor")
+            tabFlashBorderColor = unbox(getValue "tabFlashBorderColor")
         }
 
         Services.settings.setValue("tabAppearance", box(newAppearance))

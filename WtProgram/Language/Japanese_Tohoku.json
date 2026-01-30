@@ -35,7 +35,10 @@
   "MouseOver Tab Color": "マウスオーバー時のタブ色だべ",
   "Active Tab Color": "アクティブ時のタブ色だべ",
   "Flash Tab Color": "点滅時のタブ色だべ",
-  "Border": "枠線の色",
+  "Inactive Border Color": "非アクティブ時の枠線色だべ",
+  "MouseOver Border Color": "マウスオーバー時の枠線色だべ",
+  "Active Border Color": "アクティブ時の枠線色だべ",
+  "Flash Border Color": "点滅時の枠線色だべ",
 
   "Behavior": "動ぎ方",
   "runAtStartup": "パソコン起動したらWindowTabs立ち上げっぺ",

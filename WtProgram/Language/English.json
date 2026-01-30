@@ -35,7 +35,10 @@
   "MouseOver Tab Color": "Mouse Over Tab Color",
   "Active Tab Color": "Active Tab Color",
   "Flash Tab Color": "Flash Tab Color",
-  "Border": "Border Color",
+  "Inactive Border Color": "Inactive Border Color",
+  "MouseOver Border Color": "Mouse Over Border Color",
+  "Active Border Color": "Active Border Color",
+  "Flash Border Color": "Flash Border Color",
 
   "Behavior": "Behavior",
   "runAtStartup": "Run WindowTabs at startup",

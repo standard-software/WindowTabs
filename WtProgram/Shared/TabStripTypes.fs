@@ -59,5 +59,8 @@ and TabAppearanceInfo = {
     tabMouseOverTabColor: Color
     tabActiveTabColor: Color
     tabFlashTabColor: Color
-    tabBorderColor: Color
+    tabInactiveBorderColor: Color
+    tabMouseOverBorderColor: Color
+    tabActiveBorderColor: Color
+    tabFlashBorderColor: Color
     }
