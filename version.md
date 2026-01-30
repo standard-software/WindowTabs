@@ -12,6 +12,10 @@
 - Add state-dependent border colors
   - InactiveBorderColor, MouseOverBorderColor, ActiveBorderColor, FlashBorderColor
   - Border color now changes based on tab state (active, hover, flash, inactive)
+- Redesign color settings GUI layout
+  - Display colors in a grid format: rows for states (Inactive/MouseOver/Active/Flash)
+  - Columns for color types (Tab Color, Text Color, Border Color)
+  - More compact and intuitive color editing interface
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group

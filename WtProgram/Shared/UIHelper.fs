@@ -91,16 +91,17 @@ type ColorEditor() as this =
         btn.Padding <- Padding(0)
         btn.Margin <- Padding(0)
         btn.Dock <- DockStyle.None
-        btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Right
+        btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left  // Left align
         btn
         
-    let textBox = 
+    let textBox =
         let tb = TextBox()
         let maxLen = 6
         let save() =
             (this :> IPropEditor).value <- this.colorFromTb
             changedEvent.Trigger()
-        tb.Dock <- DockStyle.Fill
+        tb.Dock <- DockStyle.None
+        tb.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right  // Left align and stretch
         tb.CharacterCasing <- CharacterCasing.Upper
         tb.Margin <- Padding(0, 2, 0, 0)
         tb.KeyPress.Add <| fun e ->
@@ -125,23 +126,24 @@ type ColorEditor() as this =
         tb.Validated.Add <| fun e -> save()
         tb
 
-    let panel = 
+    let panel =
         let panel = TableLayoutPanel()
         panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         panel.RowCount <- 1
         panel.ColumnCount <- 2
         panel.RowStyles.Add(RowStyle(SizeType.Absolute, 25.0f)).ignore
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 0.9f)).ignore
+        // Column 0: Color button (fixed 20%), Column 1: Text box (80% of panel width)
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 25.0f)).ignore
-        panel.AutoSize <- true
+        panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 70.0f)).ignore
+        panel.Dock <- DockStyle.Fill  // Fill parent cell
         panel.Padding <- Padding(0)
         panel.Margin <- Padding(0)
-        panel.Controls.Add(textBox)
         panel.Controls.Add(chooserButton)
-        panel.SetRow(textBox, 0)
-        panel.SetColumn(textBox, 0)
+        panel.Controls.Add(textBox)
         panel.SetRow(chooserButton, 0)
-        panel.SetColumn(chooserButton, 1)
+        panel.SetColumn(chooserButton, 0)
+        panel.SetRow(textBox, 0)
+        panel.SetColumn(textBox, 1)
         panel
     member this.colorFromTb =
         let text = textBox.Text

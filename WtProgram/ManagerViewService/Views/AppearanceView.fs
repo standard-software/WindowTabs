@@ -90,41 +90,85 @@ type AppearanceView() as this =
         intConfig "tabIndentFlipped" "Indent Flipped"
         ])
 
-    let colorProperties = List2([
-        colorConfig "tabInactiveTextColor" "Inactive Text Color"
-        colorConfig "tabMouseOverTextColor" "MouseOver Text Color"
-        colorConfig "tabActiveTextColor" "Active Text Color"
-        colorConfig "tabFlashTextColor" "Flash Text Color"
-        colorConfig "tabInactiveTabColor" "Inactive Tab Color"
-        colorConfig "tabMouseOverTabColor" "MouseOver Tab Color"
-        colorConfig "tabActiveTabColor" "Active Tab Color"
-        colorConfig "tabFlashTabColor" "Flash Tab Color"
-        colorConfig "tabInactiveBorderColor" "Inactive Border Color"
-        colorConfig "tabMouseOverBorderColor" "MouseOver Border Color"
-        colorConfig "tabActiveBorderColor" "Active Border Color"
-        colorConfig "tabFlashBorderColor" "Flash Border Color"
-        ])
+    // Color properties organized by state (for new grid layout)
+    // Each state has: TabColor, TextColor, BorderColor (in that order for columns)
+    let colorStateRows = [
+        ("Inactive", [("tabInactiveTabColor", "TabColor"); ("tabInactiveTextColor", "TextColor"); ("tabInactiveBorderColor", "BorderColor")])
+        ("MouseOver", [("tabMouseOverTabColor", "TabColor"); ("tabMouseOverTextColor", "TextColor"); ("tabMouseOverBorderColor", "BorderColor")])
+        ("Active", [("tabActiveTabColor", "TabColor"); ("tabActiveTextColor", "TextColor"); ("tabActiveBorderColor", "BorderColor")])
+        ("Flash", [("tabFlashTabColor", "TabColor"); ("tabFlashTextColor", "TextColor"); ("tabFlashBorderColor", "BorderColor")])
+    ]
 
-    // Combined list for iteration (used by setEditorValues and applyAppearance)
-    let allProperties = List2(intProperties.list @ colorProperties.list)
+    // All color property keys for iteration
+    let colorPropertyKeys =
+        colorStateRows
+        |> List.collect (fun (_, cols) -> cols |> List.map fst)
 
-    // Layout: int properties + dark mode checkbox + theme row + color properties
-    let totalRows = intProperties.length + 1 + 1 + colorProperties.length
+    // Combined list of all properties (int + color) for setEditorValues
+    let allPropertyKeys =
+        (intProperties.list |> List.map (fun p -> p.key)) @ colorPropertyKeys
 
+    // Layout structure:
+    // - Main panel (2 rows): upper section + color grid section
+    // - Upper panel: int properties + dark mode + theme row (3 columns: label, input, reset)
+    // - Color panel: color grid (4 columns: state label, tab color, text color, border color)
+    let upperRowCount = intProperties.length + 1 + 1  // int props + dark mode + theme
+    let colorGridRowCount = 5  // header + 4 state rows
+
+    // Main container panel (vertical stack)
     let panel =
         let panel = TableLayoutPanel()
         panel.AutoScroll <- true
         panel.Dock <- DockStyle.Fill
         panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         panel.Padding <- Padding(10)
-        panel.RowCount <- totalRows
-        List2([0..totalRows - 1]).iter <| fun row ->
-            panel.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
-        panel.ColumnCount <- 3
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 200.0f)).ignore
+        panel.RowCount <- 2
+        panel.ColumnCount <- 1
+        panel.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore  // Upper section
+        panel.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore  // Color grid section
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
         panel
+
+    // Upper panel for int properties, dark mode, and theme
+    let upperPanel =
+        let p = TableLayoutPanel()
+        p.Dock <- DockStyle.Top
+        p.AutoSize <- true
+        p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
+        p.RowCount <- upperRowCount
+        p.ColumnCount <- 3
+        List2([0..upperRowCount - 1]).iter <| fun _ ->
+            p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 150.0f)).ignore  // Label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
+        p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
+        p
+
+    // Color grid panel for color settings (separate from upper panel)
+    let colorPanel =
+        let p = TableLayoutPanel()
+        p.Dock <- DockStyle.Top
+        p.AutoSize <- true
+        p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
+        p.RowCount <- colorGridRowCount
+        p.ColumnCount <- 4
+        List2([0..colorGridRowCount - 1]).iter <| fun _ ->
+            p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
+        // Match upperPanel's first column width (150px)
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 150.0f)).ignore  // State label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Tab color
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Text color
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.34f)).ignore   // Border color
+        p
+
+    // Add sub-panels to main panel
+    do
+        panel.Controls.Add(upperPanel)
+        panel.SetRow(upperPanel, 0)
+        panel.SetColumn(upperPanel, 0)
+        panel.Controls.Add(colorPanel)
+        panel.SetRow(colorPanel, 1)
+        panel.SetColumn(colorPanel, 0)
 
    
     let getDefaultValue key =
@@ -138,8 +182,8 @@ type AppearanceView() as this =
         | :? Color as c -> sprintf "#%06X" (c.ToArgb() &&& 0xFFFFFF)
         | _ -> value.ToString()
 
-    // Helper to create and place an editor at a specific row
-    let createEditorAt (prop: AppearanceProperty) (row: int) =
+    // Helper to create and place an int property editor at a specific row in upperPanel
+    let createIntEditorAt (prop: AppearanceProperty) (row: int) =
         let label =
             let label = Label()
             label.AutoSize <- true
@@ -148,89 +192,132 @@ type AppearanceView() as this =
             label.Anchor <- AnchorStyles.Left
             label.Margin <- Padding(0,5,0,5)
             label
-        let editor =
-            match prop.propertyType with
-            | ColorProperty -> ColorEditor() :> IPropEditor
-            | IntProperty -> IntEditor() :> IPropEditor
-            | HotKeyProperty -> HotKeyEditor() :> IPropEditor
+        let editor = IntEditor() :> IPropEditor
 
         editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         editor.control.Margin <- Padding(0,5,0,5)
-        panel.Controls.Add(label)
-        panel.Controls.Add(editor.control)
-        panel.SetRow(label, row)
-        panel.SetColumn(label, 0)
-        panel.SetRow(editor.control, row)
-        panel.SetColumn(editor.control, 1)
+        upperPanel.Controls.Add(label)
+        upperPanel.Controls.Add(editor.control)
+        upperPanel.SetRow(label, row)
+        upperPanel.SetColumn(label, 0)
+        upperPanel.SetRow(editor.control, row)
+        upperPanel.SetColumn(editor.control, 1)
 
-        match prop.propertyType with
-        | IntProperty ->
-            let resetBtn =
-                let btn = Button()
-                btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
-                btn.Dock <- DockStyle.Fill
-                btn.TextAlign <- ContentAlignment.MiddleLeft
-                btn.Margin <- Padding(5,5,0,5)
-                btn.Click.Add <| fun _ ->
-                    suppressEvents <- true
-                    let defaultValue = getDefaultValue prop.key
-                    editor.value <- defaultValue
-                    this.applyAppearance()
-                    suppressEvents <- false
-                btn
-            panel.Controls.Add(resetBtn)
-            panel.SetRow(resetBtn, row)
-            panel.SetColumn(resetBtn, 2)
-        | ColorProperty ->
-            // Use Anchor instead of Dock.Fill to prevent vertical stretching on last row
-            editor.control.Dock <- DockStyle.None
-            editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right ||| AnchorStyles.Top
-            // Also align label to top with 2px additional top margin
-            label.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
-            label.Margin <- Padding(0, 7, 0, 5)
-            panel.SetColumnSpan(editor.control, 2)
-        | _ -> ()
+        let resetBtn =
+            let btn = Button()
+            btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
+            btn.Dock <- DockStyle.Fill
+            btn.TextAlign <- ContentAlignment.MiddleLeft
+            btn.Margin <- Padding(5,5,0,5)
+            btn.Click.Add <| fun _ ->
+                suppressEvents <- true
+                let defaultValue = getDefaultValue prop.key
+                editor.value <- defaultValue
+                this.applyAppearance()
+                suppressEvents <- false
+            btn
+        upperPanel.Controls.Add(resetBtn)
+        upperPanel.SetRow(resetBtn, row)
+        upperPanel.SetColumn(resetBtn, 2)
 
         (prop.key, editor)
 
     // Row indices for each section
-    // Layout: int properties -> dark mode -> theme -> color properties
+    // Upper panel: int properties -> dark mode -> theme
     let darkModeRow = intProperties.length
     let themeRow = darkModeRow + 1
-    let colorStartRow = themeRow + 1
+    // Color panel: header row (0) -> state rows (1-4)
+    let colorHeaderRow = 0
+    let colorStateStartRow = 1
 
-    // Create editors in natural order: int properties, then color properties
+    // Create int property editors
+    let intEditors =
+        intProperties.enumerate.map (fun (i, prop) -> createIntEditorAt prop i)
+
+    // Create color editors storage
+    let mutable colorEditorsList : (string * IPropEditor) list = []
+
+    // Create color grid header row in colorPanel
+    do
+        let headerLabels = [
+            (Localization.getString("TabColorHeader"), 0)   // State column label
+            (Localization.getString("TabColor"), 1)         // Tab color column header
+            (Localization.getString("TextColor"), 2)        // Text color column header
+            (Localization.getString("BorderColor"), 3)      // Border color column header
+        ]
+        headerLabels |> List.iter (fun (text, col) ->
+            let label = Label()
+            label.AutoSize <- true
+            label.Text <- text
+            label.TextAlign <- ContentAlignment.MiddleLeft
+            label.Anchor <- AnchorStyles.Left
+            label.Margin <- Padding(0, 8, 0, 5)
+            colorPanel.Controls.Add(label)
+            colorPanel.SetRow(label, colorHeaderRow)
+            colorPanel.SetColumn(label, col)
+        )
+
+    // Create color state rows with 3 color editors each in colorPanel
+    do
+        colorStateRows |> List.iteri (fun rowIndex (stateName, colorCols) ->
+            let row = colorStateStartRow + rowIndex
+
+            // State label (column 0)
+            let stateLabel = Label()
+            stateLabel.AutoSize <- true
+            stateLabel.Text <- Localization.getString(stateName)
+            stateLabel.TextAlign <- ContentAlignment.MiddleLeft
+            stateLabel.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+            stateLabel.Margin <- Padding(0, 7, 0, 5)
+            colorPanel.Controls.Add(stateLabel)
+            colorPanel.SetRow(stateLabel, row)
+            colorPanel.SetColumn(stateLabel, 0)
+
+            // Color editors (columns 1, 2, 3)
+            colorCols |> List.iteri (fun colIndex (key, _) ->
+                let editor = ColorEditor() :> IPropEditor
+                editor.control.Dock <- DockStyle.None
+                editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+                editor.control.Margin <- Padding(0, 5, 20, 5)  // right=20 for column spacing
+                colorPanel.Controls.Add(editor.control)
+                colorPanel.SetRow(editor.control, row)
+                colorPanel.SetColumn(editor.control, colIndex + 1)  // columns 1, 2, 3
+                colorEditorsList <- colorEditorsList @ [(key, editor)]
+            )
+        )
+
+    // Combine all editors into a map
     let editors : Map2<string, IPropEditor> =
-        let intEditors = intProperties.enumerate.map (fun (i, prop) -> createEditorAt prop i)
-        let colorEditors = colorProperties.enumerate.map (fun (i, prop) -> createEditorAt prop (colorStartRow + i))
-        (intEditors.list @ colorEditors.list) |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
+        (intEditors.list @ colorEditorsList)
+        |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
 
-    // Create dark mode checkbox at its designated row
+    // Create dark mode checkbox at its designated row in upperPanel
     let darkModeLabel =
         let label = Label()
         label.AutoSize <- true
         label.Text <- Localization.getString("MenuDarkMode")
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Margin <- Padding(0,8,0,5)
-        panel.Controls.Add(label)
-        panel.SetRow(label, darkModeRow)
-        panel.SetColumn(label, 0)
+        upperPanel.Controls.Add(label)
+        upperPanel.SetRow(label, darkModeRow)
+        upperPanel.SetColumn(label, 0)
         label
 
     let darkModeCheckbox =
         let checkbox = settingsCheckboxBool "enableMenuDarkMode" false
         checkbox.Margin <- Padding(0,5,0,5)
-        panel.Controls.Add(checkbox)
-        panel.SetRow(checkbox, darkModeRow)
-        panel.SetColumn(checkbox, 1)
+        upperPanel.Controls.Add(checkbox)
+        upperPanel.SetRow(checkbox, darkModeRow)
+        upperPanel.SetColumn(checkbox, 1)
         checkbox
 
     let setEditorValues appearance =
-        allProperties.iter <| fun prop ->
-            let editor = editors.find prop.key
+        allPropertyKeys |> List.iter (fun key ->
+            let editor = editors.find key
             try
-                editor.value <- Serialize.readField appearance prop.key
-            with | _ ->()
+                editor.value <- Serialize.readField appearance key
+            with | _ -> ()
+        )
 
     let appearance = Services.program.tabAppearanceInfo
 
@@ -1162,20 +1249,15 @@ type AppearanceView() as this =
         container
 
     do
-        // Add theme label and panel (after dark mode, before color properties)
+        // Add theme label and panel (after dark mode) in upperPanel
         // Increase themeRow height to add bottom margin between theme and color properties
-        panel.RowStyles.[themeRow].Height <- 45.0f
-        panel.Controls.Add(themeLabel)
-        panel.SetRow(themeLabel, themeRow)
-        panel.SetColumn(themeLabel, 0)
-        panel.Controls.Add(themePanel)
-        panel.SetRow(themePanel, themeRow)
-        panel.SetColumn(themePanel, 1)
-
-        // // Add clipboard operations button (right-aligned in theme row) - temporarily disabled
-        // panel.Controls.Add(clipboardDropdownBtn)
-        // panel.SetRow(clipboardDropdownBtn, themeRow)
-        // panel.SetColumn(clipboardDropdownBtn, 2)
+        upperPanel.RowStyles.[themeRow].Height <- 45.0f
+        upperPanel.Controls.Add(themeLabel)
+        upperPanel.SetRow(themeLabel, themeRow)
+        upperPanel.SetColumn(themeLabel, 0)
+        upperPanel.Controls.Add(themePanel)
+        upperPanel.SetRow(themePanel, themeRow)
+        upperPanel.SetColumn(themePanel, 1)
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
