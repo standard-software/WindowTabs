@@ -213,8 +213,8 @@ Temporarily disable WindowTabs functionality via tray menu:
 WindowTabs preserves your tab group configuration across restarts and disabling:
 
 - **Restart Persistence**: Tab groups are automatically saved when WindowTabs exits and restored on next startup
-  - Tab order and grouping are preserved
-  - Windows are matched by process path and window title
+  - Tab order, grouping, and renamed tab names are preserved
+  - Windows are matched by window handle for reliable restoration
 - **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
   - Re-enabling restores your previous tab configuration
 
@@ -243,13 +243,17 @@ Configure which programs should use tabs and auto-grouping behavior.
 
 Customize the visual appearance of tabs:
 - Height, width, and overlap settings (with separate reset buttons per control)
-- Border and text color
-- Background colors (active, inactive, mouse hover, flash)
-- Color theme dropdown with preset and custom themes
 - Distance from edge settings
+- Color settings for each tab state (Inactive, Mouse Over, Active, Flash)
+  - Tab color, text color, and border color
+- Color theme with preset themes (Light, Light Mono, Dark, Dark Blue, Dark Mono, Dark Red Frame)
+- Custom color theme features
+  - Save/edit/delete custom themes
+  - Import/export themes via clipboard
+  - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme. We'd love for others to enjoy your cool color themes!
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
-![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
+![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
 ### Behavior Tab
 

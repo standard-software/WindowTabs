@@ -202,8 +202,8 @@ WindowTabs をスタートアップ時に起動:
 WindowTabs は再起動時や無効化時にタブグループの設定を保持します:
 
 - **再起動時の永続化**: WindowTabs 終了時にタブグループを自動保存し、次回起動時に復元
-  - タブの順序とグループ化を保持
-  - プロセスパスとウィンドウタイトルでウィンドウをマッチング
+  - タブの順序、グループ化、変更したタブ名を保持
+  - ウィンドウハンドルでウィンドウをマッチングして確実に復元
 - **無効化/有効化の永続化**: WindowTabs を一時的に無効にした際もタブグループを保持
   - 有効化時に以前のタブ設定を復元
 
@@ -242,13 +242,18 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 タブの視覚的な外観をカスタマイズできます:
 - 高さ、幅、重なりの設定 (項目ごとにリセットボタンあり)
-- 枠線と文字の色
-- 背景の色 (アクティブ、非アクティブ、マウスオーバー、点滅)
-- カラーテーマのドロップダウン (プリセットとカスタムテーマ)
 - 端からの距離設定
+- タブの状態ごとの色設定 (非アクティブ、マウスオーバー、アクティブ、点滅)
+  - タブの色、文字の色、枠線の色
+- プリセットテーマ (Light、Light Mono、Dark、Dark Blue、Dark Mono、Dark Red Frame)
+- カスタムカラーテーマ機能
+  - テーマの保存/編集/削除
+  - クリップボードでのインポート/エクスポート
+  - よいカラーテーマを作られた方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。他の方にもかっこいいカラーテーマを使っていただきたいです！
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
+![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
 ### タブの動作
 
