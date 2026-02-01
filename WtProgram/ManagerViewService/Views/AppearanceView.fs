@@ -1168,7 +1168,7 @@ type AppearanceView() as this =
                 | _ -> ()
 
         // Configure upBtn
-        upBtn.Text <- "↑"
+        upBtn.Text <- Localization.getString("Up")
         upBtn.AutoSize <- true
         upBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         upBtn.MinimumSize <- Size(30, 0)
@@ -1205,7 +1205,7 @@ type AppearanceView() as this =
                 | _ -> ()
 
         // Configure downBtn
-        downBtn.Text <- "↓"
+        downBtn.Text <- Localization.getString("Down")
         downBtn.AutoSize <- true
         downBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         downBtn.MinimumSize <- Size(30, 0)
@@ -1251,15 +1251,19 @@ type AppearanceView() as this =
         container
 
     do
+        // Increase theme row height to prevent ComboBox from being cut off
+        colorPanel.RowStyles.[themeRow].Height <- 38.0f
+
         // Add theme controls to colorPanel (row 0)
         // themeLabel in column 0
         colorPanel.Controls.Add(themeLabel)
         colorPanel.SetRow(themeLabel, themeRow)
         colorPanel.SetColumn(themeLabel, 0)
-        // themePanel (ComboBox + buttons) in column 1 (Tab Color column)
+        // themePanel (ComboBox + buttons) in columns 1-2 (Tab Color + Text Color columns)
         colorPanel.Controls.Add(themePanel)
         colorPanel.SetRow(themePanel, themeRow)
         colorPanel.SetColumn(themePanel, 1)
+        colorPanel.SetColumnSpan(themePanel, 2)  // Span Tab Color and Text Color columns
         // clipboardDropdownBtn in column 3 (Border Color column)
         clipboardDropdownBtn.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
         clipboardDropdownBtn.Margin <- Padding(0, 5, 0, 5)

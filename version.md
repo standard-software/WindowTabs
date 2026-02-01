@@ -16,6 +16,9 @@
   - Display colors in a grid format: rows for states (Inactive/MouseOver/Active/Flash)
   - Columns for color types (Tab Color, Text Color, Border Color)
   - More compact and intuitive color editing interface
+- Add custom color theme features
+  - Custom themes save/edit/delete, clipboard operations for theme import/export
+  - Theme reorder buttons now use localized text (Up/Down)
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group
