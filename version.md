@@ -1,24 +1,13 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.01.30_next_1
-- Rename color theme property keys for clarity
-  - TextColor → InactiveTextColor
-  - NormalBgColor → InactiveTabColor
-  - HighlightBgColor → MouseOverTabColor
-  - ActiveBgColor → ActiveTabColor
-  - FlashBgColor → FlashTabColor
-- Add new text color properties for each tab state
-  - MouseOverTextColor, ActiveTextColor, FlashTextColor
-- Add state-dependent border colors
-  - InactiveBorderColor, MouseOverBorderColor, ActiveBorderColor, FlashBorderColor
-  - Border color now changes based on tab state (active, hover, flash, inactive)
+## version ss_jp_2026.01.31
+- Rename color theme property keys
+- Add text color and border color for each tab state
 - Redesign color settings GUI layout
-  - Display colors in a grid format: rows for states (Inactive/MouseOver/Active/Flash)
-  - Columns for color types (Tab Color, Text Color, Border Color)
-  - More compact and intuitive color editing interface
+  - Display colors in grid format
 - Add custom color theme features
-  - Custom themes save/edit/delete, clipboard operations for theme import/export
-  - Theme reorder buttons now use localized text (Up/Down)
+  - Save/edit/delete custom themes
+  - Import/export themes via clipboard
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group
