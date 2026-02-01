@@ -8,6 +8,8 @@
 - Add custom color theme features
   - Save/edit/delete custom themes
   - Import/export themes via clipboard
+- Simplify tab group save/restore to use window handle only
+  - Tab groups, order, and renamed tab names all restored by hwnd matching
 
 ## version ss_jp_2026.01.30
 - New Window from tab menu now always docks to current group

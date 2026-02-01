@@ -288,6 +288,7 @@ type Program() as this =
     member this.refresh() = this.receive(Timer)
 
     // Save tab group configuration to settings file for restoration on next startup
+    // Uses hwnd only for matching - simpler and more reliable
     member this.saveTabGroupsToSettings() =
         try
             let json = settingsManager.settingsJson
@@ -298,11 +299,12 @@ type Program() as this =
                     let window = os.windowFromHwnd(hwnd)
                     if window.isWindow then
                         let windowObj = JObject()
-                        windowObj.setString("processPath", window.pid.processPath)
-                        windowObj.setString("title", window.text)
+                        // Save hwnd for group restoration
+                        windowObj.setInt64("hwnd", hwnd.ToInt64())
                         // Save renamed tab name if exists
                         match windowNameOverride.value.tryFind(hwnd) with
-                        | Some(Some(name)) -> windowObj.setString("renamedTabName", name)
+                        | Some(Some(name)) ->
+                            windowObj.setString("renamedTabName", name)
                         | _ -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
@@ -313,6 +315,7 @@ type Program() as this =
         | _ -> ()
 
     // Restore tab groups from settings file on startup
+    // Uses hwnd only for matching - simpler and more reliable
     member this.restoreTabGroupsFromSettings() =
         try
             let json = settingsManager.settingsJson
@@ -324,65 +327,40 @@ type Program() as this =
                 let currentWindows = os.windowsInZorder.where(fun w ->
                     this.isTabbableWindow(w) && w.pid.isCurrentProcess.not)
 
-                // For each saved group, try to find matching windows and recreate the group
-                // Track all matched hwnds globally across all groups to prevent same window matching multiple times
-                let mutable globalMatchedHwnds = List2<IntPtr>()
+                // Build a set of current window hwnds for fast lookup
+                let currentHwnds = currentWindows.map(fun w -> w.hwnd.ToInt64()).list |> Set.ofList
+
+                // For each saved group, find windows by hwnd and recreate the group
                 for groupToken in groupsArray do
                     match groupToken with
                     | :? JArray as windowsArray ->
-                        // First, collect all saved window info for this group
+                        // Collect saved window info (hwnd and optional renamedTabName)
                         let savedWindowsList =
                             windowsArray
                             |> Seq.choose (fun t ->
                                 match t with
                                 | :? JObject as obj ->
-                                    Some(obj.getString("processPath").def(""),
-                                         obj.getString("title").def(""),
-                                         obj.getString("renamedTabName"))
+                                    obj.getIntPtr("hwnd")
+                                    |> Option.map (fun hwnd -> (hwnd, obj.getString("renamedTabName")))
                                 | _ -> None)
                             |> List.ofSeq
 
-                        // Build a map of (processPath, title) -> list of candidate windows (sorted by hwnd for consistency)
-                        let mutable candidatesByKey = Map.empty<string * string, Window list>
-                        for (savedPath, savedTitle, _) in savedWindowsList do
-                            let key = (savedPath, savedTitle)
-                            if not (Map.containsKey key candidatesByKey) then
-                                let candidates =
-                                    currentWindows
-                                        .where(fun w ->
-                                            w.pid.processPath = savedPath &&
-                                            w.text = savedTitle &&
-                                            globalMatchedHwnds.contains((=) w.hwnd).not)
-                                        .sortBy(fun w -> w.hwnd.ToInt64())
-                                        .list  // Convert List2 to F# list
-                                candidatesByKey <- Map.add key candidates candidatesByKey
+                        // Filter to only windows that still exist
+                        let matchedWindows =
+                            savedWindowsList
+                            |> List.filter (fun (hwnd, _) -> currentHwnds.Contains(hwnd.ToInt64()))
 
-                        // Match saved windows in order, consuming from candidates
-                        let mutable groupMatchedHwnds = List2<IntPtr>()
-                        let mutable groupMatchedInfo = List2<IntPtr * Option<string>>()
-                        let mutable usedCandidates = candidatesByKey
-
-                        for (savedPath, savedTitle, savedRenamedTabName) in savedWindowsList do
-                            let key = (savedPath, savedTitle)
-                            match Map.tryFind key usedCandidates with
-                            | Some(w :: rest) ->
-                                groupMatchedHwnds <- groupMatchedHwnds.append(w.hwnd)
-                                globalMatchedHwnds <- globalMatchedHwnds.append(w.hwnd)
-                                groupMatchedInfo <- groupMatchedInfo.append((w.hwnd, savedRenamedTabName))
-                                usedCandidates <- Map.add key rest usedCandidates
-                            | Some([]) -> ()
-                            | None -> ()
-
-                        // Create group with matched windows (including single-tab groups)
-                        if groupMatchedHwnds.count >= 1 then
+                        // Create group with matched windows (preserving saved order)
+                        if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            groupMatchedHwnds.iter <| fun hwnd ->
+                            matchedWindows |> List.iter (fun (hwnd, renamedTabName) ->
                                 group.addWindow(hwnd, false)
-                            // Restore renamed tab names
-                            groupMatchedInfo.iter <| fun (hwnd, renamedTabName) ->
+                                // Restore renamed tab name if exists
                                 match renamedTabName with
-                                | Some(name) -> windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
+                                | Some(name) ->
+                                    windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
                                 | None -> ()
+                            )
                     | _ -> ()
 
                 isRestoringTabGroups.set(false)
