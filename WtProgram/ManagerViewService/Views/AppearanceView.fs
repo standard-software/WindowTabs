@@ -452,16 +452,15 @@ type AppearanceView() as this =
     let mutable savedCustomColors : ColorThemeData option = loadSavedCustomColors()
 
     // Build ComboBox items list (no separator items - separators are drawn in DrawItem)
-    // UnsavedCustom is only added when savedCustomColors has a value
+    // UnsavedCustom (Custom) is always shown - defaults to Light theme colors if not saved
     let buildThemeItems() =
         let items = ResizeArray<ThemeItem>()
         // Presets
         presetThemes |> List.iter (fun name -> items.Add(Preset name))
         // Custom themes
         customThemes |> List.iter (fun t -> items.Add(CustomTheme t.name))
-        // Only add UnsavedCustom if there are saved custom colors
-        if savedCustomColors.IsSome then
-            items.Add(UnsavedCustom)
+        // Always add UnsavedCustom (Custom) - will use Light theme colors as default if not saved
+        items.Add(UnsavedCustom)
         items.ToArray() |> Array.toList
 
     let mutable themeItems = buildThemeItems()
@@ -738,10 +737,10 @@ type AppearanceView() as this =
                         | Some theme -> applyCustomTheme theme
                         | None -> ()
                     | UnsavedCustom ->
-                        // Restore saved Custom colors if available
+                        // Restore saved Custom colors if available, else use Light theme colors as default
                         match savedCustomColors with
                         | Some colors -> applyCustomTheme colors
-                        | None -> ()
+                        | None -> applyCustomTheme (getPresetColors "Light")
                 updateButtonState()
 
     // Helper to switch to Custom when colors are manually changed
@@ -776,6 +775,15 @@ type AppearanceView() as this =
     let themesToJson (themes: ColorThemeData list) =
         let jsonObjects = themes |> List.map themeToJsonObject
         "[\n" + String.Join(",\n", jsonObjects) + "\n]"
+
+    // Mutable reference to "Copy All Saved Themes" menu item for dynamic enable/disable
+    let mutable copyAllSavedMenuItem : System.Windows.Forms.ToolStripMenuItem option = None
+
+    // Update the enabled state of "Copy All Saved Themes" menu item
+    let updateCopyAllSavedMenuState() =
+        match copyAllSavedMenuItem with
+        | Some item -> item.Enabled <- customThemes.Length > 0
+        | None -> ()
 
     // Clipboard operations dropdown using DropdownButton component
     let clipboardDropdownBtn =
@@ -814,14 +822,16 @@ type AppearanceView() as this =
         ) |> ignore
 
         // Menu item 3: Copy All Saved Themes
-        dropdown.AddItem(Localization.getString("CopyAllSavedThemes"), fun () ->
+        let copyAllSavedItem = dropdown.AddItem(Localization.getString("CopyAllSavedThemes"), fun () ->
             try
                 if customThemes.Length > 0 then
                     let jsonText = themesToJson customThemes
                     if not (String.IsNullOrEmpty(jsonText)) then
                         Clipboard.SetText(jsonText)
             with | _ -> ()
-        ) |> ignore
+        )
+        copyAllSavedMenuItem <- Some copyAllSavedItem
+        copyAllSavedItem.Enabled <- customThemes.Length > 0
 
         // Separator 2
         dropdown.AddSeparator()
@@ -902,6 +912,7 @@ type AppearanceView() as this =
                                 // Add new theme
                                 customThemes <- customThemes @ [newTheme]
                             saveCustomThemes customThemes
+                            updateCopyAllSavedMenuState()
                             lastAppliedTheme <- Some newTheme
 
                     // Refresh UI and apply last theme
@@ -1109,6 +1120,7 @@ type AppearanceView() as this =
                             // Add new theme
                             customThemes <- customThemes @ [newTheme]
                         saveCustomThemes customThemes
+                        updateCopyAllSavedMenuState()
                         refreshComboBoxItems()
                         // Select the saved theme
                         let newIndex = themeItems |> List.findIndex (fun item ->
@@ -1139,6 +1151,7 @@ type AppearanceView() as this =
                         // Empty name means delete the theme
                         customThemes <- customThemes |> List.filter (fun t -> t.name <> currentName)
                         saveCustomThemes customThemes
+                        updateCopyAllSavedMenuState()
                         // Ensure Custom item exists (save current colors if needed)
                         if savedCustomColors.IsNone then
                             savedCustomColors <- Some(getCurrentColors())
