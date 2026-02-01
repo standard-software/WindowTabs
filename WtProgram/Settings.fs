@@ -190,16 +190,16 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
-            tabMouseOverTextColor = Color.FromRGB(0xFFFFFF)
-            tabActiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabMouseOverTextColor = Color.FromRGB(0x111111)
+            tabActiveTextColor = Color.FromRGB(0xB13A3A)
             tabFlashTextColor = Color.FromRGB(0xFFFFFF)
             tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
-            tabMouseOverTabColor = Color.FromRGB(0x353535)
-            tabActiveTabColor = Color.FromRGB(0x575757)
-            tabFlashTabColor = Color.FromRGB(0x772222)
+            tabMouseOverTabColor = Color.FromRGB(0xB13A3A)
+            tabActiveTabColor = Color.FromRGB(0x250A0B)
+            tabFlashTabColor = Color.FromRGB(0x808080)
             tabInactiveBorderColor = Color.FromRGB(0xB13A3A)
-            tabMouseOverBorderColor = Color.FromRGB(0xB13A3A)
-            tabActiveBorderColor = Color.FromRGB(0xB13A3A)
+            tabMouseOverBorderColor = Color.FromRGB(0xFF6666)
+            tabActiveBorderColor = Color.FromRGB(0xCC4444)
             tabFlashBorderColor = Color.FromRGB(0xB13A3A)
         }
 
