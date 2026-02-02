@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.02_next_1
+
 ## version ss_jp_2026.02.02
 - Rename color theme property keys
 - Add text color and border color for each tab state
