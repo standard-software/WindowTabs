@@ -396,6 +396,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let x = max workArea.Left (min currentX (workArea.Right - width))
             let y = workArea.Bottom - height
             (x, y)
+        // Corner positions
+        | Some "topright" ->
+            let x = workArea.Right - width
+            let y = workArea.Top
+            (x, y)
+        | Some "topleft" ->
+            let x = workArea.Left
+            let y = workArea.Top
+            (x, y)
+        | Some "bottomright" ->
+            let x = workArea.Right - width
+            let y = workArea.Bottom - height
+            (x, y)
+        | Some "bottomleft" ->
+            let x = workArea.Left
+            let y = workArea.Bottom - height
+            (x, y)
         | _ ->
             (currentX, currentY)
 
@@ -604,6 +621,136 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             if newX <> bounds.location.x || newY <> bounds.location.y then
                 window.setPositionOnly newX newY
+
+            notifyDetached(hwnd)
+
+        finally
+            (ThreadHelper.cancelablePostBack 200 <| fun() ->
+                Services.program.resumeTabMonitoring()) |> ignore
+
+    member private this.calculateSnapBounds(
+        snapDirection: string,
+        workArea: System.Drawing.Rectangle,
+        currentWidth: int,
+        currentHeight: int) : (int * int * int * int) =
+        // Returns (x, y, width, height) for snap position
+        // Snap right/left: maintain width, expand height to full
+        // Snap top/bottom: maintain height, expand width to full
+        match snapDirection with
+        | "snapright" ->
+            let newWidth = currentWidth
+            let newHeight = workArea.Height
+            let x = workArea.Right - newWidth
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snapleft" ->
+            let newWidth = currentWidth
+            let newHeight = workArea.Height
+            let x = workArea.Left
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snaptop" ->
+            let newWidth = workArea.Width
+            let newHeight = currentHeight
+            let x = workArea.Left
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snapbottom" ->
+            let newWidth = workArea.Width
+            let newHeight = currentHeight
+            let x = workArea.Left
+            let y = workArea.Bottom - newHeight
+            (x, y, newWidth, newHeight)
+        | _ ->
+            (workArea.Left, workArea.Top, currentWidth, currentHeight)
+
+    member private this.detachTabToSnap(hwnd: IntPtr, snapDirection: string) =
+        // This method is only called when group has multiple tabs (menu is disabled for single tab)
+        if group.windows.items.count <= 1 then
+            raise (System.InvalidOperationException("detachTabToSnap should not be called when there is only one tab"))
+
+        let window = os.windowFromHwnd(hwnd)
+        let bounds = window.bounds
+        let screen = this.getCurrentScreenForWindow(hwnd)
+
+        let tab = Tab(hwnd)
+        Services.program.suspendTabMonitoring()
+
+        try
+            this.ts.removeTab(tab)
+            group.removeWindow(hwnd)
+
+            window.hideOffScreen(None)
+
+            if window.isMinimized || window.isMaximized then
+                window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+            let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
+                snapDirection,
+                screen.WorkingArea,
+                bounds.size.width,
+                bounds.size.height)
+
+            window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+
+            notifyDetached(hwnd)
+
+        finally
+            (ThreadHelper.cancelablePostBack 200 <| fun() ->
+                Services.program.resumeTabMonitoring()) |> ignore
+
+    member private this.detachTabToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+        // This method is only called when group has multiple tabs (menu is disabled for single tab)
+        if group.windows.items.count <= 1 then
+            raise (System.InvalidOperationException("detachTabToScreenSnap should not be called when there is only one tab"))
+
+        let window = os.windowFromHwnd(hwnd)
+        let bounds = window.bounds
+        let sourceScreen = this.getCurrentScreenForWindow(hwnd)
+        let sourceWorkArea = sourceScreen.WorkingArea
+        let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+        let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+
+        let tab = Tab(hwnd)
+        Services.program.suspendTabMonitoring()
+
+        try
+            // Remove tab from current group
+            this.ts.removeTab(tab)
+            group.removeWindow(hwnd)
+
+            window.hideOffScreen(None)
+
+            if window.isMinimized || window.isMaximized then
+                window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+            // Calculate new size based on target screen (using percentage for DPI-awareness)
+            let targetWorkArea = targetScreen.WorkingArea
+            let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+            let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+            let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
+                snapDirection,
+                targetWorkArea,
+                newWidth,
+                newHeight)
+
+            // DPI-aware window placement: move position first, wait for DPI change, then set size
+            let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
+            window.setPositionOnly newX newY
+
+            // Wait for DPI change (max 200ms)
+            let mutable currentDpi = initialDpi
+            let mutable elapsed = 0
+            while elapsed < 200 && currentDpi = initialDpi do
+                System.Threading.Thread.Sleep(10)
+                elapsed <- elapsed + 10
+                currentDpi <- WinUserApi.GetDpiForWindow(hwnd)
+
+            if currentDpi <> initialDpi then
+                System.Threading.Thread.Sleep(20)
+
+            window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
 
             notifyDetached(hwnd)
 
@@ -1079,6 +1226,378 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     | None -> ()
         | _ -> ()
 
+    member private this.splitRightTabsToSnap(hwnd: IntPtr, snapDirection: string) =
+        // Split tabs from current tab to right and snap to specified position
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index > 0 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let screen = this.getCurrentScreenForWindow(firstHwnd)
+
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
+                        snapDirection,
+                        screen.WorkingArea,
+                        bounds.size.width,
+                        bounds.size.height)
+
+                    window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Wait for the new group to be created
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None -> ()
+        | _ -> ()
+
+    member private this.splitRightTabsToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+        // Split tabs from current tab to right and snap to specified screen position
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index > 0 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let sourceScreen = this.getCurrentScreenForWindow(firstHwnd)
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let targetWorkArea = targetScreen.WorkingArea
+                    let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                    let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+                    let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
+                        snapDirection,
+                        targetWorkArea,
+                        newWidth,
+                        newHeight)
+
+                    let initialDpi = WinUserApi.GetDpiForWindow(firstHwnd)
+                    window.setPositionOnly newX newY
+
+                    let mutable currentDpi = initialDpi
+                    let mutable elapsed = 0
+                    while elapsed < 200 && currentDpi = initialDpi do
+                        System.Threading.Thread.Sleep(10)
+                        elapsed <- elapsed + 10
+                        currentDpi <- WinUserApi.GetDpiForWindow(firstHwnd)
+
+                    if currentDpi <> initialDpi then
+                        System.Threading.Thread.Sleep(20)
+
+                    window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Wait for the new group to be created
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None -> ()
+        | _ -> ()
+
+    member private this.splitLeftTabsToSnap(hwnd: IntPtr, snapDirection: string) =
+        // Split tabs from left to current tab and snap to specified position
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let screen = this.getCurrentScreenForWindow(firstHwnd)
+
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
+                        snapDirection,
+                        screen.WorkingArea,
+                        bounds.size.width,
+                        bounds.size.height)
+
+                    window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Wait for the new group to be created
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None -> ()
+        | _ -> ()
+
+    member private this.splitLeftTabsToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+        // Split tabs from left to current tab and snap to specified screen position
+        let currentTab = Tab(hwnd)
+        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+
+        match tabIndex with
+        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+
+            if tabsToSplit.Length > 0 then
+                let firstHwnd = tabsToSplit.Head
+                let remainingHwnds = tabsToSplit.Tail
+
+                let window = os.windowFromHwnd(firstHwnd)
+                let bounds = window.bounds
+                let sourceScreen = this.getCurrentScreenForWindow(firstHwnd)
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+
+                Services.program.suspendTabMonitoring()
+
+                try
+                    let firstTab = Tab(firstHwnd)
+                    this.ts.removeTab(firstTab)
+                    group.removeWindow(firstHwnd)
+
+                    window.hideOffScreen(None)
+
+                    if window.isMinimized || window.isMaximized then
+                        window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                    let targetWorkArea = targetScreen.WorkingArea
+                    let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                    let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+                    let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
+                        snapDirection,
+                        targetWorkArea,
+                        newWidth,
+                        newHeight)
+
+                    let initialDpi = WinUserApi.GetDpiForWindow(firstHwnd)
+                    window.setPositionOnly newX newY
+
+                    let mutable currentDpi = initialDpi
+                    let mutable elapsed = 0
+                    while elapsed < 200 && currentDpi = initialDpi do
+                        System.Threading.Thread.Sleep(10)
+                        elapsed <- elapsed + 10
+                        currentDpi <- WinUserApi.GetDpiForWindow(firstHwnd)
+
+                    if currentDpi <> initialDpi then
+                        System.Threading.Thread.Sleep(20)
+
+                    window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
+                    notifyDetached(firstHwnd)
+                finally
+                    Services.program.resumeTabMonitoring()
+
+                // Wait for the new group to be created
+                let mutable newGroupFound = None
+                let mutable attempts = 0
+                let maxAttempts = 50
+                while newGroupFound.IsNone && attempts < maxAttempts do
+                    System.Threading.Thread.Sleep(20)
+                    attempts <- attempts + 1
+                    newGroupFound <- lock decorators (fun () ->
+                        decorators.Values
+                        |> Seq.tryFind (fun d ->
+                            d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd)
+                    )
+
+                // Move remaining tabs to the newly created group
+                if remainingHwnds.Length > 0 then
+                    match newGroupFound with
+                    | Some targetDecorator ->
+                        Services.program.suspendTabMonitoring()
+                        try
+                            remainingHwnds |> List.iter (fun tabHwnd ->
+                                let tab = Tab(tabHwnd)
+                                let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                                if this.ts.tabs.contains(tab) then
+                                    this.ts.removeTab(tab)
+                                if group.windows.contains tabHwnd then
+                                    group.removeWindow(tabHwnd)
+
+                                System.Threading.Thread.Sleep(50)
+
+                                tabWindow.hideOffScreen(None)
+
+                                targetDecorator.group.invokeSync(fun() ->
+                                    if not (targetDecorator.group.windows.contains tabHwnd) then
+                                        targetDecorator.group.addWindow(tabHwnd, false)
+                                        tabWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                                )
+                            )
+                        finally
+                            Services.program.resumeTabMonitoring()
+                    | None -> ()
+        | _ -> ()
+
     member private this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
         // Move the entire tab group to the specified position
         // Always use the active window (topWindow) as the reference point
@@ -1161,6 +1680,69 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             System.Threading.Thread.Sleep(20)
 
         window.move (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
+
+    member private this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
+        // Move the entire tab group to snap position (resize and position)
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
+        let bounds = window.bounds
+        let screen = this.getCurrentScreenForWindow(activeHwnd)
+
+        // Restore window if minimized or maximized
+        if window.isMinimized || window.isMaximized then
+            window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+        let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
+            snapDirection,
+            screen.WorkingArea,
+            bounds.size.width,
+            bounds.size.height)
+
+        window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+
+    member private this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+        // Move the entire tab group to snap position on target screen (resize and position)
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
+        let bounds = window.bounds
+        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
+        let sourceWorkArea = sourceScreen.WorkingArea
+
+        // Calculate size percentages for DPI-aware placement
+        let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+        let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+
+        // Restore window if minimized or maximized
+        if window.isMinimized || window.isMaximized then
+            window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+        // Calculate new size based on target screen (using percentage for DPI-awareness)
+        let targetWorkArea = targetScreen.WorkingArea
+        let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+        let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+
+        let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
+            snapDirection,
+            targetWorkArea,
+            newWidth,
+            newHeight)
+
+        // DPI-aware window placement: move position first, wait for DPI change, then set size
+        let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
+        window.setPositionOnly newX newY
+
+        // Wait for DPI change (max 200ms)
+        let mutable currentDpi = initialDpi
+        let mutable elapsed = 0
+        while elapsed < 200 && currentDpi = initialDpi do
+            System.Threading.Thread.Sleep(10)
+            elapsed <- elapsed + 10
+            currentDpi <- WinUserApi.GetDpiForWindow(hwnd)
+
+        if currentDpi <> initialDpi then
+            System.Threading.Thread.Sleep(20)
+
+        window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
 
     member private  this.contextMenu(hwnd) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
@@ -1350,6 +1932,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
+            // Corner move submenu items
+            let cornerMoveSubMenu = CmiPopUp({
+                text = Localization.getString("CornerMove")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("CornerTopRight")
+                        image = None
+                        click = fun() -> this.detachTabToPosition(hwnd, Some "topright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerTopLeft")
+                        image = None
+                        click = fun() -> this.detachTabToPosition(hwnd, Some "topleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomRight")
+                        image = None
+                        click = fun() -> this.detachTabToPosition(hwnd, Some "bottomright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomLeft")
+                        image = None
+                        click = fun() -> this.detachTabToPosition(hwnd, Some "bottomleft")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
+            // Snap submenu items
+            let snapSubMenu = CmiPopUp({
+                text = Localization.getString("Snap")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("SnapRight")
+                        image = None
+                        click = fun() -> this.detachTabToSnap(hwnd, "snapright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapLeft")
+                        image = None
+                        click = fun() -> this.detachTabToSnap(hwnd, "snapleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapTop")
+                        image = None
+                        click = fun() -> this.detachTabToSnap(hwnd, "snaptop")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapBottom")
+                        image = None
+                        click = fun() -> this.detachTabToSnap(hwnd, "snapbottom")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
             let baseMenuItems = [
                 CmiRegular({
                     text = Localization.getString("DetachTabSamePosition")
@@ -1381,6 +2029,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() -> this.detachTabToPosition(hwnd, Some "bottom")
                     flags = List2()
                 })
+                cornerMoveSubMenu
+                snapSubMenu
             ]
 
             let menuItems =
@@ -1390,6 +2040,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         |> Array.map (fun screen ->
                             let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
+
+                            // Corner move submenu for this screen
+                            let screenCornerMoveSubMenu = CmiPopUp({
+                                text = Localization.getString("CornerMove")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopRight")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "topright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopLeft")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "topleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomRight")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottomright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomLeft")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottomleft")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
+
+                            // Snap submenu for this screen
+                            let screenSnapSubMenu = CmiPopUp({
+                                text = Localization.getString("Snap")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("SnapRight")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapLeft")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapTop")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snaptop")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapBottom")
+                                        image = None
+                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapbottom")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
 
                             let screenItems = [
                                 CmiRegular({
@@ -1422,6 +2138,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottom")
                                     flags = List2()
                                 })
+                                screenCornerMoveSubMenu
+                                screenSnapSubMenu
                             ]
 
                             CmiPopUp({
@@ -1467,6 +2185,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitRightTabsToPositionFormat"), rightTabCount)
 
+            // Corner move submenu items for current screen
+            let cornerMoveSubMenu = CmiPopUp({
+                text = Localization.getString("CornerMove")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("CornerTopRight")
+                        image = None
+                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "topright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerTopLeft")
+                        image = None
+                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "topleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomRight")
+                        image = None
+                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottomright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomLeft")
+                        image = None
+                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottomleft")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
+            // Snap submenu items for current screen
+            let snapSubMenu = CmiPopUp({
+                text = Localization.getString("Snap")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("SnapRight")
+                        image = None
+                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snapright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapLeft")
+                        image = None
+                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snapleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapTop")
+                        image = None
+                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snaptop")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapBottom")
+                        image = None
+                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snapbottom")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
             let baseMenuItems = [
                 CmiRegular({
                     text = Localization.getString("DetachTabSamePosition")
@@ -1498,6 +2282,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottom")
                     flags = List2()
                 })
+                cornerMoveSubMenu
+                snapSubMenu
             ]
 
             let menuItems =
@@ -1507,6 +2293,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         |> Array.map (fun screen ->
                             let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
+
+                            // Corner move submenu for this screen
+                            let screenCornerMoveSubMenu = CmiPopUp({
+                                text = Localization.getString("CornerMove")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopRight")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "topright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopLeft")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "topleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomRight")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottomright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomLeft")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottomleft")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
+
+                            // Snap submenu for this screen
+                            let screenSnapSubMenu = CmiPopUp({
+                                text = Localization.getString("Snap")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("SnapRight")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapLeft")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapTop")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snaptop")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapBottom")
+                                        image = None
+                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapbottom")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
 
                             let screenItems = [
                                 CmiRegular({
@@ -1539,6 +2391,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottom")
                                     flags = List2()
                                 })
+                                screenCornerMoveSubMenu
+                                screenSnapSubMenu
                             ]
 
                             CmiPopUp({
@@ -1584,6 +2438,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitLeftTabsToPositionFormat"), leftTabCount)
 
+            // Corner move submenu items for current screen
+            let cornerMoveSubMenu = CmiPopUp({
+                text = Localization.getString("CornerMove")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("CornerTopRight")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "topright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerTopLeft")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "topleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomRight")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottomright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomLeft")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottomleft")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
+            // Snap submenu items for current screen
+            let snapSubMenu = CmiPopUp({
+                text = Localization.getString("Snap")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("SnapRight")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapLeft")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapTop")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snaptop")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapBottom")
+                        image = None
+                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapbottom")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
             let baseMenuItems = [
                 CmiRegular({
                     text = Localization.getString("DetachTabSamePosition")
@@ -1615,6 +2535,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottom")
                     flags = List2()
                 })
+                cornerMoveSubMenu
+                snapSubMenu
             ]
 
             let menuItems =
@@ -1624,6 +2546,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         |> Array.map (fun screen ->
                             let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
+
+                            // Corner move submenu for this screen
+                            let screenCornerMoveSubMenu = CmiPopUp({
+                                text = Localization.getString("CornerMove")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopRight")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "topright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopLeft")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "topleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomRight")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottomright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomLeft")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottomleft")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
+
+                            // Snap submenu for this screen
+                            let screenSnapSubMenu = CmiPopUp({
+                                text = Localization.getString("Snap")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("SnapRight")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapLeft")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapTop")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snaptop")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapBottom")
+                                        image = None
+                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapbottom")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
 
                             let screenItems = [
                                 CmiRegular({
@@ -1656,6 +2644,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottom")
                                     flags = List2()
                                 })
+                                screenCornerMoveSubMenu
+                                screenSnapSubMenu
                             ]
 
                             CmiPopUp({
@@ -1682,6 +2672,72 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
+            // Corner move submenu items for current screen
+            let cornerMoveSubMenu = CmiPopUp({
+                text = Localization.getString("CornerMove")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("CornerTopRight")
+                        image = None
+                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "topright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerTopLeft")
+                        image = None
+                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "topleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomRight")
+                        image = None
+                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("CornerBottomLeft")
+                        image = None
+                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomleft")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
+            // Snap submenu items for current screen
+            let snapSubMenu = CmiPopUp({
+                text = Localization.getString("Snap")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("SnapRight")
+                        image = None
+                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snapright")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapLeft")
+                        image = None
+                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snapleft")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapTop")
+                        image = None
+                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snaptop")
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapBottom")
+                        image = None
+                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snapbottom")
+                        flags = List2()
+                    })
+                ])
+                flags = List2()
+            })
+
             let baseMenuItems = [
                 CmiRegular({
                     text = Localization.getString("DetachTabMoveRight")
@@ -1707,6 +2763,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottom")
                     flags = List2()
                 })
+                cornerMoveSubMenu
+                snapSubMenu
             ]
 
             let menuItems =
@@ -1717,32 +2775,140 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
 
-                            let screenItems = [
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabMoveRight")
-                                    image = None
-                                    click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "right")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabMoveLeft")
-                                    image = None
-                                    click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "left")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabMoveTop")
-                                    image = None
-                                    click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "top")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabMoveBottom")
-                                    image = None
-                                    click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottom")
-                                    flags = List2()
-                                })
-                            ]
+                            // Corner move submenu for this screen
+                            let screenCornerMoveSubMenu = CmiPopUp({
+                                text = Localization.getString("CornerMove")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopRight")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "topright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerTopLeft")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "topleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomRight")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottomright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("CornerBottomLeft")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottomleft")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
+
+                            // Snap submenu for this screen
+                            let screenSnapSubMenu = CmiPopUp({
+                                text = Localization.getString("Snap")
+                                image = None
+                                items = List2([
+                                    CmiRegular({
+                                        text = Localization.getString("SnapRight")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapright")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapLeft")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapleft")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapTop")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snaptop")
+                                        flags = List2()
+                                    })
+                                    CmiRegular({
+                                        text = Localization.getString("SnapBottom")
+                                        image = None
+                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapbottom")
+                                        flags = List2()
+                                    })
+                                ])
+                                flags = List2()
+                            })
+
+                            // For other screens, include "Same position" option
+                            let screenItems =
+                                if isCurrentScreen then
+                                    // Current screen - no "Same position" (meaningless)
+                                    [
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveRight")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "right")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveLeft")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "left")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveTop")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "top")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveBottom")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottom")
+                                            flags = List2()
+                                        })
+                                        screenCornerMoveSubMenu
+                                        screenSnapSubMenu
+                                    ]
+                                else
+                                    // Other screens - include "Same position"
+                                    [
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabSamePosition")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, None)
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveRight")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "right")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveLeft")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "left")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveTop")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "top")
+                                            flags = List2()
+                                        })
+                                        CmiRegular({
+                                            text = Localization.getString("DetachTabMoveBottom")
+                                            image = None
+                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottom")
+                                            flags = List2()
+                                        })
+                                        screenCornerMoveSubMenu
+                                        screenSnapSubMenu
+                                    ]
 
                             CmiPopUp({
                                 text = screenName
