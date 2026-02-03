@@ -1,14 +1,10 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.02_next_1
-- Add corner move feature to all reposition menus
-  - Top right, Top left, Bottom right, Bottom left
-  - Applied to: tab detach, tab group move, split right tabs, split left tabs
-- Add snap feature to all reposition menus
-  - Snap right/left (expand height to full display)
-  - Snap top/bottom (expand width to full display)
-  - Applied to: tab detach, tab group move, split right tabs, split left tabs
-- Add "Same position" option to tab group move menu for other displays
+- Redesign reposition menu structure
+  - Top level: Same position, Move Left/Right, Snap Left/Right
+  - "Move Other" submenu: Top, Bottom, Top-Left, Top-Right, Bottom-Left, Bottom-Right
+  - "Snap Other" submenu: Left/Right/Top/Bottom with 30-90% options
 
 ## version ss_jp_2026.02.02
 - Rename color theme property keys
