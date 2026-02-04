@@ -5,6 +5,8 @@
   - Top level: Same position, Move Left/Right, Snap Left/Right
   - "Move Other" submenu: Top, Bottom, Top-Left, Top-Right, Bottom-Left, Bottom-Right
   - "Snap Other" submenu: Left/Right/Top/Bottom with 30-90% options
+- Fix tab drag bug where mouse button release was not detected
+  - Use GetAsyncKeyState API to check physical mouse button state
 
 ## version ss_jp_2026.02.02
 - Rename color theme property keys

@@ -83,6 +83,10 @@ type DragAction(info:DragActionInfo) as this =
     let timer = new Timer()
     let animationWindowCell = Cell.create(None:Option<AnimationWindow>)
 
+    // Check if left mouse button is physically pressed using GetAsyncKeyState
+    let isLeftMouseButtonDown() =
+        Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
+
     member this.setNextState(newState:obj) =
         let newState = unbox<IDragState>(newState)
         dragStateCell.value.iter <| fun state -> state.dispose()
@@ -111,16 +115,21 @@ type DragAction(info:DragActionInfo) as this =
         | _ -> ()
 
     member this.wndProc (msg:Win32Message) =
-        let ptScreen() =             
+        let ptScreen() =
             let pt = msg.lParam.location
             let ptScreen = this.captureWindow.ptToScreen(pt)
             ptScreenCell.set(ptScreen)
             ptScreen
         match msg.msg with
-        | WindowMessages.WM_MOUSEMOVE -> 
-            dragStateCell.value.Value.mouseMove(ptScreen())
+        | WindowMessages.WM_MOUSEMOVE ->
+            // Also check physical mouse button state during mouse move
+            // This catches the case where mouse was released but no up event was received
+            if not (isLeftMouseButtonDown()) then
+                this.captureEnded(ptScreen())
+            else
+                dragStateCell.value.Value.mouseMove(ptScreen())
         | WindowMessages.WM_MOUSELEAVE
-        | WindowMessages.WM_LBUTTONUP -> 
+        | WindowMessages.WM_LBUTTONUP ->
             this.captureEnded(ptScreen())
         | _ -> ()
         msg.def()
@@ -175,8 +184,13 @@ type DragAction(info:DragActionInfo) as this =
         if captureWindowCell.value.IsSome then failwith "already started"
         captureWindowCell.set(Some(os.createWindow this.wndProc 0 0))
         this.captureWindow.setCapture()
-        timer.Interval <- 500
-        timer.Tick.Add <| fun _ -> if this.captureWindow.hasCapture.not then this.captureEnded(ptScreenCell.value)
+        // Use shorter interval (50ms) for more responsive mouse button state detection
+        timer.Interval <- 50
+        timer.Tick.Add <| fun _ ->
+            // Check if capture is lost OR if mouse button is physically released
+            // This handles the case where mouse up event is missed (e.g., released outside tab area)
+            if this.captureWindow.hasCapture.not || not (isLeftMouseButtonDown()) then
+                this.captureEnded(ptScreenCell.value)
         timer.Start()
         this.dragDetect()
 
