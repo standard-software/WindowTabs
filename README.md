@@ -130,13 +130,22 @@ This feature remains unchanged from the original WindowTabs functionality.
 
 The "Tab Detach and Split" submenu provides powerful tab management options:
 
-![Tab Detach and Split](README_Image/DetachTab.png)
+![Tab Detach and Split Move Position](README_Image/DetachTab.png)
+![Tab Detach and Split Snap Position](README_Image/SnapPosition.png)
 
 #### Reposition
 
-- For detach and split operations, same position option is available
-- Move to current display edges (right/left/top/bottom)
-- Move to other displays with edge positioning options
+Top level menu options:
+- **Same position** - Keep the window at its current position
+- **Move Left / Move Right** - Move to the left or right edge of the current display
+- **Snap Left / Snap Right** - Snap to the left or right side of the screen (full height)
+
+"Move Other" submenu:
+- Top, Bottom - Move to the top or bottom edge
+- Top-Left, Top-Right, Bottom-Left, Bottom-Right - Move to corners
+
+"Snap Other" submenu:
+- Left / Right / Top / Bottom - Snap with percentage options (30%, 40%, 50%, 60%, 70%, 80%, 90%)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
 
 #### Link to another group
