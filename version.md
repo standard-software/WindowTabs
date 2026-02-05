@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.05_next_1
+
 ## version ss_jp_2026.02.05
 - Redesign reposition menu structure
   - Top level: Same position, Move Left/Right, Snap Left/Right
