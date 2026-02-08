@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.05_next_1
+- Add Windows virtual desktop (Win+Tab) support
+  - UWP apps (Settings, Calculator, etc.) are properly hidden when on other virtual desktops
+  - Tab group state is preserved across all virtual desktops during WindowTabs restart
 
 ## version ss_jp_2026.02.05
 - Redesign reposition menu structure

@@ -321,6 +321,7 @@ type Program() as this =
 
     // Restore tab groups from settings file on startup
     // Uses hwnd only for matching - simpler and more reliable
+    // Includes windows on other virtual desktops (cloaked windows) for full restoration
     member this.restoreTabGroupsFromSettings() =
         try
             let json = settingsManager.settingsJson
@@ -328,9 +329,13 @@ type Program() as this =
             | :? JArray as groupsArray when groupsArray.Count > 0 ->
                 isRestoringTabGroups.set(true)
 
-                // Get all current windows
+                // Get all current windows including those on other virtual desktops (cloaked)
+                // We use isAppWindowStyle instead of isTabbableWindow to include cloaked windows
                 let currentWindows = os.windowsInZorder.where(fun w ->
-                    this.isTabbableWindow(w) && w.pid.isCurrentProcess.not)
+                    w.pid.isCurrentProcess.not &&
+                    w.isWindow &&
+                    this.isAppWindowStyle(w) &&
+                    Services.filter.getIsTabbingEnabledForProcess(w.pid.processPath))
 
                 // Build a set of current window hwnds for fast lookup
                 let currentHwnds = currentWindows.map(fun w -> w.hwnd.ToInt64()).list |> Set.ofList
