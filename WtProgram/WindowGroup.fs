@@ -206,10 +206,21 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         invoker.asyncInvoke <| fun() -> this.withUpdate f
 
     member private this.updateIsVisible() =
+        // Check if all windows in the group are cloaked (on another virtual desktop)
+        // This is particularly important for UWP apps which use cloaking when switching virtual desktops
+        let allWindowsCloaked =
+            if this.isEmpty then
+                false
+            else
+                zorderCell.value.where(isMinimized >> not).all(fun hwnd ->
+                    let window = this.os.windowFromHwnd(hwnd)
+                    window.isCloaked)
+
         isVisibleCell.value <-
             this.isEmpty.not &&
             zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
-            inMoveSize.value.not
+            inMoveSize.value.not &&
+            not allWindowsCloaked
 
     member private this.adjustChildWindows = fun() ->
         zorderCell.value.tail.iter(this.adjustWindowPlacement)
@@ -524,11 +535,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
             this.saveZorder()
+            // Update visibility for all groups when foreground changes
+            // This is critical for detecting virtual desktop switches where windows become cloaked
+            this.updateIsVisible()
             // Handle UWP application tab visibility
             if (!_ts).IsSome then
                 let ts = (!_ts).Value
                 let tsWindow = this.os.windowFromHwnd(ts.hwnd)
-                
+
                 // Check if the foreground window belongs to this group
                 if this.windows.contains(hwnd) then
                     let window = this.os.windowFromHwnd(hwnd)
