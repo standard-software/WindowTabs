@@ -302,6 +302,12 @@ and
     // Check if window is truly visible (visible and not cloaked)
     member this.isVisibleOnScreen = this.isVisible && not this.isCloaked
 
+    // Check if window is on the current virtual desktop using IVirtualDesktopManager COM API
+    member this.isOnCurrentVirtualDesktop = VirtualDesktopHelper.IsWindowOnCurrentVirtualDesktop(hwnd)
+
+    // Get the virtual desktop ID for this window
+    member this.virtualDesktopId = VirtualDesktopHelper.GetWindowDesktopId(hwnd)
+
     member this.isMinimized = WinUserApi.IsIconic(hwnd)
 
     member this.showWindow(cmd:int) = WinUserApi.ShowWindow(hwnd, cmd).ignore

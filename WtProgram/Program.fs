@@ -207,8 +207,9 @@ type Program() as this =
                 }
             isSubscribed.map(fun s -> s.add hwnd dispose)
 
-    member this.ensureWindowIsGrouped(window) =
-        if this.isTabbableWindow(window) && this.isInGroup(window.hwnd).not then
+    member this.ensureWindowIsGrouped(window:Window) =
+        // Skip windows not on the current virtual desktop to prevent regrouping during desktop switch
+        if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window) && this.isInGroup(window.hwnd).not then
             this.addWindowToGroup(window)
 
     member this.destroyEmptyGroups() =
@@ -219,7 +220,11 @@ type Program() as this =
     member this.removeUntabableWindows() =
         this.desktop.groups.iter <| fun gi ->
             gi.windows.iter <| fun hwnd ->
-                if this.isTabbableWindow(os.windowFromHwnd(hwnd)).not then gi.removeWindow hwnd
+                let window = os.windowFromHwnd(hwnd)
+                // Only remove windows that are on the current virtual desktop and not tabbable
+                // Don't remove windows on other virtual desktops to preserve tab groups during desktop switch
+                if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window).not then
+                    gi.removeWindow hwnd
 
     member this.findGroupForWindow(window:Window) =
         let handlers = List2([

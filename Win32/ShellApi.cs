@@ -477,4 +477,96 @@ namespace Bemo
     [ClassInterfaceAttribute(ClassInterfaceType.None)]
     [ComImportAttribute()]
     public class CTaskbarList { }
+
+    // IVirtualDesktopManager COM interface for Windows 10/11 Virtual Desktop support
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b")]
+    public interface IVirtualDesktopManager
+    {
+        [PreserveSig]
+        int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, out bool onCurrentDesktop);
+
+        [PreserveSig]
+        int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
+
+        [PreserveSig]
+        int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
+    }
+
+    [ComImport]
+    [Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a")]
+    public class VirtualDesktopManager { }
+
+    // Helper class for Virtual Desktop operations
+    public static class VirtualDesktopHelper
+    {
+        private static IVirtualDesktopManager _manager;
+        private static bool _initialized = false;
+        private static bool _isSupported = false;
+
+        private static void EnsureInitialized()
+        {
+            if (_initialized) return;
+            _initialized = true;
+            try
+            {
+                _manager = (IVirtualDesktopManager)new VirtualDesktopManager();
+                _isSupported = true;
+            }
+            catch
+            {
+                _isSupported = false;
+            }
+        }
+
+        public static bool IsSupported
+        {
+            get
+            {
+                EnsureInitialized();
+                return _isSupported;
+            }
+        }
+
+        public static bool IsWindowOnCurrentVirtualDesktop(IntPtr hwnd)
+        {
+            EnsureInitialized();
+            if (!_isSupported || _manager == null || hwnd == IntPtr.Zero)
+                return true; // Assume true if not supported
+
+            try
+            {
+                bool onCurrentDesktop;
+                int hr = _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop);
+                if (hr == 0)
+                    return onCurrentDesktop;
+            }
+            catch
+            {
+                // Ignore exceptions
+            }
+            return true; // Assume true on error
+        }
+
+        public static Guid GetWindowDesktopId(IntPtr hwnd)
+        {
+            EnsureInitialized();
+            if (!_isSupported || _manager == null || hwnd == IntPtr.Zero)
+                return Guid.Empty;
+
+            try
+            {
+                Guid desktopId;
+                int hr = _manager.GetWindowDesktopId(hwnd, out desktopId);
+                if (hr == 0)
+                    return desktopId;
+            }
+            catch
+            {
+                // Ignore exceptions
+            }
+            return Guid.Empty;
+        }
+    }
 }
