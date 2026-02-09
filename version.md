@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.10_next_1
+
 ## version ss_jp_2026.02.10
 - Add Windows virtual desktop (Win+Tab) support
   - UWP apps (Settings, Calculator, etc.) are properly hidden when on other virtual desktops
