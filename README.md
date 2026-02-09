@@ -189,11 +189,20 @@ While light mode is the default, dark mode is also supported for context menus (
 - Fixed tab rename floating textbox positioning on high-DPI displays
 
 
+### Virtual Desktop Support
+
+WindowTabs fully supports Windows virtual desktops (Win+Tab):
+
+- Tab groups are preserved when switching between virtual desktops
+- UWP apps (Settings, Calculator, etc.) are properly hidden when on other virtual desktops
+- Tab group state is preserved across all virtual desktops during WindowTabs restart
+
 ### UWP Application Support
 
 - Supports UWP (Universal Windows Platform) applications
 - Automatically handles UWP window Z-order for proper tab visibility
 - Maintains tab visibility when working with UWP apps
+- Properly detects cloaked state when apps are on other virtual desktops
 
 
 ### Multi-Language Support
@@ -224,6 +233,7 @@ WindowTabs preserves your tab group configuration across restarts and disabling:
 - **Restart Persistence**: Tab groups are automatically saved when WindowTabs exits and restored on next startup
   - Tab order, grouping, and renamed tab names are preserved
   - Windows are matched by window handle for reliable restoration
+  - **All virtual desktops** are restored, not just the current one
 - **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
   - Re-enabling restores your previous tab configuration
 
