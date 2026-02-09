@@ -91,6 +91,8 @@ type IProgram =
     abstract member appWindows : List2<IntPtr>
     abstract member getAutoGroupingEnabled : string -> bool
     abstract member setAutoGroupingEnabled : string -> bool -> unit
+    abstract member getCategoryEnabled : string * int -> bool
+    abstract member setCategoryEnabled : string -> int -> bool -> unit
     abstract member tabAppearanceInfo : TabAppearanceInfo
     abstract member defaultTabAppearanceInfo : TabAppearanceInfo
     abstract member darkModeTabAppearanceInfo : TabAppearanceInfo

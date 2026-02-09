@@ -2,6 +2,9 @@
 
 ## version ss_jp_2026.02.10_next_1
 - Hide Auto Grouping checkbox in Programs tab when Tabs checkbox is OFF
+- Add Category 1-5 columns in Programs tab settings
+  - Category checkboxes are visible only when Auto Grouping is ON
+  - When one category is checked, other category checkboxes become hidden (exclusive selection)
 
 ## version ss_jp_2026.02.10
 - Add Windows virtual desktop (Win+Tab) support

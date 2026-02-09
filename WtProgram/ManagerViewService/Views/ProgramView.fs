@@ -19,12 +19,17 @@ module ImgHelper =
 
 type ExeNode(procPath) =
     inherit Node(Path.GetFileName(procPath))
-    let icon = 
+    let icon =
         let procIcon = Win32Helper.GetFileIcon(procPath)
         ImgHelper.imgFromIcon (Ico.fromHandle(procIcon).def(System.Drawing.SystemIcons.Application))
     let mutable _enableTabs = Services.filter.getIsTabbingEnabledForProcess(procPath)
     let mutable _enableAutoGrouping = Services.program.getAutoGroupingEnabled(procPath)
-    member this.Icon with get() = icon 
+    let mutable _category1 = Services.program.getCategoryEnabled(procPath, 1)
+    let mutable _category2 = Services.program.getCategoryEnabled(procPath, 2)
+    let mutable _category3 = Services.program.getCategoryEnabled(procPath, 3)
+    let mutable _category4 = Services.program.getCategoryEnabled(procPath, 4)
+    let mutable _category5 = Services.program.getCategoryEnabled(procPath, 5)
+    member this.Icon with get() = icon
     member this.enableTabs
         with get() = _enableTabs
         and set(newValue) =
@@ -39,7 +44,32 @@ type ExeNode(procPath) =
         and set(newValue) =
             _enableAutoGrouping <- newValue
             Services.program.setAutoGroupingEnabled procPath _enableAutoGrouping
-           
+    member this.category1
+        with get() = _category1
+        and set(newValue) =
+            _category1 <- newValue
+            Services.program.setCategoryEnabled procPath 1 _category1
+    member this.category2
+        with get() = _category2
+        and set(newValue) =
+            _category2 <- newValue
+            Services.program.setCategoryEnabled procPath 2 _category2
+    member this.category3
+        with get() = _category3
+        and set(newValue) =
+            _category3 <- newValue
+            Services.program.setCategoryEnabled procPath 3 _category3
+    member this.category4
+        with get() = _category4
+        and set(newValue) =
+            _category4 <- newValue
+            Services.program.setCategoryEnabled procPath 4 _category4
+    member this.category5
+        with get() = _category5
+        and set(newValue) =
+            _category5 <- newValue
+            Services.program.setCategoryEnabled procPath 5 _category5
+
     interface INode with
         member x.showSettings = true
 
@@ -66,17 +96,17 @@ type ProgramView() as this=
         let sb = StatusBar()
         sb.Text <- "Ready"
         sb
-    let tree,model = 
+    let tree,model =
         let tree = TreeViewAdv()
         let model = TreeModel()
         let nameColumn = TreeColumn(Localization.getString("Name"), 200)
         tree.UseColumns <- true
         tree.Columns.Add(nameColumn)
         tree.RowHeight <- 24
-        let addCheckBoxColumn colText propName visibilityCheck =
+        let addCheckBoxColumn colText propName colWidth visibilityCheck =
             let content = Localization.getString(propName)
             let parentColumn =
-                let col = TreeColumn(content, 100)
+                let col = TreeColumn(content, colWidth)
                 col.TextAlign <- HorizontalAlignment.Center
                 col
             tree.Columns.Add(parentColumn)
@@ -99,13 +129,34 @@ type ProgramView() as this=
                     e.Value <- basicVisible && additionalVisible
                 else
                     e.Value <- false
-            control.LeftMargin <- 40
+            // Center the checkbox horizontally in the column
+            // Checkbox size is 13 pixels (NodeCheckBox.ImageSize)
+            let checkboxSize = 13
+            control.LeftMargin <- (colWidth - checkboxSize) / 2
             control.EditEnabled <- true
             control.DataPropertyName <- propName
             tree.NodeControls.Add(control)
             control
-        addCheckBoxColumn "Tabs" "enableTabs" None |> ignore
-        addCheckBoxColumn "Auto Grouping" "enableAutoGrouping" (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
+        // Helper function to check if any category is selected
+        let hasAnyCategory (exeNode:ExeNode) =
+            exeNode.category1 || exeNode.category2 || exeNode.category3 || exeNode.category4 || exeNode.category5
+        // Category visibility: show only when autoGrouping is ON and (this category is checked OR no category is checked)
+        let categoryVisibility categoryNum (exeNode:ExeNode) =
+            exeNode.enableAutoGrouping &&
+            (match categoryNum with
+             | 1 -> exeNode.category1 || not (hasAnyCategory exeNode)
+             | 2 -> exeNode.category2 || not (hasAnyCategory exeNode)
+             | 3 -> exeNode.category3 || not (hasAnyCategory exeNode)
+             | 4 -> exeNode.category4 || not (hasAnyCategory exeNode)
+             | 5 -> exeNode.category5 || not (hasAnyCategory exeNode)
+             | _ -> false)
+        addCheckBoxColumn "Tabs" "enableTabs" 50 None |> ignore
+        addCheckBoxColumn "Auto Grouping" "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
+        addCheckBoxColumn "Category 1" "category1" 70 (Some(categoryVisibility 1)) |> ignore
+        addCheckBoxColumn "Category 2" "category2" 70 (Some(categoryVisibility 2)) |> ignore
+        addCheckBoxColumn "Category 3" "category3" 70 (Some(categoryVisibility 3)) |> ignore
+        addCheckBoxColumn "Category 4" "category4" 70 (Some(categoryVisibility 4)) |> ignore
+        addCheckBoxColumn "Category 5" "category5" 70 (Some(categoryVisibility 5)) |> ignore
         tree.NodeControls.Add(
             let control = NodeControls.NodeIcon()
             control.ParentColumn <- nameColumn

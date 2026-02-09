@@ -416,8 +416,8 @@ type Program() as this =
             settingsManager.settings.autoGroupingPaths.contains(procPath)
 
         member x.setAutoGroupingEnabled procPath enabled =
-            if enabled then 
-                this.saveSettingsAndUpdateAppWindows <| fun s -> { s with autoGroupingPaths = s.autoGroupingPaths.add procPath }                        
+            if enabled then
+                this.saveSettingsAndUpdateAppWindows <| fun s -> { s with autoGroupingPaths = s.autoGroupingPaths.add procPath }
                //toggle tabbing for the process to force regrouping
                 Services.filter.setIsTabbingEnabledForProcess procPath false
                 this.refresh()
@@ -425,7 +425,23 @@ type Program() as this =
                 this.refresh()
             else
                 this.saveSettingsAndUpdateAppWindows <| fun s -> { s with autoGroupingPaths = s.autoGroupingPaths.remove procPath }
-  
+
+        member x.getCategoryEnabled (procPath, categoryNum) =
+            let settingsJson = settingsManager.settingsJson
+            let categoryKey = sprintf "category%dPaths" categoryNum
+            let paths = settingsJson.getStringArray(categoryKey).def(List2())
+            paths.contains((=) procPath)
+
+        member x.setCategoryEnabled procPath categoryNum enabled =
+            let settingsJson = settingsManager.settingsJson
+            let categoryKey = sprintf "category%dPaths" categoryNum
+            let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
+            let newPaths =
+                if enabled then paths.add procPath
+                else paths.remove procPath
+            settingsJson.setStringArray(categoryKey, newPaths.items)
+            settingsManager.settingsJson <- settingsJson
+
         member x.tabAppearanceInfo = 
             settingsManager.settings.tabAppearance
 
