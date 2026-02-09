@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.10_next_1
+- Hide Auto Grouping checkbox in Programs tab when Tabs checkbox is OFF
 
 ## version ss_jp_2026.02.10
 - Add Windows virtual desktop (Win+Tab) support

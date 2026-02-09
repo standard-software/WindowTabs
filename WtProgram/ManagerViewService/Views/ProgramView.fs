@@ -25,11 +25,15 @@ type ExeNode(procPath) =
     let mutable _enableTabs = Services.filter.getIsTabbingEnabledForProcess(procPath)
     let mutable _enableAutoGrouping = Services.program.getAutoGroupingEnabled(procPath)
     member this.Icon with get() = icon 
-    member this.enableTabs 
-        with get() = _enableTabs 
-        and set(newValue) = 
+    member this.enableTabs
+        with get() = _enableTabs
+        and set(newValue) =
             _enableTabs <- newValue
             Services.filter.setIsTabbingEnabledForProcess procPath _enableTabs
+            // When Tabs is disabled, also disable Auto Grouping
+            if not _enableTabs then
+                _enableAutoGrouping <- false
+                Services.program.setAutoGroupingEnabled procPath false
     member this.enableAutoGrouping
         with get() = _enableAutoGrouping
         and set(newValue) =
@@ -69,25 +73,39 @@ type ProgramView() as this=
         tree.UseColumns <- true
         tree.Columns.Add(nameColumn)
         tree.RowHeight <- 24
-        let addCheckBoxColumn colText propName =
+        let addCheckBoxColumn colText propName visibilityCheck =
             let content = Localization.getString(propName)
             let parentColumn =
                 let col = TreeColumn(content, 100)
                 col.TextAlign <- HorizontalAlignment.Center
                 col
             tree.Columns.Add(parentColumn)
-            tree.NodeControls.Add(
-                let control = NodeControls.NodeCheckBox()
-                control.ParentColumn <- parentColumn
-                control.IsVisibleValueNeeded.Add <| fun e ->
-                    let node = tree.GetPath(e.Node).LastNode :?> INode
-                    e.Value <- node.showSettings
-                control.LeftMargin <- 40
-                control.EditEnabled <- true
-                control.DataPropertyName <- propName
-                control)
-        addCheckBoxColumn "Tabs" "enableTabs"
-        addCheckBoxColumn "Auto Grouping" "enableAutoGrouping"
+            let control = NodeControls.NodeCheckBox()
+            control.ParentColumn <- parentColumn
+            control.IsVisibleValueNeeded.Add <| fun e ->
+                let path = tree.GetPath(e.Node)
+                if path <> null && path.LastNode <> null then
+                    let node = path.LastNode :?> INode
+                    // Check basic visibility (showSettings)
+                    let basicVisible = node.showSettings
+                    // Check additional visibility condition if provided
+                    let additionalVisible =
+                        match visibilityCheck with
+                        | Some checkFn ->
+                            match path.LastNode with
+                            | :? ExeNode as exeNode -> checkFn exeNode
+                            | _ -> true
+                        | None -> true
+                    e.Value <- basicVisible && additionalVisible
+                else
+                    e.Value <- false
+            control.LeftMargin <- 40
+            control.EditEnabled <- true
+            control.DataPropertyName <- propName
+            tree.NodeControls.Add(control)
+            control
+        addCheckBoxColumn "Tabs" "enableTabs" None |> ignore
+        addCheckBoxColumn "Auto Grouping" "enableAutoGrouping" (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
         tree.NodeControls.Add(
             let control = NodeControls.NodeIcon()
             control.ParentColumn <- nameColumn
