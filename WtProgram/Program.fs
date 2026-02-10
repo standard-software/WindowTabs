@@ -161,16 +161,39 @@ type Program() as this =
                 None
         | None -> None
 
+    // Get the category number (1-5) for a given process path, or 0 if no category is set
+    member private this.getCategoryForProcess(procPath: string) =
+        let program = this :> IProgram
+        if program.getCategoryEnabled(procPath, 1) then 1
+        elif program.getCategoryEnabled(procPath, 2) then 2
+        elif program.getCategoryEnabled(procPath, 3) then 3
+        elif program.getCategoryEnabled(procPath, 4) then 4
+        elif program.getCategoryEnabled(procPath, 5) then 5
+        else 0
+
     member this.tryAutoGroup(window:Window) =
         if (this :> IProgram).getAutoGroupingEnabled(window.pid.processPath) then
             let hwndZorders = this.hwndZorders()
             let groups = this.desktop.groups
-            let groups = 
+            let groups =
                 match this.cast<IProgram>().tabLimit with
                 | Some(tabLimit) -> groups.where(fun g -> g.windows.count < tabLimit)
                 | None -> groups
             let groups = groups.where(fun g-> g.windows.count > 0).sortBy(fun g -> g.windows.map(fun hwnd -> hwndZorders.tryFind(hwnd).def(Int32.MaxValue)).minBy(id))
-            let group = groups.tryFind(fun g -> g.windows.map(fun hwnd -> os.windowFromHwnd(hwnd).pid.processPath).contains((=) window.pid.processPath))
+
+            // Get the category for the current window
+            let windowCategory = this.getCategoryForProcess(window.pid.processPath)
+
+            let group =
+                if windowCategory > 0 then
+                    // Category-based grouping: find a group with any window in the same category
+                    groups.tryFind(fun g ->
+                        g.windows.tryFind(fun hwnd ->
+                            let otherProcPath = os.windowFromHwnd(hwnd).pid.processPath
+                            this.getCategoryForProcess(otherProcPath) = windowCategory).IsSome)
+                else
+                    // No category: use traditional same-process grouping
+                    groups.tryFind(fun g -> g.windows.map(fun hwnd -> os.windowFromHwnd(hwnd).pid.processPath).contains((=) window.pid.processPath))
             Some(group)
         else None
 

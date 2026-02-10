@@ -70,6 +70,16 @@ type ExeNode(procPath) =
             _category5 <- newValue
             Services.program.setCategoryEnabled procPath 5 _category5
 
+    // Get the category number (0 = unset, 1-5 = category number)
+    member this.categoryNumber
+        with get() =
+            if _category1 then 1
+            elif _category2 then 2
+            elif _category3 then 3
+            elif _category4 then 4
+            elif _category5 then 5
+            else 0
+
     interface INode with
         member x.showSettings = true
 
@@ -207,7 +217,8 @@ type ProgramView() as this=
             
             invoker.asyncInvoke <| fun() ->
                 model.Nodes.Clear()
-                procNodes.sortBy(fun n -> n.Text).iter <| fun node -> model.Nodes.Add(node)
+                // Sort by category number first (0 = unset first, then 1-5), then by name
+                procNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
                 statusBar.Text <- "Ready"
 
     interface ISettingsView with
