@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.10_next_1
+## version ss_jp_2026.02.11
 - Hide Auto Grouping checkbox in Programs tab when Tabs checkbox is OFF
 - Add category-based auto-grouping
   - Automatically group apps with the same category
