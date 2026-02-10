@@ -3,9 +3,7 @@ open System
 
 type FilterService() as this =
     let os = OS()
-    let blackListedExeNames = 
-        let names = Set2(List2(["taskmgr.exe"]))
-        if System.Diagnostics.Debugger.IsAttached then names.add("devenv.exe") else names
+    let blackListedExeNames = Set2(List2(["taskmgr.exe"]))
 
     member this.includedPaths 
         with get() = Services.settings.getValue("includedPaths").cast<Set2<string>>()
