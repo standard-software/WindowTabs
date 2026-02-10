@@ -252,9 +252,16 @@ Access settings by right-clicking the tray icon and selecting "Settings" or by r
 
 ### Programs Tab
 
-This feature remains unchanged from the original WindowTabs functionality.
-
 Configure which programs should use tabs and auto-grouping behavior.
+
+- **Tabs**: Enable/disable tabbing for each program
+- **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
+- **Category 1-10**: Assign programs to a category for cross-application auto-grouping
+  - Programs in the same category are automatically grouped together regardless of the executable
+  - For example, assign Word, Excel, PowerPoint, etc. to the same category to auto-group Office apps together
+  - For example, assign Chrome, Edge, Firefox, etc. to the same category to auto-group browsers together
+  - Category columns are only visible when Auto Grouping is enabled for a program
+  - Programs are sorted by category number for better visibility
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
