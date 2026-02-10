@@ -4,11 +4,7 @@
   "Name": "名前",
   "enableTabs": "タブ",
   "enableAutoGrouping": "自動でグループ化",
-  "category1": "カテゴリ1",
-  "category2": "カテゴリ2",
-  "category3": "カテゴリ3",
-  "category4": "カテゴリ4",
-  "category5": "カテゴリ5",
+  "category": "カテゴリ",
 
   "Appearance": "見た目",
   "Height": "高さ",

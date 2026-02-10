@@ -4,11 +4,7 @@
   "Name": "名稱",
   "enableTabs": "分頁",
   "enableAutoGrouping": "自動分組",
-  "category1": "分類1",
-  "category2": "分類2",
-  "category3": "分類3",
-  "category4": "分類4",
-  "category5": "分類5",
+  "category": "分類",
 
   "Appearance": "外觀",
   "Height": "高度",

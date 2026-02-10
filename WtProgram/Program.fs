@@ -161,15 +161,14 @@ type Program() as this =
                 None
         | None -> None
 
-    // Get the category number (1-5) for a given process path, or 0 if no category is set
+    // Get the category number (1-10) for a given process path, or 0 if no category is set
     member private this.getCategoryForProcess(procPath: string) =
         let program = this :> IProgram
-        if program.getCategoryEnabled(procPath, 1) then 1
-        elif program.getCategoryEnabled(procPath, 2) then 2
-        elif program.getCategoryEnabled(procPath, 3) then 3
-        elif program.getCategoryEnabled(procPath, 4) then 4
-        elif program.getCategoryEnabled(procPath, 5) then 5
-        else 0
+        let rec check i =
+            if i > 10 then 0
+            elif program.getCategoryEnabled(procPath, i) then i
+            else check (i + 1)
+        check 1
 
     member this.tryAutoGroup(window:Window) =
         if (this :> IProgram).getAutoGroupingEnabled(window.pid.processPath) then

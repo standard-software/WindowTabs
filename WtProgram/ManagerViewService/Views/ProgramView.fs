@@ -29,6 +29,11 @@ type ExeNode(procPath) =
     let mutable _category3 = Services.program.getCategoryEnabled(procPath, 3)
     let mutable _category4 = Services.program.getCategoryEnabled(procPath, 4)
     let mutable _category5 = Services.program.getCategoryEnabled(procPath, 5)
+    let mutable _category6 = Services.program.getCategoryEnabled(procPath, 6)
+    let mutable _category7 = Services.program.getCategoryEnabled(procPath, 7)
+    let mutable _category8 = Services.program.getCategoryEnabled(procPath, 8)
+    let mutable _category9 = Services.program.getCategoryEnabled(procPath, 9)
+    let mutable _category10 = Services.program.getCategoryEnabled(procPath, 10)
     member this.Icon with get() = icon
     member this.enableTabs
         with get() = _enableTabs
@@ -69,8 +74,33 @@ type ExeNode(procPath) =
         and set(newValue) =
             _category5 <- newValue
             Services.program.setCategoryEnabled procPath 5 _category5
+    member this.category6
+        with get() = _category6
+        and set(newValue) =
+            _category6 <- newValue
+            Services.program.setCategoryEnabled procPath 6 _category6
+    member this.category7
+        with get() = _category7
+        and set(newValue) =
+            _category7 <- newValue
+            Services.program.setCategoryEnabled procPath 7 _category7
+    member this.category8
+        with get() = _category8
+        and set(newValue) =
+            _category8 <- newValue
+            Services.program.setCategoryEnabled procPath 8 _category8
+    member this.category9
+        with get() = _category9
+        and set(newValue) =
+            _category9 <- newValue
+            Services.program.setCategoryEnabled procPath 9 _category9
+    member this.category10
+        with get() = _category10
+        and set(newValue) =
+            _category10 <- newValue
+            Services.program.setCategoryEnabled procPath 10 _category10
 
-    // Get the category number (0 = unset, 1-5 = category number)
+    // Get the category number (0 = unset, 1-10 = category number)
     member this.categoryNumber
         with get() =
             if _category1 then 1
@@ -78,6 +108,11 @@ type ExeNode(procPath) =
             elif _category3 then 3
             elif _category4 then 4
             elif _category5 then 5
+            elif _category6 then 6
+            elif _category7 then 7
+            elif _category8 then 8
+            elif _category9 then 9
+            elif _category10 then 10
             else 0
 
     interface INode with
@@ -113,8 +148,11 @@ type ProgramView() as this=
         tree.UseColumns <- true
         tree.Columns.Add(nameColumn)
         tree.RowHeight <- 24
-        let addCheckBoxColumn colText propName colWidth visibilityCheck =
-            let content = Localization.getString(propName)
+        let addCheckBoxColumn displayName propName colWidth visibilityCheck =
+            let content =
+                match displayName with
+                | Some name -> name
+                | None -> Localization.getString(propName)
             let parentColumn =
                 let col = TreeColumn(content, colWidth)
                 col.TextAlign <- HorizontalAlignment.Center
@@ -149,24 +187,23 @@ type ProgramView() as this=
             control
         // Helper function to check if any category is selected
         let hasAnyCategory (exeNode:ExeNode) =
-            exeNode.category1 || exeNode.category2 || exeNode.category3 || exeNode.category4 || exeNode.category5
+            exeNode.category1 || exeNode.category2 || exeNode.category3 || exeNode.category4 || exeNode.category5 ||
+            exeNode.category6 || exeNode.category7 || exeNode.category8 || exeNode.category9 || exeNode.category10
         // Category visibility: show only when autoGrouping is ON and (this category is checked OR no category is checked)
         let categoryVisibility categoryNum (exeNode:ExeNode) =
             exeNode.enableAutoGrouping &&
-            (match categoryNum with
-             | 1 -> exeNode.category1 || not (hasAnyCategory exeNode)
-             | 2 -> exeNode.category2 || not (hasAnyCategory exeNode)
-             | 3 -> exeNode.category3 || not (hasAnyCategory exeNode)
-             | 4 -> exeNode.category4 || not (hasAnyCategory exeNode)
-             | 5 -> exeNode.category5 || not (hasAnyCategory exeNode)
-             | _ -> false)
-        addCheckBoxColumn "Tabs" "enableTabs" 50 None |> ignore
-        addCheckBoxColumn "Auto Grouping" "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
-        addCheckBoxColumn "Category 1" "category1" 70 (Some(categoryVisibility 1)) |> ignore
-        addCheckBoxColumn "Category 2" "category2" 70 (Some(categoryVisibility 2)) |> ignore
-        addCheckBoxColumn "Category 3" "category3" 70 (Some(categoryVisibility 3)) |> ignore
-        addCheckBoxColumn "Category 4" "category4" 70 (Some(categoryVisibility 4)) |> ignore
-        addCheckBoxColumn "Category 5" "category5" 70 (Some(categoryVisibility 5)) |> ignore
+            (let thisCategory =
+                match categoryNum with
+                | 1 -> exeNode.category1 | 2 -> exeNode.category2 | 3 -> exeNode.category3
+                | 4 -> exeNode.category4 | 5 -> exeNode.category5 | 6 -> exeNode.category6
+                | 7 -> exeNode.category7 | 8 -> exeNode.category8 | 9 -> exeNode.category9
+                | 10 -> exeNode.category10 | _ -> false
+             thisCategory || not (hasAnyCategory exeNode))
+        addCheckBoxColumn None "enableTabs" 50 None |> ignore
+        addCheckBoxColumn None "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
+        for i in 1..10 do
+            let header = sprintf "%s%d" (Localization.getString("category")) i
+            addCheckBoxColumn (Some header) (sprintf "category%d" i) 70 (Some(categoryVisibility i)) |> ignore
         tree.NodeControls.Add(
             let control = NodeControls.NodeIcon()
             control.ParentColumn <- nameColumn

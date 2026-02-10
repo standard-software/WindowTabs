@@ -4,11 +4,7 @@
   "Name": "名称",
   "enableTabs": "标签页",
   "enableAutoGrouping": "自动分组",
-  "category1": "分类1",
-  "category2": "分类2",
-  "category3": "分类3",
-  "category4": "分类4",
-  "category5": "分类5",
+  "category": "分类",
 
   "Appearance": "外观",
   "Height": "高度",
