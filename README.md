@@ -313,15 +313,13 @@ This feature remains unchanged from the original WindowTabs functionality.
 
 ### Build Scripts
 
-Two build scripts are provided in the project root:
+A build script is provided in the project root:
 
-- **build_installer.bat** - Builds the MSI installer (WtSetup.msi)
+- **build_release.bat** - Builds both the MSI installer and the portable ZIP distribution
   - Output: `exe\installer\WtSetup.msi`
-
-- **build_release_zip.bat** - Builds the portable ZIP distribution
   - Output: `exe\zip\WindowTabs.zip`
 
-Simply run the desired batch file to create the distribution packages.
+Simply run the batch file to create the distribution packages.
 
 
 ## Links

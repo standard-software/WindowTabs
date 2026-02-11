@@ -1,5 +1,12 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.11_next_1
+- Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
+  No code changes were made. Both ZIP and MSI have been rebuilt and replaced.
+- Merge build_installer.bat and build_release_zip.bat into a single build_release.bat
+  - Add ILRepack merge verification to prevent shipping unmerged exe
+  - Use /t:Rebuild to ensure clean build state
+
 ## version ss_jp_2026.02.11
 - Hide Auto Grouping checkbox in Programs tab when Tabs checkbox is OFF
 - Add category-based auto-grouping
