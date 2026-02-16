@@ -143,7 +143,7 @@ type NotifyIconPlugin() as this =
             let darkModeEnabled =
                 try
                     let json = Services.settings.root
-                    match json.getBool("enableMenuDarkMode") with
+                    match json.getBool("EnableMenuDarkMode") with
                     | Some(value) -> value
                     | None -> false
                 with | _ -> false

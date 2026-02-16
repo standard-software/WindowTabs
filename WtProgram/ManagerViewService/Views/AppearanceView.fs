@@ -79,7 +79,7 @@ type AppearanceView() as this =
         checkbox.changed.Add <| fun() -> prop.value <- unbox<bool>(checkbox.value)
         checkbox.control
 
-    let settingsCheckboxBool key defaultValue = checkBox(settingsPropertyBool key defaultValue)
+    let settingsCheckboxBool settingsKey defaultValue = checkBox(settingsPropertyBool settingsKey defaultValue)
 
     // Separate int and color properties for cleaner UI layout
     let intProperties = List2([
@@ -304,7 +304,7 @@ type AppearanceView() as this =
         label
 
     let darkModeCheckbox =
-        let checkbox = settingsCheckboxBool "enableMenuDarkMode" false
+        let checkbox = settingsCheckboxBool "EnableMenuDarkMode" false
         checkbox.Margin <- Padding(0,5,0,5)
         upperPanel.Controls.Add(checkbox)
         upperPanel.SetRow(checkbox, darkModeRow)
@@ -342,7 +342,7 @@ type AppearanceView() as this =
     let loadCustomThemes() : ColorThemeData list =
         try
             let json = Services.settings.root
-            match json.getObjectArray("customColorThemes") with
+            match json.getObjectArray("CustomColorThemes") with
             | Some(arr) ->
                 arr.list |> List.choose (fun item ->
                     try
@@ -386,7 +386,7 @@ type AppearanceView() as this =
             item.setInt32("flashBorderColor", t.flashBorderColor)
             item
         )
-        json.setObjectArray("customColorThemes", List2(arr))
+        json.setObjectArray("CustomColorThemes", List2(arr))
         Services.settings.root <- json
 
     // Mutable list of custom themes
@@ -399,7 +399,7 @@ type AppearanceView() as this =
     let loadSavedCustomColors() : ColorThemeData option =
         try
             let json = Services.settings.root
-            match json.getObject("savedCustomColors") with
+            match json.getObject("SavedCustomColors") with
             | Some(item) ->
                 // Check if item has required fields
                 match item.getInt32("inactiveTextColor") with
@@ -441,10 +441,10 @@ type AppearanceView() as this =
             item.setInt32("mouseOverBorderColor", c.mouseOverBorderColor)
             item.setInt32("activeBorderColor", c.activeBorderColor)
             item.setInt32("flashBorderColor", c.flashBorderColor)
-            json.setObject("savedCustomColors", item)
+            json.setObject("SavedCustomColors", item)
         | None ->
             // Remove the key if None
-            json.Remove("savedCustomColors") |> ignore
+            json.update("SavedCustomColors", None)
         Services.settings.root <- json
 
     // Saved Custom theme colors (for restoring when Custom is selected)

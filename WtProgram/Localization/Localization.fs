@@ -34,7 +34,7 @@ module Localization =
             if File.Exists(jsonPath) then
                 let json = File.ReadAllText(jsonPath)
                 let jobj = parseJsoncObject(json)
-                let dict = Dictionary<string, string>()
+                let dict = Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 for prop in jobj.Properties() do
                     dict.[prop.Name] <- prop.Value.ToString()
                 Some(dict :> IDictionary<string, string>)

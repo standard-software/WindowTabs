@@ -199,10 +199,10 @@ type ProgramView() as this=
                 | 7 -> exeNode.category7 | 8 -> exeNode.category8 | 9 -> exeNode.category9
                 | 10 -> exeNode.category10 | _ -> false
              thisCategory || not (hasAnyCategory exeNode))
-        addCheckBoxColumn None "enableTabs" 50 None |> ignore
-        addCheckBoxColumn None "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
+        addCheckBoxColumn (Some(Localization.getString("EnableTabs"))) "enableTabs" 50 None |> ignore
+        addCheckBoxColumn (Some(Localization.getString("EnableAutoGrouping"))) "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
         for i in 1..10 do
-            let header = sprintf "%s%d" (Localization.getString("category")) i
+            let header = sprintf "%s%d" (Localization.getString("Category")) i
             addCheckBoxColumn (Some header) (sprintf "category%d" i) 70 (Some(categoryVisibility i)) |> ignore
         tree.NodeControls.Add(
             let control = NodeControls.NodeIcon()

@@ -211,37 +211,37 @@ type Settings(isStandAlone) as this =
                 try
                     let settingsJson = this.settingsJson
                     let settings = {
-                        includedPaths = Set2(settingsJson.getStringArray("includedPaths").def(List2()))
-                        excludedPaths = Set2(settingsJson.getStringArray("excludedPaths").def(List2()))
-                        autoGroupingPaths = Set2(settingsJson.getStringArray("autoGroupingPaths").def(List2()))
-                        licenseKey = settingsJson.getString("licenseKey").def("")
-                        ticket = settingsJson.getString("ticket")
-                        runAtStartup = settingsJson.getBool("runAtStartup").def(hasExistingSettings.not)
-                        hideInactiveTabs = settingsJson.getBool("hideInactiveTabs").def(false)
-                        enableTabbingByDefault = settingsJson.getBool("enableTabbingByDefault").def(hasExistingSettings.not)
-                        enableCtrlNumberHotKey = settingsJson.getBool("enableCtrlNumberHotKey").def(false)
-                        enableHoverActivate = settingsJson.getBool("enableHoverActivate").def(false)
-                        makeTabsNarrowerByDefault = settingsJson.getBool("makeTabsNarrowerByDefault").def(false)
-                        tabPositionByDefault = settingsJson.getString("tabPositionByDefault").def("right")
-                        hideTabsWhenDownByDefault = 
+                        includedPaths = Set2(settingsJson.getStringArray("IncludedPaths").def(List2()))
+                        excludedPaths = Set2(settingsJson.getStringArray("ExcludedPaths").def(List2()))
+                        autoGroupingPaths = Set2(settingsJson.getStringArray("AutoGroupingPaths").def(List2()))
+                        licenseKey = settingsJson.getString("LicenseKey").def("")
+                        ticket = settingsJson.getString("Ticket")
+                        runAtStartup = settingsJson.getBool("RunAtStartup").def(hasExistingSettings.not)
+                        hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
+                        enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(hasExistingSettings.not)
+                        enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
+                        enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
+                        makeTabsNarrowerByDefault = settingsJson.getBool("MakeTabsNarrowerByDefault").def(false)
+                        tabPositionByDefault = settingsJson.getString("TabPositionByDefault").def("right")
+                        hideTabsWhenDownByDefault =
                             // Handle backward compatibility: convert old bool values to new string format
                             // First try to get as string (new format)
-                            match settingsJson.getString("hideTabsWhenDownByDefault") with
+                            match settingsJson.getString("HideTabsWhenDownByDefault") with
                             | Some(stringValue) -> stringValue
                             | None ->
                                 // If not a string, try as bool (old format)
                                 try
-                                    match settingsJson.getBool("hideTabsWhenDownByDefault") with
+                                    match settingsJson.getBool("HideTabsWhenDownByDefault") with
                                     | Some(boolValue) -> if boolValue then "down" else "never"
                                     | None -> "never"
                                 with
                                 | _ -> "never"
-                        hideTabsDelayMilliseconds = settingsJson.getInt32("hideTabsDelayMilliseconds").def(3000)
-                        hideTabsOnFullscreen = settingsJson.getBool("hideTabsOnFullscreen").def(true)
-                        version = settingsJson.getString("version").def(String.Empty)
+                        hideTabsDelayMilliseconds = settingsJson.getInt32("HideTabsDelayMilliseconds").def(3000)
+                        hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
+                        version = settingsJson.getString("Version").def(String.Empty)
                         tabAppearance =
                             try
-                                let appearanceObject = settingsJson.getObject("tabAppearance").def(JObject())
+                                let appearanceObject = settingsJson.getObject("TabAppearance").def(JObject())
                                 appearanceObject.items.fold this.defaultTabAppearance <| fun appearance (key,value) ->
                                     try
                                         let value = 
@@ -286,22 +286,22 @@ type Settings(isStandAlone) as this =
 
         and set(settings) =
             let settingsJson = this.settingsJson
-            settingsJson.setString("version", settings.version)
-            settingsJson.setString("licenseKey", settings.licenseKey)
-            settings.ticket.iter <| fun ticket -> settingsJson.setString("ticket", ticket)
-            settingsJson.setBool("runAtStartup", settings.runAtStartup)
-            settingsJson.setBool("hideInactiveTabs", settings.hideInactiveTabs)
-            settingsJson.setBool("enableTabbingByDefault", settings.enableTabbingByDefault)
-            settingsJson.setBool("enableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
-            settingsJson.setBool("enableHoverActivate", settings.enableHoverActivate)
-            settingsJson.setBool("makeTabsNarrowerByDefault", settings.makeTabsNarrowerByDefault)
-            settingsJson.setString("tabPositionByDefault", settings.tabPositionByDefault)
-            settingsJson.setString("hideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
-            settingsJson.setInt32("hideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)
-            settingsJson.setBool("hideTabsOnFullscreen", settings.hideTabsOnFullscreen)
-            settingsJson.setStringArray("includedPaths", settings.includedPaths.items)
-            settingsJson.setStringArray("excludedPaths", settings.excludedPaths.items)
-            settingsJson.setStringArray("autoGroupingPaths", settings.autoGroupingPaths.items)
+            settingsJson.setString("Version", settings.version)
+            settingsJson.setString("LicenseKey", settings.licenseKey)
+            settings.ticket.iter <| fun ticket -> settingsJson.setString("Ticket", ticket)
+            settingsJson.setBool("RunAtStartup", settings.runAtStartup)
+            settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
+            settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
+            settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
+            settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
+            settingsJson.setBool("MakeTabsNarrowerByDefault", settings.makeTabsNarrowerByDefault)
+            settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)
+            settingsJson.setString("HideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
+            settingsJson.setInt32("HideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)
+            settingsJson.setBool("HideTabsOnFullscreen", settings.hideTabsOnFullscreen)
+            settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)
+            settingsJson.setStringArray("ExcludedPaths", settings.excludedPaths.items)
+            settingsJson.setStringArray("AutoGroupingPaths", settings.autoGroupingPaths.items)
             let appearanceObject =
                 let appearance = settings.tabAppearance
                 let obj = JObject()
@@ -317,7 +317,7 @@ type Settings(isStandAlone) as this =
                     | :? string as value -> obj.setString(key, value)
                     | _ -> ()
                 obj
-            settingsJson.setObject("tabAppearance", appearanceObject)
+            settingsJson.setObject("TabAppearance", appearanceObject)
             this.settingsJson <- settingsJson
 
     interface ISettings with

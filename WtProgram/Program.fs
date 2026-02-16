@@ -67,7 +67,7 @@ type Program() as this =
     do
         let savedDisabledState =
             try
-                settingsManager.settingsJson.getBool("isDisabled").def(false)
+                settingsManager.settingsJson.getBool("IsDisabled").def(false)
             with
             | _ -> false
         isDisabledCell.set(savedDisabledState)
@@ -336,7 +336,7 @@ type Program() as this =
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     groupsArray.Add(windowsArray)
-            json.["savedTabGroupsForRestart"] <- groupsArray
+            json.addOrUpdate("SavedTabGroupsForRestart", groupsArray)
             settingsManager.settingsJson <- json
         with
         | _ -> ()
@@ -347,8 +347,8 @@ type Program() as this =
     member this.restoreTabGroupsFromSettings() =
         try
             let json = settingsManager.settingsJson
-            match json.["savedTabGroupsForRestart"] with
-            | :? JArray as groupsArray when groupsArray.Count > 0 ->
+            match json.getValueCI("SavedTabGroupsForRestart") with
+            | Some(:? JArray as groupsArray) when groupsArray.Count > 0 ->
                 isRestoringTabGroups.set(true)
 
                 // Get all current windows including those on other virtual desktops (cloaked)
@@ -450,13 +450,13 @@ type Program() as this =
 
         member x.getCategoryEnabled (procPath, categoryNum) =
             let settingsJson = settingsManager.settingsJson
-            let categoryKey = sprintf "category%dPaths" categoryNum
+            let categoryKey = sprintf "Category%dPaths" categoryNum
             let paths = settingsJson.getStringArray(categoryKey).def(List2())
             paths.contains((=) procPath)
 
         member x.setCategoryEnabled procPath categoryNum enabled =
             let settingsJson = settingsManager.settingsJson
-            let categoryKey = sprintf "category%dPaths" categoryNum
+            let categoryKey = sprintf "Category%dPaths" categoryNum
             let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
             let newPaths =
                 if enabled then paths.add procPath
@@ -485,7 +485,7 @@ type Program() as this =
             settingsManager.darkRedFrameTabAppearance
             
         member x.getHotKey key = 
-            let hotKeys = settingsManager.settingsJson.getObject("hotKeys").def(JObject())
+            let hotKeys = settingsManager.settingsJson.getObject("HotKeys").def(JObject())
             match hotKeys.getInt32(key) with
             | Some(value) -> value
             | None -> 
@@ -494,9 +494,9 @@ type Program() as this =
 
         member x.setHotKey key value = 
             let settings = settingsManager.settingsJson
-            let hotKeys = settings.getObject("hotKeys").def(JObject())
+            let hotKeys = settings.getObject("HotKeys").def(JObject())
             hotKeys.setInt32(key, value)
-            settings.setObject("hotKeys", hotKeys)
+            settings.setObject("HotKeys", hotKeys)
             settingsManager.settingsJson <- settings
             this.registerHotKeys()
 
@@ -513,7 +513,7 @@ type Program() as this =
             // Save disabled state to settings
             try
                 let json = settingsManager.settingsJson
-                json.setBool("isDisabled", value)
+                json.setBool("IsDisabled", value)
                 settingsManager.settingsJson <- json
             with
             | ex -> ()  // Ignore errors when saving settings
@@ -602,9 +602,8 @@ type Program() as this =
         let hasSavedTabGroups =
             try
                 let json = settingsManager.settingsJson
-                match json.["savedTabGroupsForRestart"] with
-                | null -> false
-                | :? JArray as arr -> arr.Count > 0
+                match json.getValueCI("SavedTabGroupsForRestart") with
+                | Some(:? JArray as arr) when arr.Count > 0 -> true
                 | _ -> false
             with _ -> false
 

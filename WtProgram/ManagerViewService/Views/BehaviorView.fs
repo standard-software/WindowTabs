@@ -19,8 +19,8 @@ type HotKeyView() =
 
     let switchTabs =
         let hotKeys = List2([
-            ("nextTab", "nextTab")
-            ("prevTab", "prevTab")
+            ("nextTab", "NextTab")
+            ("prevTab", "PrevTab")
         ])
 
         let editors = hotKeys.enumerate.fold (Map2()) <| fun editors (i,(key, text)) ->
@@ -168,7 +168,7 @@ type HotKeyView() =
             )
 
             let delayLabel = new Label()
-            delayLabel.Text <- Localization.getString("hideTabsDelayMilliseconds")
+            delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
             delayLabel.AutoSize <- true
             delayLabel.Margin <- Padding(10, 5, 3, 0)  // Left margin to separate from radio, top margin to align with textbox
 
@@ -191,16 +191,16 @@ type HotKeyView() =
             text, editor.control
 
         let fields = fields.prependList(List2([
-            ("runAtStartup", settingsCheckbox "runAtStartup")
-            ("hideInactiveTabs", settingsCheckbox "hideInactiveTabs")
-            ("isTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
-            ("enableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
-            ("enableHoverActivate", settingsCheckbox "enableHoverActivate")
-            ("makeTabsNarrowerByDefault", settingsCheckbox "makeTabsNarrowerByDefault")
-            ("tabPositionByDefault", defaultTabPositionRadio :> Control)
-            ("hideTabsWhenDownByDefault", hideTabsRadio :> Control)
+            ("RunAtStartup", settingsCheckbox "runAtStartup")
+            ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
+            ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
+            ("EnableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
+            ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
+            ("MakeTabsNarrowerByDefault", settingsCheckbox "makeTabsNarrowerByDefault")
+            ("TabPositionByDefault", defaultTabPositionRadio :> Control)
+            ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
-            ("hideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
+            ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
         ]))
 
         let formPanel = UIHelper.form fields
