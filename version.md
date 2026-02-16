@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.12_next_1
+
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
   No code changes were made. Both ZIP and MSI have been rebuilt and replaced.
