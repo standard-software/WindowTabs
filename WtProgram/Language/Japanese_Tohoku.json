@@ -85,7 +85,7 @@
 
   "TabNameEdit": "タブ名の編集だべ",
   "RenameTab": "タブの名前変えっぺ",
-  "RestoreTabName": "タブの名前戻すべ",
+  "ResetTabName": "タブの名前リセットすっぺ",
 
   "TabDetachAndSplit": "タブの分離と分割だべ",
   "DetachAndMovePosTab": "このタブ分離して移動",

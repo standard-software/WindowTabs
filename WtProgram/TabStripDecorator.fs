@@ -295,6 +295,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         form.textBox.SelectionStart <- 0
         form.textBox.SelectionLength <- tabText.Length
         form.textBox.LostFocus.Add <| fun _ ->
+            let newName = form.textBox.Text
+            group.setTabName(hwnd, if newName.Length = 0 then None else Some(newName))
             form.Close()
         group.bb.write("renamingTab", true)
         form.Closed.Add <| fun _ ->
@@ -2346,7 +2348,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             this.beginRename(hwnd)
                     })
                     CmiRegular({
-                        text = Localization.getString("RestoreTabName")
+                        text = Localization.getString("ResetTabName")
                         image = None
                         flags = if group.isRenamed(hwnd) then List2() else List2([MenuFlags.MF_GRAYED])
                         click = fun() -> group.setTabName(hwnd, None)

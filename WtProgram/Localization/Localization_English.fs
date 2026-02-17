@@ -88,7 +88,7 @@ module Localization_English =
 
         ("TabNameEdit", "Tab Name")
         ("RenameTab", "Rename tab")
-        ("RestoreTabName", "Restore tab name")
+        ("ResetTabName", "Reset tab name")
 
         ("TabDetachAndSplit", "Tab Detach and Split")
         ("DetachAndMovePosTab", "Detach this tab and reposition")

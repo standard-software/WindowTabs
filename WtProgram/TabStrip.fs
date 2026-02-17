@@ -179,9 +179,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     bgColor = tabBgColor.value.tryFind(tab)
                     TabDisplayInfo.text = ti.text
                     icon = ti.iconSmall
-                    textFont =
-                        let font = SystemFonts.MenuFont
-                        if ti.isRenamed then Font(font, FontStyle.Italic) else font
+                    textFont = SystemFonts.MenuFont
                     textBrush = SystemBrushes.MenuText
                 }
                 tab,tabInfo

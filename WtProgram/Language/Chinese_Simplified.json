@@ -85,7 +85,7 @@
 
   "TabNameEdit": "标签页名称编辑",
   "RenameTab": "重命名标签页",
-  "RestoreTabName": "恢复标签页名称",
+  "ResetTabName": "重置标签页名称",
 
   "TabDetachAndSplit": "分离和拆分标签页",
   "DetachAndMovePosTab": "分离此标签页并移动",

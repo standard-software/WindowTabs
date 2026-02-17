@@ -9,7 +9,10 @@
 - Slightly reduce internal overhead when closing tabs
 - Rename WtSetup\README.md to README.txt to avoid duplicate README.md in project
 - Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (inactive option is disabled)
-- Replace rename/restore tab name items with "Tab Name" submenu (restore is always shown but disabled when not renamed)
+- Improve tab name editing
+  - Replace rename/restore items with "Tab Name" submenu (reset is always shown but disabled when not renamed)
+  - Stop rendering renamed tab names in italic font
+  - Confirm rename when input field loses focus (instead of canceling)
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
