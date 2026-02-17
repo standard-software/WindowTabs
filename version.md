@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.12_next_1
+- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (inactive option is disabled)
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
   - Backward compatible: reads settings case-insensitively so old camelCase files still work
 - Keep tab strip visible during window move/resize

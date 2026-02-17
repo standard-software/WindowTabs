@@ -79,8 +79,10 @@
   "CloseOtherTabs": "このグループの他のタブ閉じるで",
   "CloseAllTabs": "このグループの全部のタブ閉じるで",
 
-  "MakeTabsWider": "タブ幅広げるで",
-  "MakeTabsNarrower": "タブ幅せばめるで",
+  "TabWidthChange": "タブ幅の変更やで",
+  "IconOnly": "アイコンだけ",
+  "IconAndText": "アイコンとテキスト",
+
   "RenameTab": "タブの名前変えるで",
   "RestoreTabName": "タブの名前戻すで",
 

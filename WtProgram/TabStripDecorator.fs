@@ -2310,22 +2310,27 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         
-        let makeTabsWiderItem =
-            CmiRegular({
-                text = Localization.getString("MakeTabsWider")
+        let tabWidthSubMenu =
+            CmiPopUp({
+                text = Localization.getString("TabWidthChange")
                 image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("IconOnly")
+                        image = None
+                        flags = if group.isIconOnly then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() ->
+                            group.isIconOnly <- true
+                    })
+                    CmiRegular({
+                        text = Localization.getString("IconAndText")
+                        image = None
+                        flags = if not group.isIconOnly then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() ->
+                            group.isIconOnly <- false
+                    })
+                ])
                 flags = List2()
-                click = fun() ->
-                    group.isIconOnly <- false
-            })
-
-        let makeTabsNarrowerItem =
-            CmiRegular({
-                text = Localization.getString("MakeTabsNarrower")
-                image = None
-                flags = List2()
-                click = fun() ->
-                    group.isIconOnly <- true
             })
 
         let renameTabItem =
@@ -4382,7 +4387,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(closeOtherTabsItem)
             Some(closeAllTabsItem)
             Some(CmiSeparator)
-            (if group.isIconOnly then Some(makeTabsWiderItem) else Some(makeTabsNarrowerItem))
+            Some(tabWidthSubMenu)
             Some(renameTabItem)
             (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
             Some(CmiSeparator)

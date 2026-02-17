@@ -82,8 +82,10 @@ module Localization_English =
         ("CloseOtherTabs", "Close other tabs in this group")
         ("CloseAllTabs", "Close all tabs in this group")
 
-        ("MakeTabsWider", "Make tabs wider")
-        ("MakeTabsNarrower", "Make tabs narrower")
+        ("TabWidthChange", "Tab Width")
+        ("IconOnly", "Icon Only")
+        ("IconAndText", "Icon and Text")
+
         ("RenameTab", "Rename tab")
         ("RestoreTabName", "Restore tab name")
 
