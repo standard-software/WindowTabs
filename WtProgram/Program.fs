@@ -45,7 +45,7 @@ type ProgramVersion(parts:List2<int>)=
         this.compare(v2) > 0
 
 type Program() as this =
-    let version = "ss_jp_2026.02.12_next_1"
+    let version = "ss_jp_2026.02.12_next_2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
@@ -270,16 +270,26 @@ type Program() as this =
         group.addWindow(hwnd, withDelay)
 
     member this.receive message =
+        let mutable skipFullUpdate = false
         match message with
         | WinEvent(hwnd, evt) -> ()
         | ShellEvent(hwnd, evt) ->
             match evt with
             | ShellEvent.HSHELL_WINDOWDESTROYED ->
                 isSubscribed.value.tryFind(hwnd).iter <| fun dispose -> dispose.Dispose()
+                // Direct removal + lightweight cleanup instead of expensive full window scan.
+                // EVENT_OBJECT_HIDE already handles tab removal via updateAppWindows(),
+                // so HSHELL_WINDOWDESTROYED only needs cleanup for any remaining cases.
+                this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)).iter <| fun g ->
+                    g.removeWindow(hwnd)
+                this.destroyEmptyGroups()
+                this.exitIfNeeded()
+                skipFullUpdate <- true
             | _ ->()
         | Timer -> ()
-                  
-        this.updateAppWindows()
+
+        if not skipFullUpdate then
+            this.updateAppWindows()
 
     member this.exitIfNeeded() =
         if inShutdown.value then
