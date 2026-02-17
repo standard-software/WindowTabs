@@ -3,6 +3,9 @@
 ## version ss_jp_2026.02.12_next_1
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
   - Backward compatible: reads settings case-insensitively so old camelCase files still work
+- Keep tab strip visible during window move/resize
+  - Tabs now follow the window position in real-time while dragging
+  - Background windows are still hidden off-screen during move as before
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.

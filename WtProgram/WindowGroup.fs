@@ -219,7 +219,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         isVisibleCell.value <-
             this.isEmpty.not &&
             zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
-            inMoveSize.value.not &&
             not allWindowsCloaked
 
     member private this.adjustChildWindows = fun() ->
@@ -445,6 +444,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.onEnterMoveSize() =
         inMoveSize.set(true)
         this.hideChildWindows()
+        this.saveTopWindowPlacement()
         this.updateIsVisible()
 
     member this.onExitMoveSize() =
@@ -507,31 +507,35 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         //event when they loose focus, we don't want to automatically give them focus in this case
         //so make sure that the window HAD focus before reapplying it
         | WinEvent.EVENT_OBJECT_LOCATIONCHANGE ->
-            if this.isTop(hwnd) && inMoveSize.value.not then
-                //you can miss EVENT_SYSTEM_MOVESIZESTART events
-                //when a window is created and is immediatly in move size, we subscribe
-                //to the event too late (Chrome tab dragging is prime example)
-                //could be solved by subscribing only once for MOVESIZESTART gobally for all hwnds
-                //but instead, to keep it simple, we just check on all location changes if its in move size
-                let window = this.os.windowFromHwnd(hwnd)
-                if window.isInMoveSize then
-                    this.onEnterMoveSize()
-                else
-                    let isForeground = this.os.foreground.hwnd = hwnd
+            if this.isTop(hwnd) then
+                if inMoveSize.value then
+                    // During move/size, update tab position to follow the window
                     this.saveTopWindowPlacement()
-                    this.adjustChildWindows()
-                    if isForeground then
-                        this.makeTopWindowForeground()
-                    this.foreground <- this.os.foreground.hwnd
-                    isMaximizedExport.update()
-                    isFullscreenExport.update()
-                    // Update tab visibility for fullscreen change
-                    let hideForFullscreen =
-                        try
-                            let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                            hideTabsOnFullscreen && isFullscreenExport.value
-                        with _ -> false
-                    this.ts.visible <- isVisibleCell.value && not hideForFullscreen
+                else
+                    //you can miss EVENT_SYSTEM_MOVESIZESTART events
+                    //when a window is created and is immediatly in move size, we subscribe
+                    //to the event too late (Chrome tab dragging is prime example)
+                    //could be solved by subscribing only once for MOVESIZESTART gobally for all hwnds
+                    //but instead, to keep it simple, we just check on all location changes if its in move size
+                    let window = this.os.windowFromHwnd(hwnd)
+                    if window.isInMoveSize then
+                        this.onEnterMoveSize()
+                    else
+                        let isForeground = this.os.foreground.hwnd = hwnd
+                        this.saveTopWindowPlacement()
+                        this.adjustChildWindows()
+                        if isForeground then
+                            this.makeTopWindowForeground()
+                        this.foreground <- this.os.foreground.hwnd
+                        isMaximizedExport.update()
+                        isFullscreenExport.update()
+                        // Update tab visibility for fullscreen change
+                        let hideForFullscreen =
+                            try
+                                let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
+                                hideTabsOnFullscreen && isFullscreenExport.value
+                            with _ -> false
+                        this.ts.visible <- isVisibleCell.value && not hideForFullscreen
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
             this.saveZorder()
