@@ -2251,6 +2251,78 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private  this.contextMenu(hwnd) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
+
+        // Helper: build position menu items for move/snap operations
+        let buildPositionMenuItems (includeLeftRight: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
+            let snapPercentSubMenu (pct: int) =
+                CmiPopUp({
+                    text = String.Format(Localization.getString("SnapPercent"), pct)
+                    image = None
+                    items = List2([
+                        CmiRegular({ text = Localization.getString("Right"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("Left"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("Up"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("Down"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
+                    ])
+                    flags = List2()
+                })
+            let leftRightItems =
+                if includeLeftRight then
+                    [
+                        CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> snapFn("snapleft")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
+                    ]
+                else []
+            let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
+            leftRightItems @ separatorIfLeftRight @
+            [
+                CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
+                CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                CmiSeparator
+                CmiPopUp({
+                    text = Localization.getString("MoveCorner")
+                    image = None
+                    items = List2([
+                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() })
+                    ])
+                    flags = List2()
+                })
+                CmiSeparator
+                snapPercentSubMenu 30
+                snapPercentSubMenu 50
+                snapPercentSubMenu 70
+                snapPercentSubMenu 90
+            ]
+
+        // Helper: build screen position submenu
+        let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (includeLeftRight: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =
+            let screenItems =
+                let samePositionItems =
+                    if isCurrentScreen then []
+                    else
+                        [
+                            CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> moveFn screen None); flags = List2() })
+                            CmiSeparator
+                        ]
+                samePositionItems @
+                buildPositionMenuItems includeLeftRight
+                    (fun pos -> moveFn screen pos)
+                    (fun dir -> snapFn screen dir)
+                    (fun dir pct -> snapPercentFn screen dir pct)
+            CmiPopUp({
+                text = getScreenName screen
+                image = None
+                items = List2(screenItems)
+                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
+            })
+
         let window = os.windowFromHwnd(hwnd)
         let pid = window.pid
         let exeName = pid.exeName
@@ -2447,426 +2519,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
-            // Move submenu (top, bottom, corners)
-            let moveSubMenu = CmiPopUp({
-                text = Localization.getString("MoveOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTop")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "top")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottom")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "bottom")
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopLeft")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "topleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopRight")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "topright")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomLeft")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "bottomleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomRight")
-                        image = None
-                        click = fun() -> this.detachTabToPosition(hwnd, Some "bottomright")
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            // Snap submenu (with percentages)
-            let snapSubMenu = CmiPopUp({
-                text = Localization.getString("SnapOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapleft", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapleft", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapleft", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapleft", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapright", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapright", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapright", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapright", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapTop")
-                        image = None
-                        click = fun() -> this.detachTabToSnap(hwnd, "snaptop")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snaptop", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snaptop", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snaptop", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snaptop", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapBottom")
-                        image = None
-                        click = fun() -> this.detachTabToSnap(hwnd, "snapbottom")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapbottom", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapbottom", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapbottom", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                        image = None
-                        click = fun() -> this.detachTabToSnapWithPercent(hwnd, "snapbottom", 90)
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            let baseMenuItems = [
-                CmiRegular({
-                    text = Localization.getString("DetachTabSamePosition")
-                    image = None
-                    click = fun() -> this.detachTabToPosition(hwnd, None)
-                    flags = List2()
-                })
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeLeft")
-                    image = None
-                    click = fun() -> this.detachTabToPosition(hwnd, Some "left")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeRight")
-                    image = None
-                    click = fun() -> this.detachTabToPosition(hwnd, Some "right")
-                    flags = List2()
-                })
-                moveSubMenu
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("SnapLeft")
-                    image = None
-                    click = fun() -> this.detachTabToSnap(hwnd, "snapleft")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("SnapRight")
-                    image = None
-                    click = fun() -> this.detachTabToSnap(hwnd, "snapright")
-                    flags = List2()
-                })
-                snapSubMenu
-            ]
+            let baseMenuItems =
+                buildPositionMenuItems true
+                    (fun pos -> this.detachTabToPosition(hwnd, pos))
+                    (fun dir -> this.detachTabToSnap(hwnd, dir))
+                    (fun dir pct -> this.detachTabToSnapWithPercent(hwnd, dir, pct))
 
             let menuItems =
                 if allScreens.Length > 1 then
                     let screenSubMenus =
                         allScreens
                         |> Array.map (fun screen ->
-                            let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
-
-                            // Move submenu for this screen
-                            let screenMoveSubMenu = CmiPopUp({
-                                text = Localization.getString("MoveOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTop")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "top")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottom")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottom")
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopLeft")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "topleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopRight")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "topright")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomLeft")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottomleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomRight")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreen(hwnd, screen, Some "bottomright")
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            // Snap submenu for this screen
-                            let screenSnapSubMenu = CmiPopUp({
-                                text = Localization.getString("SnapOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapleft", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapleft", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapleft", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapleft", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapright", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapright", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapright", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapright", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapTop")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snaptop")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snaptop", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snaptop", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snaptop", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snaptop", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapBottom")
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapbottom")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapbottom", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapbottom", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapbottom", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.detachTabToScreenSnapWithPercent(hwnd, screen, "snapbottom", 90)
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenItems = [
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabSamePosition")
-                                    image = None
-                                    click = fun() -> this.detachTabToScreen(hwnd, screen, None)
-                                    flags = List2()
-                                })
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeLeft")
-                                    image = None
-                                    click = fun() -> this.detachTabToScreen(hwnd, screen, Some "left")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeRight")
-                                    image = None
-                                    click = fun() -> this.detachTabToScreen(hwnd, screen, Some "right")
-                                    flags = List2()
-                                })
-                                screenMoveSubMenu
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("SnapLeft")
-                                    image = None
-                                    click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapleft")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("SnapRight")
-                                    image = None
-                                    click = fun() -> this.detachTabToScreenSnap(hwnd, screen, "snapright")
-                                    flags = List2()
-                                })
-                                screenSnapSubMenu
-                            ]
-
-                            CmiPopUp({
-                                text = screenName
-                                image = None
-                                items = List2(screenItems)
-                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
-                            })
+                            buildScreenPositionSubMenu screen isCurrentScreen true
+                                (fun s pos -> this.detachTabToScreen(hwnd, s, pos))
+                                (fun s dir -> this.detachTabToScreenSnap(hwnd, s, dir))
+                                (fun s dir pct -> this.detachTabToScreenSnapWithPercent(hwnd, s, dir, pct))
+                                (fun s -> this.getScreenName(s))
                         )
                         |> Array.toList
 
@@ -2902,424 +2571,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitRightTabsToPositionFormat"), rightTabCount)
 
-            // Move submenu (top, bottom, corners)
-            let moveSubMenu = CmiPopUp({
-                text = Localization.getString("MoveOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTop")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "top")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottom")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottom")
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopLeft")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "topleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopRight")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "topright")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomLeft")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottomleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomRight")
-                        image = None
-                        click = fun() -> this.splitRightTabsToPosition(hwnd, Some "bottomright")
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            // Snap submenu (with percentages)
-            let snapSubMenu = CmiPopUp({
-                text = Localization.getString("SnapOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapleft", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapleft", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapleft", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapleft", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapright", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapright", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapright", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapright", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapTop")
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snaptop")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snaptop", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snaptop", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snaptop", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snaptop", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapBottom")
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnap(hwnd, "snapbottom")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapbottom", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapbottom", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapbottom", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitRightTabsToSnapWithPercent(hwnd, "snapbottom", 90)
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            let baseMenuItems = [
-                CmiRegular({
-                    text = Localization.getString("DetachTabSamePosition")
-                    image = None
-                    click = fun() -> this.splitRightTabsToPosition(hwnd, None)
-                    flags = List2()
-                })
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeLeft")
-                    image = None
-                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "left")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeRight")
-                    image = None
-                    click = fun() -> this.splitRightTabsToPosition(hwnd, Some "right")
-                    flags = List2()
-                })
-                moveSubMenu
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("SnapLeft")
-                    image = None
-                    click = fun() -> this.splitRightTabsToSnap(hwnd, "snapleft")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("SnapRight")
-                    image = None
-                    click = fun() -> this.splitRightTabsToSnap(hwnd, "snapright")
-                    flags = List2()
-                })
-                snapSubMenu
-            ]
+            let baseMenuItems =
+                buildPositionMenuItems true
+                    (fun pos -> this.splitRightTabsToPosition(hwnd, pos))
+                    (fun dir -> this.splitRightTabsToSnap(hwnd, dir))
+                    (fun dir pct -> this.splitRightTabsToSnapWithPercent(hwnd, dir, pct))
 
             let menuItems =
                 if allScreens.Length > 1 then
                     let screenSubMenus =
                         allScreens
                         |> Array.map (fun screen ->
-                            let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
-
-                            let screenMoveSubMenu = CmiPopUp({
-                                text = Localization.getString("MoveOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTop")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "top")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottom")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottom")
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopLeft")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "topleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopRight")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "topright")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomLeft")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottomleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomRight")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "bottomright")
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenSnapSubMenu = CmiPopUp({
-                                text = Localization.getString("SnapOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapTop")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snaptop")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapBottom")
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapbottom")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitRightTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 90)
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenItems = [
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabSamePosition")
-                                    image = None
-                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, None)
-                                    flags = List2()
-                                })
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeLeft")
-                                    image = None
-                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "left")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeRight")
-                                    image = None
-                                    click = fun() -> this.splitRightTabsToScreen(hwnd, screen, Some "right")
-                                    flags = List2()
-                                })
-                                screenMoveSubMenu
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("SnapLeft")
-                                    image = None
-                                    click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapleft")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("SnapRight")
-                                    image = None
-                                    click = fun() -> this.splitRightTabsToScreenSnap(hwnd, screen, "snapright")
-                                    flags = List2()
-                                })
-                                screenSnapSubMenu
-                            ]
-
-                            CmiPopUp({
-                                text = screenName
-                                image = None
-                                items = List2(screenItems)
-                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
-                            })
+                            buildScreenPositionSubMenu screen isCurrentScreen true
+                                (fun s pos -> this.splitRightTabsToScreen(hwnd, s, pos))
+                                (fun s dir -> this.splitRightTabsToScreenSnap(hwnd, s, dir))
+                                (fun s dir pct -> this.splitRightTabsToScreenSnapWithPercent(hwnd, s, dir, pct))
+                                (fun s -> this.getScreenName(s))
                         )
                         |> Array.toList
 
@@ -3357,424 +2625,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitLeftTabsToPositionFormat"), leftTabCount)
 
-            // Move submenu (top, bottom, corners)
-            let moveSubMenu = CmiPopUp({
-                text = Localization.getString("MoveOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTop")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "top")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottom")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottom")
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopLeft")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "topleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopRight")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "topright")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomLeft")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottomleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomRight")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "bottomright")
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            // Snap submenu (with percentages)
-            let snapSubMenu = CmiPopUp({
-                text = Localization.getString("SnapOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapleft", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapleft", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapleft", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapleft", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapright", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapright", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapright", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapright", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapTop")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snaptop")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snaptop", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snaptop", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snaptop", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snaptop", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapBottom")
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapbottom")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapbottom", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapbottom", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapbottom", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                        image = None
-                        click = fun() -> this.splitLeftTabsToSnapWithPercent(hwnd, "snapbottom", 90)
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            let baseMenuItems = [
-                CmiRegular({
-                    text = Localization.getString("DetachTabSamePosition")
-                    image = None
-                    click = fun() -> this.splitLeftTabsToPosition(hwnd, None)
-                    flags = List2()
-                })
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeLeft")
-                    image = None
-                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "left")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeRight")
-                    image = None
-                    click = fun() -> this.splitLeftTabsToPosition(hwnd, Some "right")
-                    flags = List2()
-                })
-                moveSubMenu
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("SnapLeft")
-                    image = None
-                    click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapleft")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("SnapRight")
-                    image = None
-                    click = fun() -> this.splitLeftTabsToSnap(hwnd, "snapright")
-                    flags = List2()
-                })
-                snapSubMenu
-            ]
+            let baseMenuItems =
+                buildPositionMenuItems true
+                    (fun pos -> this.splitLeftTabsToPosition(hwnd, pos))
+                    (fun dir -> this.splitLeftTabsToSnap(hwnd, dir))
+                    (fun dir pct -> this.splitLeftTabsToSnapWithPercent(hwnd, dir, pct))
 
             let menuItems =
                 if allScreens.Length > 1 then
                     let screenSubMenus =
                         allScreens
                         |> Array.map (fun screen ->
-                            let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
-
-                            let screenMoveSubMenu = CmiPopUp({
-                                text = Localization.getString("MoveOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTop")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "top")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottom")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottom")
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopLeft")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "topleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopRight")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "topright")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomLeft")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottomleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomRight")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "bottomright")
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenSnapSubMenu = CmiPopUp({
-                                text = Localization.getString("SnapOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapleft", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapright", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapTop")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snaptop")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snaptop", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapBottom")
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapbottom")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, screen, "snapbottom", 90)
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenItems = [
-                                CmiRegular({
-                                    text = Localization.getString("DetachTabSamePosition")
-                                    image = None
-                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, None)
-                                    flags = List2()
-                                })
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeLeft")
-                                    image = None
-                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "left")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("MoveEdgeRight")
-                                    image = None
-                                    click = fun() -> this.splitLeftTabsToScreen(hwnd, screen, Some "right")
-                                    flags = List2()
-                                })
-                                screenMoveSubMenu
-                                CmiSeparator
-                                CmiRegular({
-                                    text = Localization.getString("SnapLeft")
-                                    image = None
-                                    click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapleft")
-                                    flags = List2()
-                                })
-                                CmiRegular({
-                                    text = Localization.getString("SnapRight")
-                                    image = None
-                                    click = fun() -> this.splitLeftTabsToScreenSnap(hwnd, screen, "snapright")
-                                    flags = List2()
-                                })
-                                screenSnapSubMenu
-                            ]
-
-                            CmiPopUp({
-                                text = screenName
-                                image = None
-                                items = List2(screenItems)
-                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
-                            })
+                            buildScreenPositionSubMenu screen isCurrentScreen true
+                                (fun s pos -> this.splitLeftTabsToScreen(hwnd, s, pos))
+                                (fun s dir -> this.splitLeftTabsToScreenSnap(hwnd, s, dir))
+                                (fun s dir pct -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, s, dir, pct))
+                                (fun s -> this.getScreenName(s))
                         )
                         |> Array.toList
 
@@ -3789,456 +2656,37 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
             }))
 
+        // 4 top-level group position items (left move, left snap, right move, right snap)
+        let moveGroupLeftItem =
+            CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "left")); flags = List2() })
+        let snapGroupLeftItem =
+            CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapleft")); flags = List2() })
+        let moveGroupRightItem =
+            CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "right")); flags = List2() })
+        let snapGroupRightItem =
+            CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapright")); flags = List2() })
+
         let moveTabGroupSubMenu =
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
-            // Move submenu (top, bottom, corners)
-            let moveSubMenu = CmiPopUp({
-                text = Localization.getString("MoveOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTop")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "top")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottom")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottom")
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopLeft")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "topleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeTopRight")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "topright")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomLeft")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomleft")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("MoveEdgeBottomRight")
-                        image = None
-                        click = fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomright")
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            // Snap submenu (with percentages)
-            let snapSubMenu = CmiPopUp({
-                text = Localization.getString("SnapOther")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapleft", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapleft", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapleft", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapleft", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapright", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapright", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapright", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapright", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapTop")
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snaptop")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptop", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptop", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptop", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptop", 90)
-                        flags = List2()
-                    })
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("SnapBottom")
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnap(hwnd, "snapbottom")
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottom", 30)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottom", 50)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottom", 70)
-                        flags = List2()
-                    })
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                        image = None
-                        click = fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottom", 90)
-                        flags = List2()
-                    })
-                ])
-                flags = List2()
-            })
-
-            let baseMenuItems = [
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeLeft")
-                    image = None
-                    click = fun() -> this.moveTabGroupToPosition(hwnd, Some "left")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("MoveEdgeRight")
-                    image = None
-                    click = fun() -> this.moveTabGroupToPosition(hwnd, Some "right")
-                    flags = List2()
-                })
-                moveSubMenu
-                CmiSeparator
-                CmiRegular({
-                    text = Localization.getString("SnapLeft")
-                    image = None
-                    click = fun() -> this.moveTabGroupToSnap(hwnd, "snapleft")
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("SnapRight")
-                    image = None
-                    click = fun() -> this.moveTabGroupToSnap(hwnd, "snapright")
-                    flags = List2()
-                })
-                snapSubMenu
-            ]
+            let baseMenuItems =
+                buildPositionMenuItems false
+                    (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
+                    (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
+                    (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
 
             let menuItems =
                 if allScreens.Length > 1 then
                     let screenSubMenus =
                         allScreens
                         |> Array.map (fun screen ->
-                            let screenName = this.getScreenName(screen)
                             let isCurrentScreen = screen.Equals(currentScreen)
-
-                            let screenMoveSubMenu = CmiPopUp({
-                                text = Localization.getString("MoveOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTop")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "top")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottom")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottom")
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopLeft")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "topleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeTopRight")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "topright")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomLeft")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottomleft")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = Localization.getString("MoveEdgeBottomRight")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "bottomright")
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            let screenSnapSubMenu = CmiPopUp({
-                                text = Localization.getString("SnapOther")
-                                image = None
-                                items = List2([
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapleft", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapleft", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapleft", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapLeftPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapleft", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapright", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapright", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapright", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapRightPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapright", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapTop")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snaptop")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snaptop", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snaptop", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snaptop", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapTopPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snaptop", 90)
-                                        flags = List2()
-                                    })
-                                    CmiSeparator
-                                    CmiRegular({
-                                        text = Localization.getString("SnapBottom")
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapbottom")
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 30)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapbottom", 30)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 50)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapbottom", 50)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 70)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapbottom", 70)
-                                        flags = List2()
-                                    })
-                                    CmiRegular({
-                                        text = String.Format(Localization.getString("SnapBottomPercent"), 90)
-                                        image = None
-                                        click = fun() -> this.moveTabGroupToScreenSnapWithPercent(hwnd, screen, "snapbottom", 90)
-                                        flags = List2()
-                                    })
-                                ])
-                                flags = List2()
-                            })
-
-                            // For other screens, include "Same position" option
-                            let screenItems =
-                                if isCurrentScreen then
-                                    // Current screen - no "Same position" (meaningless)
-                                    [
-                                        CmiRegular({
-                                            text = Localization.getString("MoveEdgeLeft")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "left")
-                                            flags = List2()
-                                        })
-                                        CmiRegular({
-                                            text = Localization.getString("MoveEdgeRight")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "right")
-                                            flags = List2()
-                                        })
-                                        screenMoveSubMenu
-                                        CmiSeparator
-                                        CmiRegular({
-                                            text = Localization.getString("SnapLeft")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapleft")
-                                            flags = List2()
-                                        })
-                                        CmiRegular({
-                                            text = Localization.getString("SnapRight")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapright")
-                                            flags = List2()
-                                        })
-                                        screenSnapSubMenu
-                                    ]
-                                else
-                                    // Other screens - include "Same position"
-                                    [
-                                        CmiRegular({
-                                            text = Localization.getString("DetachTabSamePosition")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, None)
-                                            flags = List2()
-                                        })
-                                        CmiSeparator
-                                        CmiRegular({
-                                            text = Localization.getString("MoveEdgeLeft")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "left")
-                                            flags = List2()
-                                        })
-                                        CmiRegular({
-                                            text = Localization.getString("MoveEdgeRight")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreen(hwnd, screen, Some "right")
-                                            flags = List2()
-                                        })
-                                        screenMoveSubMenu
-                                        CmiSeparator
-                                        CmiRegular({
-                                            text = Localization.getString("SnapLeft")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapleft")
-                                            flags = List2()
-                                        })
-                                        CmiRegular({
-                                            text = Localization.getString("SnapRight")
-                                            image = None
-                                            click = fun() -> this.moveTabGroupToScreenSnap(hwnd, screen, "snapright")
-                                            flags = List2()
-                                        })
-                                        screenSnapSubMenu
-                                    ]
-
-                            CmiPopUp({
-                                text = screenName
-                                image = None
-                                items = List2(screenItems)
-                                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
-                            })
+                            buildScreenPositionSubMenu screen isCurrentScreen true
+                                (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
+                                (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
+                                (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
+                                (fun s -> this.getScreenName(s))
                         )
                         |> Array.toList
 
@@ -4247,7 +2695,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     baseMenuItems
 
             Some(CmiPopUp({
-                text = Localization.getString("MovePosTabGroup")
+                text = Localization.getString("MovePositionOther")
                 image = None
                 items = List2(menuItems)
                 flags = List2()
@@ -4389,14 +2837,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         List2([
             Some(newWindowItem)
             Some(CmiSeparator)
-            Some(closeTabItem)
-            Some(closeRightTabsItem)
-            Some(closeLeftTabsItem)
-            Some(closeOtherTabsItem)
-            Some(closeAllTabsItem)
-            Some(CmiSeparator)
-            Some(tabWidthSubMenu)
-            Some(tabNameSubMenu)
+            Some(moveGroupLeftItem)
+            Some(snapGroupLeftItem)
+            Some(moveGroupRightItem)
+            Some(snapGroupRightItem)
+            moveTabGroupSubMenu
+            Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (
@@ -4697,11 +3143,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         detachTabSubMenu
                         moveTabMenu
                         Some(CmiSeparator)
-                        splitRightTabsToPositionSubMenu
-                        splitRightTabsToGroupMenu
-                        Some(CmiSeparator)
                         splitLeftTabsToPositionSubMenu
                         splitLeftTabsToGroupMenu
+                        Some(CmiSeparator)
+                        splitRightTabsToPositionSubMenu
+                        splitRightTabsToGroupMenu
                     ] |> List.choose id
 
                 if subMenuItems.IsEmpty then None
@@ -4714,8 +3160,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     }))
             )
             Some(CmiSeparator)
-            moveTabGroupSubMenu
-            Some(moveTabGroupToGroupMenu)
+            Some(closeTabItem)
+            Some(closeLeftTabsItem)
+            Some(closeRightTabsItem)
+            Some(closeOtherTabsItem)
+            Some(closeAllTabsItem)
+            Some(CmiSeparator)
+            Some(tabWidthSubMenu)
+            Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(managerItem)
         ]).choose(id)
