@@ -2333,19 +2333,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
-        let renameTabItem =
-            CmiRegular({
-                text = Localization.getString("RenameTab")
+        let tabNameSubMenu =
+            CmiPopUp({
+                text = Localization.getString("TabNameEdit")
                 image = None
-                flags = List2()
-                click = fun() ->
-                    this.beginRename(hwnd)
-            })
-        let restoreTabNameItem =
-            CmiRegular({
-                text = Localization.getString("RestoreTabName")
-                image = None
-                click = fun() -> group.setTabName(hwnd, None)
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("RenameTab")
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            this.beginRename(hwnd)
+                    })
+                    CmiRegular({
+                        text = Localization.getString("RestoreTabName")
+                        image = None
+                        flags = if group.isRenamed(hwnd) then List2() else List2([MenuFlags.MF_GRAYED])
+                        click = fun() -> group.setTabName(hwnd, None)
+                    })
+                ])
                 flags = List2()
             })
 
@@ -4388,8 +4394,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(closeAllTabsItem)
             Some(CmiSeparator)
             Some(tabWidthSubMenu)
-            Some(renameTabItem)
-            (if group.isRenamed(hwnd) then Some(restoreTabNameItem) else None)
+            Some(tabNameSubMenu)
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (

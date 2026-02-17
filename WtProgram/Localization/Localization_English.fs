@@ -86,6 +86,7 @@ module Localization_English =
         ("IconOnly", "Icon Only")
         ("IconAndText", "Icon and Text")
 
+        ("TabNameEdit", "Tab Name")
         ("RenameTab", "Rename tab")
         ("RestoreTabName", "Restore tab name")
 

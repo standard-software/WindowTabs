@@ -1,7 +1,6 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.12_next_1
-- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (inactive option is disabled)
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
   - Backward compatible: reads settings case-insensitively so old camelCase files still work
 - Keep tab strip visible during window move/resize
@@ -9,6 +8,8 @@
   - Background windows are still hidden off-screen during move as before
 - Slightly reduce internal overhead when closing tabs
 - Rename WtSetup\README.md to README.txt to avoid duplicate README.md in project
+- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (inactive option is disabled)
+- Replace rename/restore tab name items with "Tab Name" submenu (restore is always shown but disabled when not renamed)
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
