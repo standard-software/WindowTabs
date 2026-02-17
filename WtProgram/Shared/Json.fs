@@ -35,11 +35,13 @@ module JObjectHelper =
         member this.getInt32Array(key) = this.getArray<Int64>(key).map(fun l -> l.map(int32))
         member this.getObject(key) = this.getValueCI(key).map(fun t -> unbox<JObject>(t))
         member this.update(key:string, token:JToken option) =
+            // Remove all existing properties matching the key (case-insensitive)
+            // to prevent duplicate keys with different casing
+            let existing = this.Properties() |> Seq.filter (fun p -> String.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase)) |> Seq.toList
+            existing |> List.iter (fun p -> p.Remove())
             match token with
-            | Some(token) ->
-                if (this :> IDictionary<_,_>).ContainsKey(key) then this.Remove(key).ignore
-                this.Add(key, token)
-            | None -> this.Remove(key).ignore
+            | Some(token) -> this.Add(key, token)
+            | None -> ()
         member this.addOrUpdate(key:string, token:JToken) =
             this.update(key, Some(token))
 
