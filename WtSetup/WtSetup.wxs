@@ -42,8 +42,8 @@
                         Source="$(var.WtProgram.ProjectDir)..\version.md" />
 
                   <!-- README file -->
-                  <File Id="ReadmeMd"
-                        Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.md" />
+                  <File Id="ReadmeTxt"
+                        Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.txt" />
                </Component>
 
                <!-- Language folder -->

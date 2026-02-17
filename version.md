@@ -7,6 +7,7 @@
   - Tabs now follow the window position in real-time while dragging
   - Background windows are still hidden off-screen during move as before
 - Slightly reduce internal overhead when closing tabs
+- Rename WtSetup\README.md to README.txt to avoid duplicate README.md in project
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.

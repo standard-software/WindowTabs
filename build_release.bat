@@ -92,9 +92,9 @@ if errorlevel 1 (
     echo ERROR: Failed to copy version.md
     exit /b 1
 )
-copy /Y "WtSetup\README.md" "%OUTPUT_DIR%\" >nul
+copy /Y "WtSetup\README.txt" "%OUTPUT_DIR%\" >nul
 if errorlevel 1 (
-    echo ERROR: Failed to copy README.md
+    echo ERROR: Failed to copy README.txt
     exit /b 1
 )
 
