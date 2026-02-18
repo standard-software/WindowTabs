@@ -2283,15 +2283,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     text = String.Format(Localization.getString("SnapPercent"), pct)
                     image = None
                     items = List2([
-                        CmiRegular({ text = Localization.getString("Left"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("Right"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("Up"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("Down"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
                         CmiSeparator
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
                     ])
                     flags = List2()
                 })
