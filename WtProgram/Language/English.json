@@ -98,13 +98,15 @@
   "Down": "Down",
   "Main": "Main",
 
+  "DockingTabGroupToGroup": "Link to another group",
+
   "CloseTab": "Close tab",
-  "CloseTabsToTheRightFormat": "Close tabs to the right ({0} {1})",
-  "CloseTabsToTheLeftFormat": "Close tabs to the left ({0} {1})",
+  "CloseTabsToTheRightFormat": "Close {0} tabs to the right",
+  "CloseTabsToTheLeftFormat": "Close {0} tabs to the left",
   "TabSingular": "Tab",
   "TabPlural": "Tabs",
-  "CloseOtherTabs": "Close other tabs in this group",
-  "CloseAllTabs": "Close all tabs in this group",
+  "CloseOtherTabs": "Close other tabs",
+  "CloseAllTabs": "Close all tabs",
 
   "TabWidthChange": "Tab Width",
   "IconOnly": "Icon Only",
@@ -118,13 +120,11 @@
   "DetachAndMovePosTab": "Detach this tab and reposition",
   "DetachTabSamePosition": "Same position",
   "DetachAndDockingTabToGroup": "Detach this tab and link to another group",
-  "SplitRightTabsToPositionFormat": "Split right side ({0} tabs) and reposition",
-  "SplitRightTabsToGroupFormat": "Split right side ({0} tabs) and link to group",
-  "SplitLeftTabsToPositionFormat": "Split left side ({0} tabs) and reposition",
-  "SplitLeftTabsToGroupFormat": "Split left side ({0} tabs) and link to group",
+  "SplitRightTabsToPositionFormat": "Split right {0} tabs and reposition",
+  "SplitRightTabsToGroupFormat": "Split right {0} tabs and link to group",
+  "SplitLeftTabsToPositionFormat": "Split left {0} tabs and reposition",
+  "SplitLeftTabsToGroupFormat": "Split left {0} tabs and link to group",
   "MoveTabGroupFormat": "{0} {1}: {2}",
-  "MovePosTabGroup": "Reposition this tab group",
-  "DockingTabGroupToGroup": "Link this tab group to another group",
 
   "SettingsMenu": "Settings...",
 

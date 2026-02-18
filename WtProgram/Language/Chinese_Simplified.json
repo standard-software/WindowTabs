@@ -98,13 +98,15 @@
   "Down": "下",
   "Main": "主",
 
+  "DockingTabGroupToGroup": "连接到其他组",
+
   "CloseTab": "关闭此标签页",
-  "CloseTabsToTheRightFormat": "关闭右侧标签页({0}个)",
-  "CloseTabsToTheLeftFormat": "关闭左侧标签页({0}个)",
+  "CloseTabsToTheRightFormat": "关闭右侧{0}个标签页",
+  "CloseTabsToTheLeftFormat": "关闭左侧{0}个标签页",
   "TabSingular": "标签页",
   "TabPlural": "标签页",
-  "CloseOtherTabs": "关闭此组中的其他标签页",
-  "CloseAllTabs": "关闭此组中的所有标签页",
+  "CloseOtherTabs": "关闭其他标签页",
+  "CloseAllTabs": "关闭所有标签页",
 
   "TabWidthChange": "标签页宽度",
   "IconOnly": "仅图标",
@@ -118,13 +120,11 @@
   "DetachAndMovePosTab": "分离此标签页并移动",
   "DetachTabSamePosition": "在原位置分离",
   "DetachAndDockingTabToGroup": "分离此标签页并连接到其他组",
-  "SplitRightTabsToPositionFormat": "拆分右侧({0}个标签页)并移动",
-  "SplitRightTabsToGroupFormat": "拆分右侧({0}个标签页)并连接到其他组",
-  "SplitLeftTabsToPositionFormat": "拆分左侧({0}个标签页)并移动",
-  "SplitLeftTabsToGroupFormat": "拆分左侧({0}个标签页)并连接到其他组",
+  "SplitRightTabsToPositionFormat": "右侧{0}个标签页分割并移动",
+  "SplitRightTabsToGroupFormat": "右侧{0}个标签页分割并连接到其他组",
+  "SplitLeftTabsToPositionFormat": "左侧{0}个标签页分割并移动",
+  "SplitLeftTabsToGroupFormat": "左侧{0}个标签页分割并连接到其他组",
   "MoveTabGroupFormat": "{0}{1}: {2}",
-  "MovePosTabGroup": "移动此标签组位置",
-  "DockingTabGroupToGroup": "将此标签组连接到其他组",
 
   "SettingsMenu": "设置...",
 

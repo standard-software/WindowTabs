@@ -98,13 +98,15 @@
   "Down": "下",
   "Main": "メイン",
 
+  "DockingTabGroupToGroup": "他のグループにくっつける",
+
   "CloseTab": "このタブ閉じるで",
-  "CloseTabsToTheRightFormat": "右のタブ閉じるで({0}タブ)",
-  "CloseTabsToTheLeftFormat": "左のタブ閉じるで({0}タブ)",
+  "CloseTabsToTheRightFormat": "右の{0}タブ閉じるで",
+  "CloseTabsToTheLeftFormat": "左の{0}タブ閉じるで",
   "TabSingular": "タブ",
   "TabPlural": "タブ",
-  "CloseOtherTabs": "このグループの他のタブ閉じるで",
-  "CloseAllTabs": "このグループの全部のタブ閉じるで",
+  "CloseOtherTabs": "他のタブ閉じるで",
+  "CloseAllTabs": "全部のタブ閉じるで",
 
   "TabWidthChange": "タブ幅の変更やで",
   "IconOnly": "アイコンだけ",
@@ -118,13 +120,11 @@
   "DetachAndMovePosTab": "このタブ分離して移動",
   "DetachTabSamePosition": "同じ位置",
   "DetachAndDockingTabToGroup": "このタブ分離して他のグループにくっつける",
-  "SplitRightTabsToPositionFormat": "このタブから右側({0}タブ)を分割して位置移動するで",
-  "SplitRightTabsToGroupFormat": "このタブから右側({0}タブ)を分割して他のグループにくっつけるで",
-  "SplitLeftTabsToPositionFormat": "このタブから左側({0}タブ)を分割して位置移動するで",
-  "SplitLeftTabsToGroupFormat": "このタブから左側({0}タブ)を分割して他のグループにくっつけるで",
+  "SplitRightTabsToPositionFormat": "右側{0}タブを分割して位置移動するで",
+  "SplitRightTabsToGroupFormat": "右側{0}タブを分割して他のグループにくっつけるで",
+  "SplitLeftTabsToPositionFormat": "左側{0}タブを分割して位置移動するで",
+  "SplitLeftTabsToGroupFormat": "左側{0}タブを分割して他のグループにくっつけるで",
   "MoveTabGroupFormat": "{0}{1}: {2}",
-  "MovePosTabGroup": "このタブグループを位置移動",
-  "DockingTabGroupToGroup": "このタブグループ他のグループにくっつける",
 
   "SettingsMenu": "設定やで...",
 

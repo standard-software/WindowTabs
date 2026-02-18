@@ -98,13 +98,15 @@
   "Down": "下",
   "Main": "主",
 
+  "DockingTabGroupToGroup": "連結到其他群組",
+
   "CloseTab": "關閉此分頁",
-  "CloseTabsToTheRightFormat": "關閉右側分頁({0}個)",
-  "CloseTabsToTheLeftFormat": "關閉左側分頁({0}個)",
+  "CloseTabsToTheRightFormat": "關閉右側{0}個分頁",
+  "CloseTabsToTheLeftFormat": "關閉左側{0}個分頁",
   "TabSingular": "分頁",
   "TabPlural": "分頁",
-  "CloseOtherTabs": "關閉此群組中的其他分頁",
-  "CloseAllTabs": "關閉此群組中的所有分頁",
+  "CloseOtherTabs": "關閉其他分頁",
+  "CloseAllTabs": "關閉所有分頁",
 
   "TabWidthChange": "分頁寬度",
   "IconOnly": "僅圖示",
@@ -118,13 +120,11 @@
   "DetachAndMovePosTab": "分離此分頁並移動",
   "DetachTabSamePosition": "在原位置分離",
   "DetachAndDockingTabToGroup": "分離此分頁並連結到其他群組",
-  "SplitRightTabsToPositionFormat": "拆分右側({0}個分頁)並移動",
-  "SplitRightTabsToGroupFormat": "拆分右側({0}個分頁)並連結到其他群組",
-  "SplitLeftTabsToPositionFormat": "拆分左側({0}個分頁)並移動",
-  "SplitLeftTabsToGroupFormat": "拆分左側({0}個分頁)並連結到其他群組",
+  "SplitRightTabsToPositionFormat": "右側{0}個分頁分割並移動",
+  "SplitRightTabsToGroupFormat": "右側{0}個分頁分割並連結到其他群組",
+  "SplitLeftTabsToPositionFormat": "左側{0}個分頁分割並移動",
+  "SplitLeftTabsToGroupFormat": "左側{0}個分頁分割並連結到其他群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
-  "MovePosTabGroup": "移動此分頁群組位置",
-  "DockingTabGroupToGroup": "將此分頁群組連結到其他群組",
 
   "SettingsMenu": "設定...",
 
