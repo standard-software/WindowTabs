@@ -1,17 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.12_next_3
-- Combine MoveEdge and Snap menu items into split items with left/right click detection
-  - Left click = move to edge, right click = snap
-  - Split hover effect on top-level menu items via BitBlt compositing
-- Add "Combined Move and Snap Menu" checkbox to Appearance settings
-  - Default ON: combined split items with left/right click detection and hover effect
-  - OFF: separate Move and Snap items (classic layout), timer-based drawing disabled
-- Support nested JSON objects in language files (dot-separated key flattening)
-  - MoveSnapMenuCombined sub-keys used for combined mode menu labels
-- Use format strings ({0}) for "New Tab" and "Close Tab" menu items
-
-## version ss_jp_2026.02.12_next_1
+## version ss_jp_2026.02.19
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
   - Backward compatible: reads settings case-insensitively so old camelCase files still work
 - Keep tab strip visible during window move/resize
@@ -19,15 +8,20 @@
   - Background windows are still hidden off-screen during move as before
 - Slightly reduce internal overhead when closing tabs
 - Rename WtSetup\README.md to README.txt to avoid duplicate README.md in project
-- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (active option shows checkmark)
+- Major restructuring of context menu layout
+  - Place move items at top level
+  - Move close tab items into a submenu
+  - Replace tab width toggle menu item with "Tab Width" submenu
+- Combine move and snap menu items into split items with left/right click detection
+  - Left click = move to edge, right click = snap
+  - Add "Combined Move and Snap Menu" checkbox to Appearance settings
+    - Default ON: split items with left/right click detection and hover effect
+    - OFF: separate move and snap items (classic layout)
+- Use format strings ({0}) for "New Tab" and "Close Tab" menu items
 - Improve tab name editing
   - Replace rename/restore items with "Tab Name" submenu (reset is always shown but disabled when not renamed)
   - Stop rendering renamed tab names in italic font
   - Confirm rename when input field loses focus (instead of canceling)
-- Restructure right-click context menu layout
-  - Add left/right move and snap as top-level items, group others into "Reposition Other" submenu
-  - Reorder sections and swap left/right order in close and split tabs
-- Add corner snap (top-left, top-right, bottom-left, bottom-right) to snap percentage submenus
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
