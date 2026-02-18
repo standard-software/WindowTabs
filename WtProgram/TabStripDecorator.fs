@@ -699,6 +699,30 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let x = workArea.Left
             let y = workArea.Bottom - newHeight
             (x, y, newWidth, newHeight)
+        | "snaptopleft" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Left
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snaptopright" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Right - newWidth
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snapbottomleft" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Left
+            let y = workArea.Bottom - newHeight
+            (x, y, newWidth, newHeight)
+        | "snapbottomright" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Right - newWidth
+            let y = workArea.Bottom - newHeight
+            (x, y, newWidth, newHeight)
         | _ ->
             (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
 
@@ -2259,10 +2283,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     text = String.Format(Localization.getString("SnapPercent"), pct)
                     image = None
                     items = List2([
-                        CmiRegular({ text = Localization.getString("Right"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
                         CmiRegular({ text = Localization.getString("Left"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("Right"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
                         CmiRegular({ text = Localization.getString("Up"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
                         CmiRegular({ text = Localization.getString("Down"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
+                        CmiSeparator
+                        CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
                     ])
                     flags = List2()
                 })

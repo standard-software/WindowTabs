@@ -16,6 +16,7 @@
 - Restructure right-click context menu layout
   - Add left/right move and snap as top-level items, group others into "Reposition Other" submenu
   - Reorder sections and swap left/right order in close and split tabs
+- Add corner snap (top-left, top-right, bottom-left, bottom-right) to snap percentage submenus
 
 ## version ss_jp_2026.02.12
 - Re-release: The ZIP in version ss_jp_2026.02.11 contained a non-working exe.
