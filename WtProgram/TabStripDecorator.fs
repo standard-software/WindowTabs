@@ -3004,7 +3004,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             (fun s -> this.getScreenName(s)))
                     )
                     |> Array.toList
-                [Some(CmiSeparator)] @ screenSubMenus
+                [Some(CmiSeparator)] @ screenSubMenus @ [Some(CmiSeparator)]
             else
                 []
 
@@ -3014,8 +3014,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(moveSnapGroupLeftItem)
             Some(moveSnapGroupRightItem)
             moveTabGroupSubMenu
-            Some(moveTabGroupToGroupMenu)
         ] @ screenDisplayItems @ [
+            Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (
