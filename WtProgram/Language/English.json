@@ -72,10 +72,10 @@
 
   "NewTab": "New tab",
 
-  "MoveEdgeLeft": "Move Left Edge",
-  "MoveEdgeRight": "Move Right Edge",
-  "MoveEdgeTop": "Move Top Edge",
-  "MoveEdgeBottom": "Move Bottom Edge",
+  "MoveEdgeLeft": "Move Left",
+  "MoveEdgeRight": "Move Right",
+  "MoveEdgeTop": "Move Top",
+  "MoveEdgeBottom": "Move Bottom",
   "MoveCorner": "Corner",
   "MoveEdgeTopLeft": "Top Left",
   "MoveEdgeTopRight": "Top Right",
