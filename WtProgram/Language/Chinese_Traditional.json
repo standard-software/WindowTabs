@@ -71,7 +71,7 @@
   "Diagnostics": "診斷",
   "Reset": "重設",
 
-  "NewTab": "新增分頁",
+  "NewTab": "新增分頁 : 啟動{0}",
 
   "MoveEdgeLeft": "移動 左端",
   "MoveEdgeRight": "移動 右端",
@@ -115,7 +115,7 @@
 
   "DockingTabGroupToGroup": "連結到其他群組",
 
-  "CloseTab": "關閉此分頁",
+  "CloseTab": "關閉此分頁 : {0}",
   "CloseTabsToTheRightFormat": "關閉右側{0}個分頁",
   "CloseTabsToTheLeftFormat": "關閉左側{0}個分頁",
   "TabSingular": "分頁",

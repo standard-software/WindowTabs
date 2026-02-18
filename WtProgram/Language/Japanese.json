@@ -71,7 +71,7 @@
   "Diagnostics": "診断",
   "Reset": "リセット",
 
-  "NewTab": "新しいタブ",
+  "NewTab": "新しいタブ : {0}起動",
 
   "MoveEdgeLeft": "移動 左端",
   "MoveEdgeRight": "移動 右端",
@@ -115,7 +115,7 @@
 
   "DockingTabGroupToGroup": "他のグループへ連結",
 
-  "CloseTab": "このタブを閉じる",
+  "CloseTab": "このタブを閉じる : {0}",
   "CloseTabsToTheRightFormat": "右側の{0}タブを閉じる",
   "CloseTabsToTheLeftFormat": "左側の{0}タブを閉じる",
   "TabSingular": "タブ",

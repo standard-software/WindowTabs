@@ -2532,8 +2532,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 None
 
         let newWindowItem =
+            let exeName = System.IO.Path.GetFileName(processPath)
             CmiRegular({
-                text = Localization.getString("NewTab")
+                text = String.Format(Localization.getString("NewTab"), exeName)
                 flags = List2()
                 image = None
                 click = fun() ->
@@ -2633,7 +2634,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 else
                     tabText.Substring(0, 9) + "..."
             CmiRegular({
-                text = sprintf "%s(%s)" (Localization.getString("CloseTab")) displayText
+                text = String.Format(Localization.getString("CloseTab"), displayText)
                 image = None
                 click = fun() -> this.onCloseWindow hwnd
                 flags = List2()

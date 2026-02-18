@@ -71,7 +71,7 @@
   "Diagnostics": "诊断",
   "Reset": "重置",
 
-  "NewTab": "新建标签页",
+  "NewTab": "新建标签页 : 启动{0}",
 
   "MoveEdgeLeft": "移动 左端",
   "MoveEdgeRight": "移动 右端",
@@ -115,7 +115,7 @@
 
   "DockingTabGroupToGroup": "连接到其他组",
 
-  "CloseTab": "关闭此标签页",
+  "CloseTab": "关闭此标签页 : {0}",
   "CloseTabsToTheRightFormat": "关闭右侧{0}个标签页",
   "CloseTabsToTheLeftFormat": "关闭左侧{0}个标签页",
   "TabSingular": "标签页",

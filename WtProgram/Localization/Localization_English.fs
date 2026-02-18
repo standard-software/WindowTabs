@@ -74,7 +74,7 @@ module Localization_English =
         ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")
 
-        ("NewTab", "New tab")
+        ("NewTab", "New tab : execute {0}")
 
         ("MoveEdgeLeft", "Move Left Edge")
         ("MoveEdgeRight", "Move Right Edge")
@@ -116,7 +116,7 @@ module Localization_English =
 
         ("DockingTabGroupToGroup", "Link to another group")
 
-        ("CloseTab", "Close tab")
+        ("CloseTab", "Close tab : {0}")
         ("CloseTabsToTheRightFormat", "Close {0} tabs to the right")
         ("CloseTabsToTheLeftFormat", "Close {0} tabs to the left")
         ("TabSingular", "Tab")

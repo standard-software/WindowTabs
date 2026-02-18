@@ -9,6 +9,7 @@
   - OFF: separate Move and Snap items (classic layout), timer-based drawing disabled
 - Support nested JSON objects in language files (dot-separated key flattening)
   - MoveSnapMenuCombined sub-keys used for combined mode menu labels
+- Use format strings ({0}) for "New Tab" and "Close Tab" menu items
 
 ## version ss_jp_2026.02.12_next_1
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
