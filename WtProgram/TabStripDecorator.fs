@@ -2392,14 +2392,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     CmiRegular({
                         text = Localization.getString("IconOnly")
                         image = None
-                        flags = if group.isIconOnly then List2([MenuFlags.MF_GRAYED]) else List2()
+                        flags = if group.isIconOnly then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
                             group.isIconOnly <- true
                     })
                     CmiRegular({
                         text = Localization.getString("IconAndText")
                         image = None
-                        flags = if not group.isIconOnly then List2([MenuFlags.MF_GRAYED]) else List2()
+                        flags = if not group.isIconOnly then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
                             group.isIconOnly <- false
                     })

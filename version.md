@@ -8,7 +8,7 @@
   - Background windows are still hidden off-screen during move as before
 - Slightly reduce internal overhead when closing tabs
 - Rename WtSetup\README.md to README.txt to avoid duplicate README.md in project
-- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (inactive option is disabled)
+- Replace tab width toggle menu item with "Tab Width" submenu containing "Icon Only" and "Icon and Text" options (active option shows checkmark)
 - Improve tab name editing
   - Replace rename/restore items with "Tab Name" submenu (reset is always shown but disabled when not renamed)
   - Stop rendering renamed tab names in italic font
