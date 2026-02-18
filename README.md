@@ -106,32 +106,33 @@ This feature remains unchanged from the original WindowTabs functionality.
 ### Tab Management
 
 - **Tab Context Menu**: Right-click on tabs to access various options
-  - New window
-  - Close tabs (this tab, tabs to the right, tabs to the left, other tabs, all tabs)
+  - New tab
   ---
-  - Make tabs wider / Make tabs narrower
-  - Rename tab
+  - Move Left / Move Right (with Snap)
+  - Move Other
+  ---
+  - Display Left / Display Main / Display Right
+  ---
+  - Link to another group
   ---
   - Tab Detach and Split (submenu)
-    - Detach this tab and reposition
-    - Detach this tab and link to another group
-    ---
-    - Split right / left side and reposition
-    - Split right / left side and link to group
   ---
-  - Reposition this tab group
-  - Link this tab group to another group
+  - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
+  ---
+  - Tab Width (wider / narrower)
+  - Tab Name (rename)
   ---
   - Settings
 
 ![Popup Menu](README_Image/PopupMenu.png)
+![Popup Menu](README_Image/PopupMenuCloseTab.png)
+
 
 ### Tab Detach and Split
 
 The "Tab Detach and Split" submenu provides powerful tab management options:
 
 ![Tab Detach and Split Move Position](README_Image/DetachTab.png)
-![Tab Detach and Split Snap Position](README_Image/SnapPosition.png)
 
 #### Reposition
 
@@ -270,6 +271,8 @@ Configure which programs should use tabs and auto-grouping behavior.
 Customize the visual appearance of tabs:
 - Height, width, and overlap settings (with separate reset buttons per control)
 - Distance from edge settings
+- Menu Dark Mode toggle
+- Combined Move and Snap Menu: displays Move and Snap as a single combined line in the context menu
 - Color settings for each tab state (Inactive, Mouse Over, Active, Flash)
   - Tab color, text color, and border color
 - Color theme with preset themes (Light, Light Mono, Dark, Dark Blue, Dark Mono, Dark Red Frame)
@@ -284,23 +287,10 @@ Customize the visual appearance of tabs:
 ### Behavior Tab
 
 Configure tab behavior:
-- Tab position (left/center/right)
-- Tab width (narrow/wide) default
-- Toggle tab width on active tab icon double-click
-- Hide tabs when positioned at bottom (never/always/double-click)
-- Delay before hiding tabs
-- Hide tabs when window is fullscreen
-- Auto-grouping settings
-- Hotkey settings (Ctrl+1...+9 for tab activation)
-- Mouse hover activation
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
 ### Workspace Tab
-
-This feature remains unchanged from the original WindowTabs functionality.
-
-### Diagnostics Tab
 
 This feature remains unchanged from the original WindowTabs functionality.
 
