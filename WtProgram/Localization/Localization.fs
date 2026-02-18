@@ -28,6 +28,7 @@ module Localization =
         Path.Combine(exeDir, "Language")
 
     // Load language strings from JSON file (supports JSONC format with comments)
+    // Nested objects are flattened with dot-separated keys (e.g., "Parent.Child")
     let loadLanguageFromJson(langName: string) =
         try
             let jsonPath = Path.Combine(getLanguageFolder(), langName + ".json")
@@ -35,8 +36,15 @@ module Localization =
                 let json = File.ReadAllText(jsonPath)
                 let jobj = parseJsoncObject(json)
                 let dict = Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                for prop in jobj.Properties() do
-                    dict.[prop.Name] <- prop.Value.ToString()
+                let rec flattenProps (prefix: string) (obj: JObject) =
+                    for prop in obj.Properties() do
+                        let key = if prefix = "" then prop.Name else prefix + "." + prop.Name
+                        match prop.Value.Type with
+                        | JTokenType.Object ->
+                            flattenProps key (prop.Value :?> JObject)
+                        | _ ->
+                            dict.[key] <- prop.Value.ToString()
+                flattenProps "" jobj
                 Some(dict :> IDictionary<string, string>)
             else
                 None

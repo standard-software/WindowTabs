@@ -112,7 +112,7 @@ type AppearanceView() as this =
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 1  // int props + dark mode (theme moved to colorPanel)
+    let upperRowCount = intProperties.length + 2  // int props + dark mode + split menu (theme moved to colorPanel)
     let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
@@ -225,6 +225,7 @@ type AppearanceView() as this =
     // Row indices for each section
     // Upper panel: int properties -> dark mode
     let darkModeRow = intProperties.length
+    let splitMenuRow = darkModeRow + 1
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -308,6 +309,26 @@ type AppearanceView() as this =
         checkbox.Margin <- Padding(0,5,0,5)
         upperPanel.Controls.Add(checkbox)
         upperPanel.SetRow(checkbox, darkModeRow)
+        upperPanel.SetColumn(checkbox, 1)
+        checkbox
+
+    // Create split menu checkbox at the row below dark mode
+    let splitMenuLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("EnableSplitMoveSnapMenu")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Margin <- Padding(0,8,0,5)
+        upperPanel.Controls.Add(label)
+        upperPanel.SetRow(label, splitMenuRow)
+        upperPanel.SetColumn(label, 0)
+        label
+
+    let splitMenuCheckbox =
+        let checkbox = settingsCheckboxBool "EnableSplitMoveSnapMenu" true
+        checkbox.Margin <- Padding(0,5,0,5)
+        upperPanel.Controls.Add(checkbox)
+        upperPanel.SetRow(checkbox, splitMenuRow)
         upperPanel.SetColumn(checkbox, 1)
         checkbox
 

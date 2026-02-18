@@ -4,6 +4,11 @@
 - Combine MoveEdge and Snap menu items into split items with left/right click detection
   - Left click = move to edge, right click = snap
   - Split hover effect on top-level menu items via BitBlt compositing
+- Add "Combined Move and Snap Menu" checkbox to Appearance settings
+  - Default ON: combined split items with left/right click detection and hover effect
+  - OFF: separate Move and Snap items (classic layout), timer-based drawing disabled
+- Support nested JSON objects in language files (dot-separated key flattening)
+  - MoveSnapMenuCombined sub-keys used for combined mode menu labels
 
 ## version ss_jp_2026.02.12_next_1
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys

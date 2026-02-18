@@ -141,6 +141,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | Some(value) -> value
                         | None -> false
                     with | _ -> false
+                let splitMenuEnabled =
+                    try
+                        let json = Services.settings.root
+                        match json.getBool("enableSplitMoveSnapMenu") with
+                        | Some(value) -> value
+                        | None -> false
+                    with | _ -> false
                 // Split hover effect: per-item bitmap caches for split menu items (\t items)
                 // Key = "{menuHandle}_{itemIndex}" to avoid collisions across different menus
                 let splitNormalDC = System.Collections.Generic.Dictionary<string, IntPtr>()
@@ -154,6 +161,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let splitWasOver = System.Collections.Generic.Dictionary<string, bool>()
                 let splitTimer = new System.Windows.Forms.Timer(Interval = 16)
                 Win32Menu.onMenuCreated <- Some(fun hMenu ->
+                    if not splitMenuEnabled then () else
                     splitTimer.Tick.Add(fun _ ->
                         let mutable cursorPt = POINT()
                         WinUserApi.GetCursorPos(&cursorPt) |> ignore
@@ -268,7 +276,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                     splitTimer.Start()
                 )
-                Win32Menu.show group.hwnd ptScreen (this.contextMenu(hwnd)) darkModeEnabled
+                Win32Menu.show group.hwnd ptScreen (this.contextMenu(hwnd, splitMenuEnabled)) darkModeEnabled
                 splitTimer.Stop()
                 splitTimer.Dispose()
                 // Clean up split hover cached bitmaps
@@ -2413,7 +2421,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
-    member private  this.contextMenu(hwnd) =
+    member private  this.contextMenu(hwnd, splitMenuEnabled: bool) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
 
@@ -2436,18 +2444,39 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     ])
                     flags = List2()
                 })
+            // Key prefix for combined mode labels
+            let c key = if splitMenuEnabled then "MoveSnapMenuCombined." + key else key
             let leftRightItems =
                 if includeLeftRight then
-                    [
-                        CmiRegular({ text = Localization.getString("MoveEdgeLeft") + "\t" + Localization.getString("SnapLeft"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapleft") else moveFn(Some "left")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeRight") + "\t" + Localization.getString("SnapRight"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapright") else moveFn(Some "right")); flags = List2() })
-                    ]
+                    if splitMenuEnabled then
+                        [
+                            CmiRegular({ text = Localization.getString(c "MoveEdgeLeft") + "\t" + Localization.getString(c "SnapLeft"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapleft") else moveFn(Some "left")); flags = List2() })
+                            CmiRegular({ text = Localization.getString(c "MoveEdgeRight") + "\t" + Localization.getString(c "SnapRight"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapright") else moveFn(Some "right")); flags = List2() })
+                        ]
+                    else
+                        [
+                            CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
+                            CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> snapFn("snapleft")); flags = List2() })
+                            CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
+                            CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
+                        ]
                 else []
             let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
-            leftRightItems @ separatorIfLeftRight @
+            let topBottomItems =
+                if splitMenuEnabled then
+                    [
+                        CmiRegular({ text = Localization.getString(c "MoveEdgeTop") + "\t" + Localization.getString(c "SnapTop"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snaptop") else moveFn(Some "top")); flags = List2() })
+                        CmiRegular({ text = Localization.getString(c "MoveEdgeBottom") + "\t" + Localization.getString(c "SnapBottom"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapbottom") else moveFn(Some "bottom")); flags = List2() })
+                    ]
+                else
+                    [
+                        CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                    ]
+            leftRightItems @ separatorIfLeftRight @ topBottomItems @
             [
-                CmiRegular({ text = Localization.getString("MoveEdgeTop") + "\t" + Localization.getString("SnapTop"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snaptop") else moveFn(Some "top")); flags = List2() })
-                CmiRegular({ text = Localization.getString("MoveEdgeBottom") + "\t" + Localization.getString("SnapBottom"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapbottom") else moveFn(Some "bottom")); flags = List2() })
                 CmiSeparator
                 CmiPopUp({
                     text = Localization.getString("MoveCorner")
@@ -2822,25 +2851,55 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
             }))
 
-        // 2 top-level split items: left half = move, right half = snap
-        let moveSnapGroupLeftItem =
-            CmiRegular({
-                text = Localization.getString("MoveEdgeLeft") + "\t" + Localization.getString("SnapLeft")
-                image = None
-                click = (fun() ->
-                    if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapleft")
-                    else this.moveTabGroupToPosition(hwnd, Some "left"))
-                flags = List2()
-            })
-        let moveSnapGroupRightItem =
-            CmiRegular({
-                text = Localization.getString("MoveEdgeRight") + "\t" + Localization.getString("SnapRight")
-                image = None
-                click = (fun() ->
-                    if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapright")
-                    else this.moveTabGroupToPosition(hwnd, Some "right"))
-                flags = List2()
-            })
+        // Top-level move/snap items: split mode or separate mode
+        let topLevelMoveSnapItems =
+            let c key = if splitMenuEnabled then "MoveSnapMenuCombined." + key else key
+            if splitMenuEnabled then
+                [
+                    CmiRegular({
+                        text = Localization.getString(c "MoveEdgeLeft") + "\t" + Localization.getString(c "SnapLeft")
+                        image = None
+                        click = (fun() ->
+                            if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapleft")
+                            else this.moveTabGroupToPosition(hwnd, Some "left"))
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString(c "MoveEdgeRight") + "\t" + Localization.getString(c "SnapRight")
+                        image = None
+                        click = (fun() ->
+                            if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapright")
+                            else this.moveTabGroupToPosition(hwnd, Some "right"))
+                        flags = List2()
+                    })
+                ]
+            else
+                [
+                    CmiRegular({
+                        text = Localization.getString("MoveEdgeLeft")
+                        image = None
+                        click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "left"))
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapLeft")
+                        image = None
+                        click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapleft"))
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("MoveEdgeRight")
+                        image = None
+                        click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "right"))
+                        flags = List2()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SnapRight")
+                        image = None
+                        click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapright"))
+                        flags = List2()
+                    })
+                ]
 
         let moveTabGroupSubMenu =
             let baseMenuItems =
@@ -3011,8 +3070,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         List2([
             Some(newWindowItem)
             Some(CmiSeparator)
-            Some(moveSnapGroupLeftItem)
-            Some(moveSnapGroupRightItem)
+        ] @ (topLevelMoveSnapItems |> List.map Some) @ [
             moveTabGroupSubMenu
         ] @ screenDisplayItems @ [
             Some(moveTabGroupToGroupMenu)
