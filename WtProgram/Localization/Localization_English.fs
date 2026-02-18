@@ -116,6 +116,7 @@ module Localization_English =
 
         ("DockingTabGroupToGroup", "Link to another group")
 
+        ("CloseTabMenu", "Close Tab")
         ("CloseTab", "Close tab : {0}")
         ("CloseTabsToTheRightFormat", "Close {0} tabs to the right")
         ("CloseTabsToTheLeftFormat", "Close {0} tabs to the left")

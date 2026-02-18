@@ -115,6 +115,7 @@
 
   "DockingTabGroupToGroup": "連結到其他群組",
 
+  "CloseTabMenu": "關閉分頁",
   "CloseTab": "關閉此分頁 : {0}",
   "CloseTabsToTheRightFormat": "關閉右側{0}個分頁",
   "CloseTabsToTheLeftFormat": "關閉左側{0}個分頁",

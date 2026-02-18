@@ -3392,11 +3392,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     }))
             )
             Some(CmiSeparator)
-            Some(closeTabItem)
-            Some(closeLeftTabsItem)
-            Some(closeRightTabsItem)
-            Some(closeOtherTabsItem)
-            Some(closeAllTabsItem)
+            Some(CmiPopUp({
+                text = Localization.getString("CloseTabMenu")
+                image = None
+                items = List2([
+                    closeTabItem
+                    closeLeftTabsItem
+                    closeRightTabsItem
+                    closeOtherTabsItem
+                    closeAllTabsItem
+                ])
+                flags = List2()
+            }))
             Some(CmiSeparator)
             Some(tabWidthSubMenu)
             Some(tabNameSubMenu)

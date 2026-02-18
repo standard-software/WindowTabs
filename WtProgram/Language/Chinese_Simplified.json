@@ -115,6 +115,7 @@
 
   "DockingTabGroupToGroup": "连接到其他组",
 
+  "CloseTabMenu": "关闭标签页",
   "CloseTab": "关闭此标签页 : {0}",
   "CloseTabsToTheRightFormat": "关闭右侧{0}个标签页",
   "CloseTabsToTheLeftFormat": "关闭左侧{0}个标签页",

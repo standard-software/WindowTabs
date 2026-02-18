@@ -115,6 +115,7 @@
 
   "DockingTabGroupToGroup": "他のグループにくっつける",
 
+  "CloseTabMenu": "タブを閉じるで",
   "CloseTab": "このタブ閉じるで : {0}",
   "CloseTabsToTheRightFormat": "右の{0}タブ閉じるで",
   "CloseTabsToTheLeftFormat": "左の{0}タブ閉じるで",
