@@ -141,7 +141,148 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | Some(value) -> value
                         | None -> false
                     with | _ -> false
+                // Split hover effect: per-item bitmap caches for split menu items (\t items)
+                // Key = "{menuHandle}_{itemIndex}" to avoid collisions across different menus
+                let splitNormalDC = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitNormalBmp = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitNormalOldBmp = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitNormalCached = System.Collections.Generic.Dictionary<string, bool>()
+                let splitHoverDC = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitHoverBmp = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitHoverOldBmp = System.Collections.Generic.Dictionary<string, IntPtr>()
+                let splitHoverCached = System.Collections.Generic.Dictionary<string, bool>()
+                let splitWasOver = System.Collections.Generic.Dictionary<string, bool>()
+                let splitTimer = new System.Windows.Forms.Timer(Interval = 16)
+                Win32Menu.onMenuCreated <- Some(fun hMenu ->
+                    splitTimer.Tick.Add(fun _ ->
+                        let mutable cursorPt = POINT()
+                        WinUserApi.GetCursorPos(&cursorPt) |> ignore
+                        // Collect all menu handles: top-level + all submenus recursively
+                        let allMenus = System.Collections.Generic.List<IntPtr>()
+                        let rec collectMenus (m: IntPtr) =
+                            allMenus.Add(m)
+                            let cnt = WinUserApi.GetMenuItemCount(m)
+                            for j in 0..cnt-1 do
+                                let sub = WinUserApi.GetSubMenu(m, j)
+                                if sub <> IntPtr.Zero then
+                                    collectMenus sub
+                        collectMenus hMenu
+                        for menuH in allMenus do
+                            let count = WinUserApi.GetMenuItemCount(menuH)
+                            for i in 0..count-1 do
+                                let mii = MENUITEMINFO()
+                                mii.fMask <- MenuItemInfoMask.MIIM_STRING
+                                mii.cch <- 256
+                                mii.dwTypeData <- new string(' ', 256)
+                                WinUserApi.GetMenuItemInfo(menuH, i, true, mii) |> ignore
+                                if mii.dwTypeData <> null && mii.dwTypeData.Contains("\t") then
+                                    let mutable itemRect = RECT()
+                                    let gotRect = WinUserApi.GetMenuItemRect(group.hwnd, menuH, i, &itemRect)
+                                    if gotRect && itemRect.Right > itemRect.Left && itemRect.Bottom > itemRect.Top then
+                                        // Find the popup window for this menu item using WindowFromPoint
+                                        let centerPt = POINT(X = (itemRect.Left + itemRect.Right) / 2, Y = (itemRect.Top + itemRect.Bottom) / 2)
+                                        let menuWnd = WinUserApi.WindowFromPoint(centerPt)
+                                        // Verify this is a popup menu window (class "#32768") to avoid drawing on wrong windows
+                                        let isMenuPopup =
+                                            if menuWnd = IntPtr.Zero then false
+                                            else
+                                                let classNameBuf = System.Text.StringBuilder(32)
+                                                WinUserApi.GetClassName(menuWnd, classNameBuf, 32) |> ignore
+                                                classNameBuf.ToString() = "#32768"
+                                        if isMenuPopup then
+                                            let key = sprintf "%d_%d" (int64 menuH) i
+                                            let mutable clientPt = POINT(X = itemRect.Left, Y = itemRect.Top)
+                                            WinUserApi.ScreenToClient(menuWnd, &clientPt) |> ignore
+                                            let cL = clientPt.X
+                                            let cT = clientPt.Y
+                                            let itemW = itemRect.Right - itemRect.Left
+                                            let itemH = itemRect.Bottom - itemRect.Top
+                                            let isOver = cursorPt.Y >= itemRect.Top && cursorPt.Y <= itemRect.Bottom
+                                                         && cursorPt.X >= itemRect.Left && cursorPt.X <= itemRect.Right
+                                            let onLeft = isOver && cursorPt.X <= (itemRect.Left + itemRect.Right) / 2
+                                            let hdc = WinUserApi.GetDC(menuWnd)
+                                            if hdc <> IntPtr.Zero then
+                                                let dark = Win32Menu.isDarkMode
+                                                let divX = itemW / 2
+                                                let lineColor = if dark then Color.FromArgb(100, 100, 100) else Color.FromArgb(160, 160, 160)
+                                                let wasOver = if splitWasOver.ContainsKey(key) then splitWasOver.[key] else false
+                                                let nCached = if splitNormalCached.ContainsKey(key) then splitNormalCached.[key] else false
+                                                let hCached = if splitHoverCached.ContainsKey(key) then splitHoverCached.[key] else false
+                                                // Cache non-hovered state and bake divider line
+                                                if not nCached && not isOver then
+                                                    let memDC = WinGdiApi.CreateCompatibleDC(hdc)
+                                                    let memBmp = WinGdiApi.CreateCompatibleBitmap(hdc, itemW, itemH)
+                                                    let oldBmp = WinGdiApi.SelectObject(memDC, memBmp)
+                                                    WinGdiApi.BitBlt(memDC, 0, 0, itemW, itemH, hdc, cL, cT, RasterOperations.SRCCOPY) |> ignore
+                                                    use gNorm = Graphics.FromHdc(memDC)
+                                                    use penNorm = new Pen(lineColor, 1.0f)
+                                                    gNorm.DrawLine(penNorm, divX, 3, divX, itemH - 3)
+                                                    splitNormalDC.[key] <- memDC
+                                                    splitNormalBmp.[key] <- memBmp
+                                                    splitNormalOldBmp.[key] <- oldBmp
+                                                    splitNormalCached.[key] <- true
+                                                // Cache hovered state on hover entry and bake divider
+                                                if isOver && not wasOver && not hCached then
+                                                    let memDC = WinGdiApi.CreateCompatibleDC(hdc)
+                                                    let memBmp = WinGdiApi.CreateCompatibleBitmap(hdc, itemW, itemH)
+                                                    let oldBmp = WinGdiApi.SelectObject(memDC, memBmp)
+                                                    WinGdiApi.BitBlt(memDC, 0, 0, itemW, itemH, hdc, cL, cT, RasterOperations.SRCCOPY) |> ignore
+                                                    use gHov = Graphics.FromHdc(memDC)
+                                                    use penHov = new Pen(lineColor, 1.0f)
+                                                    gHov.DrawLine(penHov, divX, 3, divX, itemH - 3)
+                                                    splitHoverDC.[key] <- memDC
+                                                    splitHoverBmp.[key] <- memBmp
+                                                    splitHoverOldBmp.[key] <- oldBmp
+                                                    splitHoverCached.[key] <- true
+                                                splitWasOver.[key] <- isOver
+                                                // Re-read cached state after potential updates
+                                                let nCached = if splitNormalCached.ContainsKey(key) then splitNormalCached.[key] else false
+                                                let hCached = if splitHoverCached.ContainsKey(key) then splitHoverCached.[key] else false
+                                                // Composite phase: use double-buffer to prevent flicker
+                                                if isOver && nCached && hCached then
+                                                    // Composite to off-screen buffer, then blit in one operation
+                                                    let tmpDC = WinGdiApi.CreateCompatibleDC(hdc)
+                                                    let tmpBmp = WinGdiApi.CreateCompatibleBitmap(hdc, itemW, itemH)
+                                                    let tmpOld = WinGdiApi.SelectObject(tmpDC, tmpBmp)
+                                                    if onLeft then
+                                                        WinGdiApi.BitBlt(tmpDC, 0, 0, divX, itemH, splitHoverDC.[key], 0, 0, RasterOperations.SRCCOPY) |> ignore
+                                                        WinGdiApi.BitBlt(tmpDC, divX, 0, itemW - divX, itemH, splitNormalDC.[key], divX, 0, RasterOperations.SRCCOPY) |> ignore
+                                                    else
+                                                        WinGdiApi.BitBlt(tmpDC, 0, 0, divX, itemH, splitNormalDC.[key], 0, 0, RasterOperations.SRCCOPY) |> ignore
+                                                        WinGdiApi.BitBlt(tmpDC, divX, 0, itemW - divX, itemH, splitHoverDC.[key], divX, 0, RasterOperations.SRCCOPY) |> ignore
+                                                    // Single blit to screen
+                                                    WinGdiApi.BitBlt(hdc, cL, cT, itemW, itemH, tmpDC, 0, 0, RasterOperations.SRCCOPY) |> ignore
+                                                    WinGdiApi.SelectObject(tmpDC, tmpOld) |> ignore
+                                                    WinGdiApi.DeleteObject(tmpBmp) |> ignore
+                                                    WinGdiApi.DeleteDC(tmpDC) |> ignore
+                                                elif not isOver && nCached then
+                                                    // Restore full item to normal state (both halves)
+                                                    WinGdiApi.BitBlt(hdc, cL, cT, itemW, itemH, splitNormalDC.[key], 0, 0, RasterOperations.SRCCOPY) |> ignore
+                                                // Fallback divider when caches not yet captured
+                                                if not nCached && not hCached then
+                                                    let midX = cL + itemW / 2
+                                                    use g = Graphics.FromHdc(hdc)
+                                                    use pen = new Pen(lineColor, 1.0f)
+                                                    g.DrawLine(pen, midX, cT + 3, midX, cT + itemH - 3)
+                                                WinUserApi.ReleaseDC(menuWnd, hdc) |> ignore
+                    )
+                    splitTimer.Start()
+                )
                 Win32Menu.show group.hwnd ptScreen (this.contextMenu(hwnd)) darkModeEnabled
+                splitTimer.Stop()
+                splitTimer.Dispose()
+                // Clean up split hover cached bitmaps
+                for kvp in splitNormalCached do
+                    if kvp.Value then
+                        WinGdiApi.SelectObject(splitNormalDC.[kvp.Key], splitNormalOldBmp.[kvp.Key]) |> ignore
+                        WinGdiApi.DeleteObject(splitNormalBmp.[kvp.Key]) |> ignore
+                        WinGdiApi.DeleteDC(splitNormalDC.[kvp.Key]) |> ignore
+                for kvp in splitHoverCached do
+                    if kvp.Value then
+                        WinGdiApi.SelectObject(splitHoverDC.[kvp.Key], splitHoverOldBmp.[kvp.Key]) |> ignore
+                        WinGdiApi.DeleteObject(splitHoverBmp.[kvp.Key]) |> ignore
+                        WinGdiApi.DeleteDC(splitHoverDC.[kvp.Key]) |> ignore
+                Win32Menu.onMenuCreated <- None
                 group.bb.write("contextMenuVisible", false)
             | MouseDown, MouseLeft ->
                 capturedHwnd := Some(hwnd)
@@ -2298,19 +2439,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let leftRightItems =
                 if includeLeftRight then
                     [
-                        CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> snapFn("snapleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeLeft") + "\t" + Localization.getString("SnapLeft"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapleft") else moveFn(Some "left")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeRight") + "\t" + Localization.getString("SnapRight"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapright") else moveFn(Some "right")); flags = List2() })
                     ]
                 else []
             let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
             leftRightItems @ separatorIfLeftRight @
             [
-                CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
-                CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
-                CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
-                CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                CmiRegular({ text = Localization.getString("MoveEdgeTop") + "\t" + Localization.getString("SnapTop"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snaptop") else moveFn(Some "top")); flags = List2() })
+                CmiRegular({ text = Localization.getString("MoveEdgeBottom") + "\t" + Localization.getString("SnapBottom"); image = None; click = (fun() -> if Win32Menu.lastClickInRightHalf then snapFn("snapbottom") else moveFn(Some "bottom")); flags = List2() })
                 CmiSeparator
                 CmiPopUp({
                     text = Localization.getString("MoveCorner")
@@ -2685,15 +2822,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
             }))
 
-        // 4 top-level group position items (left move, left snap, right move, right snap)
-        let moveGroupLeftItem =
-            CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "left")); flags = List2() })
-        let snapGroupLeftItem =
-            CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapleft")); flags = List2() })
-        let moveGroupRightItem =
-            CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "right")); flags = List2() })
-        let snapGroupRightItem =
-            CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapright")); flags = List2() })
+        // 2 top-level split items: left half = move, right half = snap
+        let moveSnapGroupLeftItem =
+            CmiRegular({
+                text = Localization.getString("MoveEdgeLeft") + "\t" + Localization.getString("SnapLeft")
+                image = None
+                click = (fun() ->
+                    if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapleft")
+                    else this.moveTabGroupToPosition(hwnd, Some "left"))
+                flags = List2()
+            })
+        let moveSnapGroupRightItem =
+            CmiRegular({
+                text = Localization.getString("MoveEdgeRight") + "\t" + Localization.getString("SnapRight")
+                image = None
+                click = (fun() ->
+                    if Win32Menu.lastClickInRightHalf then this.moveTabGroupToSnap(hwnd, "snapright")
+                    else this.moveTabGroupToPosition(hwnd, Some "right"))
+                flags = List2()
+            })
 
         let moveTabGroupSubMenu =
             let baseMenuItems =
@@ -2864,10 +3011,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         List2([
             Some(newWindowItem)
             Some(CmiSeparator)
-            Some(moveGroupLeftItem)
-            Some(snapGroupLeftItem)
-            Some(moveGroupRightItem)
-            Some(snapGroupRightItem)
+            Some(moveSnapGroupLeftItem)
+            Some(moveSnapGroupRightItem)
             moveTabGroupSubMenu
             Some(moveTabGroupToGroupMenu)
         ] @ screenDisplayItems @ [

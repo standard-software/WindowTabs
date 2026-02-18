@@ -3026,6 +3026,10 @@ namespace Bemo
 		public static extern int GetMenuItemID(IntPtr hMenu, int nPos);
 		[DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
 		public static extern int GetMenuItemCount(IntPtr hMenu);
+		[DllImport("user32.dll", ExactSpelling = true)]
+		public static extern bool GetMenuItemRect(IntPtr hWnd, IntPtr hMenu, int uItem, ref RECT lprcItem);
+		[DllImport("user32.dll", ExactSpelling = true)]
+		public static extern IntPtr GetSubMenu(IntPtr hMenu, int nPos);
 		[DllImport("user32.dll", CharSet = CharSet.Auto)]
 		public static extern IntPtr CreateAcceleratorTable(ref ACCEL accel, int cCount);
 		[DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
@@ -3042,6 +3046,8 @@ namespace Bemo
         public static extern IntPtr FindWindow(String lpClassName, IntPtr lpWindowName);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr FindWindow(IntPtr lpClassName, String lpWindowName);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, String lpszClass, IntPtr lpszWindow);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool GetGUIThreadInfo(int idThread, out GUITHREADINFO lpgui);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
