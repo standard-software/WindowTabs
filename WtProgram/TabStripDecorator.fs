@@ -2667,37 +2667,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapright")); flags = List2() })
 
         let moveTabGroupSubMenu =
-            let allScreens = this.getAllScreensSorted()
-            let currentScreen = this.getCurrentScreenForWindow(hwnd)
-
             let baseMenuItems =
                 buildPositionMenuItems false
                     (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
                     (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
                     (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
 
-            let menuItems =
-                if allScreens.Length > 1 then
-                    let screenSubMenus =
-                        allScreens
-                        |> Array.map (fun screen ->
-                            let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen true
-                                (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
-                                (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
-                                (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
-                                (fun s -> this.getScreenName(s))
-                        )
-                        |> Array.toList
-
-                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
-                else
-                    baseMenuItems
-
             Some(CmiPopUp({
                 text = Localization.getString("MovePositionOther")
                 image = None
-                items = List2(menuItems)
+                items = List2(baseMenuItems)
                 flags = List2()
             }))
 
@@ -2834,6 +2813,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     flags = List2([MenuFlags.MF_GRAYED])
                 })
 
+        let screenDisplayItems =
+            let allScreens = this.getAllScreensSorted()
+            let currentScreen = this.getCurrentScreenForWindow(hwnd)
+            if allScreens.Length > 1 then
+                let screenSubMenus =
+                    allScreens
+                    |> Array.map (fun screen ->
+                        let isCurrentScreen = screen.Equals(currentScreen)
+                        Some(buildScreenPositionSubMenu screen isCurrentScreen true
+                            (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
+                            (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
+                            (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
+                            (fun s -> this.getScreenName(s)))
+                    )
+                    |> Array.toList
+                [Some(CmiSeparator)] @ screenSubMenus
+            else
+                []
+
         List2([
             Some(newWindowItem)
             Some(CmiSeparator)
@@ -2843,6 +2841,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(snapGroupRightItem)
             moveTabGroupSubMenu
             Some(moveTabGroupToGroupMenu)
+        ] @ screenDisplayItems @ [
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (
