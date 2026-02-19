@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.19_next_1
+
 ## version ss_jp_2026.02.19
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys
   - Backward compatible: reads settings case-insensitively so old camelCase files still work
