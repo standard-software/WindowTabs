@@ -166,7 +166,7 @@
 
       <CustomAction Id="BackupLanguageFolder"
                     Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -ExecutionPolicy Bypass -Command &quot;$p=(Get-ItemProperty -Path 'HKCU:\Software\WindowTabs' -Name 'InstallPath' -EA SilentlyContinue).InstallPath; if($p -and (Test-Path (Join-Path $p 'Language'))){Rename-Item (Join-Path $p 'Language') ('Backup_Language_'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'))}&quot;"
+                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p -and (Test-Path($p+'\Language'))){ren($p+'\Language')('Backup_Language_'+(Get-Date -f yyyy-MM-dd_HH-mm-ss))}&quot;"
                     Execute="immediate"
                     Return="ignore" />
 
