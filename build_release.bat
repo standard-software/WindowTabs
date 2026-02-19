@@ -133,7 +133,9 @@ echo.
 :: Build MSI Installer
 :: ----------------------------------------
 echo [3/4] Building MSI Installer...
-%MSBUILD% WtSetup\WtSetup.wixproj /p:Configuration=Release /p:Platform=x86 /v:minimal
+:: BuildProjectReferences=false prevents WtSetup from rebuilding WtProgram
+:: (already built in step 1), avoiding file lock conflicts
+%MSBUILD% WtSetup\WtSetup.wixproj /p:Configuration=Release /p:Platform=x86 /p:BuildProjectReferences=false /v:minimal
 if errorlevel 1 (
     echo ERROR: WtSetup build failed
     echo.
