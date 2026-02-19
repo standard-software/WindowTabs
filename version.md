@@ -3,6 +3,7 @@
 ## version ss_jp_2026.02.19_next_1
 - Auto-grouping: new tabs are now placed next to existing tabs of the same exe instead of at the end
   - Works for both category-based and same-process auto-grouping
+- "New Tab" menu: new tab is now inserted to the right of the invoking tab instead of at the end
 
 ## version ss_jp_2026.02.19
 - Change settings JSON keys from camelCase to PascalCase for consistency with localization keys

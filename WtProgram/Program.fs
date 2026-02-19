@@ -80,8 +80,10 @@ type Program() as this =
     let inShutdown = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
-    // Track pending new window launches: process path -> (target group hwnd, timestamp)
-    let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * DateTime>())
+    // Track pending new window launches: process path -> (target group hwnd, invoker tab hwnd, timestamp)
+    let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * IntPtr * DateTime>())
+    // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
+    let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
@@ -148,9 +150,11 @@ type Program() as this =
     member this.tryNewWindowLaunch(window:Window) =
         let processPath = window.pid.processPath
         match pendingNewWindowLaunches.value.tryFind(processPath) with
-        | Some((groupHwnd, timestamp)) ->
+        | Some((groupHwnd, invokerHwnd, timestamp)) ->
             // Remove the pending launch (only match once)
             pendingNewWindowLaunches.map(fun m -> m.remove processPath)
+            // Store invoker hwnd for addWindowToGroup to use for positioning
+            lastNewTabInvokerHwnd.set(invokerHwnd)
             // Check if the launch is still recent (within 30 seconds)
             if (DateTime.Now - timestamp).TotalSeconds < 30.0 then
                 // Find the target group
@@ -269,8 +273,27 @@ type Program() as this =
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
         group.addWindow(hwnd, withDelay)
 
+        // Check if this is a "New Tab" launch - position after the invoking tab
+        let invokerHwnd = lastNewTabInvokerHwnd.value
+        if invokerHwnd <> IntPtr.Zero then
+            lastNewTabInvokerHwnd.set(IntPtr.Zero)
+            match group :> obj with
+            | :? GroupInfo as gi ->
+                gi.invokeGroup <| fun() ->
+                    let wg = gi.group
+                    let tabs = wg.ts.lorder
+                    let newTab = Tab(hwnd)
+                    let invokerTab = Tab(invokerHwnd)
+                    match tabs.tryFindIndex((=) invokerTab) with
+                    | Some(invokerIdx) ->
+                        match tabs.tryFindIndex((=) newTab) with
+                        | Some(curIdx) when curIdx <> invokerIdx + 1 ->
+                            wg.ts.moveTab(newTab, invokerIdx + 1)
+                        | _ -> ()
+                    | None -> ()
+            | _ -> ()
         // For auto-grouping, position new tab next to same-exe tabs
-        if not isNewGroup && not isDropped then
+        elif not isNewGroup && not isDropped then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -595,9 +618,9 @@ type Program() as this =
 
             this.refresh()
 
-        member x.launchNewWindow(groupHwnd)(processPath) =
+        member x.launchNewWindow(groupHwnd)(invokerHwnd)(processPath) =
             // Register the pending launch: new window with this process path should dock to this group
-            pendingNewWindowLaunches.map(fun m -> m.add processPath (groupHwnd, DateTime.Now))
+            pendingNewWindowLaunches.map(fun m -> m.add processPath (groupHwnd, invokerHwnd, DateTime.Now))
             // Start the process
             try
                 let psi = ProcessStartInfo()
