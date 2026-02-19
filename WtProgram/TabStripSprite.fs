@@ -29,19 +29,34 @@ type CloseButtonSprite = {
     with
     member private this.bgColor =
         match this.hover, this.captured with
-        | true, true -> Some(Color.DimGray)
-        | true, false -> Some(Color.DarkRed)
+        | true, true -> Some(Color.FromArgb(128, 128, 128))
+        | true, false -> Some(Color.FromArgb(90, 90, 90))
         | _ -> None
     member private this.penColor = if this.bgColor.IsSome then Color.White else Color.Gray
-    member private this.pen = new Pen(this.penColor, 2.0f)
+    member private this.pen = new Pen(this.penColor, 1.7f)
     interface ISprite with
-        member this.image = 
-            let crossOffest = 3
+        member this.image =
+            let crossOffset = 3
             let bitmap = Img(this.size)
             let g = bitmap.graphics
-            g.FillEllipse(new SolidBrush(this.bgColor.def(Color.FromArgb(1, 1, 1, 1))), Rect(Pt.empty, this.size).Rectangle)
-            g.DrawLine(this.pen, crossOffest, crossOffest, this.size.width - crossOffest, this.size.height - crossOffest)
-            g.DrawLine(this.pen, crossOffest, this.size.height - crossOffest, this.size.width - crossOffest, crossOffest)
+            g.SmoothingMode <- SmoothingMode.AntiAlias
+            // Draw rounded rectangle background
+            let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
+            let r = 3
+            let rect = Rectangle(0, 0, this.size.width - 1, this.size.height - 1)
+            use path = new GraphicsPath()
+            path.AddArc(rect.X, rect.Y, r * 2, r * 2, 180.0f, 90.0f)
+            path.AddArc(rect.Right - r * 2, rect.Y, r * 2, r * 2, 270.0f, 90.0f)
+            path.AddArc(rect.Right - r * 2, rect.Bottom - r * 2, r * 2, r * 2, 0.0f, 90.0f)
+            path.AddArc(rect.X, rect.Bottom - r * 2, r * 2, r * 2, 90.0f, 90.0f)
+            path.CloseFigure()
+            g.FillPath(new SolidBrush(bgColor), path)
+            // Draw X mark centered on rounded rect
+            let cx = float32(this.size.width - 1) / 2.0f
+            let cy = float32(this.size.height - 1) / 2.0f
+            let half = 4.0f
+            g.DrawLine(this.pen, cx - half, cy - half, cx + half, cy + half)
+            g.DrawLine(this.pen, cx - half, cy + half, cx + half, cy - half)
             bitmap
         member this.children = List2()
 
@@ -153,10 +168,10 @@ type TabSprite<'id> = {
         let y = (this.size.height - this.iconSize.height) / 2
         Pt(this.edgeWidth, y)
 
-    member private this.closeButtonSize = Sz(13, 13)
+    member private this.closeButtonSize = Sz(17, 17)
 
     member private this.closeButtonLocation =
-        let x = this.size.width - this.edgeWidth - this.closeButtonSize.width
+        let x = this.size.width - this.edgeWidth - this.closeButtonSize.width + 3
         let y = (this.size.height - this.closeButtonSize.height) / 2
         Pt(x, y)
 
@@ -165,8 +180,13 @@ type TabSprite<'id> = {
         Pt(x, 0)
 
     member this.textSize =
-        let closeButtonSpace = if this.hover.IsSome || this.captured.IsSome then this.closeButtonSize.width else 0
-        let width = this.size.width - this.textLocation.x - this.edgeWidth - closeButtonSpace
+        let width =
+            if this.hover.IsSome || this.captured.IsSome then
+                // When hovered, text area ends where close button starts
+                this.closeButtonLocation.x - this.textLocation.x
+            else
+                // When not hovered, extend text closer to right edge (fade handles visual boundary)
+                this.size.width - this.textLocation.x - 18
         let width = max 1 width
         Sz(width, this.size.height)
 
@@ -205,7 +225,7 @@ type TabSprite<'id> = {
                 // Draw fade-out gradient at right edge of text area (VSCode-style)
                 let textMeasured = g.MeasureString(text, font)
                 if textMeasured.Width > float32(bounds.size.width) then
-                    let fadeWidth = 20
+                    let fadeWidth = 15
                     let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
                     if fadeX > this.textLocation.x then
                         let bgColor = this.tabBgColor
