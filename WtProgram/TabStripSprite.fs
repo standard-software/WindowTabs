@@ -106,18 +106,18 @@ type TabSprite<'id> = {
             bezPoints.[4],
             bezPoints.[5])
 
-    member private this.bgBrush =
-        let color = 
-            match this.displayInfo.bgColor with
-            | Some(color) -> color
-            | None ->
-                let active = this.appearance.tabActiveTabColor
-                let inactive = this.appearance.tabInactiveTabColor
-                let highlight = this.appearance.tabMouseOverTabColor
-                if this.isTop then active
-                elif this.hover.IsSome || this.captured.IsSome then highlight
-                else inactive
-        SolidBrush(color)
+    member private this.tabBgColor =
+        match this.displayInfo.bgColor with
+        | Some(color) -> color
+        | None ->
+            let active = this.appearance.tabActiveTabColor
+            let inactive = this.appearance.tabInactiveTabColor
+            let highlight = this.appearance.tabMouseOverTabColor
+            if this.isTop then active
+            elif this.hover.IsSome || this.captured.IsSome then highlight
+            else inactive
+
+    member private this.bgBrush = SolidBrush(this.tabBgColor)
 
     member private this.borderPen =
         let color =
@@ -165,7 +165,8 @@ type TabSprite<'id> = {
         Pt(x, 0)
 
     member this.textSize =
-        let width = this.size.width - this.textLocation.x - this.edgeWidth - this.closeButtonSize.width
+        let closeButtonSpace = if this.hover.IsSome || this.captured.IsSome then this.closeButtonSize.width else 0
+        let width = this.size.width - this.textLocation.x - this.edgeWidth - closeButtonSpace
         let width = max 1 width
         Sz(width, this.size.height)
 
@@ -197,15 +198,33 @@ type TabSprite<'id> = {
                 let format = new StringFormat()
                 do format.LineAlignment <- StringAlignment.Center
                 do format.Alignment <- StringAlignment.Near
-                do format.Trimming <- StringTrimming.EllipsisCharacter
+                do format.Trimming <- StringTrimming.None
                 do format.FormatFlags <- format.FormatFlags ||| StringFormatFlags.NoWrap
                 let bounds = Rect(this.textLocation, this.textSize)
                 do g.DrawString(text, font, brush, bounds.Rectangle.RectangleF, format)
+                // Draw fade-out gradient at right edge of text area (VSCode-style)
+                let textMeasured = g.MeasureString(text, font)
+                if textMeasured.Width > float32(bounds.size.width) then
+                    let fadeWidth = 20
+                    let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
+                    if fadeX > this.textLocation.x then
+                        let bgColor = this.tabBgColor
+                        let fadeRect = Rectangle(fadeX, 0, fadeWidth + 1, this.size.height)
+                        let state = g.Save()
+                        g.SetClip(this.borderPath)
+                        use fadeBrush = new LinearGradientBrush(
+                            fadeRect,
+                            Color.FromArgb(0, int bgColor.R, int bgColor.G, int bgColor.B),
+                            bgColor,
+                            LinearGradientMode.Horizontal)
+                        g.FillRectangle(fadeBrush, fadeRect)
+                        g.Restore(state)
             img
-        member this.children = 
+        member this.children =
+            let showCloseButton = not this.onlyIcon && (this.hover.IsSome || this.captured.IsSome)
             List2([
-                Some(this.iconLocation,this.iconSprite) 
-                (if this.onlyIcon then None else Some(this.closeButtonLocation, this.closeButtonSprite))
+                Some(this.iconLocation,this.iconSprite)
+                (if showCloseButton then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
                 ]).choose(id)
 
 type TabStripSprite<'id> when 'id : equality = {

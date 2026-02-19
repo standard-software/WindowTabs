@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.20_next_1
+- Tab close button is now only shown on hover (hidden when not hovered)
+  - Tab title text uses fade-out gradient instead of ellipsis ("...") when text overflows
 
 ## version ss_jp_2026.02.20
 - Auto-grouping: new tabs are now placed next to existing tabs of the same exe instead of at the end
