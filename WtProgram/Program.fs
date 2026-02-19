@@ -259,7 +259,7 @@ type Program() as this =
 
     member this.addWindowToGroup(window:Window) =
         let hwnd = window.hwnd
-        let group,isNewGroup = 
+        let group,isNewGroup =
             match this.findGroupForWindow(window) with
             | Some(group) -> (group, false)
             | None -> (Services.desktop.createGroup(false), true)
@@ -268,6 +268,33 @@ type Program() as this =
         isDroppedAndAwaitingGrouping.map(fun s -> s.remove hwnd)
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
         group.addWindow(hwnd, withDelay)
+
+        // For auto-grouping, position new tab next to same-exe tabs
+        if not isNewGroup && not isDropped then
+            let procPath = window.pid.processPath
+            match group :> obj with
+            | :? GroupInfo as gi ->
+                gi.invokeGroup <| fun() ->
+                    let wg = gi.group
+                    let tabs = wg.ts.lorder
+                    let newTab = Tab(hwnd)
+                    // Find the rightmost tab of the same exe (excluding the new tab)
+                    let mutable lastSameExeIdx = -1
+                    tabs.iteri(fun i t ->
+                        if t <> newTab then
+                            try
+                                let (Tab thwnd) = t
+                                let otherProcPath = os.windowFromHwnd(thwnd).pid.processPath
+                                if otherProcPath = procPath then
+                                    lastSameExeIdx <- i
+                            with _ -> ()
+                    )
+                    if lastSameExeIdx >= 0 then
+                        match tabs.tryFindIndex((=) newTab) with
+                        | Some(curIdx) when curIdx <> lastSameExeIdx + 1 ->
+                            wg.ts.moveTab(newTab, lastSameExeIdx + 1)
+                        | _ -> ()
+            | _ -> ()
 
     member this.receive message =
         let mutable skipFullUpdate = false
