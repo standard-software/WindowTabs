@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.20_next_1
+
 ## version ss_jp_2026.02.20
 - Auto-grouping: new tabs are now placed next to existing tabs of the same exe instead of at the end
   - Works for both category-based and same-process auto-grouping
