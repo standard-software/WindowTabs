@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.20_next_1
+## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)
   - Tab title text uses fade-out gradient instead of ellipsis ("...") when text overflows
 - Snap percent menu order reversed: 90% 70% 50% 30% (most useful first)
