@@ -2588,6 +2588,37 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         
+        let tabPositionSubMenu =
+            let currentPosition = group.tabPosition
+            CmiPopUp({
+                text = Localization.getString("TabPositionMenu")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("AlignLeft")
+                        image = None
+                        flags = if currentPosition = "left" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            group.tabPosition <- "left"
+                    })
+                    CmiRegular({
+                        text = Localization.getString("AlignCenter")
+                        image = None
+                        flags = if currentPosition = "center" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            group.tabPosition <- "center"
+                    })
+                    CmiRegular({
+                        text = Localization.getString("AlignRight")
+                        image = None
+                        flags = if currentPosition = "right" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            group.tabPosition <- "right"
+                    })
+                ])
+                flags = List2()
+            })
+
         let tabWidthSubMenu =
             CmiPopUp({
                 text = Localization.getString("TabWidthChange")
@@ -3413,6 +3444,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             }))
             Some(CmiSeparator)
+            Some(tabPositionSubMenu)
             Some(tabWidthSubMenu)
             Some(tabNameSubMenu)
             Some(CmiSeparator)

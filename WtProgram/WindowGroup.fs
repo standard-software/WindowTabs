@@ -54,19 +54,22 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isForegroundExport = Cell.export <| fun() ->
         zorderCell.value.any((=) foregroundCell.value)
 
+    // Per-group tab position: None = use global default, Some = per-group override
+    let mutable perGroupTabPosition : string option = None
+
     member this.isSuperBarEnabled = enableSuperBar
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
 
         // Apply default setting for tab position
-        let defaultPosition = 
+        let defaultPosition =
             match Services.settings.getValue("tabPositionByDefault") :?> string with
             | "left" -> TabLeft
             | "center" -> TabCenter
             | _ -> TabRight
         ts.setAlignment(ts.direction, defaultPosition)
-        
+
         // Apply default setting for hiding tabs when inside
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
         match hideTabsMode with
@@ -94,10 +97,23 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             this.invokeAsync <| fun() ->
                 this.ts.setTabAppearance(this.tabAppearance)
 
-        // Listen for tabPositionByDefault changes
+        // Listen for tabPositionByDefault changes (only apply if no per-group override)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
             this.invokeAsync <| fun() ->
-                let position = unbox<string>(value)
+                if perGroupTabPosition.IsNone then
+                    let position = unbox<string>(value)
+                    let alignment =
+                        match position with
+                        | "left" -> TabLeft
+                        | "center" -> TabCenter
+                        | _ -> TabRight
+                    ts.setAlignment(ts.direction, alignment)
+
+        // Listen for "Apply to all tab groups" button
+        Services.settings.notifyValue "applyTabPositionToAllGroups" <| fun _ ->
+            this.invokeAsync <| fun() ->
+                perGroupTabPosition <- None
+                let position = Services.settings.getValue("tabPositionByDefault") :?> string
                 let alignment =
                     match position with
                     | "left" -> TabLeft
@@ -309,9 +325,44 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
         
-    member this.isIconOnly 
+    member this.isIconOnly
         with get() = this.ts.isIconOnly
         and set(value) = this.ts.isIconOnly <- value
+
+    member this.tabPosition
+        with get() =
+            match perGroupTabPosition with
+            | Some(pos) -> pos
+            | None -> Services.settings.getValue("tabPositionByDefault") :?> string
+        and set(value) =
+            perGroupTabPosition <- Some(value)
+            let alignment =
+                match value with
+                | "left" -> TabLeft
+                | "center" -> TabCenter
+                | _ -> TabRight
+            this.ts.setAlignment(this.ts.direction, alignment)
+
+    member this.perGroupTabPositionValue
+        with get() = perGroupTabPosition
+        and set(value) =
+            perGroupTabPosition <- value
+            match value with
+            | Some(pos) ->
+                let alignment =
+                    match pos with
+                    | "left" -> TabLeft
+                    | "center" -> TabCenter
+                    | _ -> TabRight
+                this.ts.setAlignment(this.ts.direction, alignment)
+            | None ->
+                let defaultPos = Services.settings.getValue("tabPositionByDefault") :?> string
+                let alignment =
+                    match defaultPos with
+                    | "left" -> TabLeft
+                    | "center" -> TabCenter
+                    | _ -> TabRight
+                this.ts.setAlignment(this.ts.direction, alignment)
 
     member this.hwnd = this.ts.hwnd
 

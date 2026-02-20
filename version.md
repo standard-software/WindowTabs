@@ -1,6 +1,10 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.21_next_1
+- Per-tab-group tab position: each tab group can have its own Left/Center/Right alignment via context menu
+  - Setting is preserved across restart, disable/enable, and watchdog restart
+  - "Apply to all tab groups" button in Behavior settings resets all groups to default
+- Tab position setting changed from radio buttons to ComboBox in Behavior tab
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

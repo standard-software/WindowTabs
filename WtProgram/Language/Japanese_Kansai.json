@@ -125,6 +125,8 @@
   "CloseOtherTabs": "他のタブ閉じるで",
   "CloseAllTabs": "全部のタブ閉じるで",
 
+  "TabPositionMenu": "タブの位置やで",
+  "ApplyToAllTabGroups": "全部のタブグループに反映するで",
   "TabWidthChange": "タブ幅の変更やで",
   "IconOnly": "アイコンだけ",
   "IconAndText": "アイコンとテキスト",
