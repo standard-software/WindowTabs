@@ -138,7 +138,7 @@ type HotKeyView() =
                     "doubleclick"
 
             let radioNever = new RadioButton()
-            radioNever.Text <- Localization.getString("HideNever")
+            radioNever.Text <- Localization.getString("HideTabsNever")
             radioNever.AutoSize <- true
             radioNever.Checked <- (currentMode = "never")
             radioNever.CheckedChanged.Add(fun _ ->
@@ -148,7 +148,7 @@ type HotKeyView() =
             )
 
             let radioDown = new RadioButton()
-            radioDown.Text <- Localization.getString("HideWhenDown")
+            radioDown.Text <- Localization.getString("HideTabsWhenDown")
             radioDown.AutoSize <- true
             radioDown.Checked <- (currentMode = "down")
             radioDown.CheckedChanged.Add(fun _ ->
@@ -158,7 +158,7 @@ type HotKeyView() =
             )
 
             let radioDoubleClick = new RadioButton()
-            radioDoubleClick.Text <- Localization.getString("HideOnDoubleClick")
+            radioDoubleClick.Text <- Localization.getString("HideTabsOnClick")
             radioDoubleClick.AutoSize <- true
             radioDoubleClick.Checked <- (currentMode = "doubleclick")
             radioDoubleClick.CheckedChanged.Add(fun _ ->

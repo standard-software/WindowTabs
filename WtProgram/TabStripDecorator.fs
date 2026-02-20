@@ -28,9 +28,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let mouseEvent = Event<IntPtr * MouseButton * TabPart * MouseAction * Pt>()
     let _ts = TabStrip(this :> ITabStripMonitor)
     // Variables for double-click detection
-    let lastClickTime = ref System.DateTime.MinValue
-    let lastClickTab = ref None
-    let doubleClickTimeoutMs = 500.0  // Windows default double-click time
     let hiddenByDoubleClick = ref false
     let doubleClickProtectUntil = ref System.DateTime.MinValue
     let firstClickTab = ref None  // Track the tab that was clicked first in potential double-click
@@ -108,26 +105,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if hwnd = group.topWindow && !firstClickTab = Some(hwnd) then
                     match part with
                     | TabIcon when toggleTabWidthOnIconDoubleClick ->
-                        // Toggle tab width on icon double-click
+                        // Toggle tab width on icon double-click (priority over other actions)
                         group.isIconOnly <- not group.isIconOnly
                     | TabBackground when toggleTabWidthOnIconDoubleClick && group.isIconOnly ->
                         // When tabs are narrow (icon-only), allow background click to also toggle width
-                        // This improves usability when tab is narrow (clicking beside icon still works)
                         group.isIconOnly <- not group.isIconOnly
-                    | TabBackground when autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
-                        // Hide tabs on background double-click (only when tabs are at bottom and NOT in icon-only mode)
+                    | _ when autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
+                        // Hide tabs on double-click (only when option is on, tabs at bottom, NOT icon-only)
                         hiddenByDoubleClick := true
                         doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
                         group.invokeAsync <| fun() ->
                             this.ts.isShrunk <- true
-                    | _ when not toggleTabWidthOnIconDoubleClick && autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
-                        // When toggle feature is OFF, treat all double-clicks as background double-click
-                        // Only hide if tabs are NOT in icon-only mode
-                        hiddenByDoubleClick := true
-                        doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
-                        group.invokeAsync <| fun() ->
-                            this.ts.isShrunk <- true
-                    | _ -> ()
+                    | _ ->
+                        // Otherwise, double-click opens rename UI
+                        this.beginRename(hwnd)
 
                 // Clear first click tracking after double-click
                 firstClickTab := None
@@ -302,7 +293,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     firstClickTab := None
             | MouseDown, _ ->
                 capturedHwnd := Some(hwnd)
-            | MouseUp, MouseMiddle -> 
+            | MouseUp, MouseMiddle ->
                 capturedHwnd.Value.iter <| fun capturedHwnd ->
                     if hwnd = capturedHwnd then
                         this.onCloseWindow hwnd
@@ -3465,7 +3456,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // Update isWindowInside based on current tab position
             isWindowInside.value <- this.ts.showInside
 
-            // Handle double-click mode separately
+            // Handle double-click-to-hide mode separately
             if autoHideDoubleClickCell.value && this.ts.direction = TabDown then
 
                 // Check if protection period has expired

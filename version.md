@@ -6,6 +6,8 @@
 - Snap percent menu order reversed: 90% 70% 50% 30% (most useful first)
 - Fix: icon double-click now works on transparent areas of the icon
 - New setting: "Add tab height margin when snapping" offsets snap/move-top positions by tab height
+- Active tab double-click now opens tab rename UI
+  - When "Hide when double-clicking active tab" option is on and tabs at bottom, double-click hides tabs instead
 
 ## version ss_jp_2026.02.20
 - Auto-grouping: new tabs are now placed next to existing tabs of the same exe instead of at the end

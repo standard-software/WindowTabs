@@ -51,10 +51,10 @@
   "AlignCenter": "真ん中",
   "AlignRight": "右",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
-  "HideNever": "隠さね",
-  "HideWhenDown": "指定した時間で隠すべ",
+  "HideTabsNever": "隠さね",
+  "HideTabsWhenDown": "指定した時間で隠すべ",
   "HideTabsDelayMilliseconds": "待機時間 (ミリ秒)",
-  "HideOnDoubleClick": "アクティブなタブをダブルクリックで隠すべ",
+  "HideTabsOnClick": "アクティブなタブをダブルクリックで隠すべ",
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示にすっぺ",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあけっぺ",

@@ -51,10 +51,10 @@
   "AlignCenter": "置中",
   "AlignRight": "靠右對齊",
   "HideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
-  "HideNever": "不隱藏",
-  "HideWhenDown": "指定時間後隱藏",
+  "HideTabsNever": "不隱藏",
+  "HideTabsWhenDown": "指定時間後隱藏",
   "HideTabsDelayMilliseconds": "等待時間(毫秒)",
-  "HideOnDoubleClick": "雙擊活動分頁時隱藏",
+  "HideTabsOnClick": "雙擊活動分頁時隱藏",
 
   "HideTabsOnFullscreen": "全螢幕視窗時隱藏分頁",
   "SnapTabHeightMargin": "吸附時為分頁高度留出邊距",

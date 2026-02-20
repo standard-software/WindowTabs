@@ -54,10 +54,10 @@ module Localization_English =
         ("AlignCenter", "Center")
         ("AlignRight", "Right")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
-        ("HideNever", "Never hide")
-        ("HideWhenDown", "Hide after specified time")
+        ("HideTabsNever", "Never hide")
+        ("HideTabsWhenDown", "Hide after specified time")
         ("HideTabsDelayMilliseconds", "Wait time (ms)")
-        ("HideOnDoubleClick", "Hide when double-clicking active tab")
+        ("HideTabsOnClick", "Hide when double-clicking active tab")
 
         ("HideTabsOnFullscreen", "Hide tabs when window is fullscreen")
         ("SnapTabHeightMargin", "Add tab height margin when snapping")
