@@ -146,7 +146,7 @@ Top level menu options:
 - Top-Left, Top-Right, Bottom-Left, Bottom-Right - Move to corners
 
 "Snap Other" submenu:
-- Left / Right / Top / Bottom - Snap with percentage options (30%, 40%, 50%, 60%, 70%, 80%, 90%)
+- Left / Right / Top / Bottom - Snap with percentage options (90%, 70%, 50%, 30%)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
 
 #### Link to another group
