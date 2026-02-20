@@ -10,9 +10,11 @@ type IconSprite = {
     size: Sz
     } with
     interface ISprite with
-        member this.image = 
+        member this.image =
             let bitmap = Img(this.size)
             let g = bitmap.graphics
+            // Fill with near-transparent color so entire icon area is hit-testable
+            g.Clear(Color.FromArgb(1, 0, 0, 0))
             try
                 // Draw icon with proper scaling to fit the target size
                 let rect = new Rectangle(0, 0, this.size.width, this.size.height)
