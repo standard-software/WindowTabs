@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.21_next_1
+
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)
   - Tab title text uses fade-out gradient instead of ellipsis ("...") when text overflows
