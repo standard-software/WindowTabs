@@ -2490,10 +2490,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     flags = List2()
                 })
                 CmiSeparator
-                snapPercentSubMenu 30
-                snapPercentSubMenu 50
-                snapPercentSubMenu 70
                 snapPercentSubMenu 90
+                snapPercentSubMenu 70
+                snapPercentSubMenu 50
+                snapPercentSubMenu 30
             ]
 
         // Helper: build screen position submenu
