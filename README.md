@@ -348,4 +348,3 @@ This project is open source and licensed under the MIT License.
 
 If you have any issues, please contact us via GitHub Issues or email: `standard.software.net@gmail.com`
 
-Thanks to Claude Code's hard work, development has progressed significantly. However, I've given up on making the Settings dialog dark mode-compatible as I couldn't get it to look right. I'm hoping someone might fork this project and improve it.
