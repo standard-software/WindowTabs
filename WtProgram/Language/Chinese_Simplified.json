@@ -57,6 +57,7 @@
   "HideOnDoubleClick": "双击活动标签页时隐藏",
 
   "HideTabsOnFullscreen": "全屏窗口时隐藏标签页",
+  "SnapTabHeightMargin": "吸附时为标签页高度留出边距",
   "NextTab": "下一个标签页",
   "PrevTab": "上一个标签页",
 

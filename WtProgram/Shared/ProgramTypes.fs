@@ -34,6 +34,7 @@ type SettingsRec = {
     hideTabsWhenDownByDefault: string
     hideTabsDelayMilliseconds: int
     hideTabsOnFullscreen: bool
+    snapTabHeightMargin: bool
     }
 
 type ILicenseManager =

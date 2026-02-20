@@ -5,6 +5,7 @@
   - Tab title text uses fade-out gradient instead of ellipsis ("...") when text overflows
 - Snap percent menu order reversed: 90% 70% 50% 30% (most useful first)
 - Fix: icon double-click now works on transparent areas of the icon
+- New setting: "Add tab height margin when snapping" offsets snap/move-top positions by tab height
 
 ## version ss_jp_2026.02.20
 - Auto-grouping: new tabs are now placed next to existing tabs of the same exe instead of at the end

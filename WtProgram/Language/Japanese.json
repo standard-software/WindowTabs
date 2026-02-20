@@ -57,6 +57,7 @@
   "HideOnDoubleClick": "アクティブなタブをダブルクリックで隠す",
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示",
+  "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあける",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
 

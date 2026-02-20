@@ -201,6 +201,7 @@ type HotKeyView() =
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
+            ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
         ]))
 
         let formPanel = UIHelper.form fields

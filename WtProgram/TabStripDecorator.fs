@@ -530,6 +530,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         width: int,
         height: int) : (int * int) =
 
+        let tabOffset = this.getTabHeightForSnap()
         match position with
         | Some "right" ->
             let x = workArea.Right - width
@@ -541,7 +542,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (x, y)
         | Some "top" ->
             let x = max workArea.Left (min currentX (workArea.Right - width))
-            let y = workArea.Top
+            let y = workArea.Top + tabOffset
             (x, y)
         | Some "bottom" ->
             let x = max workArea.Left (min currentX (workArea.Right - width))
@@ -550,11 +551,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Corner positions
         | Some "topright" ->
             let x = workArea.Right - width
-            let y = workArea.Top
+            let y = workArea.Top + tabOffset
             (x, y)
         | Some "topleft" ->
             let x = workArea.Left
-            let y = workArea.Top
+            let y = workArea.Top + tabOffset
             (x, y)
         | Some "bottomright" ->
             let x = workArea.Right - width
@@ -779,6 +780,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (ThreadHelper.cancelablePostBack 200 <| fun() ->
                 Services.program.resumeTabMonitoring()) |> ignore
 
+    member private this.getTabHeightForSnap() =
+        try
+            let snapTabHeightMargin = Services.settings.getValue("snapTabHeightMargin") :?> bool
+            if snapTabHeightMargin then group.tabAppearance.tabHeight
+            else 0
+        with | _ -> 0
+
+    member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle) =
+        let tabHeight = this.getTabHeightForSnap()
+        if tabHeight > 0 then
+            System.Drawing.Rectangle(workArea.X, workArea.Y + tabHeight, workArea.Width, workArea.Height - tabHeight)
+        else
+            workArea
+
     member private this.calculateSnapBounds(
         snapDirection: string,
         workArea: System.Drawing.Rectangle,
@@ -787,6 +802,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Returns (x, y, width, height) for snap position
         // Snap right/left: maintain width, expand height to full
         // Snap top/bottom: maintain height, expand width to full
+        let workArea = this.adjustWorkAreaForTabHeight(workArea)
         match snapDirection with
         | "snapright" ->
             let newWidth = currentWidth
@@ -822,6 +838,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Returns (x, y, width, height) for snap position with percentage
         // Snap right/left: width = workArea.Width * percent, height = full
         // Snap top/bottom: width = full, height = workArea.Height * percent
+        let workArea = this.adjustWorkAreaForTabHeight(workArea)
         let percentFloat = float(percent) / 100.0
         match snapDirection with
         | "snapright" ->

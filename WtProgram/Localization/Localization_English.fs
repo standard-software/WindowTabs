@@ -60,6 +60,7 @@ module Localization_English =
         ("HideOnDoubleClick", "Hide when double-clicking active tab")
 
         ("HideTabsOnFullscreen", "Hide tabs when window is fullscreen")
+        ("SnapTabHeightMargin", "Add tab height margin when snapping")
         ("NextTab", "Next Tab")
         ("PrevTab", "Previous Tab")
 
