@@ -632,6 +632,22 @@ type Program() as this =
                 // If launch fails, remove the pending entry
                 pendingNewWindowLaunches.map(fun m -> m.remove processPath)
 
+        member x.getAllConfiguredProcessPaths() =
+            let paths = System.Collections.Generic.HashSet<string>()
+            // Collect from includedPaths and excludedPaths
+            let settings = settingsManager.settings
+            settings.includedPaths.items.iter(fun p -> paths.Add(p) |> ignore)
+            settings.excludedPaths.items.iter(fun p -> paths.Add(p) |> ignore)
+            // Collect from autoGroupingPaths
+            settings.autoGroupingPaths.items.iter(fun p -> paths.Add(p) |> ignore)
+            // Collect from Category1Paths through Category10Paths
+            let settingsJson = settingsManager.settingsJson
+            for i in 1..10 do
+                let categoryKey = sprintf "Category%dPaths" i
+                let categoryPaths = settingsJson.getStringArray(categoryKey).def(List2())
+                categoryPaths.iter(fun p -> paths.Add(p) |> ignore)
+            List2(paths |> Seq.toList)
+
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =
             isDroppedAndAwaitingGrouping.map <| fun s -> s.add hwnd

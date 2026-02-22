@@ -128,14 +128,27 @@ type WindowNode(window:Window) =
 type ProgramView() as this=
 
     let invoker = InvokerService.invoker
-    let toolBar = 
+    let mutable showAllSettings = false
+    let toolBar =
         let ts = ToolStrip()
-        ts.GripStyle  <- ToolStripGripStyle.Hidden
-        let refreshBtn = 
+        ts.GripStyle <- ToolStripGripStyle.Hidden
+        let refreshBtn =
             let btn = ToolStripButton(Localization.getString("Refresh"))
             btn.Click.Add <| fun _ -> this.populateNodes()
             btn
         ts.Items.Add(refreshBtn).ignore
+        ts.Items.Add(new ToolStripSeparator()) |> ignore
+        let checkBoxCtrl = new CheckBox()
+        checkBoxCtrl.Text <- Localization.getString("ShowAllSettings")
+        checkBoxCtrl.AutoSize <- true
+        checkBoxCtrl.Checked <- false
+        checkBoxCtrl.CheckedChanged.Add(fun _ ->
+            showAllSettings <- checkBoxCtrl.Checked
+            this.populateNodes()
+        )
+        let host = new ToolStripControlHost(checkBoxCtrl)
+        host.AutoSize <- true
+        ts.Items.Add(host) |> ignore
         ts
     let statusBar = 
         let sb = StatusBar()
@@ -144,7 +157,7 @@ type ProgramView() as this=
     let tree,model =
         let tree = TreeViewAdv()
         let model = TreeModel()
-        let nameColumn = TreeColumn(Localization.getString("Name"), 200)
+        let nameColumn = TreeColumn(Localization.getString("ProcessName"), 200)
         tree.UseColumns <- true
         tree.Columns.Add(nameColumn)
         tree.RowHeight <- 24
@@ -237,6 +250,7 @@ type ProgramView() as this=
 
     member private this.populateNodes() =
         model.Nodes.Clear()
+        let showAll = showAllSettings
         ThreadHelper.queueBackground <| fun() ->
             let os = OS()
             let procs = Services.program.appWindows.fold (Map2()) <| fun procs hwnd ->
@@ -251,11 +265,22 @@ type ProgramView() as this=
                     let windowNode = WindowNode(window)
                     procNode.Nodes.Add(windowNode)
                 procNode
-            
+            // When showAllSettings is ON, also add configured programs that are not currently running
+            let allProcNodes =
+                if showAll then
+                    let runningPaths = System.Collections.Generic.HashSet<string>()
+                    procs.items.iter <| fun (procPath, _) -> runningPaths.Add(procPath) |> ignore
+                    let configuredPaths = Services.program.getAllConfiguredProcessPaths()
+                    let extraNodes = configuredPaths.where(fun p -> not (runningPaths.Contains(p))).map <| fun procPath ->
+                        ExeNode(procPath)
+                    procNodes.appendList(extraNodes)
+                else
+                    procNodes
+
             invoker.asyncInvoke <| fun() ->
                 model.Nodes.Clear()
                 // Sort by category number first (0 = unset first, then 1-5), then by name
-                procNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
+                allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
                 statusBar.Text <- "Ready"
 
     interface ISettingsView with

@@ -1,7 +1,8 @@
 {
   "Programs": "Programs",
   "Refresh": "Refresh",
-  "Name": "Name",
+  "ShowAllSettings": "Show all settings",
+  "ProcessName": "Process Name",
   "EnableTabs": "Tabs",
   "EnableAutoGrouping": "Auto Grouping",
   "Category": "Category ",

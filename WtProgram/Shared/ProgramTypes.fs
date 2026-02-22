@@ -116,6 +116,7 @@ type IProgram =
     abstract member isShuttingDown : bool
     abstract member saveTabGroupsBeforeExit : unit -> unit
     abstract member launchNewWindow : IntPtr -> IntPtr -> string -> unit
+    abstract member getAllConfiguredProcessPaths : unit -> List2<string>
 
 type IGroup =
     abstract member hwnd : IntPtr

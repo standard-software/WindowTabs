@@ -4,6 +4,8 @@ module Localization_English =
     let strings = dict [
         ("Programs", "Programs")
         ("Refresh", "Refresh")
+        ("ShowAllSettings", "Show all settings")
+        ("ProcessName", "Process Name")
         ("Name", "Name")
         ("EnableTabs", "Tabs")
         ("EnableAutoGrouping", "Auto Grouping")

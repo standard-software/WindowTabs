@@ -1,7 +1,8 @@
 {
   "Programs": "プログラム",
   "Refresh": "更新すっぺ",
-  "Name": "名前",
+  "ShowAllSettings": "全部の設定を表示すっぺ",
+  "ProcessName": "プロセス名",
   "EnableTabs": "タブ",
   "EnableAutoGrouping": "自動でグループ化",
   "Category": "カテゴリ",

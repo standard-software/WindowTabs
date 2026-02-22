@@ -1,7 +1,8 @@
 {
   "Programs": "程式",
   "Refresh": "重新整理",
-  "Name": "名稱",
+  "ShowAllSettings": "顯示所有設定",
+  "ProcessName": "程式名稱",
   "EnableTabs": "分頁",
   "EnableAutoGrouping": "自動分組",
   "Category": "分類",

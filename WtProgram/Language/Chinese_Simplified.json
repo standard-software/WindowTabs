@@ -1,7 +1,8 @@
 {
   "Programs": "程序",
   "Refresh": "刷新",
-  "Name": "名称",
+  "ShowAllSettings": "显示所有设置",
+  "ProcessName": "程序名",
   "EnableTabs": "标签页",
   "EnableAutoGrouping": "自动分组",
   "Category": "分类",
