@@ -11,6 +11,7 @@
     - Changing the ComboBox applies to all existing tab groups immediately
 - "Add tab height margin when snapping" is now a per-tab-group setting
   - Context menu: "Tab Margin When Snapping" > "Add margin at top" toggle
+- Snap percent menu: added Center, Center Horizontally, Center Vertically options
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

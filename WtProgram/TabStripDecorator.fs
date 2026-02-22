@@ -879,6 +879,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let x = workArea.Right - newWidth
             let y = workArea.Bottom - newHeight
             (x, y, newWidth, newHeight)
+        | "snapcenter" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Left + (workArea.Width - newWidth) / 2
+            let y = workArea.Top + (workArea.Height - newHeight) / 2
+            (x, y, newWidth, newHeight)
+        | "snapcenterhorizontal" ->
+            let newWidth = int(float(workArea.Width) * percentFloat)
+            let newHeight = workArea.Height
+            let x = workArea.Left + (workArea.Width - newWidth) / 2
+            let y = workArea.Top
+            (x, y, newWidth, newHeight)
+        | "snapcentervertical" ->
+            let newWidth = workArea.Width
+            let newHeight = int(float(workArea.Height) * percentFloat)
+            let x = workArea.Left
+            let y = workArea.Top + (workArea.Height - newHeight) / 2
+            (x, y, newWidth, newHeight)
         | _ ->
             (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
 
@@ -2448,6 +2466,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
                         CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
                         CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
+                        CmiSeparator
+                        CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> snapPercentFn "snapcenter" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> snapPercentFn "snapcenterhorizontal" pct); flags = List2() })
+                        CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> snapPercentFn "snapcentervertical" pct); flags = List2() })
                     ])
                     flags = List2()
                 })
