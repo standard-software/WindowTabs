@@ -335,17 +335,22 @@ type TabStripSprite<'id> when 'id : equality = {
         | TabCenter -> widthOfEmptySpace / 2.0
         | TabRight -> widthOfEmptySpace
             
+    member private this.tabYOffset =
+        match this.direction with
+        | TabUp -> 0
+        | TabDown -> 1
+
     member this.tabLocation tab =
         match this.slide with
-        | Some(slideTab, x) when tab = slideTab-> 
+        | Some(slideTab, x) when tab = slideTab->
             let bounds = (0, this.size.width - int(this.tabLength))
-            Pt(between bounds x, 1)
-        | _ -> 
+            Pt(between bounds x, this.tabYOffset)
+        | _ ->
             let x = this.tabOffset (this.adjustedLorder.findIndex((=)tab))
             let x = x + this.alignmentOffset
-            Pt(int(x), 1)
+            Pt(int(x), this.tabYOffset)
 
-    member this.tabSize = Sz(int(this.tabLength), (this.size.height) - 2)
+    member this.tabSize = Sz(int(this.tabLength), (this.size.height) - 1)
 
     member this.movedTab =
         match this.slide with

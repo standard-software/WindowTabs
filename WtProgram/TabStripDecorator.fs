@@ -773,7 +773,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.getTabHeightForSnap() =
         try
-            if group.snapTabHeightMargin then group.tabAppearance.tabHeight
+            if group.snapTabHeightMargin then group.tabAppearance.tabHeight - 1
             else 0
         with | _ -> 0
 

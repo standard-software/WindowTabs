@@ -16,6 +16,7 @@
   - Respects tab height margin setting
 - Tooltip improvements:
   - When switching tabs while tooltip is visible, immediately update to new tab's content (no delay)
+- Tab border area at screen edge now responds to mouse clicks (no longer passes through to desktop)
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)
