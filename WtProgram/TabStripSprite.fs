@@ -209,6 +209,9 @@ type TabSprite<'id> = {
         member this.image =
             let img = Img(this.size)
             let g = img.graphics
+            // Fill with near-transparent color so entire rectangular area is hit-testable
+            // This prevents mouse events from passing through the gap between tab curves
+            g.Clear(Color.FromArgb(1, 0, 0, 0))
             do g.FillPath(this.bgBrush, this.borderPath)
             do g.DrawPath(this.borderPen, this.borderPath)
             if this.onlyIcon.not then
@@ -383,14 +386,14 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member this.render = this.sprite.render
 
-    member this.tryHit pt = 
+    member this.tryHit pt =
         let path = this.sprite.hit(pt)
         maybe {
             let! tab = path.tryPick <| fun sprite ->
                 match sprite with
                 | :? TabSprite<'id> as ts -> Some(ts.id)
-                | _ -> None 
-            let part : TabPart = 
+                | _ -> None
+            let part : TabPart =
                 match path.head with
                 | :? TabSprite<'id> -> TabBackground
                 | :? IconSprite -> TabIcon
@@ -398,3 +401,22 @@ type TabStripSprite<'id> when 'id : equality = {
                 | _ -> TabBackground
             return tab,part
         }
+
+    // Tooltip hit test: boundary at midpoint of tab overlap area, ignoring z-order
+    member this.tryHitForTooltip (pt: Pt) : Option<'id> =
+        if this.count = 0 then None
+        else
+            let yOff = this.tabYOffset
+            let tabH = this.tabSize.height
+            if pt.y >= yOff && pt.y < yOff + tabH then
+                let tabSpacing = this.tabLength - this.tabOverlap
+                if tabSpacing <= 0.0 then
+                    Some(this.adjustedLorder.head)
+                else
+                    // Boundary between tab i and i+1 is at the midpoint of the overlap area
+                    let relX = float(pt.x) - this.alignmentOffset - this.tabOverlap / 2.0
+                    let index = int(floor(relX / tabSpacing))
+                    let index = max 0 (min index (this.count - 1))
+                    Some(this.adjustedLorder.skip(index).head)
+            else
+                None

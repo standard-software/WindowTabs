@@ -173,9 +173,16 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.hit : Option<Tab*TabPart> = maybe {
         let! pt = ptCell.value
         let! hit = this.ts.tryHit(pt)
-        return hit 
+        return hit
         }
-    
+
+    // Tooltip hit test: boundary at midpoint of tab overlap area, ignoring z-order
+    member private this.hitForTooltipTab : Option<Tab> = maybe {
+        let! pt = ptCell.value
+        let! tab = this.ts.tryHitForTooltip(pt)
+        return tab
+        }
+
     member private this.updateTooltipForTab(tab: Tab) =
         let tabInfo = this.tabInfo(tab)
         if tabInfo.text <> "" then
@@ -225,9 +232,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 this.window.trackMouseLeave()
             let currentHit = this.hit
             hoverCell.set(currentHit)
-            // Update tooltip when hovering over a tab (including close button)
-            match currentHit with
-            | Some(tab, TabBackground) | Some(tab, TabIcon) | Some(tab, TabClose) ->
+            // Update tooltip using overlap-midpoint hit test (ignores tab curves and z-order)
+            let tooltipTab = this.hitForTooltipTab
+            match tooltipTab with
+            | Some(tab) ->
                 if !lastToolTipTab <> Some(tab) then
                     let wasVisible = tooltipForm.Visible
                     tooltipTimer.Stop()
@@ -241,7 +249,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     else
                         // No tooltip visible - show with delay
                         tooltipTimer.Start()
-            | _ ->
+            | None ->
                 if !lastToolTipTab <> None then
                     lastToolTipTab := None
                     pendingTooltipTab := None
