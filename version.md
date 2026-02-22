@@ -12,6 +12,8 @@
 - "Add tab height margin when snapping" is now a per-tab-group setting
   - Context menu: "Tab Margin When Snapping" > "Add margin at top" toggle
 - Snap percent menu: added Center, Center Horizontally, Center Vertically options
+- Snap Maximize menu: resize window to fill current display or entire desktop (without using Windows maximize)
+  - Respects tab height margin setting
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

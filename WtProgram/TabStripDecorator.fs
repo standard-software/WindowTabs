@@ -828,7 +828,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Returns (x, y, width, height) for snap position with percentage
         // Snap right/left: width = workArea.Width * percent, height = full
         // Snap top/bottom: width = full, height = workArea.Height * percent
-        let workArea = this.adjustWorkAreaForTabHeight(workArea)
+        let workArea =
+            if snapDirection = "snapmaximizedesktop" then
+                this.adjustWorkAreaForTabHeight(System.Windows.Forms.SystemInformation.VirtualScreen)
+            else
+                this.adjustWorkAreaForTabHeight(workArea)
         let percentFloat = float(percent) / 100.0
         match snapDirection with
         | "snapright" ->
@@ -897,6 +901,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let x = workArea.Left
             let y = workArea.Top + (workArea.Height - newHeight) / 2
             (x, y, newWidth, newHeight)
+        | "snapmaximizedisplay" | "snapmaximizedesktop" ->
+            (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
         | _ ->
             (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
 
@@ -2523,6 +2529,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 snapPercentSubMenu 70
                 snapPercentSubMenu 50
                 snapPercentSubMenu 30
+                CmiSeparator
+                CmiPopUp({
+                    text = Localization.getString("SnapMaximize")
+                    image = None
+                    items = List2(
+                        [
+                            CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+                        ] @
+                        (if System.Windows.Forms.Screen.AllScreens.Length > 1 then
+                            [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
+                         else [])
+                    )
+                    flags = List2()
+                })
             ]
 
         // Helper: build screen position submenu
