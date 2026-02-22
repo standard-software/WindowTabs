@@ -2,22 +2,15 @@
 
 ## version ss_jp_2026.02.21_next_1
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running
-  - Rename localization key "Name" to "ProcessName" for Programs tab column header
-  - Updated all language files: English "Process Name" etc.
-  - Programs tab: [x] delete button for non-running process rows to remove settings
+  - Added [x] delete button on non-running process rows to remove settings
 - Per-tab-group tab position: each tab group can have its own Left/Center/Right alignment via context menu
-  - Setting is preserved across restart, disable/enable, and watchdog restart
   - Tab position setting in Behavior tab changed from radio buttons to ComboBox
-    - Changing the ComboBox applies to all existing tab groups immediately
 - "Add tab height margin when snapping" is now a per-tab-group setting
-  - Context menu: "Tab Margin When Snapping" > "Add margin at top" toggle
 - Snap percent menu: added Center, Center Horizontally, Center Vertically options
 - Snap Maximize menu: resize window to fill current display or entire desktop (without using Windows maximize)
-  - Respects tab height margin setting
-- Tooltip improvements:
-  - When switching tabs while tooltip is visible, immediately update to new tab's content (no delay)
+- Tooltip: immediately update to new tab's content when switching tabs (no delay)
+  - Tooltip stays visible when mouse moves to tab's rounded edge area
 - Tab border area at screen edge now responds to mouse clicks (no longer passes through to desktop)
-- Tooltip stays visible when mouse moves to tab's rounded edge area
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)
