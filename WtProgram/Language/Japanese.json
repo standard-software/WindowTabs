@@ -126,6 +126,8 @@
   "CloseOtherTabs": "他のタブを閉じる",
   "CloseAllTabs": "全てのタブを閉じる",
 
+  "SnapTabMarginMenu": "スナップ時のタブの余白",
+  "SnapTabMarginTop": "上に余白をあける",
   "TabPositionMenu": "タブの位置",
   "TabWidthChange": "タブ幅の変更",
   "IconOnly": "アイコンのみ",

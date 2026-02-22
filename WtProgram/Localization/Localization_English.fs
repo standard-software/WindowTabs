@@ -128,6 +128,8 @@ module Localization_English =
         ("CloseOtherTabs", "Close other tabs")
         ("CloseAllTabs", "Close all tabs")
 
+        ("SnapTabMarginMenu", "Tab Margin When Snapping")
+        ("SnapTabMarginTop", "Add margin at top")
         ("TabPositionMenu", "Tab Position")
         ("TabWidthChange", "Tab Width")
         ("IconOnly", "Icon Only")

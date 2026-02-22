@@ -126,6 +126,8 @@
   "CloseOtherTabs": "關閉其他分頁",
   "CloseAllTabs": "關閉所有分頁",
 
+  "SnapTabMarginMenu": "吸附時的分頁邊距",
+  "SnapTabMarginTop": "頂部新增邊距",
   "TabPositionMenu": "分頁位置",
   "TabWidthChange": "分頁寬度",
   "IconOnly": "僅圖示",

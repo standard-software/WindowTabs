@@ -128,6 +128,7 @@ type IGroup =
     abstract member lorder: List2<IntPtr>  // Tab display order (left to right)
     abstract member destroy: unit -> unit
     abstract member perGroupTabPositionValue: string with get, set
+    abstract member snapTabHeightMargin: bool with get, set
 
 type IDesktop =
     abstract member isDragging : bool

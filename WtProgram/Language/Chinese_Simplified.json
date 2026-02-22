@@ -126,6 +126,8 @@
   "CloseOtherTabs": "关闭其他标签页",
   "CloseAllTabs": "关闭所有标签页",
 
+  "SnapTabMarginMenu": "吸附时的标签页边距",
+  "SnapTabMarginTop": "顶部添加边距",
   "TabPositionMenu": "标签页位置",
   "TabWidthChange": "标签页宽度",
   "IconOnly": "仅图标",

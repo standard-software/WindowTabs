@@ -56,6 +56,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     // Per-group tab position: always has a concrete value (TopLeft/TopCenter/TopRight)
     let mutable perGroupTabPosition : string = "TopRight"
+    // Per-group snap tab height margin: always has a concrete value
+    let mutable perGroupSnapTabHeightMargin : bool = false
 
     member this.isSuperBarEnabled = enableSuperBar
 
@@ -71,6 +73,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             | "TopCenter" -> TabCenter
             | _ -> TabRight
         ts.setAlignment(ts.direction, alignment)
+
+        // Apply default setting for snap tab height margin
+        let defaultSnapMargin =
+            try Services.settings.getValue("snapTabHeightMargin") :?> bool
+            with _ -> false
+        perGroupSnapTabHeightMargin <- defaultSnapMargin
 
         // Apply default setting for hiding tabs when inside
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -110,6 +118,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                     | "TopCenter" -> TabCenter
                     | _ -> TabRight
                 ts.setAlignment(ts.direction, alignment)
+
+        // Listen for snapTabHeightMargin changes (apply to all groups)
+        Services.settings.notifyValue "snapTabHeightMargin" <| fun value ->
+            this.invokeAsync <| fun() ->
+                perGroupSnapTabHeightMargin <- unbox<bool>(value)
 
         // Listen for hideTabsWhenDownByDefault changes
         Services.settings.notifyValue "hideTabsWhenDownByDefault" <| fun value ->
@@ -340,6 +353,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 | "TopCenter" -> TabCenter
                 | _ -> TabRight
             this.ts.setAlignment(this.ts.direction, alignment)
+
+    member this.snapTabHeightMargin
+        with get() = perGroupSnapTabHeightMargin
+        and set(value) = perGroupSnapTabHeightMargin <- value
 
     member this.hwnd = this.ts.hwnd
 

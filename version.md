@@ -9,6 +9,8 @@
   - Setting is preserved across restart, disable/enable, and watchdog restart
   - Tab position setting in Behavior tab changed from radio buttons to ComboBox
     - Changing the ComboBox applies to all existing tab groups immediately
+- "Add tab height margin when snapping" is now a per-tab-group setting
+  - Context menu: "Tab Margin When Snapping" > "Add margin at top" toggle
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

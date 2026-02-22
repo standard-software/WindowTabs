@@ -773,8 +773,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.getTabHeightForSnap() =
         try
-            let snapTabHeightMargin = Services.settings.getValue("snapTabHeightMargin") :?> bool
-            if snapTabHeightMargin then group.tabAppearance.tabHeight
+            if group.snapTabHeightMargin then group.tabAppearance.tabHeight
             else 0
         with | _ -> 0
 
@@ -3444,6 +3443,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             }))
             Some(CmiSeparator)
+            Some(CmiPopUp({
+                text = Localization.getString("SnapTabMarginMenu")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = Localization.getString("SnapTabMarginTop")
+                        image = None
+                        flags = if group.snapTabHeightMargin then List2([MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            group.snapTabHeightMargin <- not group.snapTabHeightMargin
+                    })
+                ])
+                flags = List2()
+            }))
             Some(tabPositionSubMenu)
             Some(tabWidthSubMenu)
             Some(tabNameSubMenu)

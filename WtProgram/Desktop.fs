@@ -67,7 +67,10 @@ type GroupInfo(enableSuperBar) as this =
         member x.perGroupTabPositionValue
             with get() : string = _group.perGroupTabPositionValue
             and set(value:string) = this.invokeGroup <| fun() -> _group.perGroupTabPositionValue <- value
-        
+        member x.snapTabHeightMargin
+            with get() = _group.snapTabHeightMargin
+            and set(value) = this.invokeGroup <| fun() -> _group.snapTabHeightMargin <- value
+
 type IDesktopNotification =
     abstract member dragDrop : IntPtr -> unit
     abstract member dragEnd : unit -> unit
