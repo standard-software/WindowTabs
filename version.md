@@ -7,7 +7,7 @@
   - Tab position setting in Behavior tab changed from radio buttons to ComboBox
 - "Add tab height margin when snapping" is now a per-tab-group setting
 - Snap percent menu: added Center, Center Horizontally, Center Vertically options
-- Snap Maximize menu: resize window to fill current display or entire desktop (without using Windows maximize)
+- Snap Maximize: changed from submenu to direct menu items (Snap Display / Snap Desktop)
 - Tooltip: immediately update to new tab's content when switching tabs (no delay)
   - Tooltip stays visible when mouse moves to tab's rounded edge area
 - Tab border area at screen edge now responds to mouse clicks (no longer passes through to desktop)
