@@ -54,19 +54,24 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isForegroundExport = Cell.export <| fun() ->
         zorderCell.value.any((=) foregroundCell.value)
 
+    // Per-group tab position: always has a concrete value (TopLeft/TopCenter/TopRight)
+    let mutable perGroupTabPosition : string = "TopRight"
+
     member this.isSuperBarEnabled = enableSuperBar
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
 
         // Apply default setting for tab position
-        let defaultPosition = 
-            match Services.settings.getValue("tabPositionByDefault") :?> string with
-            | "left" -> TabLeft
-            | "center" -> TabCenter
+        let defaultPosition = Services.settings.getValue("tabPositionByDefault") :?> string
+        perGroupTabPosition <- defaultPosition
+        let alignment =
+            match defaultPosition with
+            | "TopLeft" -> TabLeft
+            | "TopCenter" -> TabCenter
             | _ -> TabRight
-        ts.setAlignment(ts.direction, defaultPosition)
-        
+        ts.setAlignment(ts.direction, alignment)
+
         // Apply default setting for hiding tabs when inside
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
         match hideTabsMode with
@@ -94,14 +99,15 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             this.invokeAsync <| fun() ->
                 this.ts.setTabAppearance(this.tabAppearance)
 
-        // Listen for tabPositionByDefault changes
+        // Listen for tabPositionByDefault changes (apply to all groups)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
             this.invokeAsync <| fun() ->
                 let position = unbox<string>(value)
+                perGroupTabPosition <- position
                 let alignment =
                     match position with
-                    | "left" -> TabLeft
-                    | "center" -> TabCenter
+                    | "TopLeft" -> TabLeft
+                    | "TopCenter" -> TabCenter
                     | _ -> TabRight
                 ts.setAlignment(ts.direction, alignment)
 
@@ -309,9 +315,31 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
         
-    member this.isIconOnly 
+    member this.isIconOnly
         with get() = this.ts.isIconOnly
         and set(value) = this.ts.isIconOnly <- value
+
+    member this.tabPosition
+        with get() = perGroupTabPosition
+        and set(value) =
+            perGroupTabPosition <- value
+            let alignment =
+                match value with
+                | "TopLeft" -> TabLeft
+                | "TopCenter" -> TabCenter
+                | _ -> TabRight
+            this.ts.setAlignment(this.ts.direction, alignment)
+
+    member this.perGroupTabPositionValue
+        with get() = perGroupTabPosition
+        and set(value) =
+            perGroupTabPosition <- value
+            let alignment =
+                match value with
+                | "TopLeft" -> TabLeft
+                | "TopCenter" -> TabCenter
+                | _ -> TabRight
+            this.ts.setAlignment(this.ts.direction, alignment)
 
     member this.hwnd = this.ts.hwnd
 

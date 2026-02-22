@@ -128,6 +128,7 @@ module Localization_English =
         ("CloseOtherTabs", "Close other tabs")
         ("CloseAllTabs", "Close all tabs")
 
+        ("TabPositionMenu", "Tab Position")
         ("TabWidthChange", "Tab Width")
         ("IconOnly", "Icon Only")
         ("IconAndText", "Icon and Text")

@@ -1,10 +1,14 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.21_next_2
-- Rename localization key "Name" to "ProcessName" for Programs tab column header
-  - Updated all language files: English "Process Name" etc.
+## version ss_jp_2026.02.21_next_1
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running
+  - Rename localization key "Name" to "ProcessName" for Programs tab column header
+  - Updated all language files: English "Process Name" etc.
   - Programs tab: [x] delete button for non-running process rows to remove settings
+- Per-tab-group tab position: each tab group can have its own Left/Center/Right alignment via context menu
+  - Setting is preserved across restart, disable/enable, and watchdog restart
+  - Tab position setting in Behavior tab changed from radio buttons to ComboBox
+    - Changing the ComboBox applies to all existing tab groups immediately
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

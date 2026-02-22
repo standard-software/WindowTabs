@@ -222,7 +222,14 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
                         makeTabsNarrowerByDefault = settingsJson.getBool("MakeTabsNarrowerByDefault").def(false)
-                        tabPositionByDefault = settingsJson.getString("TabPositionByDefault").def("right")
+                        tabPositionByDefault =
+                            // Handle backward compatibility: convert old format to new TopXxx format
+                            match settingsJson.getString("TabPositionByDefault") with
+                            | Some("left") -> "TopLeft"
+                            | Some("center") -> "TopCenter"
+                            | Some("right") -> "TopRight"
+                            | Some(v) -> v  // Already in TopXxx format or other valid value
+                            | None -> "TopRight"
                         hideTabsWhenDownByDefault =
                             // Handle backward compatibility: convert old bool values to new string format
                             // First try to get as string (new format)
@@ -273,7 +280,7 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = false
                         enableHoverActivate = false
                         makeTabsNarrowerByDefault = false
-                        tabPositionByDefault = "right"
+                        tabPositionByDefault = "TopRight"
                         hideTabsWhenDownByDefault = "never"
                         hideTabsDelayMilliseconds = 3000
                         hideTabsOnFullscreen = true

@@ -45,7 +45,7 @@ type ProgramVersion(parts:List2<int>)=
         this.compare(v2) > 0
 
 type Program() as this =
-    let version = "ss_jp_2026.02.21"
+    let version = "ss_jp_2026.02.21_next_1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
@@ -85,7 +85,7 @@ type Program() as this =
     // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
     let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
     // Temporary storage for tab group configuration (used during disable/enable)
-    let savedTabGroups = Cell.create<List2<List2<IntPtr>>>(List2())
+    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
@@ -395,7 +395,11 @@ type Program() as this =
                         | _ -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
-                    groupsArray.Add(windowsArray)
+                    let groupObj = JObject()
+                    groupObj.addOrUpdate("windows", windowsArray)
+                    // Save per-group tab position
+                    groupObj.setString("tabPosition", gi.perGroupTabPositionValue)
+                    groupsArray.Add(groupObj)
             json.addOrUpdate("SavedTabGroupsForRestart", groupsArray)
             settingsManager.settingsJson <- json
         with
@@ -423,9 +427,24 @@ type Program() as this =
                 let currentHwnds = currentWindows.map(fun w -> w.hwnd.ToInt64()).list |> Set.ofList
 
                 // For each saved group, find windows by hwnd and recreate the group
+                // Supports both old format (JArray of windows) and new format (JObject with windows + tabPosition)
                 for groupToken in groupsArray do
-                    match groupToken with
-                    | :? JArray as windowsArray ->
+                    let windowsArray, savedTabPosition =
+                        match groupToken with
+                        | :? JObject as groupObj ->
+                            // New format: { windows: [...], tabPosition: "TopLeft" }
+                            let windows =
+                                match groupObj.getValueCI("windows") with
+                                | Some(:? JArray as arr) -> arr
+                                | _ -> JArray()
+                            let tabPos = groupObj.getString("tabPosition")
+                            windows, tabPos
+                        | :? JArray as arr ->
+                            // Old format: direct array of window objects
+                            arr, None
+                        | _ -> JArray(), None
+
+                    if windowsArray.Count > 0 then
                         // Collect saved window info (hwnd and optional renamedTabName)
                         let savedWindowsList =
                             windowsArray
@@ -453,7 +472,11 @@ type Program() as this =
                                     windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
                                 | None -> ()
                             )
-                    | _ -> ()
+                            // Restore per-group tab position if saved
+                            match savedTabPosition with
+                            | Some(pos) ->
+                                group.perGroupTabPositionValue <- pos
+                            | None -> ()  // Use global default (already applied during group creation)
 
                 isRestoringTabGroups.set(false)
                 // Do NOT clear saved data here - keep it for watchdog restart scenarios
@@ -579,8 +602,8 @@ type Program() as this =
             | ex -> ()  // Ignore errors when saving settings
 
             if value then
-                // When disabling, save current tab group configuration first
-                let groupConfigs = this.desktop.groups.map <| fun gi -> gi.lorder
+                // When disabling, save current tab group configuration first (with per-group tab position)
+                let groupConfigs = this.desktop.groups.map <| fun gi -> (gi.lorder, gi.perGroupTabPositionValue)
                 savedTabGroups.set(groupConfigs)
 
                 // Set disabled state before destroying groups
@@ -599,7 +622,7 @@ type Program() as this =
                 this.isTabMonitoringSuspended <- true
 
                 // Restore saved tab groups
-                savedTabGroups.value.iter <| fun hwnds ->
+                savedTabGroups.value.iter <| fun (hwnds, savedTabPos) ->
                     // Filter out windows that no longer exist or are not visible
                     let validHwnds = hwnds.where <| fun hwnd ->
                         let window = os.windowFromHwnd(hwnd)
@@ -609,6 +632,8 @@ type Program() as this =
                         let group = Services.desktop.createGroup(false)
                         validHwnds.iter <| fun hwnd ->
                             group.addWindow(hwnd, false)
+                        // Restore per-group tab position
+                        group.perGroupTabPositionValue <- savedTabPos
 
                 // Clear saved configuration
                 savedTabGroups.set(List2())

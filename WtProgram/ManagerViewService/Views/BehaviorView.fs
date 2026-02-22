@@ -45,47 +45,27 @@ type HotKeyView() =
 
         let settingsCheckbox key = checkBox(settingsProperty(key))
         
-        let defaultTabPositionRadio =
-            let panel = new FlowLayoutPanel()
-            panel.FlowDirection <- FlowDirection.TopDown
-            panel.AutoSize <- true
-            panel.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            panel.Margin <- Padding(0)
-            panel.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+        let defaultTabPositionCombo =
+            let combo = new ComboBox()
+            combo.DropDownStyle <- ComboBoxStyle.DropDownList
+            combo.Width <- 100
+            combo.Items.Add(Localization.getString("AlignLeft")) |> ignore
+            combo.Items.Add(Localization.getString("AlignCenter")) |> ignore
+            combo.Items.Add(Localization.getString("AlignRight")) |> ignore
 
             let currentPosition = Services.settings.getValue("tabPositionByDefault") :?> string
+            combo.SelectedIndex <-
+                match currentPosition with
+                | "TopLeft" -> 0
+                | "TopCenter" -> 1
+                | _ -> 2
 
-            let radioLeft = new RadioButton()
-            radioLeft.Text <- Localization.getString("AlignLeft")
-            radioLeft.AutoSize <- true
-            radioLeft.Checked <- (currentPosition = "left")
-            radioLeft.CheckedChanged.Add(fun _ ->
-                if radioLeft.Checked then
-                    Services.settings.setValue("tabPositionByDefault", "left")
+            combo.SelectedIndexChanged.Add(fun _ ->
+                let value = match combo.SelectedIndex with | 0 -> "TopLeft" | 1 -> "TopCenter" | _ -> "TopRight"
+                Services.settings.setValue("tabPositionByDefault", value)
             )
 
-            let radioCenter = new RadioButton()
-            radioCenter.Text <- Localization.getString("AlignCenter")
-            radioCenter.AutoSize <- true
-            radioCenter.Checked <- (currentPosition = "center")
-            radioCenter.CheckedChanged.Add(fun _ ->
-                if radioCenter.Checked then
-                    Services.settings.setValue("tabPositionByDefault", "center")
-            )
-
-            let radioRight = new RadioButton()
-            radioRight.Text <- Localization.getString("AlignRight")
-            radioRight.AutoSize <- true
-            radioRight.Checked <- (currentPosition = "right" || (currentPosition <> "left" && currentPosition <> "center"))
-            radioRight.CheckedChanged.Add(fun _ ->
-                if radioRight.Checked then
-                    Services.settings.setValue("tabPositionByDefault", "right")
-            )
-
-            panel.Controls.Add(radioLeft)
-            panel.Controls.Add(radioCenter)
-            panel.Controls.Add(radioRight)
-            panel
+            combo
 
         let hideTabsDelay =
             let textBox = new TextBox()
@@ -197,7 +177,7 @@ type HotKeyView() =
             ("EnableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("MakeTabsNarrowerByDefault", settingsCheckbox "makeTabsNarrowerByDefault")
-            ("TabPositionByDefault", defaultTabPositionRadio :> Control)
+            ("TabPositionByDefault", defaultTabPositionCombo :> Control)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
@@ -210,13 +190,11 @@ type HotKeyView() =
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled, 3=enableCtrlNumber,
         //            4=enableHover, 5=makeTabsNarrower, 6=tabPosition, 7=hideTabsWhenDown,
         //            8+=hotkeys
-        let tabPositionRowIndex = 6
         let hideTabsRowIndex = 7
 
         if formPanel :? TableLayoutPanel then
             let table = formPanel :?> TableLayoutPanel
             // Let rows auto-size based on content
-            table.RowStyles.[tabPositionRowIndex].SizeType <- SizeType.AutoSize
             table.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
 
         "Switch Tabs", formPanel
