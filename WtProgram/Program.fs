@@ -648,6 +648,22 @@ type Program() as this =
                 categoryPaths.iter(fun p -> paths.Add(p) |> ignore)
             List2(paths |> Seq.toList)
 
+        member x.removeProcessSettings(procPath) =
+            // Remove from includedPaths, excludedPaths, autoGroupingPaths
+            this.saveSettingsAndUpdateAppWindows <| fun s ->
+                { s with
+                    includedPaths = s.includedPaths.remove procPath
+                    excludedPaths = s.excludedPaths.remove procPath
+                    autoGroupingPaths = s.autoGroupingPaths.remove procPath }
+            // Remove from Category1-10Paths
+            let settingsJson = settingsManager.settingsJson
+            for i in 1..10 do
+                let categoryKey = sprintf "Category%dPaths" i
+                let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
+                let newPaths = paths.remove procPath
+                settingsJson.setStringArray(categoryKey, newPaths.items)
+            settingsManager.settingsJson <- settingsJson
+
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =
             isDroppedAndAwaitingGrouping.map <| fun s -> s.add hwnd

@@ -3,6 +3,8 @@
 ## version ss_jp_2026.02.21_next_2
 - Rename localization key "Name" to "ProcessName" for Programs tab column header
   - Updated all language files: English "Process Name" etc.
+- Programs tab: "Show all settings" checkbox to display settings for programs not currently running
+  - Programs tab: [x] delete button for non-running process rows to remove settings
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)

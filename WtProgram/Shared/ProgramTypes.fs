@@ -117,6 +117,7 @@ type IProgram =
     abstract member saveTabGroupsBeforeExit : unit -> unit
     abstract member launchNewWindow : IntPtr -> IntPtr -> string -> unit
     abstract member getAllConfiguredProcessPaths : unit -> List2<string>
+    abstract member removeProcessSettings : string -> unit
 
 type IGroup =
     abstract member hwnd : IntPtr

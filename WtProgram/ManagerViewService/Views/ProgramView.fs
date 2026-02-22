@@ -22,6 +22,7 @@ type ExeNode(procPath) =
     let icon =
         let procIcon = Win32Helper.GetFileIcon(procPath)
         ImgHelper.imgFromIcon (Ico.fromHandle(procIcon).def(System.Drawing.SystemIcons.Application))
+    let mutable _isRunning = true
     let mutable _enableTabs = Services.filter.getIsTabbingEnabledForProcess(procPath)
     let mutable _enableAutoGrouping = Services.program.getAutoGroupingEnabled(procPath)
     let mutable _category1 = Services.program.getCategoryEnabled(procPath, 1)
@@ -35,6 +36,10 @@ type ExeNode(procPath) =
     let mutable _category9 = Services.program.getCategoryEnabled(procPath, 9)
     let mutable _category10 = Services.program.getCategoryEnabled(procPath, 10)
     member this.Icon with get() = icon
+    member this.processPath = procPath
+    member this.isRunning
+        with get() = _isRunning
+        and set(v) = _isRunning <- v
     member this.enableTabs
         with get() = _enableTabs
         and set(newValue) =
@@ -125,6 +130,41 @@ type WindowNode(window:Window) =
     interface INode with
         member x.showSettings = false
 
+type NodeDeleteButton() =
+    inherit NodeControls.NodeControl()
+    let deleteClicked = Event<ExeNode>()
+    member this.DeleteClicked = deleteClicked.Publish
+    override this.MeasureSize(node, context) =
+        let path = this.Parent.GetPath(node)
+        if path <> null && path.LastNode <> null then
+            match path.LastNode with
+            | :? ExeNode as exeNode when not exeNode.isRunning -> Size(16, 16)
+            | _ -> Size.Empty
+        else
+            Size.Empty
+    override this.Draw(node, context) =
+        let path = this.Parent.GetPath(node)
+        if path <> null && path.LastNode <> null then
+            match path.LastNode with
+            | :? ExeNode as exeNode when not exeNode.isRunning ->
+                let bounds = this.GetBounds(node, context)
+                let g = context.Graphics
+                use pen = new Pen(Color.Gray, 1.5f)
+                let x = bounds.X + 3
+                let y = bounds.Y + 3
+                let size = 9
+                g.DrawLine(pen, x, y, x + size, y + size)
+                g.DrawLine(pen, x + size, y, x, y + size)
+            | _ -> ()
+    override this.MouseDown(args) =
+        let path = this.Parent.GetPath(args.Node)
+        if path <> null && path.LastNode <> null then
+            match path.LastNode with
+            | :? ExeNode as exeNode when not exeNode.isRunning ->
+                deleteClicked.Trigger(exeNode)
+                args.Handled <- true
+            | _ -> ()
+
 type ProgramView() as this=
 
     let invoker = InvokerService.invoker
@@ -212,6 +252,20 @@ type ProgramView() as this=
                 | 7 -> exeNode.category7 | 8 -> exeNode.category8 | 9 -> exeNode.category9
                 | 10 -> exeNode.category10 | _ -> false
              thisCategory || not (hasAnyCategory exeNode))
+        // Delete column - shows [x] button for non-running process rows
+        let deleteColumn =
+            let col = TreeColumn("", 24)
+            col.TextAlign <- HorizontalAlignment.Center
+            col
+        tree.Columns.Add(deleteColumn)
+        let deleteBtn = NodeDeleteButton()
+        deleteBtn.ParentColumn <- deleteColumn
+        deleteBtn.LeftMargin <- 3
+        deleteBtn.DeleteClicked.Add(fun exeNode ->
+            Services.program.removeProcessSettings(exeNode.processPath)
+            model.Nodes.Remove(exeNode) |> ignore
+        )
+        tree.NodeControls.Add(deleteBtn)
         addCheckBoxColumn (Some(Localization.getString("EnableTabs"))) "enableTabs" 50 None |> ignore
         addCheckBoxColumn (Some(Localization.getString("EnableAutoGrouping"))) "enableAutoGrouping" 100 (Some(fun (exeNode:ExeNode) -> exeNode.enableTabs)) |> ignore
         for i in 1..10 do
@@ -272,7 +326,9 @@ type ProgramView() as this=
                     procs.items.iter <| fun (procPath, _) -> runningPaths.Add(procPath) |> ignore
                     let configuredPaths = Services.program.getAllConfiguredProcessPaths()
                     let extraNodes = configuredPaths.where(fun p -> not (runningPaths.Contains(p))).map <| fun procPath ->
-                        ExeNode(procPath)
+                        let node = ExeNode(procPath)
+                        node.isRunning <- false
+                        node
                     procNodes.appendList(extraNodes)
                 else
                     procNodes
