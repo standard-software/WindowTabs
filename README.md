@@ -119,8 +119,10 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
-  - Tab Width (wider / narrower)
-  - Tab Name (rename)
+  - Tab Margin When Snapping (per-tab-group toggle)
+  - Tab Position (Left / Center / Right per-tab-group)
+  - Tab Width (Icon Only / Icon and Text)
+  - Tab Name (rename / reset)
   ---
   - Settings
 
@@ -147,6 +149,9 @@ Top level menu options:
 
 "Snap Other" submenu:
 - Left / Right / Top / Bottom - Snap with percentage options (90%, 70%, 50%, 30%)
+- Top-Left, Top-Right, Bottom-Left, Bottom-Right - Corner snap with percentage options
+- Center, Center Horizontally, Center Vertically
+- Snap Display / Snap Desktop - Resize to fill current display or entire desktop (without using Windows maximize)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
 
 #### Link to another group
@@ -255,6 +260,7 @@ Access settings by right-clicking the tray icon and selecting "Settings" or by r
 
 Configure which programs should use tabs and auto-grouping behavior.
 
+- **Show all settings**: Checkbox to display settings for programs not currently running
 - **Tabs**: Enable/disable tabbing for each program
 - **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
 - **Category 1-10**: Assign programs to a category for cross-application auto-grouping
@@ -263,6 +269,7 @@ Configure which programs should use tabs and auto-grouping behavior.
   - For example, assign Chrome, Edge, Firefox, etc. to the same category to auto-group browsers together
   - Category columns are only visible when Auto Grouping is enabled for a program
   - Programs are sorted by category number for better visibility
+- **Delete button [x]**: Remove settings for non-running processes
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
