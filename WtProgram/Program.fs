@@ -85,7 +85,7 @@ type Program() as this =
     // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
     let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
     // Temporary storage for tab group configuration (used during disable/enable)
-    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string option>>(List2())
+    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
@@ -397,16 +397,8 @@ type Program() as this =
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
                     groupObj.addOrUpdate("windows", windowsArray)
-                    // Save per-group tab position if set
-                    match gi.perGroupTabPositionValue with
-                    | Some(pos) ->
-                        let savedValue =
-                            match pos with
-                            | "left" -> "TopLeft"
-                            | "center" -> "TopCenter"
-                            | _ -> "TopRight"
-                        groupObj.setString("tabPosition", savedValue)
-                    | None -> ()
+                    // Save per-group tab position
+                    groupObj.setString("tabPosition", gi.perGroupTabPositionValue)
                     groupsArray.Add(groupObj)
             json.addOrUpdate("SavedTabGroupsForRestart", groupsArray)
             settingsManager.settingsJson <- json
@@ -483,14 +475,8 @@ type Program() as this =
                             // Restore per-group tab position if saved
                             match savedTabPosition with
                             | Some(pos) ->
-                                let internalPos =
-                                    match pos with
-                                    | "TopLeft" -> "left"
-                                    | "TopCenter" -> "center"
-                                    | "TopRight" -> "right"
-                                    | _ -> "right"
-                                group.perGroupTabPositionValue <- Some(internalPos)
-                            | None -> ()
+                                group.perGroupTabPositionValue <- pos
+                            | None -> ()  // Use global default (already applied during group creation)
 
                 isRestoringTabGroups.set(false)
                 // Do NOT clear saved data here - keep it for watchdog restart scenarios
@@ -647,9 +633,7 @@ type Program() as this =
                         validHwnds.iter <| fun hwnd ->
                             group.addWindow(hwnd, false)
                         // Restore per-group tab position
-                        match savedTabPos with
-                        | Some(_) -> group.perGroupTabPositionValue <- savedTabPos
-                        | None -> ()
+                        group.perGroupTabPositionValue <- savedTabPos
 
                 // Clear saved configuration
                 savedTabGroups.set(List2())

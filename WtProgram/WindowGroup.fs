@@ -54,8 +54,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isForegroundExport = Cell.export <| fun() ->
         zorderCell.value.any((=) foregroundCell.value)
 
-    // Per-group tab position: None = use global default, Some = per-group override
-    let mutable perGroupTabPosition : string option = None
+    // Per-group tab position: always has a concrete value (TopLeft/TopCenter/TopRight)
+    let mutable perGroupTabPosition : string = "TopRight"
 
     member this.isSuperBarEnabled = enableSuperBar
 
@@ -63,12 +63,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         _ts := Some(ts)
 
         // Apply default setting for tab position
-        let defaultPosition =
-            match Services.settings.getValue("tabPositionByDefault") :?> string with
-            | "left" -> TabLeft
-            | "center" -> TabCenter
+        let defaultPosition = Services.settings.getValue("tabPositionByDefault") :?> string
+        perGroupTabPosition <- defaultPosition
+        let alignment =
+            match defaultPosition with
+            | "TopLeft" -> TabLeft
+            | "TopCenter" -> TabCenter
             | _ -> TabRight
-        ts.setAlignment(ts.direction, defaultPosition)
+        ts.setAlignment(ts.direction, alignment)
 
         // Apply default setting for hiding tabs when inside
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -97,27 +99,15 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             this.invokeAsync <| fun() ->
                 this.ts.setTabAppearance(this.tabAppearance)
 
-        // Listen for tabPositionByDefault changes (only apply if no per-group override)
+        // Listen for tabPositionByDefault changes (apply to all groups)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
             this.invokeAsync <| fun() ->
-                if perGroupTabPosition.IsNone then
-                    let position = unbox<string>(value)
-                    let alignment =
-                        match position with
-                        | "left" -> TabLeft
-                        | "center" -> TabCenter
-                        | _ -> TabRight
-                    ts.setAlignment(ts.direction, alignment)
-
-        // Listen for "Apply to all tab groups" button
-        Services.settings.notifyValue "applyTabPositionToAllGroups" <| fun _ ->
-            this.invokeAsync <| fun() ->
-                perGroupTabPosition <- None
-                let position = Services.settings.getValue("tabPositionByDefault") :?> string
+                let position = unbox<string>(value)
+                perGroupTabPosition <- position
                 let alignment =
                     match position with
-                    | "left" -> TabLeft
-                    | "center" -> TabCenter
+                    | "TopLeft" -> TabLeft
+                    | "TopCenter" -> TabCenter
                     | _ -> TabRight
                 ts.setAlignment(ts.direction, alignment)
 
@@ -330,16 +320,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         and set(value) = this.ts.isIconOnly <- value
 
     member this.tabPosition
-        with get() =
-            match perGroupTabPosition with
-            | Some(pos) -> pos
-            | None -> Services.settings.getValue("tabPositionByDefault") :?> string
+        with get() = perGroupTabPosition
         and set(value) =
-            perGroupTabPosition <- Some(value)
+            perGroupTabPosition <- value
             let alignment =
                 match value with
-                | "left" -> TabLeft
-                | "center" -> TabCenter
+                | "TopLeft" -> TabLeft
+                | "TopCenter" -> TabCenter
                 | _ -> TabRight
             this.ts.setAlignment(this.ts.direction, alignment)
 
@@ -347,22 +334,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         with get() = perGroupTabPosition
         and set(value) =
             perGroupTabPosition <- value
-            match value with
-            | Some(pos) ->
-                let alignment =
-                    match pos with
-                    | "left" -> TabLeft
-                    | "center" -> TabCenter
-                    | _ -> TabRight
-                this.ts.setAlignment(this.ts.direction, alignment)
-            | None ->
-                let defaultPos = Services.settings.getValue("tabPositionByDefault") :?> string
-                let alignment =
-                    match defaultPos with
-                    | "left" -> TabLeft
-                    | "center" -> TabCenter
-                    | _ -> TabRight
-                this.ts.setAlignment(this.ts.direction, alignment)
+            let alignment =
+                match value with
+                | "TopLeft" -> TabLeft
+                | "TopCenter" -> TabCenter
+                | _ -> TabRight
+            this.ts.setAlignment(this.ts.direction, alignment)
 
     member this.hwnd = this.ts.hwnd
 

@@ -46,12 +46,6 @@ type HotKeyView() =
         let settingsCheckbox key = checkBox(settingsProperty(key))
         
         let defaultTabPositionCombo =
-            let panel = new FlowLayoutPanel()
-            panel.FlowDirection <- FlowDirection.LeftToRight
-            panel.AutoSize <- true
-            panel.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            panel.Margin <- Padding(0)
-
             let combo = new ComboBox()
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 100
@@ -62,26 +56,16 @@ type HotKeyView() =
             let currentPosition = Services.settings.getValue("tabPositionByDefault") :?> string
             combo.SelectedIndex <-
                 match currentPosition with
-                | "left" -> 0
-                | "center" -> 1
+                | "TopLeft" -> 0
+                | "TopCenter" -> 1
                 | _ -> 2
 
             combo.SelectedIndexChanged.Add(fun _ ->
-                let value = match combo.SelectedIndex with | 0 -> "left" | 1 -> "center" | _ -> "right"
+                let value = match combo.SelectedIndex with | 0 -> "TopLeft" | 1 -> "TopCenter" | _ -> "TopRight"
                 Services.settings.setValue("tabPositionByDefault", value)
             )
 
-            let applyAllButton = new Button()
-            applyAllButton.Text <- Localization.getString("ApplyToAllTabGroups")
-            applyAllButton.AutoSize <- true
-            applyAllButton.Margin <- Padding(5, 0, 0, 0)
-            applyAllButton.Click.Add(fun _ ->
-                Services.settings.setValue("applyTabPositionToAllGroups", true)
-            )
-
-            panel.Controls.Add(combo)
-            panel.Controls.Add(applyAllButton)
-            panel
+            combo
 
         let hideTabsDelay =
             let textBox = new TextBox()

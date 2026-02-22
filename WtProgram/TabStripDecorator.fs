@@ -2597,23 +2597,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     CmiRegular({
                         text = Localization.getString("AlignLeft")
                         image = None
-                        flags = if currentPosition = "left" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentPosition = "TopLeft" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.tabPosition <- "left"
+                            group.tabPosition <- "TopLeft"
                     })
                     CmiRegular({
                         text = Localization.getString("AlignCenter")
                         image = None
-                        flags = if currentPosition = "center" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentPosition = "TopCenter" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.tabPosition <- "center"
+                            group.tabPosition <- "TopCenter"
                     })
                     CmiRegular({
                         text = Localization.getString("AlignRight")
                         image = None
-                        flags = if currentPosition = "right" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentPosition = "TopRight" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.tabPosition <- "right"
+                            group.tabPosition <- "TopRight"
                     })
                 ])
                 flags = List2()

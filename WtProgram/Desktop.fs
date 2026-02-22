@@ -65,8 +65,8 @@ type GroupInfo(enableSuperBar) as this =
         member x.removeWindow hwnd = this.removeWindow hwnd
         member x.switchWindow(next,force) = this.switchWindow(next, force)
         member x.perGroupTabPositionValue
-            with get() = _group.perGroupTabPositionValue
-            and set(value) = this.invokeGroup <| fun() -> _group.perGroupTabPositionValue <- value
+            with get() : string = _group.perGroupTabPositionValue
+            and set(value:string) = this.invokeGroup <| fun() -> _group.perGroupTabPositionValue <- value
         
 type IDesktopNotification =
     abstract member dragDrop : IntPtr -> unit
