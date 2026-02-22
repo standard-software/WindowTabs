@@ -793,33 +793,35 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Snap right/left: maintain width, expand height to full
         // Snap top/bottom: maintain height, expand width to full
         let workArea = this.adjustWorkAreaForTabHeight(workArea)
+        let clampedWidth = min currentWidth workArea.Width
+        let clampedHeight = min currentHeight workArea.Height
         match snapDirection with
         | "snapright" ->
-            let newWidth = currentWidth
+            let newWidth = clampedWidth
             let newHeight = workArea.Height
             let x = workArea.Right - newWidth
             let y = workArea.Top
             (x, y, newWidth, newHeight)
         | "snapleft" ->
-            let newWidth = currentWidth
+            let newWidth = clampedWidth
             let newHeight = workArea.Height
             let x = workArea.Left
             let y = workArea.Top
             (x, y, newWidth, newHeight)
         | "snaptop" ->
             let newWidth = workArea.Width
-            let newHeight = currentHeight
+            let newHeight = clampedHeight
             let x = workArea.Left
             let y = workArea.Top
             (x, y, newWidth, newHeight)
         | "snapbottom" ->
             let newWidth = workArea.Width
-            let newHeight = currentHeight
+            let newHeight = clampedHeight
             let x = workArea.Left
             let y = workArea.Bottom - newHeight
             (x, y, newWidth, newHeight)
         | _ ->
-            (workArea.Left, workArea.Top, currentWidth, currentHeight)
+            (workArea.Left, workArea.Top, clampedWidth, clampedHeight)
 
     member private this.calculateSnapBoundsWithPercent(
         snapDirection: string,
