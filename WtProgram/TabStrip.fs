@@ -52,6 +52,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let tooltipTimer = new Timer(Interval = 500)
     let lastToolTipTab = ref None
     let pendingTooltipTab = ref None
+    let tooltipMaxWidth =
+        use g = Graphics.FromHwnd(IntPtr.Zero)
+        let dpiScale = g.DpiX / 96.0f
+        int(500.0f * dpiScale)
 
     let isMouseOverExport = Cell.export <| fun() ->
         hoverCell.value.IsSome
@@ -73,17 +77,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Set form opacity for modern look
         tooltipForm.Opacity <- 0.95
         
-        // Get DPI scale factor
-        use g = Graphics.FromHwnd(IntPtr.Zero)
-        let dpiScale = g.DpiX / 96.0f
-        let maxWidth = int(500.0f * dpiScale)
-        
         tooltipLabel.ForeColor <- Color.White
         tooltipLabel.BackColor <- Color.FromArgb(40, 40, 40)
         tooltipLabel.Font <- SystemFonts.MenuFont
         tooltipLabel.TextAlign <- ContentAlignment.TopLeft  // Top-left aligned for proper wrapping
         tooltipLabel.AutoSize <- false  // Keep false for proper width control
-        tooltipLabel.MaximumSize <- new Size(maxWidth, 0)
+        tooltipLabel.MaximumSize <- new Size(tooltipMaxWidth, 0)
         tooltipLabel.Dock <- DockStyle.Fill  // Fill the parent container
         tooltipLabel.Parent <- tooltipForm
         
@@ -102,47 +101,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             tooltipForm.Region <- new Region(path)
         )
         
-        tooltipTimer.Tick.Add(fun _ -> 
+        tooltipTimer.Tick.Add(fun _ ->
+            tooltipTimer.Stop()
             match !pendingTooltipTab with
             | Some(tab) ->
-                let tabInfo = this.tabInfo(tab)
-                if tabInfo.text <> "" then
-                    // Hide tooltip first to avoid visual glitches
-                    tooltipForm.Visible <- false
-                    
-                    // Set new text
-                    tooltipLabel.Text <- tabInfo.text
-                    
-                    // Calculate proper size based on text
-                    use g = tooltipLabel.CreateGraphics()
-                    let textSize = g.MeasureString(tabInfo.text, tooltipLabel.Font, maxWidth)
-                    // Add extra width for one character to prevent text cutoff
-                    let charWidth = g.MeasureString("W", tooltipLabel.Font).Width  // Use 'W' as a wide character
-                    let labelWidth = min maxWidth (int(textSize.Width + charWidth) + 16)  // Add padding + extra char width
-                    let labelHeight = int(textSize.Height) + 16  // Add padding
-                    
-                    // Set form size explicitly
-                    tooltipForm.Size <- new Size(labelWidth, labelHeight)
-                    
-                    // Position tooltip
-                    let mousePt = Control.MousePosition
-                    tooltipForm.Location <- new Point(mousePt.X + 10, mousePt.Y + 20)
-                    
-                    // Ensure tooltip is within screen bounds
-                    let screen = Screen.FromPoint(mousePt)
-                    let formRight = tooltipForm.Location.X + tooltipForm.Width
-                    let formBottom = tooltipForm.Location.Y + tooltipForm.Height
-                    if formRight > screen.WorkingArea.Right then
-                        tooltipForm.Location <- new Point(screen.WorkingArea.Right - tooltipForm.Width, tooltipForm.Location.Y)
-                    if formBottom > screen.WorkingArea.Bottom then
-                        tooltipForm.Location <- new Point(tooltipForm.Location.X, mousePt.Y - tooltipForm.Height - 5)
-                    
-                    // Show tooltip after everything is set
-                    tooltipForm.Visible <- true
-                    tooltipForm.BringToFront()
+                this.updateTooltipForTab tab
                 pendingTooltipTab := None
             | None -> ()
-            tooltipTimer.Stop()
         )
         
         layeredWindowCell.value <-
@@ -211,6 +176,47 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         return hit 
         }
     
+    member private this.updateTooltipForTab(tab: Tab) =
+        let tabInfo = this.tabInfo(tab)
+        if tabInfo.text <> "" then
+            // Move off-screen and ensure visible so rendering can occur
+            tooltipForm.Location <- new Point(-10000, -10000)
+            if not tooltipForm.Visible then
+                tooltipForm.Visible <- true
+
+            // Update text and size while off-screen
+            tooltipLabel.Text <- tabInfo.text
+
+            // Calculate proper size based on text
+            use g = tooltipLabel.CreateGraphics()
+            let textSize = g.MeasureString(tabInfo.text, tooltipLabel.Font, tooltipMaxWidth)
+            let charWidth = g.MeasureString("W", tooltipLabel.Font).Width
+            let labelWidth = min tooltipMaxWidth (int(textSize.Width + charWidth) + 16)
+            let labelHeight = int(textSize.Height) + 16
+            tooltipForm.Size <- new Size(labelWidth, labelHeight)
+
+            // Force synchronous repaint with new content while off-screen
+            tooltipForm.Update()
+
+            // Calculate final position based on tab's left edge, always below tab strip
+            let tabLoc : Pt = this.tabLocation tab
+            let stripLoc : Pt = this.location
+            let tabScreenX = stripLoc.x + tabLoc.x
+            let tabScreenY = stripLoc.y
+            let tabStripHeight = this.ts.size.height
+            tooltipForm.Location <- new Point(tabScreenX, tabScreenY + tabStripHeight + 2)
+
+            // Ensure tooltip is within screen bounds
+            let screen = Screen.FromPoint(new Point(tabScreenX, tabScreenY))
+            let formRight = tooltipForm.Location.X + tooltipForm.Width
+            let formBottom = tooltipForm.Location.Y + tooltipForm.Height
+            if formRight > screen.WorkingArea.Right then
+                tooltipForm.Location <- new Point(screen.WorkingArea.Right - tooltipForm.Width, tooltipForm.Location.Y)
+            if formBottom > screen.WorkingArea.Bottom then
+                tooltipForm.Location <- new Point(tooltipForm.Location.X, tabScreenY - tooltipForm.Height - 5)
+
+            tooltipForm.BringToFront()
+
     member private this.processMouse(mouse) =
         match mouse with
         | MouseMove(pt) ->
@@ -219,14 +225,22 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 this.window.trackMouseLeave()
             let currentHit = this.hit
             hoverCell.set(currentHit)
-            // Update tooltip when hovering over a tab
+            // Update tooltip when hovering over a tab (including close button)
             match currentHit with
-            | Some(tab, TabBackground) | Some(tab, TabIcon) ->
+            | Some(tab, TabBackground) | Some(tab, TabIcon) | Some(tab, TabClose) ->
                 if !lastToolTipTab <> Some(tab) then
+                    let wasVisible = tooltipForm.Visible
+                    tooltipTimer.Stop()
                     lastToolTipTab := Some(tab)
                     pendingTooltipTab := Some(tab)
-                    tooltipTimer.Stop()
-                    tooltipTimer.Start()
+                    if wasVisible then
+                        // Tooltip was showing for previous tab - update immediately
+                        // updateTooltipForTab moves off-screen, updates content, repaints, then moves to position
+                        this.updateTooltipForTab tab
+                        pendingTooltipTab := None
+                    else
+                        // No tooltip visible - show with delay
+                        tooltipTimer.Start()
             | _ ->
                 if !lastToolTipTab <> None then
                     lastToolTipTab := None

@@ -14,6 +14,8 @@
 - Snap percent menu: added Center, Center Horizontally, Center Vertically options
 - Snap Maximize menu: resize window to fill current display or entire desktop (without using Windows maximize)
   - Respects tab height margin setting
+- Tooltip improvements:
+  - When switching tabs while tooltip is visible, immediately update to new tab's content (no delay)
 
 ## version ss_jp_2026.02.21
 - Tab close button is now only shown on hover (hidden when not hovered)
