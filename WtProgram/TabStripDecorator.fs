@@ -3137,7 +3137,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             (fun s -> this.getScreenName(s)))
                     )
                     |> Array.toList
-                screenSubMenus
+                [Some(CmiSeparator)] @ screenSubMenus @ [Some(CmiSeparator)]
             else
                 []
 

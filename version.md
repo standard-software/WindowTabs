@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.02.23_next_1
+- Context menu: added separators around display items when multiple displays are connected
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running
