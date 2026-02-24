@@ -389,8 +389,18 @@ type TabStripSprite<'id> when 'id : equality = {
             let bounds = (0, this.size.width - int(tabLen))
             Pt(between bounds x, this.tabYOffset)
         | _ ->
-            let x = this.tabOffset (this.adjustedLorder.findIndex((=)tab))
-            let x = x + this.alignmentOffset
+            // Compute offset by iterating through adjustedLorder with per-tab widths
+            // This correctly handles cross-zone drag where tab order differs from pinned zones
+            let adjusted = this.adjustedLorder
+            let tabIdx = adjusted.findIndex((=)tab)
+            let offset =
+                adjusted.list
+                |> Seq.take tabIdx
+                |> Seq.fold (fun acc t ->
+                    let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+                    acc + tLen - this.tabOverlap
+                ) 0.0
+            let x = offset + this.alignmentOffset
             Pt(int(x), this.tabYOffset)
 
     member this.tabSize = Sz(int(this.unpinnedTabLength), (this.size.height) - 1)
@@ -401,27 +411,28 @@ type TabStripSprite<'id> when 'id : equality = {
             let index =
                 if this.count = 0 then 0
                 else
-                    let isPinned = this.isPinned(tab)
+                    let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
                     let x = float(x) - this.alignmentOffset
-                    if isPinned then
-                        // Pinned tab: can only move within [0, pinnedCount-1]
-                        let step = this.pinnedTabLength - this.tabOverlap
-                        if step <= 0.0 then 0
+                    let centerX = x + dragTabLen / 2.0
+                    // Allow cross-zone drag (VSCode-style): determine target index
+                    // based on which zone the center of the dragged tab falls in
+                    let pinnedStep = this.pinnedTabLength - this.tabOverlap
+                    let pinnedZoneEnd = float(this.pinnedCount) * pinnedStep
+                    if this.pinnedCount > 0 && centerX < pinnedZoneEnd then
+                        // Center is in pinned zone
+                        if pinnedStep <= 0.0 then 0
                         else
-                            let mid = x + this.pinnedTabLength / 2.0
-                            let idx = int((mid - this.tabOverlap / 2.0) / step)
-                            max 0 (min idx (this.pinnedCount - 1))
+                            let idx = int(centerX / pinnedStep)
+                            max 0 (min idx (this.count - 1))
                     else
-                        // Unpinned tab: can only move within [pinnedCount, count-1]
-                        let pinnedZoneEnd = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
-                        let step = this.unpinnedTabLength - this.tabOverlap
-                        if step <= 0.0 then this.pinnedCount
+                        // Center is in unpinned zone
+                        let unpinnedStep = this.unpinnedTabLength - this.tabOverlap
+                        if unpinnedStep <= 0.0 then this.pinnedCount
                         else
-                            let relX = x - pinnedZoneEnd
-                            let mid = relX + this.unpinnedTabLength / 2.0
-                            let relIdx = int((mid - this.tabOverlap / 2.0) / step)
+                            let relX = centerX - pinnedZoneEnd
+                            let relIdx = int(relX / unpinnedStep)
                             let idx = this.pinnedCount + relIdx
-                            max this.pinnedCount (min idx (this.count - 1))
+                            max 0 (min idx (this.count - 1))
             Some(tab, index)
         | None -> None
 

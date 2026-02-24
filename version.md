@@ -7,8 +7,10 @@
 - Added pinned tab feature (v1)
   - Pinned tabs display as icon-only with narrow width (50px) and are positioned on the left side
   - Context menu: "Tab Pin" submenu with Pin/Unpin this tab, Pin all, Unpin all
-  - Pinned tabs cannot be dragged past unpinned tabs and vice versa
   - Pinned state is preserved when tabs are moved between groups (detach, split, move to group)
+  - VSCode-style cross-zone drag and drop
+    - Dragging a tab into the pinned zone automatically pins it
+    - Dragging a tab into the unpinned zone automatically unpins it
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running

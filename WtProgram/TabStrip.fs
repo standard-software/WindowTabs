@@ -402,7 +402,25 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.movedTab = this.ts.movedTab
 
     member this.moveTab(tab, index) =
+        Cell.beginUpdate()
         lorderCell.set(lorderCell.value.move((=) tab, index))
+        // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
+        let newLorder = lorderCell.value
+        let tabIndex = newLorder.tryFindIndex((=) tab)
+        match tabIndex with
+        | Some idx ->
+            let currentPinnedCount =
+                newLorder.where(fun t -> pinnedTabsCell.value.contains(t)).length
+            if idx < currentPinnedCount then
+                // Dropped in pinned zone -> pin the tab
+                if not (pinnedTabsCell.value.contains(tab)) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
+            else
+                // Dropped in unpinned zone -> unpin the tab
+                if pinnedTabsCell.value.contains(tab) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
+        | None -> ()
+        Cell.endUpdate()
         monitor.tabMoved(tab, index)
         tabMovedEvent.Trigger(tab, index)
 
