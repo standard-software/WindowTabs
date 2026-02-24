@@ -37,6 +37,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let showInsideCell = Cell.create(false)
     let isInAltTabCell = Cell.create(false)
     let pinnedTabsCell = Cell.create(Set2<Tab>())
+    // Thread-safe snapshot of pinned tabs for cross-thread reads (e.g., save from main thread)
+    [<VolatileField>]
+    let mutable pinnedTabsSnapshot = Set2<Tab>()
     let alignment = Cell.create(TabRight)
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
@@ -121,6 +124,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         hwndRef := layeredWindowCell.value.Value.hwnd
         
         isMouseOverExport.init()
+
+        // Sync pinned tabs snapshot for thread-safe cross-thread reads
+        Cell.listen <| fun() ->
+            pinnedTabsSnapshot <- pinnedTabsCell.value
 
         Cell.listen <| fun() ->
             this.update()
@@ -440,6 +447,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.pinnedTabs = pinnedTabsCell.value
 
     member this.isPinned(tab) = pinnedTabsCell.value.contains(tab)
+
+    // Thread-safe version for cross-thread reads (reads from volatile snapshot)
+    member this.isPinnedThreadSafe(tab) = pinnedTabsSnapshot.contains(tab)
 
     member this.pinTab(tab) =
         if not (pinnedTabsCell.value.contains(tab)) then

@@ -329,6 +329,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
         
     member this.isPinned(hwnd) = this.ts.isPinned(Tab(hwnd))
+    // Thread-safe version for cross-thread reads (e.g., save from main thread)
+    member this.isPinnedThreadSafe(hwnd) = this.ts.isPinnedThreadSafe(Tab(hwnd))
     member this.pinTab(hwnd) = this.ts.pinTab(Tab(hwnd))
     member this.unpinTab(hwnd) = this.ts.unpinTab(Tab(hwnd))
     member this.pinAll() = this.ts.pinAll()

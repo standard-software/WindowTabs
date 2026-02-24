@@ -70,7 +70,7 @@ type GroupInfo(enableSuperBar) as this =
         member x.snapTabHeightMargin
             with get() = _group.snapTabHeightMargin
             and set(value) = this.invokeGroup <| fun() -> _group.snapTabHeightMargin <- value
-        member x.isPinned(hwnd) = _group.isPinned(hwnd)
+        member x.isPinned(hwnd) = _group.isPinnedThreadSafe(hwnd)
         member x.pinTab(hwnd) = this.invokeGroup <| fun() -> _group.pinTab(hwnd)
 
 type IDesktopNotification =

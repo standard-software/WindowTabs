@@ -473,12 +473,13 @@ type Program() as this =
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
                             matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned) ->
-                                group.addWindow(hwnd, false)
-                                // Restore renamed tab name if exists
+                                // Restore renamed tab name BEFORE addWindow to avoid race condition
+                                // (addWindow is async on group thread, which reads name override)
                                 match renamedTabName with
                                 | Some(name) ->
                                     windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
                                 | None -> ()
+                                group.addWindow(hwnd, false)
                                 // Restore pinned state
                                 if isPinned then
                                     group.pinTab(hwnd)
