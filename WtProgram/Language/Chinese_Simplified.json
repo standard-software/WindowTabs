@@ -45,7 +45,6 @@
   "IsTabbingEnabledForAllProcessesByDefault": "为所有程序启用标签页",
   "EnableCtrlNumberHotKey": "使用 Ctrl+1...+9 切换标签页",
   "EnableHoverActivate": "鼠标悬停时切换标签页",
-  "MakeTabsNarrowerByDefault": "双击活动标签页图标时改变标签页宽度",
 
   "TabPositionByDefault": "标签页位置",
   "AlignLeft": "左对齐",
@@ -134,9 +133,6 @@
   "SnapTabMarginMenu": "吸附时的标签页边距",
   "SnapTabMarginTop": "顶部添加边距",
   "TabPositionMenu": "标签页位置",
-  "TabWidthChange": "标签页宽度",
-  "IconOnly": "仅图标",
-  "IconAndText": "图标和文字",
 
   "TabNameEdit": "标签页名称编辑",
   "RenameTab": "重命名标签页",

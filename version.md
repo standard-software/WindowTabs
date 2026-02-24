@@ -2,6 +2,8 @@
 
 ## version ss_jp_2026.02.23_next_1
 - Context menu: added separators around display items when multiple displays are connected
+- Removed "Tab Width" (Icon Only / Icon and Text) feature from context menu and settings
+  - Removed "Toggle tab width on active tab icon double-click" setting from Behavior tab
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running

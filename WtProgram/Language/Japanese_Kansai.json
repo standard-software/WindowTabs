@@ -45,7 +45,6 @@
   "IsTabbingEnabledForAllProcessesByDefault": "全部のプログラムでタブ使うで",
   "EnableCtrlNumberHotKey": "Ctrl+1...+9 でタブ切り替えるで",
   "EnableHoverActivate": "マウス乗せたらタブ切り替わるで",
-  "MakeTabsNarrowerByDefault": "アクティブなタブアイコンをダブルクリックで幅を変更するで",
 
   "TabPositionByDefault": "タブの位置",
   "AlignLeft": "左",
@@ -134,9 +133,6 @@
   "SnapTabMarginMenu": "スナップん時のタブの余白やで",
   "SnapTabMarginTop": "上に余白あけるで",
   "TabPositionMenu": "タブの位置やで",
-  "TabWidthChange": "タブ幅の変更やで",
-  "IconOnly": "アイコンだけ",
-  "IconAndText": "アイコンとテキスト",
 
   "TabNameEdit": "タブ名の編集やで",
   "RenameTab": "タブの名前変えるで",

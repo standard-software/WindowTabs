@@ -34,7 +34,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let transparentCell = Cell.create(true)
     let showInsideCell = Cell.create(false)
     let isInAltTabCell = Cell.create(false)
-    let iconOnlyCell = Cell.create(false)
     let alignment = Cell.create(TabRight)
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
@@ -157,13 +156,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             slide = this.slide
             direction = direction
             alignment = alignment.value
-            onlyIcons = this.isIconOnly
+            onlyIcons = false
             transparent = this.transparent
-            appearance = 
-                if this.isIconOnly then
-                    { this.appearance with tabMaxWidth = 50 }
-                else
-                    this.appearance
+            appearance = this.appearance
         }
     member private this.ts = this.tsBase this.direction
         
@@ -403,10 +398,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.sprite = this.ts.sprite
             
-    member this.isIconOnly 
-        with get() = iconOnlyCell.value
-        and set(value) = iconOnlyCell.set(value)
-
     member this.isShrunk    
         with get() = isShrunkCell.value
         and set(newValue) = isShrunkCell.set(newValue)

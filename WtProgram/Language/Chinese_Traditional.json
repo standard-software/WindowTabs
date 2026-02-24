@@ -45,7 +45,6 @@
   "IsTabbingEnabledForAllProcessesByDefault": "為所有程式啟用分頁",
   "EnableCtrlNumberHotKey": "使用 Ctrl+1...+9 切換分頁",
   "EnableHoverActivate": "滑鼠懸停時切換分頁",
-  "MakeTabsNarrowerByDefault": "雙擊活動分頁圖示時改變分頁寬度",
 
   "TabPositionByDefault": "分頁位置",
   "AlignLeft": "靠左對齊",
@@ -134,9 +133,6 @@
   "SnapTabMarginMenu": "吸附時的分頁邊距",
   "SnapTabMarginTop": "頂部新增邊距",
   "TabPositionMenu": "分頁位置",
-  "TabWidthChange": "分頁寬度",
-  "IconOnly": "僅圖示",
-  "IconAndText": "圖示和文字",
 
   "TabNameEdit": "分頁名稱編輯",
   "RenameTab": "重新命名分頁",

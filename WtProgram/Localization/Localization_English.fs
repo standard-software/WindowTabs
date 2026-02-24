@@ -49,7 +49,6 @@ module Localization_English =
         ("IsTabbingEnabledForAllProcessesByDefault", "Enable tabs for all programs by default")
         ("EnableCtrlNumberHotKey", "Enable Ctrl+1, ...Ctrl+9 to active tab")
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
-        ("MakeTabsNarrowerByDefault", "Toggle tab width on active tab icon double-click")
 
         ("TabPositionByDefault", "Tab position")
         ("AlignLeft", "Left")
@@ -136,9 +135,6 @@ module Localization_English =
         ("SnapTabMarginMenu", "Tab Margin When Snapping")
         ("SnapTabMarginTop", "Add margin at top")
         ("TabPositionMenu", "Tab Position")
-        ("TabWidthChange", "Tab Width")
-        ("IconOnly", "Icon Only")
-        ("IconAndText", "Icon and Text")
 
         ("TabNameEdit", "Tab Name")
         ("RenameTab", "Rename tab")

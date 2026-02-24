@@ -29,7 +29,6 @@ type SettingsRec = {
     enableTabbingByDefault: bool
     enableCtrlNumberHotKey: bool
     enableHoverActivate: bool
-    makeTabsNarrowerByDefault: bool
     tabPositionByDefault: string
     hideTabsWhenDownByDefault: string
     hideTabsDelayMilliseconds: int

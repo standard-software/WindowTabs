@@ -221,7 +221,6 @@ type Settings(isStandAlone) as this =
                         enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(hasExistingSettings.not)
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
-                        makeTabsNarrowerByDefault = settingsJson.getBool("MakeTabsNarrowerByDefault").def(false)
                         tabPositionByDefault =
                             // Handle backward compatibility: convert old format to new TopXxx format
                             match settingsJson.getString("TabPositionByDefault") with
@@ -279,7 +278,6 @@ type Settings(isStandAlone) as this =
                         enableTabbingByDefault = true
                         enableCtrlNumberHotKey = false
                         enableHoverActivate = false
-                        makeTabsNarrowerByDefault = false
                         tabPositionByDefault = "TopRight"
                         hideTabsWhenDownByDefault = "never"
                         hideTabsDelayMilliseconds = 3000
@@ -303,7 +301,6 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
-            settingsJson.setBool("MakeTabsNarrowerByDefault", settings.makeTabsNarrowerByDefault)
             settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)
             settingsJson.setString("HideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
             settingsJson.setInt32("HideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)

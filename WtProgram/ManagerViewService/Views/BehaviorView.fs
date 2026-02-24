@@ -176,7 +176,6 @@ type HotKeyView() =
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
             ("EnableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
-            ("MakeTabsNarrowerByDefault", settingsCheckbox "makeTabsNarrowerByDefault")
             ("TabPositionByDefault", defaultTabPositionCombo :> Control)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
@@ -188,9 +187,9 @@ type HotKeyView() =
 
         // Adjust row heights for radio button groups
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled, 3=enableCtrlNumber,
-        //            4=enableHover, 5=makeTabsNarrower, 6=tabPosition, 7=hideTabsWhenDown,
-        //            8+=hotkeys
-        let hideTabsRowIndex = 7
+        //            4=enableHover, 5=tabPosition, 6=hideTabsWhenDown,
+        //            7+=hotkeys
+        let hideTabsRowIndex = 6
 
         if formPanel :? TableLayoutPanel then
             let table = formPanel :?> TableLayoutPanel

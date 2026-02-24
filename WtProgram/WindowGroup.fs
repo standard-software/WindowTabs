@@ -328,10 +328,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
         
-    member this.isIconOnly
-        with get() = this.ts.isIconOnly
-        and set(value) = this.ts.isIconOnly <- value
-
     member this.tabPosition
         with get() = perGroupTabPosition
         and set(value) =

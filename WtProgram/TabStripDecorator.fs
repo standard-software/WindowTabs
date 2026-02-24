@@ -91,27 +91,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         this.mouse.Add <| fun(hwnd, btn, part, action, pt) ->
             match action, btn with
             | MouseDblClick, MouseLeft ->
-                // Check if tab width toggle on icon double-click is enabled
-                let toggleTabWidthOnIconDoubleClick =
-                    try
-                        Services.settings.getValue("makeTabsNarrowerByDefault") :?> bool
-                    with
-                    | _ -> false
-
                 // Check if double-click hide mode is enabled
                 let autoHideDoubleClick = group.bb.read("autoHideDoubleClick", false)
 
                 // Only process if it's the active tab
                 if hwnd = group.topWindow && !firstClickTab = Some(hwnd) then
                     match part with
-                    | TabIcon when toggleTabWidthOnIconDoubleClick ->
-                        // Toggle tab width on icon double-click (priority over other actions)
-                        group.isIconOnly <- not group.isIconOnly
-                    | TabBackground when toggleTabWidthOnIconDoubleClick && group.isIconOnly ->
-                        // When tabs are narrow (icon-only), allow background click to also toggle width
-                        group.isIconOnly <- not group.isIconOnly
-                    | _ when autoHideDoubleClick && this.ts.direction = TabDown && not group.isIconOnly ->
-                        // Hide tabs on double-click (only when option is on, tabs at bottom, NOT icon-only)
+                    | _ when autoHideDoubleClick && this.ts.direction = TabDown ->
+                        // Hide tabs on double-click (only when option is on, tabs at bottom)
                         hiddenByDoubleClick := true
                         doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
                         group.invokeAsync <| fun() ->
@@ -2653,29 +2640,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
-        let tabWidthSubMenu =
-            CmiPopUp({
-                text = Localization.getString("TabWidthChange")
-                image = None
-                items = List2([
-                    CmiRegular({
-                        text = Localization.getString("IconOnly")
-                        image = None
-                        flags = if group.isIconOnly then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.isIconOnly <- true
-                    })
-                    CmiRegular({
-                        text = Localization.getString("IconAndText")
-                        image = None
-                        flags = if not group.isIconOnly then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.isIconOnly <- false
-                    })
-                ])
-                flags = List2()
-            })
-
         let tabNameSubMenu =
             CmiPopUp({
                 text = Localization.getString("TabNameEdit")
@@ -3493,7 +3457,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             }))
             Some(tabPositionSubMenu)
-            Some(tabWidthSubMenu)
             Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(managerItem)
