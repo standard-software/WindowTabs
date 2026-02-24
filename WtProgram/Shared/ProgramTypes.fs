@@ -128,6 +128,8 @@ type IGroup =
     abstract member destroy: unit -> unit
     abstract member perGroupTabPositionValue: string with get, set
     abstract member snapTabHeightMargin: bool with get, set
+    abstract member isPinned: IntPtr -> bool
+    abstract member pinTab: IntPtr -> unit
 
 type IDesktop =
     abstract member isDragging : bool

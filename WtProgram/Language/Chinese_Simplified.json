@@ -138,6 +138,8 @@
   "UnpinThisTab": "取消固定此标签页",
   "PinAllTabs": "固定所有标签页",
   "UnpinAllTabs": "取消固定所有标签页",
+  "PinLeftTabsFormat": "固定左侧{0}个标签页",
+  "UnpinRightTabsFormat": "取消固定右侧{0}个标签页",
 
   "TabNameEdit": "标签页名称编辑",
   "RenameTab": "重命名标签页",

@@ -138,6 +138,8 @@
   "UnpinThisTab": "取消固定此分頁",
   "PinAllTabs": "固定所有分頁",
   "UnpinAllTabs": "取消固定所有分頁",
+  "PinLeftTabsFormat": "固定左側{0}個分頁",
+  "UnpinRightTabsFormat": "取消固定右側{0}個分頁",
 
   "TabNameEdit": "分頁名稱編輯",
   "RenameTab": "重新命名分頁",

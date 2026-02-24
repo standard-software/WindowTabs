@@ -138,6 +138,8 @@
   "UnpinThisTab": "このタブのピン止め外すべ",
   "PinAllTabs": "全部のタブをピン止めすっぺ",
   "UnpinAllTabs": "全部のタブのピン止め外すべ",
+  "PinLeftTabsFormat": "左側{0}タブをピン止めすっぺ",
+  "UnpinRightTabsFormat": "右側{0}タブのピン止め外すべ",
 
   "TabNameEdit": "タブ名の編集だべ",
   "RenameTab": "タブの名前変えっぺ",

@@ -140,6 +140,8 @@ module Localization_English =
         ("UnpinThisTab", "Unpin this tab")
         ("PinAllTabs", "Pin all tabs")
         ("UnpinAllTabs", "Unpin all tabs")
+        ("PinLeftTabsFormat", "Pin {0} tabs to the left")
+        ("UnpinRightTabsFormat", "Unpin {0} tabs to the right")
 
         ("TabNameEdit", "Tab Name")
         ("RenameTab", "Rename tab")

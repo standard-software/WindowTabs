@@ -462,6 +462,54 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.unpinAll() =
         pinnedTabsCell.set(Set2<Tab>())
 
+    // Count of unpinned tabs to the left of the given tab (in lorder)
+    member this.unpinnedCountToLeft(tab) =
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            lorderCell.value.list
+            |> Seq.take idx
+            |> Seq.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
+            |> Seq.length
+        | None -> 0
+
+    // Count of pinned tabs to the right of the given tab (in lorder)
+    member this.pinnedCountToRight(tab) =
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            lorderCell.value.list
+            |> Seq.skip (idx + 1)
+            |> Seq.filter (fun t -> pinnedTabsCell.value.contains(t))
+            |> Seq.length
+        | None -> 0
+
+    // Pin all unpinned tabs to the left of the given tab
+    member this.pinLeftTabs(tab) =
+        Cell.beginUpdate()
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            let mutable newPinned = pinnedTabsCell.value
+            lorderCell.value.list |> List.iteri (fun i t ->
+                if i <= idx && not (newPinned.contains(t)) then
+                    newPinned <- newPinned.add(t)
+            )
+            pinnedTabsCell.set(newPinned)
+        | None -> ()
+        Cell.endUpdate()
+
+    // Unpin all pinned tabs to the right of the given tab (including the tab itself)
+    member this.unpinRightTabs(tab) =
+        Cell.beginUpdate()
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            let mutable newPinned = pinnedTabsCell.value
+            lorderCell.value.list |> List.iteri (fun i t ->
+                if i >= idx && newPinned.contains(t) then
+                    newPinned <- newPinned.remove(t)
+            )
+            pinnedTabsCell.set(newPinned)
+        | None -> ()
+        Cell.endUpdate()
+
     member this.isMouseOver = isMouseOverExport :> ICellOutput<_>
 
     member this.getAlignment direction = alignment.value

@@ -85,7 +85,7 @@ type Program() as this =
     // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
     let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
     // Temporary storage for tab group configuration (used during disable/enable)
-    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool>>(List2())
+    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
@@ -393,6 +393,9 @@ type Program() as this =
                         | Some(Some(name)) ->
                             windowObj.setString("renamedTabName", name)
                         | _ -> ()
+                        // Save pinned state
+                        if gi.isPinned(hwnd) then
+                            windowObj.setBool("isPinned", true)
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
@@ -448,32 +451,37 @@ type Program() as this =
                         | _ -> JArray(), None, None
 
                     if windowsArray.Count > 0 then
-                        // Collect saved window info (hwnd and optional renamedTabName)
+                        // Collect saved window info (hwnd, optional renamedTabName, isPinned)
                         let savedWindowsList =
                             windowsArray
                             |> Seq.choose (fun t ->
                                 match t with
                                 | :? JObject as obj ->
                                     obj.getIntPtr("hwnd")
-                                    |> Option.map (fun hwnd -> (hwnd, obj.getString("renamedTabName")))
+                                    |> Option.map (fun hwnd ->
+                                        let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
+                                        (hwnd, obj.getString("renamedTabName"), isPinned))
                                 | _ -> None)
                             |> List.ofSeq
 
                         // Filter to only windows that still exist
                         let matchedWindows =
                             savedWindowsList
-                            |> List.filter (fun (hwnd, _) -> currentHwnds.Contains(hwnd.ToInt64()))
+                            |> List.filter (fun (hwnd, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
 
                         // Create group with matched windows (preserving saved order)
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, renamedTabName) ->
+                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned) ->
                                 group.addWindow(hwnd, false)
                                 // Restore renamed tab name if exists
                                 match renamedTabName with
                                 | Some(name) ->
                                     windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
                                 | None -> ()
+                                // Restore pinned state
+                                if isPinned then
+                                    group.pinTab(hwnd)
                             )
                             // Restore per-group tab position if saved
                             match savedTabPosition with
@@ -611,7 +619,9 @@ type Program() as this =
 
             if value then
                 // When disabling, save current tab group configuration first (with per-group tab position)
-                let groupConfigs = this.desktop.groups.map <| fun gi -> (gi.lorder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin)
+                let groupConfigs = this.desktop.groups.map <| fun gi ->
+                    let pinnedHwnds = gi.lorder.where(fun hwnd -> gi.isPinned(hwnd))
+                    (gi.lorder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, pinnedHwnds)
                 savedTabGroups.set(groupConfigs)
 
                 // Set disabled state before destroying groups
@@ -630,7 +640,7 @@ type Program() as this =
                 this.isTabMonitoringSuspended <- true
 
                 // Restore saved tab groups
-                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin) ->
+                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, pinnedHwnds) ->
                     // Filter out windows that no longer exist or are not visible
                     let validHwnds = hwnds.where <| fun hwnd ->
                         let window = os.windowFromHwnd(hwnd)
@@ -644,6 +654,10 @@ type Program() as this =
                         group.perGroupTabPositionValue <- savedTabPos
                         // Restore per-group snap tab height margin
                         group.snapTabHeightMargin <- savedSnapMargin
+                        // Restore pinned tabs
+                        pinnedHwnds.iter <| fun hwnd ->
+                            if validHwnds.contains((=) hwnd) then
+                                group.pinTab(hwnd)
 
                 // Clear saved configuration
                 savedTabGroups.set(List2())
