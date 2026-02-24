@@ -133,6 +133,11 @@
   "SnapTabMarginMenu": "スナップ時のタブの余白",
   "SnapTabMarginTop": "上に余白をあける",
   "TabPositionMenu": "タブの位置",
+  "PinTabMenu": "タブのピン止め",
+  "PinThisTab": "このタブをピン止め",
+  "UnpinThisTab": "このタブのピン止めを解除",
+  "PinAllTabs": "全てのタブをピン止め",
+  "UnpinAllTabs": "全てのタブのピン止めを解除",
 
   "TabNameEdit": "タブ名の編集",
   "RenameTab": "タブの名前を変更",

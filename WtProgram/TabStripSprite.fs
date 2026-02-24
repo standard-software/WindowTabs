@@ -264,25 +264,68 @@ type TabStripSprite<'id> when 'id : equality = {
     alignment: Bemo.TabAlignment
     direction: TabDirection
     transparent: bool
-    onlyIcons: bool
+    pinnedTabs: Set2<'id>
     } with
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
-    member private this.tabMaxLen = float(this.appearance.tabMaxWidth)
+    member private this.unpinnedTabMaxLen = float(this.appearance.tabMaxWidth)
+    member private this.pinnedTabMaxLen = 50.0
+
+    member private this.count = this.lorder.length
+    member private this.pinnedCount =
+        this.lorder.where(fun tab -> this.pinnedTabs.contains(tab)).length
+    member private this.unpinnedCount = this.count - this.pinnedCount
+
+    member private this.isPinned (tab: 'id) = this.pinnedTabs.contains(tab)
+
+    // Pinned tab width: fixed at pinnedTabMaxLen unless space is too tight
+    member private this.pinnedTabLength =
+        if this.pinnedCount = 0 then this.pinnedTabMaxLen
+        else
+            let totalOverlap = float(max 0 (this.count - 1)) * this.tabOverlap
+            let availableWidth = float(this.size.width) + totalOverlap
+            let pinnedMaxTotal = float(this.pinnedCount) * this.pinnedTabMaxLen
+            let unpinnedRemaining = availableWidth - pinnedMaxTotal
+            // If unpinned tabs still have at least 1px each, keep pinned at max
+            if this.unpinnedCount = 0 || unpinnedRemaining / float(this.unpinnedCount) >= 1.0 then
+                this.pinnedTabMaxLen
+            else
+                // Everything too tight, use uniform width
+                availableWidth / float(this.count)
+
+    // Unpinned tab width: fills remaining space after pinned tabs
+    member private this.unpinnedTabLength =
+        if this.unpinnedCount = 0 then this.unpinnedTabMaxLen
+        else
+            let totalOverlap = float(max 0 (this.count - 1)) * this.tabOverlap
+            let availableWidth = float(this.size.width) + totalOverlap
+            let pinnedTotal = float(this.pinnedCount) * this.pinnedTabLength
+            let unpinnedAvailable = availableWidth - pinnedTotal
+            min (unpinnedAvailable / float(this.unpinnedCount)) this.unpinnedTabMaxLen
+
+    member private this.tabLengthFor index =
+        if index < this.pinnedCount then this.pinnedTabLength
+        else this.unpinnedTabLength
 
     member private this.tabSprite (tab:'id) =
+        let isPinned = this.isPinned(tab)
+        let tabLen = if isPinned then this.pinnedTabLength else this.unpinnedTabLength
         {
             TabSprite.id = tab
             isTop =
                 match this.zorder.tryHead with
                 | Some(top) -> top = tab
-                | None -> false 
+                | None -> false
             displayInfo = this.tabs.find(tab)
-            appearance = this.appearance
-            size = this.tabSize
-            onlyIcon = this.onlyIcons
+            appearance =
+                if isPinned then
+                    { this.appearance with tabMaxWidth = int(this.pinnedTabLength) }
+                else
+                    this.appearance
+            size = Sz(int(tabLen), (this.size.height) - 1)
+            onlyIcon = isPinned
             direction = this.direction
-            hover = 
+            hover =
                 match this.hover with
                 | Some(id, part) when id = tab -> Some(part)
                 | _ -> None
@@ -292,13 +335,11 @@ type TabStripSprite<'id> when 'id : equality = {
                 | _ -> None
         } :> ISprite
 
-    member private this.count = this.lorder.length
-
     member private this.bgImage =
-        let bgColor = 
+        let bgColor =
             if this.transparent then Color.FromArgb(0, 0, 0, 0)
-            else Color.FromArgb(1, 1, 1, 1) 
-        let gr, img = 
+            else Color.FromArgb(1, 1, 1, 1)
+        let gr, img =
             let sz = this.size
             if sz.isEmptyArea then
                 let bmp = new Bitmap(1,1)
@@ -309,35 +350,33 @@ type TabStripSprite<'id> when 'id : equality = {
                 let bmp = new Bitmap(sz.width, sz.height)
                 let gr = Graphics.FromImage(bmp)
                 do gr.SmoothingMode <- SmoothingMode.AntiAlias
-                (gr, bmp)   
+                (gr, bmp)
         let bounds = Rect(Pt(), this.size)
         do  gr.FillRectangle(new SolidBrush(bgColor), bounds.Rectangle)
         img.img
 
-    member private this.tabLengthWithOverlap tabOverlap =
-        let tsWidth = float(this.size.width)
-        let tsWidth =
-            if this.count < 2 then tsWidth 
-            else 
-                let tsWidth = tsWidth + float(this.count - 1) * tabOverlap
-                tsWidth / float(this.count)
-        min tsWidth this.tabMaxLen
-
-    member private this.tabLength = this.tabLengthWithOverlap this.tabOverlap
-
+    // Tab offset: accounts for different widths of pinned vs unpinned tabs
     member private this.tabOffset index =
-        let tabOffset = this.tabLength - this.tabOverlap
-        float(index) * tabOffset
+        if index <= 0 then 0.0
+        elif index <= this.pinnedCount then
+            float(index) * (this.pinnedTabLength - this.tabOverlap)
+        else
+            let pinnedOffset = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
+            let unpinnedLocalIndex = index - this.pinnedCount
+            pinnedOffset + float(unpinnedLocalIndex) * (this.unpinnedTabLength - this.tabOverlap)
 
     member private this.alignmentOffset =
-        let lastIndex = this.count - 1
-        let lastTabRight = this.tabOffset lastIndex + this.tabLength
-        let widthOfEmptySpace = float(this.size.width) - lastTabRight
-        match this.alignment with
-        | TabLeft -> 0.0
-        | TabCenter -> widthOfEmptySpace / 2.0
-        | TabRight -> widthOfEmptySpace
-            
+        if this.count = 0 then 0.0
+        else
+            let lastIndex = this.count - 1
+            let lastTabLen = this.tabLengthFor lastIndex
+            let lastTabRight = this.tabOffset lastIndex + lastTabLen
+            let widthOfEmptySpace = float(this.size.width) - lastTabRight
+            match this.alignment with
+            | TabLeft -> 0.0
+            | TabCenter -> widthOfEmptySpace / 2.0
+            | TabRight -> widthOfEmptySpace
+
     member private this.tabYOffset =
         match this.direction with
         | TabUp -> 0
@@ -345,26 +384,44 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member this.tabLocation tab =
         match this.slide with
-        | Some(slideTab, x) when tab = slideTab->
-            let bounds = (0, this.size.width - int(this.tabLength))
+        | Some(slideTab, x) when tab = slideTab ->
+            let tabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+            let bounds = (0, this.size.width - int(tabLen))
             Pt(between bounds x, this.tabYOffset)
         | _ ->
             let x = this.tabOffset (this.adjustedLorder.findIndex((=)tab))
             let x = x + this.alignmentOffset
             Pt(int(x), this.tabYOffset)
 
-    member this.tabSize = Sz(int(this.tabLength), (this.size.height) - 1)
+    member this.tabSize = Sz(int(this.unpinnedTabLength), (this.size.height) - 1)
 
     member this.movedTab =
         match this.slide with
         | Some(tab, x) ->
-            let index = 
+            let index =
                 if this.count = 0 then 0
                 else
-                    let x = float(x)
-                    let x = x - this.alignmentOffset
-                    let mid = x + this.tabLength / 2.0
-                    int((mid - this.tabOverlap / 2.0) / (this.tabLength - this.tabOverlap))
+                    let isPinned = this.isPinned(tab)
+                    let x = float(x) - this.alignmentOffset
+                    if isPinned then
+                        // Pinned tab: can only move within [0, pinnedCount-1]
+                        let step = this.pinnedTabLength - this.tabOverlap
+                        if step <= 0.0 then 0
+                        else
+                            let mid = x + this.pinnedTabLength / 2.0
+                            let idx = int((mid - this.tabOverlap / 2.0) / step)
+                            max 0 (min idx (this.pinnedCount - 1))
+                    else
+                        // Unpinned tab: can only move within [pinnedCount, count-1]
+                        let pinnedZoneEnd = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
+                        let step = this.unpinnedTabLength - this.tabOverlap
+                        if step <= 0.0 then this.pinnedCount
+                        else
+                            let relX = x - pinnedZoneEnd
+                            let mid = relX + this.unpinnedTabLength / 2.0
+                            let relIdx = int((mid - this.tabOverlap / 2.0) / step)
+                            let idx = this.pinnedCount + relIdx
+                            max this.pinnedCount (min idx (this.count - 1))
             Some(tab, index)
         | None -> None
 
@@ -373,12 +430,12 @@ type TabStripSprite<'id> when 'id : equality = {
         | Some(tab, index) -> this.lorder.move((=)tab, index)
         | None -> this.lorder
 
-    
+
     member this.sprite =
         {
             new ISprite with
-            member x.image = this.bgImage 
-            member x.children = this.zorder.map <| fun (tab:'id) -> 
+            member x.image = this.bgImage
+            member x.children = this.zorder.map <| fun (tab:'id) ->
                 (this.tabLocation tab, this.tabSprite(tab))
         }
 
@@ -407,16 +464,33 @@ type TabStripSprite<'id> when 'id : equality = {
         if this.count = 0 then None
         else
             let yOff = this.tabYOffset
-            let tabH = this.tabSize.height
+            let tabH = (this.size.height) - 1
             if pt.y >= yOff && pt.y < yOff + tabH then
-                let tabSpacing = this.tabLength - this.tabOverlap
-                if tabSpacing <= 0.0 then
-                    Some(this.adjustedLorder.head)
+                let relX = float(pt.x) - this.alignmentOffset
+                // Determine which zone the point falls in
+                let pinnedZoneEnd =
+                    if this.pinnedCount = 0 then 0.0
+                    else
+                        this.tabOffset this.pinnedCount
+                if relX < pinnedZoneEnd && this.pinnedCount > 0 then
+                    // In pinned zone
+                    let step = this.pinnedTabLength - this.tabOverlap
+                    if step <= 0.0 then Some(this.adjustedLorder.head)
+                    else
+                        let index = int(floor((relX - this.tabOverlap / 2.0) / step))
+                        let index = max 0 (min index (this.pinnedCount - 1))
+                        Some(this.adjustedLorder.skip(index).head)
                 else
-                    // Boundary between tab i and i+1 is at the midpoint of the overlap area
-                    let relX = float(pt.x) - this.alignmentOffset - this.tabOverlap / 2.0
-                    let index = int(floor(relX / tabSpacing))
-                    let index = max 0 (min index (this.count - 1))
-                    Some(this.adjustedLorder.skip(index).head)
+                    // In unpinned zone
+                    if this.unpinnedCount = 0 then None
+                    else
+                        let unpinnedStart = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
+                        let unpinnedRelX = relX - unpinnedStart
+                        let step = this.unpinnedTabLength - this.tabOverlap
+                        if step <= 0.0 then Some(this.adjustedLorder.skip(this.pinnedCount).head)
+                        else
+                            let index = int(floor((unpinnedRelX - this.tabOverlap / 2.0) / step))
+                            let index = max 0 (min index (this.unpinnedCount - 1))
+                            Some(this.adjustedLorder.skip(this.pinnedCount + index).head)
             else
                 None

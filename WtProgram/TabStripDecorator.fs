@@ -2640,6 +2640,45 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
+        let tabPinSubMenu =
+            let isPinned = group.isPinned(hwnd)
+            let tabName =
+                let ti = this.ts.tabInfo(Tab(hwnd))
+                if ti.text.Length > 20 then ti.text.Substring(0, 20) + "..." else ti.text
+            let pinToggleText =
+                if isPinned then
+                    Localization.getString("UnpinThisTab") + " : " + tabName
+                else
+                    Localization.getString("PinThisTab") + " : " + tabName
+            CmiPopUp({
+                text = Localization.getString("PinTabMenu")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = pinToggleText
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            if isPinned then group.unpinTab(hwnd)
+                            else group.pinTab(hwnd)
+                    })
+                    CmiSeparator
+                    CmiRegular({
+                        text = Localization.getString("PinAllTabs")
+                        image = None
+                        flags = if group.allPinned then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() -> group.pinAll()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("UnpinAllTabs")
+                        image = None
+                        flags = if group.nonePinned then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() -> group.unpinAll()
+                    })
+                ])
+                flags = List2()
+            })
+
         let tabNameSubMenu =
             CmiPopUp({
                 text = Localization.getString("TabNameEdit")
@@ -3457,6 +3496,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             }))
             Some(tabPositionSubMenu)
+            Some(tabPinSubMenu)
             Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(managerItem)

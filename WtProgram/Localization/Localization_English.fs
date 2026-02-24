@@ -135,6 +135,11 @@ module Localization_English =
         ("SnapTabMarginMenu", "Tab Margin When Snapping")
         ("SnapTabMarginTop", "Add margin at top")
         ("TabPositionMenu", "Tab Position")
+        ("PinTabMenu", "Tab Pin")
+        ("PinThisTab", "Pin this tab")
+        ("UnpinThisTab", "Unpin this tab")
+        ("PinAllTabs", "Pin all tabs")
+        ("UnpinAllTabs", "Unpin all tabs")
 
         ("TabNameEdit", "Tab Name")
         ("RenameTab", "Rename tab")

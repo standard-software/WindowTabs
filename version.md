@@ -4,6 +4,11 @@
 - Context menu: added separators around display items when multiple displays are connected
 - Removed "Tab Width" (Icon Only / Icon and Text) feature from context menu and settings
   - Removed "Toggle tab width on active tab icon double-click" setting from Behavior tab
+- Added pinned tab feature (v1)
+  - Pinned tabs display as icon-only with narrow width (50px) and are positioned on the left side
+  - Context menu: "Tab Pin" submenu with Pin/Unpin this tab, Pin all, Unpin all
+  - Pinned tabs cannot be dragged past unpinned tabs and vice versa
+  - Pinned state is preserved when tabs are moved between groups (detach, split, move to group)
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running

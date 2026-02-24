@@ -133,6 +133,11 @@
   "SnapTabMarginMenu": "吸附时的标签页边距",
   "SnapTabMarginTop": "顶部添加边距",
   "TabPositionMenu": "标签页位置",
+  "PinTabMenu": "固定标签页",
+  "PinThisTab": "固定此标签页",
+  "UnpinThisTab": "取消固定此标签页",
+  "PinAllTabs": "固定所有标签页",
+  "UnpinAllTabs": "取消固定所有标签页",
 
   "TabNameEdit": "标签页名称编辑",
   "RenameTab": "重命名标签页",

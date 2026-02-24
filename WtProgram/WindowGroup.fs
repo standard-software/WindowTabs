@@ -328,6 +328,15 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
         
+    member this.isPinned(hwnd) = this.ts.isPinned(Tab(hwnd))
+    member this.pinTab(hwnd) = this.ts.pinTab(Tab(hwnd))
+    member this.unpinTab(hwnd) = this.ts.unpinTab(Tab(hwnd))
+    member this.pinAll() = this.ts.pinAll()
+    member this.unpinAll() = this.ts.unpinAll()
+    member this.pinnedCount = this.ts.pinnedTabs.count
+    member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
+    member this.nonePinned = this.ts.pinnedTabs.count = 0
+
     member this.tabPosition
         with get() = perGroupTabPosition
         and set(value) =
