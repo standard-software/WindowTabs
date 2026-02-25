@@ -85,7 +85,6 @@ type AppearanceView() as this =
     let intProperties = List2([
         intConfig "tabHeight" "Tab Height"
         intConfig "tabMaxWidth" "Tab Width (Max)"
-        intConfig "tabPinnedTabWidth" "Pinned Tab Width"
         intConfig "tabOverlap" "Tab Overlap"
         intConfig "tabIndentNormal" "Indent Normal"
         intConfig "tabIndentFlipped" "Indent Flipped"
@@ -107,13 +106,13 @@ type AppearanceView() as this =
 
     // Combined list of all properties (int + color) for setEditorValues
     let allPropertyKeys =
-        (intProperties.list |> List.map (fun p -> p.key)) @ colorPropertyKeys
+        (intProperties.list |> List.map (fun p -> p.key)) @ ["tabPinnedTabWidth"] @ colorPropertyKeys
 
     // Layout structure:
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 2  // int props + dark mode + split menu (theme moved to colorPanel)
+    let upperRowCount = intProperties.length + 3  // int props + pinned width row + dark mode + split menu
     let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
@@ -225,16 +224,134 @@ type AppearanceView() as this =
 
     // Row indices for each section
     // Upper panel: int properties -> dark mode
-    let darkModeRow = intProperties.length
+    let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
     let splitMenuRow = darkModeRow + 1
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
     let colorStateStartRow = 2
 
-    // Create int property editors
+    // Create int property editors (skip row 2 for custom pinned width row)
     let intEditors =
-        intProperties.enumerate.map (fun (i, prop) -> createIntEditorAt prop i)
+        intProperties.enumerate.map (fun (i, prop) ->
+            let row = if i >= 2 then i + 1 else i
+            createIntEditorAt prop row)
+
+    // Custom pinned tab width row with radio buttons (row 2 in upperPanel)
+    let pinnedWidthRow = 2
+
+    let pinnedWidthLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("Pinned Tab Width")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Anchor <- AnchorStyles.Left
+        label.Margin <- Padding(0,5,0,5)
+        upperPanel.Controls.Add(label)
+        upperPanel.SetRow(label, pinnedWidthRow)
+        upperPanel.SetColumn(label, 0)
+        label
+
+    let pinnedWidthIconOnlyRadio = RadioButton()
+    let pinnedWidthSpecifyRadio = RadioButton()
+    let pinnedWidthNumeric = NumericUpDown()
+
+    let pinnedWidthInputPanel =
+        let tbl = TableLayoutPanel()
+        tbl.ColumnCount <- 3
+        tbl.RowCount <- 1
+        tbl.Dock <- DockStyle.Fill
+        tbl.Margin <- Padding(0,5,0,5)
+        tbl.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore   // Icon-only radio
+        tbl.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore   // Specify radio
+        tbl.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore  // NumericUpDown (fill)
+        tbl.RowStyles.Add(RowStyle(SizeType.Percent, 100.0f)).ignore
+
+        pinnedWidthIconOnlyRadio.Text <- Localization.getString("PinnedWidthIconOnly")
+        pinnedWidthIconOnlyRadio.AutoSize <- true
+        pinnedWidthIconOnlyRadio.Margin <- Padding(0,3,10,0)
+        pinnedWidthIconOnlyRadio.Anchor <- AnchorStyles.Left
+
+        pinnedWidthSpecifyRadio.Text <- Localization.getString("PinnedWidthSpecify")
+        pinnedWidthSpecifyRadio.AutoSize <- true
+        pinnedWidthSpecifyRadio.Margin <- Padding(0,3,5,0)
+        pinnedWidthSpecifyRadio.Anchor <- AnchorStyles.Left
+
+        pinnedWidthNumeric.Minimum <- 50m
+        pinnedWidthNumeric.Maximum <- 500m
+        pinnedWidthNumeric.Value <- 90m
+        pinnedWidthNumeric.Dock <- DockStyle.Fill
+        pinnedWidthNumeric.Margin <- Padding(0,2,0,0)
+
+        tbl.Controls.Add(pinnedWidthIconOnlyRadio)
+        tbl.SetRow(pinnedWidthIconOnlyRadio, 0)
+        tbl.SetColumn(pinnedWidthIconOnlyRadio, 0)
+        tbl.Controls.Add(pinnedWidthSpecifyRadio)
+        tbl.SetRow(pinnedWidthSpecifyRadio, 0)
+        tbl.SetColumn(pinnedWidthSpecifyRadio, 1)
+        tbl.Controls.Add(pinnedWidthNumeric)
+        tbl.SetRow(pinnedWidthNumeric, 0)
+        tbl.SetColumn(pinnedWidthNumeric, 2)
+
+        upperPanel.Controls.Add(tbl)
+        upperPanel.SetRow(tbl, pinnedWidthRow)
+        upperPanel.SetColumn(tbl, 1)
+        tbl
+
+    let pinnedWidthResetBtn =
+        let btn = Button()
+        btn.Text <- sprintf "%s:90" (Localization.getString("Reset"))
+        btn.Dock <- DockStyle.Fill
+        btn.TextAlign <- ContentAlignment.MiddleLeft
+        btn.Margin <- Padding(5,5,0,5)
+        btn.Click.Add <| fun _ ->
+            suppressEvents <- true
+            let defaultValue = unbox<int>(getDefaultValue "tabPinnedTabWidth")
+            if defaultValue <= 0 then
+                pinnedWidthIconOnlyRadio.Checked <- true
+                pinnedWidthNumeric.Enabled <- false
+                pinnedWidthNumeric.Value <- 90m
+            else
+                pinnedWidthSpecifyRadio.Checked <- true
+                pinnedWidthNumeric.Enabled <- true
+                pinnedWidthNumeric.Value <- decimal defaultValue
+            this.applyAppearance()
+            suppressEvents <- false
+        upperPanel.Controls.Add(btn)
+        upperPanel.SetRow(btn, pinnedWidthRow)
+        upperPanel.SetColumn(btn, 2)
+        btn
+
+    // IPropEditor wrapper for pinned tab width custom UI
+    let pinnedWidthEditor : IPropEditor =
+        let changedEvent = Event<unit>()
+        let mutable updating = false
+        pinnedWidthIconOnlyRadio.CheckedChanged.Add(fun _ ->
+            pinnedWidthNumeric.Enabled <- pinnedWidthSpecifyRadio.Checked
+            if not updating then changedEvent.Trigger()
+        )
+        pinnedWidthNumeric.ValueChanged.Add(fun _ ->
+            if not updating then changedEvent.Trigger()
+        )
+        { new IPropEditor with
+            member x.value
+                with get() =
+                    if pinnedWidthIconOnlyRadio.Checked then box(0)
+                    else box(int pinnedWidthNumeric.Value)
+                and set(newValue) =
+                    updating <- true
+                    let v = unbox<int>(newValue)
+                    if v <= 0 then
+                        pinnedWidthIconOnlyRadio.Checked <- true
+                        pinnedWidthNumeric.Enabled <- false
+                    else
+                        pinnedWidthSpecifyRadio.Checked <- true
+                        pinnedWidthNumeric.Enabled <- true
+                        pinnedWidthNumeric.Value <- decimal v
+                    updating <- false
+            member x.control = pinnedWidthInputPanel :> Control
+            member x.changed = changedEvent.Publish
+        }
 
     // Create color editors storage
     let mutable colorEditorsList : (string * IPropEditor) list = []
@@ -290,7 +407,7 @@ type AppearanceView() as this =
 
     // Combine all editors into a map
     let editors : Map2<string, IPropEditor> =
-        (intEditors.list @ colorEditorsList)
+        (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthEditor)] @ colorEditorsList)
         |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
 
     // Create dark mode checkbox at its designated row in upperPanel

@@ -11,6 +11,8 @@
   "Tab Height": "タブの高さ",
   "Tab Width (Max)": "タブの幅(最大値)",
   "Pinned Tab Width": "ピン止めタブの幅",
+  "PinnedWidthIconOnly": "アイコンのみ",
+  "PinnedWidthSpecify": "幅を指定",
   "Tab Overlap": "タブの重なり",
   "Indent Normal": "上方向タブの端がらの距離",
   "Indent Flipped": "下方向タブの端がらの距離",

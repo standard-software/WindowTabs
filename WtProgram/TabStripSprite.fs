@@ -115,7 +115,7 @@ type PinButtonSprite = {
                 use format = new StringFormat()
                 format.Alignment <- StringAlignment.Center
                 format.LineAlignment <- StringAlignment.Center
-                let drawRect = RectangleF(0.0f, 0.0f, float32 this.size.width, float32 this.size.height)
+                let drawRect = RectangleF(-1.0f, 2.0f, float32 this.size.width, float32 this.size.height)
                 g.DrawString("\uE718", font, brush, drawRect, format)
                 g.ResetTransform()
             | None ->
@@ -311,7 +311,6 @@ type TabSprite<'id> = {
             // This prevents mouse events from passing through the gap between tab curves
             g.Clear(Color.FromArgb(1, 0, 0, 0))
             do g.FillPath(this.bgBrush, this.borderPath)
-            do g.DrawPath(this.borderPen, this.borderPath)
             if this.onlyIcon.not && this.textSize.width > 0 then
                 //the text can't be drawn as a separate bitmap because clearcase fonts
                 //can't be drawn by gdi+ to a transparent background, need to draw directly on the tab background
@@ -328,9 +327,9 @@ type TabSprite<'id> = {
                 // Draw fade-out gradient at right edge of text area (VSCode-style)
                 let textMeasured = g.MeasureString(text, font)
                 if textMeasured.Width > float32(bounds.size.width) then
-                    let fadeWidth = 15
-                    let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
-                    if fadeX > this.textLocation.x then
+                    let fadeWidth = min 15 this.textSize.width
+                    if fadeWidth > 0 then
+                        let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
                         let bgColor = this.tabBgColor
                         let fadeRect = Rectangle(fadeX, 0, fadeWidth + 1, this.size.height)
                         let state = g.Save()
@@ -342,11 +341,18 @@ type TabSprite<'id> = {
                             LinearGradientMode.Horizontal)
                         g.FillRectangle(fadeBrush, fadeRect)
                         g.Restore(state)
+            // Draw border after text and gradient so border is never affected by fade
+            do g.DrawPath(this.borderPen, this.borderPath)
             img
         member this.children =
             let isHoverOrCaptured = this.hover.IsSome || this.captured.IsSome
-            let showCloseButton = not this.onlyIcon && not this.isPinned && isHoverOrCaptured
-            let showPinButton = not this.onlyIcon && this.isPinned
+            let iconRight = this.iconLocation.x + this.iconSize.width
+            // Hide close button if it would overlap with program icon
+            let canShowCloseButton = this.closeButtonLocation.x >= iconRight
+            // Hide pin button if it would extend beyond tab right edge
+            let canShowPinButton = this.pinButtonLocation.x + this.closeButtonSize.width <= this.size.width
+            let showCloseButton = not this.onlyIcon && not this.isPinned && isHoverOrCaptured && canShowCloseButton
+            let showPinButton = not this.onlyIcon && this.isPinned && canShowPinButton
             List2([
                 Some(this.iconLocation, this.iconSprite)
                 (if showCloseButton then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
@@ -370,7 +376,11 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
     member private this.unpinnedTabMaxLen = float(this.appearance.tabMaxWidth)
-    member private this.pinnedTabMinLen = 50.0
+    member private this.pinnedTabMinLen =
+        // Calculate dynamically based on tab height and icon size
+        let tabHeight = this.size.height - 1
+        let iconHeight = min (max 16 (tabHeight - 8)) 24
+        float(18 + iconHeight + 18)  // left edge + icon width + right padding
     member private this.pinnedTabSettingLen = float(this.appearance.tabPinnedTabWidth)
     member private this.pinnedTabMaxLen = max this.pinnedTabMinLen this.pinnedTabSettingLen
 

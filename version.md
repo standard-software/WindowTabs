@@ -24,6 +24,7 @@
   - Pin button position is clamped to stay right of the program icon
   - Text area becomes 0 gracefully when there is no space between icon and pin button
 - Settings UI: renamed appearance labels for clarity (Tab Height, Tab Width (Max), Pinned Tab Width, Tab Overlap)
+- Pinned Tab Width setting now uses radio buttons: "Icon Only" or "Specify Width" with numeric input
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running

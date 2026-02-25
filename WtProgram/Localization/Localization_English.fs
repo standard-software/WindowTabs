@@ -15,6 +15,8 @@ module Localization_English =
         ("Tab Height", "Tab Height")
         ("Tab Width (Max)", "Tab Width (Max)")
         ("Pinned Tab Width", "Pinned Tab Width")
+        ("PinnedWidthIconOnly", "Icon Only")
+        ("PinnedWidthSpecify", "Specify Width")
         ("Tab Overlap", "Tab Overlap")
         ("Indent Normal", "Distance from edge when tabs up")
         ("Indent Flipped", "Distance from edge when tabs down")

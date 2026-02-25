@@ -75,7 +75,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = 25
             tabMaxWidth = 200
-            tabPinnedTabWidth = 90
+            tabPinnedTabWidth = 0
             tabOverlap = 20
             tabHeightOffset = 1
             tabIndentFlipped = 150

@@ -11,6 +11,8 @@
   "Tab Height": "标签页高度",
   "Tab Width (Max)": "标签页宽度(最大值)",
   "Pinned Tab Width": "固定标签页宽度",
+  "PinnedWidthIconOnly": "仅图标",
+  "PinnedWidthSpecify": "指定宽度",
   "Tab Overlap": "标签页重叠",
   "Indent Normal": "标签页在上方时的边缘距离",
   "Indent Flipped": "标签页在下方时的边缘距离",
