@@ -12,9 +12,10 @@ module Localization_English =
         ("Category", "Category ")
 
         ("Appearance", "Appearance")
-        ("Height", "Height")
-        ("Max Width", "Max Width")
-        ("Overlap", "Overlap")
+        ("Tab Height", "Tab Height")
+        ("Tab Width (Max)", "Tab Width (Max)")
+        ("Pinned Tab Width", "Pinned Tab Width")
+        ("Tab Overlap", "Tab Overlap")
         ("Indent Normal", "Distance from edge when tabs up")
         ("Indent Flipped", "Distance from edge when tabs down")
         ("MenuDarkMode", "Menu Dark Mode")

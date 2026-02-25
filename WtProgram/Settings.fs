@@ -75,6 +75,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = 25
             tabMaxWidth = 200
+            tabPinnedTabWidth = 90
             tabOverlap = 20
             tabHeightOffset = 1
             tabIndentFlipped = 150
@@ -97,6 +98,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = -1
             tabMaxWidth = -1
+            tabPinnedTabWidth = -1
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -119,6 +121,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = -1
             tabMaxWidth = -1
+            tabPinnedTabWidth = -1
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -141,6 +144,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = -1
             tabMaxWidth = -1
+            tabPinnedTabWidth = -1
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -163,6 +167,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = -1
             tabMaxWidth = -1
+            tabPinnedTabWidth = -1
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -185,6 +190,7 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = -1
             tabMaxWidth = -1
+            tabPinnedTabWidth = -1
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1

@@ -11,6 +11,19 @@
   - VSCode-style cross-zone drag and drop
     - Dragging a tab into the pinned zone automatically pins it
     - Dragging a tab into the unpinned zone automatically unpins it
+- Close button size increased from 17x17 to 18x18 pixels
+- Pinned tab width changed to 80px (icon + text display)
+  - Minimum width preserved at 50px (icon-only width)
+- Pinned tabs now show unpin button (VSCode-style tilted pushpin icon) always visible
+  - Pin icon button hover highlights same as close button
+  - Clicking the unpin button removes the pinned state
+- Pinned tab width is now configurable in Appearance settings (default: 90px)
+- Pin icon now uses Segoe MDL2 Assets system font (E718 glyph) for high-quality rendering
+  - Falls back to GDI+ diagonal pushpin drawing on systems without the font
+- Pin button no longer overlaps with program icon when tab width is narrow
+  - Pin button position is clamped to stay right of the program icon
+  - Text area becomes 0 gracefully when there is no space between icon and pin button
+- Settings UI: renamed appearance labels for clarity (Tab Height, Tab Width (Max), Pinned Tab Width, Tab Overlap)
 
 ## version ss_jp_2026.02.23
 - Programs tab: "Show all settings" checkbox to display settings for programs not currently running

@@ -83,9 +83,10 @@ type AppearanceView() as this =
 
     // Separate int and color properties for cleaner UI layout
     let intProperties = List2([
-        intConfig "tabHeight" "Height"
-        intConfig "tabMaxWidth" "Max Width"
-        intConfig "tabOverlap" "Overlap"
+        intConfig "tabHeight" "Tab Height"
+        intConfig "tabMaxWidth" "Tab Width (Max)"
+        intConfig "tabPinnedTabWidth" "Pinned Tab Width"
+        intConfig "tabOverlap" "Tab Overlap"
         intConfig "tabIndentNormal" "Indent Normal"
         intConfig "tabIndentFlipped" "Indent Flipped"
         ])
@@ -642,6 +643,7 @@ type AppearanceView() as this =
         let mergedAppearance = {
             tabHeight = currentAppearance.tabHeight
             tabMaxWidth = currentAppearance.tabMaxWidth
+            tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
@@ -671,6 +673,7 @@ type AppearanceView() as this =
         let mergedAppearance = {
             tabHeight = currentAppearance.tabHeight
             tabMaxWidth = currentAppearance.tabMaxWidth
+            tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
@@ -1338,6 +1341,7 @@ type AppearanceView() as this =
         let newAppearance = {
             tabHeight = unbox(getValue "tabHeight")
             tabMaxWidth = unbox(getValue "tabMaxWidth")
+            tabPinnedTabWidth = unbox(getValue "tabPinnedTabWidth")
             tabOverlap = unbox(getValue "tabOverlap")
             tabHeightOffset = currentAppearance.tabHeightOffset  // Keep internal value
             tabIndentFlipped = unbox(getValue "tabIndentFlipped")

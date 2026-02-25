@@ -28,6 +28,7 @@ and TabPart =
     | TabBackground
     | TabIcon
     | TabClose
+    | TabPin
 
 and TabDirection =
     | TabUp
@@ -47,6 +48,7 @@ and TabDock =
 and TabAppearanceInfo = {
     tabHeight: int
     tabMaxWidth: int
+    tabPinnedTabWidth: int
     tabOverlap: int
     tabHeightOffset : int
     tabIndentFlipped : int

@@ -8,9 +8,10 @@
   "Category": "分类",
 
   "Appearance": "外观",
-  "Height": "高度",
-  "Max Width": "最大宽度",
-  "Overlap": "重叠",
+  "Tab Height": "标签页高度",
+  "Tab Width (Max)": "标签页宽度(最大值)",
+  "Pinned Tab Width": "固定标签页宽度",
+  "Tab Overlap": "标签页重叠",
   "Indent Normal": "标签页在上方时的边缘距离",
   "Indent Flipped": "标签页在下方时的边缘距离",
   "MenuDarkMode": "菜单使用深色模式",

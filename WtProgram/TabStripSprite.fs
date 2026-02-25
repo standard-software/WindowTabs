@@ -62,6 +62,85 @@ type CloseButtonSprite = {
             bitmap
         member this.children = List2()
 
+// Pin icon font: use Segoe MDL2 Assets (Windows 10/11 system icon font)
+module private PinIcon =
+    let font : Font option =
+        try
+            let f = new Font("Segoe MDL2 Assets", 12.0f)
+            if f.Name = "Segoe MDL2 Assets" then Some(f)
+            else f.Dispose(); None
+        with _ -> None
+
+type PinButtonSprite = {
+    hover: bool
+    captured: bool
+    size: Sz
+    }
+    with
+    member private this.bgColor =
+        match this.hover, this.captured with
+        | true, true -> Some(Color.FromArgb(128, 128, 128))
+        | true, false -> Some(Color.FromArgb(90, 90, 90))
+        | _ -> None
+    member private this.penColor = if this.bgColor.IsSome then Color.White else Color.Gray
+    interface ISprite with
+        member this.image =
+            let bitmap = Img(this.size)
+            let g = bitmap.graphics
+            g.SmoothingMode <- SmoothingMode.AntiAlias
+            // Draw rounded rectangle background (same as close button)
+            let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
+            let r = 3
+            let rect = Rectangle(0, 0, this.size.width - 1, this.size.height - 1)
+            use path = new GraphicsPath()
+            path.AddArc(rect.X, rect.Y, r * 2, r * 2, 180.0f, 90.0f)
+            path.AddArc(rect.Right - r * 2, rect.Y, r * 2, r * 2, 270.0f, 90.0f)
+            path.AddArc(rect.Right - r * 2, rect.Bottom - r * 2, r * 2, r * 2, 0.0f, 90.0f)
+            path.AddArc(rect.X, rect.Bottom - r * 2, r * 2, r * 2, 90.0f, 90.0f)
+            path.CloseFigure()
+            g.FillPath(new SolidBrush(bgColor), path)
+            // Draw pin icon
+            let color = this.penColor
+            use brush = new SolidBrush(color)
+            match PinIcon.font with
+            | Some font ->
+                // Use Segoe MDL2 Assets system font for pin icon (E718 = Pin glyph)
+                // Rotate -45 degrees (left tilt) around center
+                let cx = float32 this.size.width / 2.0f
+                let cy = float32 this.size.height / 2.0f
+                g.TextRenderingHint <- System.Drawing.Text.TextRenderingHint.AntiAliasGridFit
+                g.TranslateTransform(cx, cy)
+                g.RotateTransform(-45.0f)
+                g.TranslateTransform(-cx, -cy)
+                use format = new StringFormat()
+                format.Alignment <- StringAlignment.Center
+                format.LineAlignment <- StringAlignment.Center
+                let drawRect = RectangleF(0.0f, 0.0f, float32 this.size.width, float32 this.size.height)
+                g.DrawString("\uE718", font, brush, drawRect, format)
+                g.ResetTransform()
+            | None ->
+                // Fallback: simple diagonal pushpin using GDI+
+                let cx = float32(this.size.width - 1) / 2.0f
+                let cy = float32(this.size.height - 1) / 2.0f
+                let dc = 0.707f
+                let ptf s p = PointF(cx + (s + p) * dc, cy + (s - p) * dc)
+                use headPen = new Pen(color, 1.8f)
+                headPen.StartCap <- Drawing2D.LineCap.Round
+                headPen.EndCap <- Drawing2D.LineCap.Round
+                g.DrawLine(headPen, ptf -3.5f -4.0f, ptf -3.5f 4.0f)
+                use bodyPath = new GraphicsPath()
+                bodyPath.AddPolygon([|
+                    ptf -3.5f -2.0f
+                    ptf -3.5f  2.0f
+                    ptf  1.0f  0.7f
+                    ptf  1.0f -0.7f
+                |])
+                g.FillPath(brush, bodyPath)
+                use needlePen = new Pen(color, 1.2f)
+                g.DrawLine(needlePen, ptf 1.0f 0.0f, ptf 5.0f 0.0f)
+            bitmap
+        member this.children = List2()
+
 type TabDisplayInfo = {
     bgColor : Color option
     text: string
@@ -77,6 +156,7 @@ type TabSprite<'id> = {
     displayInfo: TabDisplayInfo
     size: Sz
     onlyIcon: bool
+    isPinned: bool
     direction: TabDirection
     hover: TabPart option
     captured: TabPart option
@@ -88,13 +168,20 @@ type TabSprite<'id> = {
             size = this.iconSize
         } :> ISprite
     
-    member private this.closeButtonSprite = 
+    member private this.closeButtonSprite =
         {
             CloseButtonSprite.size = this.closeButtonSize
             hover = this.hover = Some(TabClose)
             captured = this.captured = Some(TabClose)
         } :> ISprite
-       
+
+    member private this.pinButtonSprite =
+        {
+            PinButtonSprite.size = this.closeButtonSize
+            hover = this.hover = Some(TabPin)
+            captured = this.captured = Some(TabPin)
+        } :> ISprite
+
     member private this.edgeWidth = 18
 
     member private this.renderTabEdge(path:GraphicsPath, startPoint:PointF, endPoint:PointF) =
@@ -170,10 +257,18 @@ type TabSprite<'id> = {
         let y = (this.size.height - this.iconSize.height) / 2
         Pt(this.edgeWidth, y)
 
-    member private this.closeButtonSize = Sz(17, 17)
+    member private this.closeButtonSize = Sz(18, 18)
 
     member private this.closeButtonLocation =
         let x = this.size.width - this.edgeWidth - this.closeButtonSize.width + 3
+        let y = (this.size.height - this.closeButtonSize.height) / 2
+        Pt(x, y)
+
+    // Pin button location: same as close button but never overlaps with program icon
+    member private this.pinButtonLocation =
+        let normalX = this.closeButtonLocation.x
+        let minX = this.iconLocation.x + this.iconSize.width + 2
+        let x = max normalX minX
         let y = (this.size.height - this.closeButtonSize.height) / 2
         Pt(x, y)
 
@@ -183,13 +278,16 @@ type TabSprite<'id> = {
 
     member this.textSize =
         let width =
-            if this.hover.IsSome || this.captured.IsSome then
-                // When hovered, text area ends where close button starts
+            if this.isPinned then
+                // Pin button always visible: text area ends where pin button starts
+                this.pinButtonLocation.x - this.textLocation.x
+            elif this.hover.IsSome || this.captured.IsSome then
+                // Hovered: text area ends where close button starts
                 this.closeButtonLocation.x - this.textLocation.x
             else
-                // When not hovered, extend text closer to right edge (fade handles visual boundary)
+                // Not hovered: extend text closer to right edge (fade handles visual boundary)
                 this.size.width - this.textLocation.x - 18
-        let width = max 1 width
+        let width = max 0 width
         Sz(width, this.size.height)
 
     member this.tabTextBrush =
@@ -214,7 +312,7 @@ type TabSprite<'id> = {
             g.Clear(Color.FromArgb(1, 0, 0, 0))
             do g.FillPath(this.bgBrush, this.borderPath)
             do g.DrawPath(this.borderPen, this.borderPath)
-            if this.onlyIcon.not then
+            if this.onlyIcon.not && this.textSize.width > 0 then
                 //the text can't be drawn as a separate bitmap because clearcase fonts
                 //can't be drawn by gdi+ to a transparent background, need to draw directly on the tab background
                 let text = this.displayInfo.text
@@ -246,10 +344,13 @@ type TabSprite<'id> = {
                         g.Restore(state)
             img
         member this.children =
-            let showCloseButton = not this.onlyIcon && (this.hover.IsSome || this.captured.IsSome)
+            let isHoverOrCaptured = this.hover.IsSome || this.captured.IsSome
+            let showCloseButton = not this.onlyIcon && not this.isPinned && isHoverOrCaptured
+            let showPinButton = not this.onlyIcon && this.isPinned
             List2([
-                Some(this.iconLocation,this.iconSprite)
+                Some(this.iconLocation, this.iconSprite)
                 (if showCloseButton then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
+                (if showPinButton then Some(this.pinButtonLocation, this.pinButtonSprite) else None)
                 ]).choose(id)
 
 type TabStripSprite<'id> when 'id : equality = {
@@ -269,7 +370,9 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
     member private this.unpinnedTabMaxLen = float(this.appearance.tabMaxWidth)
-    member private this.pinnedTabMaxLen = 50.0
+    member private this.pinnedTabMinLen = 50.0
+    member private this.pinnedTabSettingLen = float(this.appearance.tabPinnedTabWidth)
+    member private this.pinnedTabMaxLen = max this.pinnedTabMinLen this.pinnedTabSettingLen
 
     member private this.count = this.lorder.length
     member private this.pinnedCount =
@@ -323,7 +426,8 @@ type TabStripSprite<'id> when 'id : equality = {
                 else
                     this.appearance
             size = Sz(int(tabLen), (this.size.height) - 1)
-            onlyIcon = isPinned
+            onlyIcon = isPinned && this.pinnedTabSettingLen <= this.pinnedTabMinLen
+            isPinned = isPinned
             direction = this.direction
             hover =
                 match this.hover with
@@ -466,6 +570,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 | :? TabSprite<'id> -> TabBackground
                 | :? IconSprite -> TabIcon
                 | :? CloseButtonSprite -> TabClose
+                | :? PinButtonSprite -> TabPin
                 | _ -> TabBackground
             return tab,part
         }

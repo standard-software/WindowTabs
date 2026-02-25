@@ -13,6 +13,7 @@ type ITabStripMonitor =
     abstract member tabClick : (MouseButton * Tab * TabPart * MouseAction * Pt) -> unit
     abstract member tabActivate : (Tab) -> unit
     abstract member tabClose : Tab -> unit
+    abstract member tabPin : Tab -> unit
     abstract member tabMoved : Tab * int -> unit
     abstract member windowMsg : Win32Message -> unit
 
@@ -279,11 +280,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     capturedCell.set(Some(hitTab, hitPart))
                 | MouseUp ->
                     capturedCell.value.iter <| fun(capturedTab, capturedPart) ->
-                    if  btn = MouseLeft && 
+                    if  btn = MouseLeft &&
                         hitTab = capturedTab &&
-                        hitPart = capturedPart &&
-                        hitPart = TabClose then
-                        monitor.tabClose(hitTab)
+                        hitPart = capturedPart then
+                        match hitPart with
+                        | TabClose -> monitor.tabClose(hitTab)
+                        | TabPin -> monitor.tabPin(hitTab)
+                        | _ -> ()
                     capturedCell.set(None)
                 | MouseDblClick ->
                     ()

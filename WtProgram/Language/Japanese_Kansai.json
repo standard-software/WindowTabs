@@ -8,9 +8,10 @@
   "Category": "カテゴリ",
 
   "Appearance": "見た目",
-  "Height": "高さ",
-  "Max Width": "最大幅",
-  "Overlap": "重なり",
+  "Tab Height": "タブの高さ",
+  "Tab Width (Max)": "タブの幅(最大値)",
+  "Pinned Tab Width": "ピン止めタブの幅",
+  "Tab Overlap": "タブの重なり",
   "Indent Normal": "上方向タブの端からの距離",
   "Indent Flipped": "下方向タブの端からの距離",
   "MenuDarkMode": "メニューをダークモードにするで",

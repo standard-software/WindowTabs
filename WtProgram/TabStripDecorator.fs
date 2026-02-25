@@ -3621,7 +3621,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     os.windowFromHwnd(group.topWindow).setForeground(false)
                 | MouseLeft ->
                     group.tabActivate(tab, false)
-                    if part <> TabClose then
+                    if part <> TabClose && part <> TabPin then
                         let tabInfo = this.ts.tabInfo(tab)
                         let originalTabLocation = this.ts.tabLocation tab
                         let clickOffsetInTab = pt.sub(originalTabLocation)
@@ -3649,6 +3649,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         member x.tabMoved(Tab(hwnd), index) =
             group.onTabMoved(hwnd, index)
+
+        member x.tabPin(Tab(hwnd)) =
+            group.unpinTab(hwnd)
 
         member x.tabClose(Tab(hwnd)) =
             // Get all tabs and current tab index before closing

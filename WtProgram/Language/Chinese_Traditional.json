@@ -8,9 +8,10 @@
   "Category": "分類",
 
   "Appearance": "外觀",
-  "Height": "高度",
-  "Max Width": "最大寬度",
-  "Overlap": "重疊",
+  "Tab Height": "分頁高度",
+  "Tab Width (Max)": "分頁寬度(最大值)",
+  "Pinned Tab Width": "固定分頁寬度",
+  "Tab Overlap": "分頁重疊",
   "Indent Normal": "分頁在上方時的邊緣距離",
   "Indent Flipped": "分頁在下方時的邊緣距離",
   "MenuDarkMode": "選單使用深色模式",
