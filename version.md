@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.02.26_next_1
+
 ## version ss_jp_2026.02.26
 - Added pinned tab feature
   - Pinned tabs display as icon-only with narrow width (50px) and are positioned on the left side
