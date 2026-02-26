@@ -106,7 +106,7 @@ type AppearanceView() as this =
 
     // Combined list of all properties (int + color) for setEditorValues
     let allPropertyKeys =
-        (intProperties.list |> List.map (fun p -> p.key)) @ ["tabPinnedTabWidth"] @ colorPropertyKeys
+        (intProperties.list |> List.map (fun p -> p.key)) @ ["tabPinnedTabWidth"; "tabPinnedTabWidthIcon"] @ colorPropertyKeys
 
     // Layout structure:
     // - Main panel (2 rows): upper section + color grid section
@@ -300,21 +300,19 @@ type AppearanceView() as this =
 
     let pinnedWidthResetBtn =
         let btn = Button()
-        btn.Text <- sprintf "%s:90" (Localization.getString("Reset"))
+        let defaultIcon = unbox<bool>(getDefaultValue "tabPinnedTabWidthIcon")
+        let defaultWidth = unbox<int>(getDefaultValue "tabPinnedTabWidth")
+        let resetText = if defaultIcon then Localization.getString("PinnedWidthIconOnly") else string defaultWidth
+        btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) resetText
         btn.Dock <- DockStyle.Fill
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5,5,0,5)
         btn.Click.Add <| fun _ ->
             suppressEvents <- true
-            let defaultValue = unbox<int>(getDefaultValue "tabPinnedTabWidth")
-            if defaultValue <= 0 then
-                pinnedWidthIconOnlyRadio.Checked <- true
-                pinnedWidthNumeric.Enabled <- false
-                pinnedWidthNumeric.Value <- 90m
-            else
-                pinnedWidthSpecifyRadio.Checked <- true
-                pinnedWidthNumeric.Enabled <- true
-                pinnedWidthNumeric.Value <- decimal defaultValue
+            pinnedWidthIconOnlyRadio.Checked <- defaultIcon
+            pinnedWidthSpecifyRadio.Checked <- not defaultIcon
+            pinnedWidthNumeric.Enabled <- not defaultIcon
+            pinnedWidthNumeric.Value <- decimal defaultWidth
             this.applyAppearance()
             suppressEvents <- false
         upperPanel.Controls.Add(btn)
@@ -322,32 +320,43 @@ type AppearanceView() as this =
         upperPanel.SetColumn(btn, 2)
         btn
 
-    // IPropEditor wrapper for pinned tab width custom UI
-    let pinnedWidthEditor : IPropEditor =
+    // IPropEditor for pinned tab width numeric value (always holds the real value like 90)
+    let pinnedWidthNumericEditor : IPropEditor =
+        let changedEvent = Event<unit>()
+        let mutable updating = false
+        pinnedWidthNumeric.ValueChanged.Add(fun _ ->
+            if not updating then changedEvent.Trigger()
+        )
+        { new IPropEditor with
+            member x.value
+                with get() = box(int pinnedWidthNumeric.Value)
+                and set(newValue) =
+                    updating <- true
+                    let v = unbox<int>(newValue)
+                    if v > 0 then
+                        pinnedWidthNumeric.Value <- decimal v
+                    updating <- false
+            member x.control = pinnedWidthInputPanel :> Control
+            member x.changed = changedEvent.Publish
+        }
+
+    // IPropEditor for pinned tab width icon-only boolean (radio button state)
+    let pinnedWidthIconEditor : IPropEditor =
         let changedEvent = Event<unit>()
         let mutable updating = false
         pinnedWidthIconOnlyRadio.CheckedChanged.Add(fun _ ->
             pinnedWidthNumeric.Enabled <- pinnedWidthSpecifyRadio.Checked
             if not updating then changedEvent.Trigger()
         )
-        pinnedWidthNumeric.ValueChanged.Add(fun _ ->
-            if not updating then changedEvent.Trigger()
-        )
         { new IPropEditor with
             member x.value
-                with get() =
-                    if pinnedWidthIconOnlyRadio.Checked then box(0)
-                    else box(int pinnedWidthNumeric.Value)
+                with get() = box(pinnedWidthIconOnlyRadio.Checked)
                 and set(newValue) =
                     updating <- true
-                    let v = unbox<int>(newValue)
-                    if v <= 0 then
-                        pinnedWidthIconOnlyRadio.Checked <- true
-                        pinnedWidthNumeric.Enabled <- false
-                    else
-                        pinnedWidthSpecifyRadio.Checked <- true
-                        pinnedWidthNumeric.Enabled <- true
-                        pinnedWidthNumeric.Value <- decimal v
+                    let v = unbox<bool>(newValue)
+                    pinnedWidthIconOnlyRadio.Checked <- v
+                    pinnedWidthSpecifyRadio.Checked <- not v
+                    pinnedWidthNumeric.Enabled <- not v
                     updating <- false
             member x.control = pinnedWidthInputPanel :> Control
             member x.changed = changedEvent.Publish
@@ -407,7 +416,7 @@ type AppearanceView() as this =
 
     // Combine all editors into a map
     let editors : Map2<string, IPropEditor> =
-        (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthEditor)] @ colorEditorsList)
+        (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthNumericEditor); ("tabPinnedTabWidthIcon", pinnedWidthIconEditor)] @ colorEditorsList)
         |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
 
     // Create dark mode checkbox at its designated row in upperPanel
@@ -761,6 +770,7 @@ type AppearanceView() as this =
             tabHeight = currentAppearance.tabHeight
             tabMaxWidth = currentAppearance.tabMaxWidth
             tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
+            tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
@@ -791,6 +801,7 @@ type AppearanceView() as this =
             tabHeight = currentAppearance.tabHeight
             tabMaxWidth = currentAppearance.tabMaxWidth
             tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
+            tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
@@ -1459,6 +1470,7 @@ type AppearanceView() as this =
             tabHeight = unbox(getValue "tabHeight")
             tabMaxWidth = unbox(getValue "tabMaxWidth")
             tabPinnedTabWidth = unbox(getValue "tabPinnedTabWidth")
+            tabPinnedTabWidthIcon = unbox(getValue "tabPinnedTabWidthIcon")
             tabOverlap = unbox(getValue "tabOverlap")
             tabHeightOffset = currentAppearance.tabHeightOffset  // Keep internal value
             tabIndentFlipped = unbox(getValue "tabIndentFlipped")

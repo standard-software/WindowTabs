@@ -75,7 +75,8 @@ type Settings(isStandAlone) as this =
         {
             tabHeight = 25
             tabMaxWidth = 200
-            tabPinnedTabWidth = 0
+            tabPinnedTabWidth = 90
+            tabPinnedTabWidthIcon = true
             tabOverlap = 20
             tabHeightOffset = 1
             tabIndentFlipped = 150
@@ -99,6 +100,7 @@ type Settings(isStandAlone) as this =
             tabHeight = -1
             tabMaxWidth = -1
             tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -122,6 +124,7 @@ type Settings(isStandAlone) as this =
             tabHeight = -1
             tabMaxWidth = -1
             tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -145,6 +148,7 @@ type Settings(isStandAlone) as this =
             tabHeight = -1
             tabMaxWidth = -1
             tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -168,6 +172,7 @@ type Settings(isStandAlone) as this =
             tabHeight = -1
             tabMaxWidth = -1
             tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -191,6 +196,7 @@ type Settings(isStandAlone) as this =
             tabHeight = -1
             tabMaxWidth = -1
             tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
             tabOverlap = -1
             tabHeightOffset = -1
             tabIndentFlipped = -1
@@ -261,6 +267,7 @@ type Settings(isStandAlone) as this =
                                             let value = (value :?> JValue).Value
                                             let fieldType = Serialize.getFieldType (appearance.GetType()) key
                                             if fieldType = typeof<Int32> then box(unbox<Int64>(value).Int32)
+                                            elif fieldType = typeof<Boolean> then box(unbox<bool>(value))
                                             elif fieldType = typeof<Color> then box(Color.FromRGB(Int32.Parse(unbox<string>(value), Globalization.NumberStyles.HexNumber)))
                                             else failwith "UNKNOWN TYPE"
                                         Serialize.writeField appearance key value :?> TabAppearanceInfo
@@ -327,6 +334,7 @@ type Settings(isStandAlone) as this =
                     match value with
                     | :? Color as value -> obj.setString(key, sprintf "%X" (value.ToRGB()))
                     | :? int as value -> obj.setInt64(key, int64(value))
+                    | :? bool as value -> obj.setBool(key, value)
                     | :? string as value -> obj.setString(key, value)
                     | _ -> ()
                 obj

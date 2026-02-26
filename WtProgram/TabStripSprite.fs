@@ -382,7 +382,9 @@ type TabStripSprite<'id> when 'id : equality = {
         let iconHeight = min (max 16 (tabHeight - 8)) 24
         float(18 + iconHeight + 18)  // left edge + icon width + right padding
     member private this.pinnedTabSettingLen = float(this.appearance.tabPinnedTabWidth)
-    member private this.pinnedTabMaxLen = max this.pinnedTabMinLen this.pinnedTabSettingLen
+    member private this.pinnedTabMaxLen =
+        if this.appearance.tabPinnedTabWidthIcon then this.pinnedTabMinLen
+        else max this.pinnedTabMinLen this.pinnedTabSettingLen
 
     member private this.count = this.lorder.length
     member private this.pinnedCount =
@@ -436,7 +438,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 else
                     this.appearance
             size = Sz(int(tabLen), (this.size.height) - 1)
-            onlyIcon = isPinned && this.pinnedTabSettingLen <= this.pinnedTabMinLen
+            onlyIcon = isPinned && this.appearance.tabPinnedTabWidthIcon
             isPinned = isPinned
             direction = this.direction
             hover =

@@ -49,6 +49,7 @@ and TabAppearanceInfo = {
     tabHeight: int
     tabMaxWidth: int
     tabPinnedTabWidth: int
+    tabPinnedTabWidthIcon: bool
     tabOverlap: int
     tabHeightOffset : int
     tabIndentFlipped : int
