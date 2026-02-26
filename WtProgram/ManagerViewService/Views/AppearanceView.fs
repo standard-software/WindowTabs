@@ -300,18 +300,13 @@ type AppearanceView() as this =
 
     let pinnedWidthResetBtn =
         let btn = Button()
-        let defaultIcon = unbox<bool>(getDefaultValue "tabPinnedTabWidthIcon")
         let defaultWidth = unbox<int>(getDefaultValue "tabPinnedTabWidth")
-        let resetText = if defaultIcon then Localization.getString("PinnedWidthIconOnly") else string defaultWidth
-        btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) resetText
+        btn.Text <- sprintf "%s:%d" (Localization.getString("Reset")) defaultWidth
         btn.Dock <- DockStyle.Fill
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5,5,0,5)
         btn.Click.Add <| fun _ ->
             suppressEvents <- true
-            pinnedWidthIconOnlyRadio.Checked <- defaultIcon
-            pinnedWidthSpecifyRadio.Checked <- not defaultIcon
-            pinnedWidthNumeric.Enabled <- not defaultIcon
             pinnedWidthNumeric.Value <- decimal defaultWidth
             this.applyAppearance()
             suppressEvents <- false
