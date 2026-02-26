@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.23_next_1
+## version ss_jp_2026.02.26
 - Added pinned tab feature
   - Pinned tabs display as icon-only with narrow width (50px) and are positioned on the left side
   - Context menu: "Tab Pin" submenu with Pin/Unpin this tab, Pin all, Unpin all, Pin left tabs, Unpin right tabs
