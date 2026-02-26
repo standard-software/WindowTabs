@@ -119,9 +119,10 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
+  - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin left tabs, Unpin right tabs)
+  ---
   - Tab Margin When Snapping (per-tab-group toggle)
   - Tab Position (Left / Center / Right per-tab-group)
-  - Tab Width (Icon Only / Icon and Text)
   - Tab Name (rename / reset)
   ---
   - Settings
@@ -179,6 +180,16 @@ Operates on the entire tab group:
 
 ![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
+
+### Pinned Tabs
+
+Pin tabs to keep them in a fixed position on the left side of the tab strip, similar to browser pinned tabs.
+
+- **Pin/Unpin**: Right-click a tab and use the "Tab Pin" submenu
+- **Pinned tab display**: Pinned tabs are displayed with a narrow width on the left side, with an always-visible unpin button (tilted pushpin icon)
+- **VSCode-style cross-zone drag and drop**: Drag a tab into the pinned zone to automatically pin it, or into the unpinned zone to unpin it
+- **Configurable width**: In Appearance settings, choose "Icon Only" or specify a custom width for pinned tabs
+- **Pin icon**: Uses Segoe MDL2 Assets system font for high-quality rendering
 
 ### Menu Dark Mode / Light Mode
 
@@ -276,7 +287,8 @@ Configure which programs should use tabs and auto-grouping behavior.
 ### Appearance Tab
 
 Customize the visual appearance of tabs:
-- Height, width, and overlap settings (with separate reset buttons per control)
+- Tab height, tab width (max), pinned tab width, and tab overlap settings (with separate reset buttons per control)
+- Pinned tab width: "Icon Only" or specify a custom width
 - Distance from edge settings
 - Menu Dark Mode toggle
 - Combined Move and Snap Menu: displays Move and Snap as a single combined line in the context menu
