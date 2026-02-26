@@ -57,7 +57,7 @@
   "HideTabsNever": "隠さない",
   "HideTabsWhenDown": "指定した時間で隠す",
   "HideTabsDelayMilliseconds": "待機時間 (ミリ秒)",
-  "HideTabsOnClick": "アクティブなタブをダブルクリックで隠す",
+  "HideTabsOnClick": "アクティブなタブのアイコンクリックで隠す",
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあける",

@@ -57,7 +57,7 @@
   "HideTabsNever": "不隐藏",
   "HideTabsWhenDown": "指定时间后隐藏",
   "HideTabsDelayMilliseconds": "等待时间(毫秒)",
-  "HideTabsOnClick": "双击活动标签页时隐藏",
+  "HideTabsOnClick": "点击活动标签页图标时隐藏",
 
   "HideTabsOnFullscreen": "全屏窗口时隐藏标签页",
   "SnapTabHeightMargin": "吸附时为标签页高度留出边距",

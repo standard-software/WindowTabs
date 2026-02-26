@@ -91,24 +91,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         this.mouse.Add <| fun(hwnd, btn, part, action, pt) ->
             match action, btn with
             | MouseDblClick, MouseLeft ->
-                // Check if double-click hide mode is enabled
-                let autoHideDoubleClick = group.bb.read("autoHideDoubleClick", false)
-
-                // Only process if it's the active tab
+                // Double-click always opens rename UI for the active tab
                 if hwnd = group.topWindow && !firstClickTab = Some(hwnd) then
-                    match part with
-                    | _ when autoHideDoubleClick && this.ts.direction = TabDown ->
-                        // Hide tabs on double-click (only when option is on, tabs at bottom)
-                        hiddenByDoubleClick := true
-                        doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
-                        group.invokeAsync <| fun() ->
-                            this.ts.isShrunk <- true
-                    | _ ->
-                        // Otherwise, double-click opens rename UI
-                        this.beginRename(hwnd)
+                    this.beginRename(hwnd)
 
                 // Clear first click tracking after double-click
                 firstClickTab := None
+            | MouseUp, MouseLeft ->
+                // Hide tabs when clicking the icon of the active tab (if icon-click hide mode is enabled)
+                capturedHwnd.Value.iter <| fun captured ->
+                    if hwnd = captured && hwnd = group.topWindow && part = TabIcon then
+                        let autoHideIconClick = group.bb.read("autoHideDoubleClick", false)
+                        if autoHideIconClick then
+                            hiddenByDoubleClick := true
+                            doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
+                            group.invokeAsync <| fun() ->
+                                this.ts.isShrunk <- true
             | MouseUp, MouseRight ->
                 let ptScreen = os.windowFromHwnd(group.hwnd).ptToScreen(pt)
                 group.bb.write("contextMenuVisible", true)
@@ -3556,8 +3554,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // Update isWindowInside based on current tab position
             isWindowInside.value <- this.ts.showInside
 
-            // Handle double-click-to-hide mode separately
-            if autoHideDoubleClickCell.value && this.ts.direction = TabDown then
+            // Handle icon-click-to-hide mode separately
+            if autoHideDoubleClickCell.value then
 
                 // Check if protection period has expired
                 let protectionExpired = System.DateTime.Now > !doubleClickProtectUntil
