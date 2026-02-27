@@ -343,6 +343,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.pinLeftTabs(hwnd) = this.ts.pinLeftTabs(Tab(hwnd))
     member this.unpinRightTabs(hwnd) = this.ts.unpinRightTabs(Tab(hwnd))
 
+    member this.setTabFillColor(hwnd, color : Color option) = this.ts.setTabFillColor(Tab(hwnd), color)
+    member this.getTabFillColor(hwnd) = this.ts.getTabFillColor(Tab(hwnd))
+    // Thread-safe versions for cross-thread reads
+    member this.getTabFillColorThreadSafe(hwnd) = this.ts.getTabFillColorThreadSafe(Tab(hwnd))
+
     member this.tabPosition
         with get() = perGroupTabPosition
         and set(value) =

@@ -14,6 +14,30 @@ type TabGroupInfo = {
     tabHwnds: IntPtr list
 }
 
+// Tab color decoration definitions
+type TabColorDef = {
+    color: Color
+    labelKey: string
+}
+
+module TabColorDefs =
+    // Parse RRGGBBAA hex string to Color
+    let private c (rrggbbaa: string) =
+        let r = System.Convert.ToInt32(rrggbbaa.Substring(0, 2), 16)
+        let g = System.Convert.ToInt32(rrggbbaa.Substring(2, 2), 16)
+        let b = System.Convert.ToInt32(rrggbbaa.Substring(4, 2), 16)
+        let a = System.Convert.ToInt32(rrggbbaa.Substring(6, 2), 16)
+        Color.FromArgb(a, r, g, b)
+    // 6 colors in RRGGBBAA format (AA=99 -> 60% opaque / 40% transparent)
+    let defs = [
+        { color = c "D2323C99"; labelKey = "TabColorRed" }
+        { color = c "2864D299"; labelKey = "TabColorBlue" }
+        { color = c "13A10E99"; labelKey = "TabColorGreen" }
+        { color = c "F7D30399"; labelKey = "TabColorYellow" }
+        { color = c "88179899"; labelKey = "TabColorPurple" }
+        { color = c "F9731699"; labelKey = "TabColorOrange" }
+    ]
+
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
@@ -2694,6 +2718,64 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
+        let tabColorSubMenu =
+            let currentFill = group.getTabFillColor(hwnd)
+            let tabText = this.ts.tabInfo(Tab(hwnd)).text
+            let shortTabText =
+                if tabText.Length <= 9 then tabText
+                else tabText.Substring(0, 9) + "..."
+            // Create a color swatch icon for menu items
+            let createColorIcon (color: Color) =
+                let size = 16
+                let img = Img(Sz(size, size))
+                let g = img.graphics
+                g.Clear(Color.White)
+                use brush = new SolidBrush(Color.FromArgb(255, int color.R, int color.G, int color.B))
+                g.FillRectangle(brush, 1, 1, size - 2, size - 2)
+                use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
+                g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
+                img
+            let colorItems =
+                TabColorDefs.defs |> List.map (fun def ->
+                    let isChecked =
+                        currentFill |> Option.exists (fun f -> f = def.color)
+                    CmiRegular({
+                        text = Localization.getString(def.labelKey)
+                        image = Some(createColorIcon def.color)
+                        flags = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            let newColor =
+                                if isChecked then None
+                                else Some(def.color)
+                            group.setTabFillColor(hwnd, newColor)
+                    })
+                )
+            let resetItems = [
+                CmiSeparator
+                CmiRegular({
+                    text = String.Format(Localization.getString("TabColorReset"), shortTabText)
+                    image = None
+                    flags = List2()
+                    click = fun() ->
+                        group.setTabFillColor(hwnd, None)
+                })
+                CmiRegular({
+                    text = Localization.getString("TabColorResetAll")
+                    image = None
+                    flags = List2()
+                    click = fun() ->
+                        this.ts.lorder.list |> List.iter (fun (Tab(h)) ->
+                            group.setTabFillColor(h, None)
+                        )
+                })
+            ]
+            CmiPopUp({
+                text = Localization.getString("TabColorMenu")
+                image = None
+                items = List2(colorItems @ resetItems)
+                flags = List2()
+            })
+
         let tabNameSubMenu =
             CmiPopUp({
                 text = Localization.getString("TabNameEdit")
@@ -3512,6 +3594,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             }))
             Some(tabPositionSubMenu)
             Some(tabPinSubMenu)
+            Some(tabColorSubMenu)
             Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(managerItem)

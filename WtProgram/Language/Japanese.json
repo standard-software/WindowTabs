@@ -144,6 +144,16 @@
   "PinLeftTabsFormat": "左側{0}タブをピン止めする",
   "UnpinRightTabsFormat": "右側{0}タブのピン止めを外す",
 
+  "TabColorMenu": "タブの色の変更",
+  "TabColorReset": "このタブの色をリセット : {0}",
+  "TabColorResetAll": "全てのタブの色をリセット",
+  "TabColorRed": "赤",
+  "TabColorBlue": "青",
+  "TabColorGreen": "緑",
+  "TabColorYellow": "黄色",
+  "TabColorPurple": "紫",
+  "TabColorOrange": "オレンジ",
+
   "TabNameEdit": "タブ名の編集",
   "RenameTab": "タブの名前を変更",
   "ResetTabName": "タブの名前をリセット",

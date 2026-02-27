@@ -1,5 +1,6 @@
 ﻿namespace Bemo
 open System
+open System.Drawing
 open System.Windows.Forms
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
@@ -130,6 +131,9 @@ type IGroup =
     abstract member snapTabHeightMargin: bool with get, set
     abstract member isPinned: IntPtr -> bool
     abstract member pinTab: IntPtr -> unit
+    abstract member isPinnedThreadSafe: IntPtr -> bool
+    abstract member setTabFillColor: IntPtr * Color option -> unit
+    abstract member getTabFillColorThreadSafe: IntPtr -> Color option
 
 type IDesktop =
     abstract member isDragging : bool

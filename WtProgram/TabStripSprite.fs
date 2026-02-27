@@ -143,6 +143,7 @@ type PinButtonSprite = {
 
 type TabDisplayInfo = {
     bgColor : Color option
+    fillColor : Color option
     text: string
     textFont: Font
     textBrush: Brush
@@ -311,6 +312,15 @@ type TabSprite<'id> = {
             // This prevents mouse events from passing through the gap between tab curves
             g.Clear(Color.FromArgb(1, 0, 0, 0))
             do g.FillPath(this.bgBrush, this.borderPath)
+            // Draw fill color overlay (semi-transparent) between background and text
+            match this.displayInfo.fillColor with
+            | Some(fillColor) ->
+                let state = g.Save()
+                g.SetClip(this.borderPath)
+                use fillBrush = new SolidBrush(fillColor)
+                g.FillRectangle(fillBrush, Rectangle(0, 0, this.size.width, this.size.height))
+                g.Restore(state)
+            | None -> ()
             if this.onlyIcon.not && this.textSize.width > 0 then
                 //the text can't be drawn as a separate bitmap because clearcase fonts
                 //can't be drawn by gdi+ to a transparent background, need to draw directly on the tab background
@@ -330,7 +340,17 @@ type TabSprite<'id> = {
                     let fadeWidth = min 15 this.textSize.width
                     if fadeWidth > 0 then
                         let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
-                        let bgColor = this.tabBgColor
+                        // Compute effective background color considering fill color overlay
+                        let bgColor =
+                            match this.displayInfo.fillColor with
+                            | Some(fc) ->
+                                let a = float fc.A / 255.0
+                                let bg = this.tabBgColor
+                                Color.FromArgb(255,
+                                    int(float fc.R * a + float bg.R * (1.0 - a)),
+                                    int(float fc.G * a + float bg.G * (1.0 - a)),
+                                    int(float fc.B * a + float bg.B * (1.0 - a)))
+                            | None -> this.tabBgColor
                         let fadeRect = Rectangle(fadeX, 0, fadeWidth + 1, this.size.height)
                         let state = g.Save()
                         g.SetClip(this.borderPath)

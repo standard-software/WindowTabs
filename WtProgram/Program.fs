@@ -41,8 +41,24 @@ type ProgramVersion(parts:List2<int>)=
             elif v2 > v1 then Some(-1)
             else None).def(0)
 
-    member this.isNewerThan(v2:ProgramVersion) = 
+    member this.isNewerThan(v2:ProgramVersion) =
         this.compare(v2) > 0
+
+// Parse RRGGBBAA hex string to Color
+let parseColorRRGGBBAA (s: string) : Color option =
+    if s.Length = 8 then
+        try
+            let r = Convert.ToInt32(s.Substring(0, 2), 16)
+            let g = Convert.ToInt32(s.Substring(2, 2), 16)
+            let b = Convert.ToInt32(s.Substring(4, 2), 16)
+            let a = Convert.ToInt32(s.Substring(6, 2), 16)
+            Some(Color.FromArgb(a, r, g, b))
+        with _ -> None
+    else None
+
+// Convert Color to RRGGBBAA hex string
+let colorToRRGGBBAA (c: Color) : string =
+    sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
 
 type Program() as this =
     let version = "ss_jp_2026.02.26_next_1"
@@ -396,6 +412,10 @@ type Program() as this =
                         // Save pinned state
                         if gi.isPinned(hwnd) then
                             windowObj.setBool("isPinned", true)
+                        // Save tab fill color
+                        match gi.getTabFillColorThreadSafe(hwnd) with
+                        | Some(c) -> windowObj.setString("tabFillColor", colorToRRGGBBAA c)
+                        | None -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
@@ -451,7 +471,7 @@ type Program() as this =
                         | _ -> JArray(), None, None
 
                     if windowsArray.Count > 0 then
-                        // Collect saved window info (hwnd, optional renamedTabName, isPinned)
+                        // Collect saved window info (hwnd, optional renamedTabName, isPinned, fillColor)
                         let savedWindowsList =
                             windowsArray
                             |> Seq.choose (fun t ->
@@ -460,19 +480,20 @@ type Program() as this =
                                     obj.getIntPtr("hwnd")
                                     |> Option.map (fun hwnd ->
                                         let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
-                                        (hwnd, obj.getString("renamedTabName"), isPinned))
+                                        let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
+                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor))
                                 | _ -> None)
                             |> List.ofSeq
 
                         // Filter to only windows that still exist
                         let matchedWindows =
                             savedWindowsList
-                            |> List.filter (fun (hwnd, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
+                            |> List.filter (fun (hwnd, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
 
                         // Create group with matched windows (preserving saved order)
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned) ->
+                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor) ->
                                 // Restore renamed tab name BEFORE addWindow to avoid race condition
                                 // (addWindow is async on group thread, which reads name override)
                                 match renamedTabName with
@@ -483,6 +504,10 @@ type Program() as this =
                                 // Restore pinned state
                                 if isPinned then
                                     group.pinTab(hwnd)
+                                // Restore tab fill color
+                                match fillColor with
+                                | Some(_) -> group.setTabFillColor(hwnd, fillColor)
+                                | None -> ()
                             )
                             // Restore per-group tab position if saved
                             match savedTabPosition with

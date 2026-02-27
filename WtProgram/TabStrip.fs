@@ -50,6 +50,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let layeredWindowCell = Cell.create(None)
     let eventHandlersCell = Cell.create(Set2())
     let tabBgColor = Cell.create(Map2())
+    let tabFillColor = Cell.create(Map2() : Map2<Tab, Color>)
+    // Thread-safe snapshots for cross-thread reads
+    [<VolatileField>]
+    let mutable tabFillColorSnapshot = Map2<Tab, Color>()
     let hwndRef = ref IntPtr.Zero
     let isShrunkCell = Cell.create(false)
     // Tooltip implementation
@@ -130,6 +134,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         Cell.listen <| fun() ->
             pinnedTabsSnapshot <- pinnedTabsCell.value
 
+        // Sync tab color snapshots for thread-safe cross-thread reads
+        Cell.listen <| fun() ->
+            tabFillColorSnapshot <- tabFillColor.value
+
         Cell.listen <| fun() ->
             this.update()
        
@@ -152,6 +160,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 let ti = this.tabInfo(tab)
                 let tabInfo = {
                     bgColor = tabBgColor.value.tryFind(tab)
+                    fillColor = tabFillColor.value.tryFind(tab)
                     TabDisplayInfo.text = ti.text
                     icon = ti.iconSmall
                     textFont = SystemFonts.MenuFont
@@ -594,11 +603,21 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.setTabBgColor((tab, color)) =
         match color with
-        | Some(color) -> 
+        | Some(color) ->
             tabBgColor.map(fun m -> m.add tab color)
-        | None -> 
+        | None ->
             tabBgColor.map(fun m -> m.remove tab)
-        
+
+    member this.setTabFillColor(tab, color : Color option) =
+        match color with
+        | Some(c) -> tabFillColor.map(fun m -> m.add tab c)
+        | None -> tabFillColor.map(fun m -> m.remove tab)
+
+    member this.getTabFillColor(tab) = tabFillColor.value.tryFind(tab)
+
+    // Thread-safe versions for cross-thread reads
+    member this.getTabFillColorThreadSafe(tab) = tabFillColorSnapshot.tryFind(tab)
+
     member this.setTabAppearance(appearance) = appearanceCell.set(Some(appearance))
             
     member this.contentBounds 

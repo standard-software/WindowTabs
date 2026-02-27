@@ -72,6 +72,9 @@ type GroupInfo(enableSuperBar) as this =
             and set(value) = this.invokeGroup <| fun() -> _group.snapTabHeightMargin <- value
         member x.isPinned(hwnd) = _group.isPinnedThreadSafe(hwnd)
         member x.pinTab(hwnd) = this.invokeGroup <| fun() -> _group.pinTab(hwnd)
+        member x.isPinnedThreadSafe(hwnd) = _group.isPinnedThreadSafe(hwnd)
+        member x.setTabFillColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabFillColor(hwnd, color)
+        member x.getTabFillColorThreadSafe(hwnd) = _group.getTabFillColorThreadSafe(hwnd)
 
 type IDesktopNotification =
     abstract member dragDrop : IntPtr -> unit

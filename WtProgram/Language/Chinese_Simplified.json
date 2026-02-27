@@ -144,6 +144,16 @@
   "PinLeftTabsFormat": "固定左侧{0}个标签页",
   "UnpinRightTabsFormat": "取消固定右侧{0}个标签页",
 
+  "TabColorMenu": "标签页颜色更改",
+  "TabColorReset": "重置此标签页颜色 : {0}",
+  "TabColorResetAll": "重置所有标签页颜色",
+  "TabColorRed": "红色",
+  "TabColorBlue": "蓝色",
+  "TabColorGreen": "绿色",
+  "TabColorYellow": "黄色",
+  "TabColorPurple": "紫色",
+  "TabColorOrange": "橙色",
+
   "TabNameEdit": "标签页名称编辑",
   "RenameTab": "重命名标签页",
   "ResetTabName": "重置标签页名称",
