@@ -120,6 +120,7 @@ This feature remains unchanged from the original WindowTabs functionality.
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
   - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin left tabs, Unpin right tabs)
+  - Tab Color Change (submenu: 6 color options, reset)
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
   - Tab Position (Left / Center / Right per-tab-group)
@@ -185,11 +186,19 @@ Operates on the entire tab group:
 
 Pin tabs to keep them in a fixed position on the left side of the tab strip, similar to browser pinned tabs.
 
-- **Pin/Unpin**: Right-click a tab and use the "Tab Pin" submenu
-- **Pinned tab display**: Pinned tabs are displayed with a narrow width on the left side, with an always-visible unpin button (tilted pushpin icon)
-- **VSCode-style cross-zone drag and drop**: Drag a tab into the pinned zone to automatically pin it, or into the unpinned zone to unpin it
-- **Configurable width**: In Appearance settings, choose "Icon Only" or specify a custom width for pinned tabs
-- **Pin icon**: Uses Segoe MDL2 Assets system font for high-quality rendering
+- Pin or unpin individual tabs, or pin/unpin all tabs in a group at once
+- Pinned tab width can be set to icon-only size or a specified fixed width
+- When using specified width, a pushpin icon allows unpinning
+- Dragging a tab into the pinned zone automatically pins it
+
+### Tab Color
+
+Set a color overlay on individual tabs for visual identification.
+
+- **6 colors**: Red, Blue, Green, Yellow, Purple, Orange (semi-transparent overlay)
+- Right-click a tab and use the "Tab Color Change" submenu
+- Reset per-tab or all tabs at once
+- Colors are persisted across restarts
 
 ### Menu Dark Mode / Light Mode
 
