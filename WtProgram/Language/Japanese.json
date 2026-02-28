@@ -138,7 +138,7 @@
   "TabPositionMenu": "タブの位置",
   "PinTabMenu": "タブのピン止め",
   "PinThisTab": "このタブをピン止め",
-  "UnpinThisTab": "このタブのピン止めを解除",
+  "UnpinThisTab": "このタブのピン止めを外す",
   "PinAllTabs": "全てのタブをピン止め",
   "UnpinAllTabs": "全てのタブのピン止めを外す",
   "PinLeftTabsFormat": "左側{0}タブをピン止めする",
