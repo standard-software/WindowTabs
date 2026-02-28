@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.02.26_next_1
+## version ss_jp_2026.03.01
 - Added per-tab color fill feature
   - Tab context menu: "Tab Color Change" submenu with 6 color options (Red, Blue, Green, Yellow, Purple, Orange)
   - Semi-transparent (40% transparent / 60% opaque) color overlay on tab background
