@@ -101,7 +101,6 @@ This feature remains unchanged from the original WindowTabs functionality.
 - Drag tabs to reorder within the same group
 - Drag tabs to separate into new windows with preview
 - Drop windows to create new tab groups
-- Respects tab alignment settings (left/center/right)
 
 ### Tab Management
 
@@ -128,33 +127,26 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Settings
 
-![Popup Menu](README_Image/PopupMenu.png)
-![Popup Menu](README_Image/PopupMenuCloseTab.png)
-
-
-### Tab Detach and Split
-
-The "Tab Detach and Split" submenu provides powerful tab management options:
-
-![Tab Detach and Split Move Position](README_Image/DetachTab.png)
 
 #### Reposition
 
 Top level menu options:
-- **Same position** - Keep the window at its current position
-- **Move Left / Move Right** - Move to the left or right edge of the current display
-- **Snap Left / Snap Right** - Snap to the left or right side of the screen (full height)
+- Move Left / Move Right - Move to the left or right edge of the current display
+- Snap Left / Snap Right - Snap to the left or right side of the screen (full height)
 
 "Move Other" submenu:
-- Top, Bottom - Move to the top or bottom edge
-- Top-Left, Top-Right, Bottom-Left, Bottom-Right - Move to corners
+- Move Top / Move Bottom
+- Snap Top / Snap Bottom
+- "Corner" submenu: Top-Left, Top-Right, Bottom-Left, Bottom-Right
 
-"Snap Other" submenu:
-- Left / Right / Top / Bottom - Snap with percentage options (90%, 70%, 50%, 30%)
+"Snap x%" submenu:
+- Left / Right / Top / Bottom
 - Top-Left, Top-Right, Bottom-Left, Bottom-Right - Corner snap with percentage options
 - Center, Center Horizontally, Center Vertically
 - Snap Display / Snap Desktop - Resize to fill current display or entire desktop (without using Windows maximize)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
+
+![Popup Menu](README_Image/PopupMenu.png)
 
 #### Link to another group
 
@@ -162,25 +154,19 @@ Link a tab or tabs to another existing group:
 - Shows other groups with tab names and counts
 - Displays the application icon of the first tab in each group
 
-![Link to another group](README_Image/MoveTab.png)
+![Link to another group](README_Image/MoveTabGroupToGroup.png)
 
-#### Detach this tab
+#### Detach this tab / Split right/left side
 
-Detach a single tab from the tab group.
+Detach a single tab from a tab group,
+or split tabs to the right or left from the selected tab,
+and reposition or link to another group.
 
-#### Split right/left side
+![Tab Split Move Position](README_Image/SplitTabs.png)
 
-Split tab groups with 3 or more tabs:
-- Split tabs to the right or left, including the selected tab
-- Supports reposition and link to another group operations
+#### Close Tab
 
-#### This tab group
-
-Operates on the entire tab group:
-- Supports reposition and link to another group operations
-
-![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
-
+![Popup Menu](README_Image/PopupMenuCloseTab.png)
 
 ### Pinned Tabs
 
@@ -199,6 +185,8 @@ Set a color overlay on individual tabs for visual identification.
 - Right-click a tab and use the "Tab Color Change" submenu
 - Reset per-tab or all tabs at once
 - Colors are persisted across restarts
+
+![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
 ### Menu Dark Mode / Light Mode
 
