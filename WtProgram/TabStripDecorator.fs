@@ -2724,8 +2724,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let shortTabText =
                 if tabText.Length <= 9 then tabText
                 else tabText.Substring(0, 9) + "..."
-            // Create a color swatch icon for menu items
-            let createColorIcon (color: Color) =
+            // Create a color swatch icon for menu items (with optional checkmark overlay)
+            let createColorIcon (color: Color) (isChecked: bool) =
                 let size = 16
                 let img = Img(Sz(size, size))
                 let g = img.graphics
@@ -2734,6 +2734,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.FillRectangle(brush, 1, 1, size - 2, size - 2)
                 use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
+                if isChecked then
+                    g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
+                    // Dark outline for visibility on light colors
+                    use outlinePen = new Pen(Color.FromArgb(200, 0, 0, 0), 3.0f)
+                    g.DrawLine(outlinePen, 3, 8, 6, 12)
+                    g.DrawLine(outlinePen, 6, 12, 13, 4)
+                    // White checkmark
+                    use checkPen = new Pen(Color.White, 2.0f)
+                    g.DrawLine(checkPen, 3, 8, 6, 12)
+                    g.DrawLine(checkPen, 6, 12, 13, 4)
                 img
             let colorItems =
                 TabColorDefs.defs |> List.map (fun def ->
@@ -2741,8 +2751,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         currentFill |> Option.exists (fun f -> f = def.color)
                     CmiRegular({
                         text = Localization.getString(def.labelKey)
-                        image = Some(createColorIcon def.color)
-                        flags = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
+                        image = Some(createColorIcon def.color isChecked)
+                        flags = List2()
                         click = fun() ->
                             let newColor =
                                 if isChecked then None
@@ -2755,14 +2765,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiRegular({
                     text = String.Format(Localization.getString("TabColorReset"), shortTabText)
                     image = None
-                    flags = List2()
+                    flags = if currentFill.IsNone then List2([MenuFlags.MF_GRAYED]) else List2()
                     click = fun() ->
                         group.setTabFillColor(hwnd, None)
                 })
                 CmiRegular({
                     text = Localization.getString("TabColorResetAll")
                     image = None
-                    flags = List2()
+                    flags =
+                        let anyHasColor = this.ts.lorder.list |> List.exists (fun (Tab(h)) ->
+                            group.getTabFillColor(h).IsSome)
+                        if anyHasColor then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
                         this.ts.lorder.list |> List.iter (fun (Tab(h)) ->
                             group.setTabFillColor(h, None)

@@ -3,6 +3,10 @@
 ## version ss_jp_2026.03.01_next
 - Fixed tab color and pinned state not being preserved when splitting, detaching, or linking tabs to another group
   - Tab color and pinned state now use global HWND-keyed storage (same pattern as renamed tab names)
+- Tab Color menu
+  - checkmark overlay on the color icon when the tab's current color matches
+  - "Reset this tab color" is disabled when the tab has no color set
+  - "Reset all tab colors" is disabled when no tabs in the group have colors
 
 ## version ss_jp_2026.03.01
 - Added per-tab color fill feature
