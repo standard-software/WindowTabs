@@ -18,8 +18,6 @@ type ITabStripMonitor =
     abstract member windowMsg : Win32Message -> unit
 
 type TabStrip(monitor:ITabStripMonitor) as this =
-    // Static set to track pinned state across tab transfers between groups
-    static let recentlyPinnedTabs = System.Collections.Generic.HashSet<IntPtr>()
     let Cell = CellScope(false, true)
     let _os = OS()
     let taskbar = _os.getTaskbar()
@@ -385,13 +383,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 l.map(fun l -> l.append(tab))
         addToEnd(lorderCell)
         addToEnd(zorderCell)
-        // Restore pinned state from cross-group transfer
-        let (Tab h) = tab
-        if recentlyPinnedTabs.Remove(h) then
-            pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
-            // Move pinned tab to the end of pinned zone in lorder
-            let pinnedCount = lorderCell.value.where(fun t -> pinnedTabsCell.value.contains(t)).length
-            lorderCell.set(lorderCell.value.move((=) tab, pinnedCount - 1))
         slide.iter <| fun slide ->
             this.slide <- Some(slide)
         Cell.endUpdate()
@@ -400,13 +391,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.removeTab tab =
         Cell.beginUpdate()
-        // Remember pinned state for cross-group transfer
-        let (Tab h) = tab
         if pinnedTabsCell.value.contains(tab) then
-            recentlyPinnedTabs.Add(h) |> ignore
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
-        else
-            recentlyPinnedTabs.Remove(h) |> ignore
+        tabFillColor.map(fun m -> m.remove tab)
         lorderCell.map(fun l -> l.where((<>) tab))
         zorderCell.map(fun z -> z.where((<>) tab))
         tabInfoCell.map(fun m -> m.remove tab)

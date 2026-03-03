@@ -89,6 +89,10 @@ type IProgram =
     abstract member tabLimit : int option
     abstract member setWindowNameOverride : (IntPtr * Option<string>) -> unit
     abstract member getWindowNameOverride : IntPtr -> Option<string>
+    abstract member setWindowFillColor : IntPtr * Color option -> unit
+    abstract member getWindowFillColor : IntPtr -> Color option
+    abstract member setWindowPinned : IntPtr * bool -> unit
+    abstract member isWindowPinned : IntPtr -> bool
     abstract member appWindows : List2<IntPtr>
     abstract member getAutoGroupingEnabled : string -> bool
     abstract member setAutoGroupingEnabled : string -> bool -> unit

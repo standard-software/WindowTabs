@@ -1,5 +1,9 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.03.01_next
+- Fixed tab color and pinned state not being preserved when splitting, detaching, or linking tabs to another group
+  - Tab color and pinned state now use global HWND-keyed storage (same pattern as renamed tab names)
+
 ## version ss_jp_2026.03.01
 - Added per-tab color fill feature
   - Tab context menu: "Tab Color Change" submenu with 6 color options (Red, Blue, Green, Yellow, Purple, Orange)

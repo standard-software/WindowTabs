@@ -331,19 +331,35 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.isPinned(hwnd) = this.ts.isPinned(Tab(hwnd))
     // Thread-safe version for cross-thread reads (e.g., save from main thread)
     member this.isPinnedThreadSafe(hwnd) = this.ts.isPinnedThreadSafe(Tab(hwnd))
-    member this.pinTab(hwnd) = this.ts.pinTab(Tab(hwnd))
-    member this.unpinTab(hwnd) = this.ts.unpinTab(Tab(hwnd))
-    member this.pinAll() = this.ts.pinAll()
-    member this.unpinAll() = this.ts.unpinAll()
+    member this.pinTab(hwnd) =
+        this.ts.pinTab(Tab(hwnd))
+        Services.program.setWindowPinned(hwnd, true)
+    member this.unpinTab(hwnd) =
+        this.ts.unpinTab(Tab(hwnd))
+        Services.program.setWindowPinned(hwnd, false)
+    member this.pinAll() =
+        this.ts.pinAll()
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, true))
+    member this.unpinAll() =
+        this.ts.unpinAll()
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, false))
     member this.pinnedCount = this.ts.pinnedTabs.count
     member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
     member this.nonePinned = this.ts.pinnedTabs.count = 0
     member this.unpinnedCountToLeft(hwnd) = this.ts.unpinnedCountToLeft(Tab(hwnd))
     member this.pinnedCountToRight(hwnd) = this.ts.pinnedCountToRight(Tab(hwnd))
-    member this.pinLeftTabs(hwnd) = this.ts.pinLeftTabs(Tab(hwnd))
-    member this.unpinRightTabs(hwnd) = this.ts.unpinRightTabs(Tab(hwnd))
+    member this.pinLeftTabs(hwnd) =
+        this.ts.pinLeftTabs(Tab(hwnd))
+        // Sync all tabs' pinned state to global
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+    member this.unpinRightTabs(hwnd) =
+        this.ts.unpinRightTabs(Tab(hwnd))
+        // Sync all tabs' pinned state to global
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
 
-    member this.setTabFillColor(hwnd, color : Color option) = this.ts.setTabFillColor(Tab(hwnd), color)
+    member this.setTabFillColor(hwnd, color : Color option) =
+        this.ts.setTabFillColor(Tab(hwnd), color)
+        Services.program.setWindowFillColor(hwnd, color)
     member this.getTabFillColor(hwnd) = this.ts.getTabFillColor(Tab(hwnd))
     // Thread-safe versions for cross-thread reads
     member this.getTabFillColorThreadSafe(hwnd) = this.ts.getTabFillColorThreadSafe(Tab(hwnd))
@@ -673,6 +689,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             this.setTabInfo hwnd
 
             this.ts.addTab(Tab(hwnd))
+            // Restore fill color from global (persists across group transfers)
+            match Services.program.getWindowFillColor(hwnd) with
+            | Some(c) -> this.ts.setTabFillColor(Tab(hwnd), Some(c))
+            | None -> ()
+            // Restore pinned state from global (persists across group transfers)
+            if Services.program.isWindowPinned(hwnd) then
+                this.ts.pinTab(Tab(hwnd))
             this.adjustWindowPlacement(hwnd)
             addedEvent.Trigger(hwnd)
 
@@ -798,7 +821,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         tsWindow.makeNotTopMost()
             ).Dispose()
 
-    member this.onTabMoved(hwnd, index) = movedEvent.Trigger(hwnd, index)
+    member this.onTabMoved(hwnd, index) =
+        // Sync pinned state to global after drag-based auto-pin/unpin
+        Services.program.setWindowPinned(hwnd, this.ts.isPinned(Tab(hwnd)))
+        movedEvent.Trigger(hwnd, index)
 
     member x.exited = exitedEvent.Publish
     member this.bounds = boundsExport :> ICellOutput<_>

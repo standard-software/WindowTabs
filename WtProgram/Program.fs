@@ -103,6 +103,9 @@ type Program() as this =
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
+    // Global per-HWND storage for fill color and pinned state (persists across group transfers)
+    let windowFillColor = Cell.create(Map2() : Map2<IntPtr, Color>)
+    let windowPinned = Cell.create(Set2<IntPtr>())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
    
@@ -409,11 +412,11 @@ type Program() as this =
                         | Some(Some(name)) ->
                             windowObj.setString("renamedTabName", name)
                         | _ -> ()
-                        // Save pinned state
-                        if gi.isPinned(hwnd) then
+                        // Save pinned state from global
+                        if windowPinned.value.contains(hwnd) then
                             windowObj.setBool("isPinned", true)
-                        // Save tab fill color
-                        match gi.getTabFillColorThreadSafe(hwnd) with
+                        // Save tab fill color from global
+                        match windowFillColor.value.tryFind(hwnd) with
                         | Some(c) -> windowObj.setString("tabFillColor", colorToRRGGBBAA c)
                         | None -> ()
                         windowsArray.Add(windowObj)
@@ -494,20 +497,21 @@ type Program() as this =
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
                             matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor) ->
-                                // Restore renamed tab name BEFORE addWindow to avoid race condition
-                                // (addWindow is async on group thread, which reads name override)
+                                // Restore to global maps BEFORE addWindow to avoid race condition
+                                // (addWindow is async on group thread, which reads from globals)
                                 match renamedTabName with
                                 | Some(name) ->
                                     windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
                                 | None -> ()
-                                group.addWindow(hwnd, false)
-                                // Restore pinned state
-                                if isPinned then
-                                    group.pinTab(hwnd)
-                                // Restore tab fill color
+                                // Restore fill color to global
                                 match fillColor with
-                                | Some(_) -> group.setTabFillColor(hwnd, fillColor)
+                                | Some(c) ->
+                                    windowFillColor.set(windowFillColor.value.add hwnd c)
                                 | None -> ()
+                                // Restore pinned state to global
+                                if isPinned then
+                                    windowPinned.set(windowPinned.value.add hwnd)
+                                group.addWindow(hwnd, false)
                             )
                             // Restore per-group tab position if saved
                             match savedTabPosition with
@@ -556,7 +560,22 @@ type Program() as this =
         member x.getWindowNameOverride(hwnd) =
             windowNameOverride.value.tryFind(hwnd).bind(id)
 
-        member x.appWindows = 
+        member x.setWindowFillColor(hwnd, color : Color option) =
+            match color with
+            | Some(c) -> windowFillColor.set(windowFillColor.value.add hwnd c)
+            | None -> windowFillColor.set(windowFillColor.value.remove hwnd)
+
+        member x.getWindowFillColor(hwnd) =
+            windowFillColor.value.tryFind(hwnd)
+
+        member x.setWindowPinned(hwnd, pinned : bool) =
+            if pinned then windowPinned.set(windowPinned.value.add hwnd)
+            else windowPinned.set(windowPinned.value.remove hwnd)
+
+        member x.isWindowPinned(hwnd) =
+            windowPinned.value.contains(hwnd)
+
+        member x.appWindows =
             os.windowsInZorder.where(this.isAppWindow).map(fun w -> w.hwnd)
 
         member x.getAutoGroupingEnabled procPath =
