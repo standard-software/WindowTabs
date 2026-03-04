@@ -7,6 +7,7 @@
   - checkmark overlay on the color icon when the tab's current color matches
   - "Reset this tab color" is disabled when the tab has no color set
   - "Reset all tab colors" is disabled when no tabs in the group have colors
+- Added "Same position" option to Detach, Split Right, and Split Left position menus
 
 ## version ss_jp_2026.03.01
 - Added per-tab color fill feature

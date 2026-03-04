@@ -2901,7 +2901,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
+            let samePositionItem = [
+                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachTabToPosition(hwnd, None)); flags = List2() })
+                CmiSeparator
+            ]
+
             let baseMenuItems =
+                samePositionItem @
                 buildPositionMenuItems true true
                     (fun pos -> this.detachTabToPosition(hwnd, pos))
                     (fun dir -> this.detachTabToSnap(hwnd, dir))
@@ -2953,7 +2959,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitRightTabsToPositionFormat"), rightTabCount)
 
+            let samePositionItem = [
+                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.splitRightTabsToPosition(hwnd, None)); flags = List2() })
+                CmiSeparator
+            ]
+
             let baseMenuItems =
+                samePositionItem @
                 buildPositionMenuItems true true
                     (fun pos -> this.splitRightTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitRightTabsToSnap(hwnd, dir))
@@ -3007,7 +3019,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let menuText = String.Format(Localization.getString("SplitLeftTabsToPositionFormat"), leftTabCount)
 
+            let samePositionItem = [
+                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.splitLeftTabsToPosition(hwnd, None)); flags = List2() })
+                CmiSeparator
+            ]
+
             let baseMenuItems =
+                samePositionItem @
                 buildPositionMenuItems true true
                     (fun pos -> this.splitLeftTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitLeftTabsToSnap(hwnd, dir))
