@@ -49,9 +49,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let eventHandlersCell = Cell.create(Set2())
     let tabBgColor = Cell.create(Map2())
     let tabFillColor = Cell.create(Map2() : Map2<Tab, Color>)
+    let tabUnderlineColor = Cell.create(Map2() : Map2<Tab, Color>)
     // Thread-safe snapshots for cross-thread reads
     [<VolatileField>]
     let mutable tabFillColorSnapshot = Map2<Tab, Color>()
+    [<VolatileField>]
+    let mutable tabUnderlineColorSnapshot = Map2<Tab, Color>()
     let hwndRef = ref IntPtr.Zero
     let isShrunkCell = Cell.create(false)
     // Tooltip implementation
@@ -135,6 +138,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Sync tab color snapshots for thread-safe cross-thread reads
         Cell.listen <| fun() ->
             tabFillColorSnapshot <- tabFillColor.value
+        Cell.listen <| fun() ->
+            tabUnderlineColorSnapshot <- tabUnderlineColor.value
 
         Cell.listen <| fun() ->
             this.update()
@@ -159,6 +164,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 let tabInfo = {
                     bgColor = tabBgColor.value.tryFind(tab)
                     fillColor = tabFillColor.value.tryFind(tab)
+                    underlineColor = tabUnderlineColor.value.tryFind(tab)
                     TabDisplayInfo.text = ti.text
                     icon = ti.iconSmall
                     textFont = SystemFonts.MenuFont
@@ -394,6 +400,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
         tabFillColor.map(fun m -> m.remove tab)
+        tabUnderlineColor.map(fun m -> m.remove tab)
         lorderCell.map(fun l -> l.where((<>) tab))
         zorderCell.map(fun z -> z.where((<>) tab))
         tabInfoCell.map(fun m -> m.remove tab)
@@ -597,13 +604,28 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.setTabFillColor(tab, color : Color option) =
         match color with
-        | Some(c) -> tabFillColor.map(fun m -> m.add tab c)
+        | Some(c) ->
+            tabFillColor.map(fun m -> m.add tab c)
+            // Mutually exclusive: clear underline when setting fill
+            tabUnderlineColor.map(fun m -> m.remove tab)
         | None -> tabFillColor.map(fun m -> m.remove tab)
 
     member this.getTabFillColor(tab) = tabFillColor.value.tryFind(tab)
 
     // Thread-safe versions for cross-thread reads
     member this.getTabFillColorThreadSafe(tab) = tabFillColorSnapshot.tryFind(tab)
+
+    member this.setTabUnderlineColor(tab, color : Color option) =
+        match color with
+        | Some(c) ->
+            tabUnderlineColor.map(fun m -> m.add tab c)
+            // Mutually exclusive: clear fill when setting underline
+            tabFillColor.map(fun m -> m.remove tab)
+        | None -> tabUnderlineColor.map(fun m -> m.remove tab)
+
+    member this.getTabUnderlineColor(tab) = tabUnderlineColor.value.tryFind(tab)
+
+    member this.getTabUnderlineColorThreadSafe(tab) = tabUnderlineColorSnapshot.tryFind(tab)
 
     member this.setTabAppearance(appearance) = appearanceCell.set(Some(appearance))
             

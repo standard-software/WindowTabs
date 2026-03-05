@@ -91,6 +91,8 @@ type IProgram =
     abstract member getWindowNameOverride : IntPtr -> Option<string>
     abstract member setWindowFillColor : IntPtr * Color option -> unit
     abstract member getWindowFillColor : IntPtr -> Color option
+    abstract member setWindowUnderlineColor : IntPtr * Color option -> unit
+    abstract member getWindowUnderlineColor : IntPtr -> Color option
     abstract member setWindowPinned : IntPtr * bool -> unit
     abstract member isWindowPinned : IntPtr -> bool
     abstract member appWindows : List2<IntPtr>
@@ -138,6 +140,8 @@ type IGroup =
     abstract member isPinnedThreadSafe: IntPtr -> bool
     abstract member setTabFillColor: IntPtr * Color option -> unit
     abstract member getTabFillColorThreadSafe: IntPtr -> Color option
+    abstract member setTabUnderlineColor: IntPtr * Color option -> unit
+    abstract member getTabUnderlineColorThreadSafe: IntPtr -> Color option
 
 type IDesktop =
     abstract member isDragging : bool

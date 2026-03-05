@@ -364,6 +364,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // Thread-safe versions for cross-thread reads
     member this.getTabFillColorThreadSafe(hwnd) = this.ts.getTabFillColorThreadSafe(Tab(hwnd))
 
+    member this.setTabUnderlineColor(hwnd, color : Color option) =
+        this.ts.setTabUnderlineColor(Tab(hwnd), color)
+        Services.program.setWindowUnderlineColor(hwnd, color)
+    member this.getTabUnderlineColor(hwnd) = this.ts.getTabUnderlineColor(Tab(hwnd))
+    member this.getTabUnderlineColorThreadSafe(hwnd) = this.ts.getTabUnderlineColorThreadSafe(Tab(hwnd))
+
     member this.tabPosition
         with get() = perGroupTabPosition
         and set(value) =
@@ -692,6 +698,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Restore fill color from global (persists across group transfers)
             match Services.program.getWindowFillColor(hwnd) with
             | Some(c) -> this.ts.setTabFillColor(Tab(hwnd), Some(c))
+            | None -> ()
+            // Restore underline color from global (persists across group transfers)
+            match Services.program.getWindowUnderlineColor(hwnd) with
+            | Some(c) -> this.ts.setTabUnderlineColor(Tab(hwnd), Some(c))
             | None -> ()
             // Restore pinned state from global (persists across group transfers)
             if Services.program.isWindowPinned(hwnd) then

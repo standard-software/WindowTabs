@@ -8,6 +8,11 @@
   - "Reset this tab color" is disabled when the tab has no color set
   - "Reset all tab colors" is disabled when no tabs in the group have colors
 - Added "Same position" option to Detach, Split Right, and Split Left position menus
+- Added underline color feature
+  - Fill and underline are mutually exclusive
+  - Underline opacity: 90% (10% transparent)
+- Tab colors expanded to 8: Red, Blue, Green, Yellow, Purple, Orange, Emerald Green, Light Blue
+
 
 ## version ss_jp_2026.03.01
 - Added per-tab color fill feature

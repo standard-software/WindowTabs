@@ -75,6 +75,8 @@ type GroupInfo(enableSuperBar) as this =
         member x.isPinnedThreadSafe(hwnd) = _group.isPinnedThreadSafe(hwnd)
         member x.setTabFillColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabFillColor(hwnd, color)
         member x.getTabFillColorThreadSafe(hwnd) = _group.getTabFillColorThreadSafe(hwnd)
+        member x.setTabUnderlineColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabUnderlineColor(hwnd, color)
+        member x.getTabUnderlineColorThreadSafe(hwnd) = _group.getTabUnderlineColorThreadSafe(hwnd)
 
 type IDesktopNotification =
     abstract member dragDrop : IntPtr -> unit

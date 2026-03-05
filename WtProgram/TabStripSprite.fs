@@ -144,6 +144,7 @@ type PinButtonSprite = {
 type TabDisplayInfo = {
     bgColor : Color option
     fillColor : Color option
+    underlineColor : Color option
     text: string
     textFont: Font
     textBrush: Brush
@@ -363,6 +364,20 @@ type TabSprite<'id> = {
                         g.Restore(state)
             // Draw border after text and gradient so border is never affected by fade
             do g.DrawPath(this.borderPen, this.borderPath)
+            // Draw underline color at bottom/top of tab
+            match this.displayInfo.underlineColor with
+            | Some(underlineColor) ->
+                let underlineHeight = 3
+                let state = g.Save()
+                g.SetClip(this.borderPath)
+                use underlineBrush = new SolidBrush(underlineColor)
+                let y =
+                    match this.direction with
+                    | TabUp -> this.size.height - underlineHeight
+                    | TabDown -> 0
+                g.FillRectangle(underlineBrush, Rectangle(0, y, this.size.width, underlineHeight))
+                g.Restore(state)
+            | None -> ()
             img
         member this.children =
             let isHoverOrCaptured = this.hover.IsSome || this.captured.IsSome

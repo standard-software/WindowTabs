@@ -103,8 +103,9 @@ type Program() as this =
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
-    // Global per-HWND storage for fill color and pinned state (persists across group transfers)
+    // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
     let windowFillColor = Cell.create(Map2() : Map2<IntPtr, Color>)
+    let windowUnderlineColor = Cell.create(Map2() : Map2<IntPtr, Color>)
     let windowPinned = Cell.create(Set2<IntPtr>())
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
@@ -419,6 +420,10 @@ type Program() as this =
                         match windowFillColor.value.tryFind(hwnd) with
                         | Some(c) -> windowObj.setString("tabFillColor", colorToRRGGBBAA c)
                         | None -> ()
+                        // Save tab underline color from global
+                        match windowUnderlineColor.value.tryFind(hwnd) with
+                        | Some(c) -> windowObj.setString("tabUnderlineColor", colorToRRGGBBAA c)
+                        | None -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
@@ -484,19 +489,20 @@ type Program() as this =
                                     |> Option.map (fun hwnd ->
                                         let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
                                         let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
-                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor))
+                                        let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
+                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor))
                                 | _ -> None)
                             |> List.ofSeq
 
                         // Filter to only windows that still exist
                         let matchedWindows =
                             savedWindowsList
-                            |> List.filter (fun (hwnd, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
+                            |> List.filter (fun (hwnd, _, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
 
                         // Create group with matched windows (preserving saved order)
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor) ->
+                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor, underlineColor) ->
                                 // Restore to global maps BEFORE addWindow to avoid race condition
                                 // (addWindow is async on group thread, which reads from globals)
                                 match renamedTabName with
@@ -507,6 +513,11 @@ type Program() as this =
                                 match fillColor with
                                 | Some(c) ->
                                     windowFillColor.set(windowFillColor.value.add hwnd c)
+                                | None -> ()
+                                // Restore underline color to global
+                                match underlineColor with
+                                | Some(c) ->
+                                    windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c)
                                 | None -> ()
                                 // Restore pinned state to global
                                 if isPinned then
@@ -562,11 +573,25 @@ type Program() as this =
 
         member x.setWindowFillColor(hwnd, color : Color option) =
             match color with
-            | Some(c) -> windowFillColor.set(windowFillColor.value.add hwnd c)
+            | Some(c) ->
+                windowFillColor.set(windowFillColor.value.add hwnd c)
+                // Mutually exclusive: clear underline when setting fill
+                windowUnderlineColor.set(windowUnderlineColor.value.remove hwnd)
             | None -> windowFillColor.set(windowFillColor.value.remove hwnd)
 
         member x.getWindowFillColor(hwnd) =
             windowFillColor.value.tryFind(hwnd)
+
+        member x.setWindowUnderlineColor(hwnd, color : Color option) =
+            match color with
+            | Some(c) ->
+                windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c)
+                // Mutually exclusive: clear fill when setting underline
+                windowFillColor.set(windowFillColor.value.remove hwnd)
+            | None -> windowUnderlineColor.set(windowUnderlineColor.value.remove hwnd)
+
+        member x.getWindowUnderlineColor(hwnd) =
+            windowUnderlineColor.value.tryFind(hwnd)
 
         member x.setWindowPinned(hwnd, pinned : bool) =
             if pinned then windowPinned.set(windowPinned.value.add hwnd)
