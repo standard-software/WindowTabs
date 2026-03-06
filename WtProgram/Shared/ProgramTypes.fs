@@ -93,6 +93,8 @@ type IProgram =
     abstract member getWindowFillColor : IntPtr -> Color option
     abstract member setWindowUnderlineColor : IntPtr * Color option -> unit
     abstract member getWindowUnderlineColor : IntPtr -> Color option
+    abstract member setWindowBorderColor : IntPtr * Color option -> unit
+    abstract member getWindowBorderColor : IntPtr -> Color option
     abstract member setWindowPinned : IntPtr * bool -> unit
     abstract member isWindowPinned : IntPtr -> bool
     abstract member appWindows : List2<IntPtr>
@@ -142,6 +144,8 @@ type IGroup =
     abstract member getTabFillColorThreadSafe: IntPtr -> Color option
     abstract member setTabUnderlineColor: IntPtr * Color option -> unit
     abstract member getTabUnderlineColorThreadSafe: IntPtr -> Color option
+    abstract member setTabBorderColor: IntPtr * Color option -> unit
+    abstract member getTabBorderColorThreadSafe: IntPtr -> Color option
 
 type IDesktop =
     abstract member isDragging : bool

@@ -145,6 +145,7 @@ type TabDisplayInfo = {
     bgColor : Color option
     fillColor : Color option
     underlineColor : Color option
+    borderColor : Color option
     text: string
     textFont: Font
     textBrush: Brush
@@ -364,18 +365,58 @@ type TabSprite<'id> = {
                         g.Restore(state)
             // Draw border after text and gradient so border is never affected by fade
             do g.DrawPath(this.borderPen, this.borderPath)
-            // Draw underline color at bottom/top of tab
+            // Draw underline color at bottom/top of tab with gradient (opaque left half, fading to transparent on right)
             match this.displayInfo.underlineColor with
             | Some(underlineColor) ->
                 let underlineHeight = 3
                 let state = g.Save()
                 g.SetClip(this.borderPath)
-                use underlineBrush = new SolidBrush(underlineColor)
                 let y =
                     match this.direction with
                     | TabUp -> this.size.height - underlineHeight
                     | TabDown -> 0
-                g.FillRectangle(underlineBrush, Rectangle(0, y, this.size.width, underlineHeight))
+                let rect = Rectangle(0, y, this.size.width, underlineHeight)
+                let opaqueColor = underlineColor
+                let transparentColor = Color.FromArgb(0, int underlineColor.R, int underlineColor.G, int underlineColor.B)
+                use gradientBrush = new LinearGradientBrush(
+                    Rectangle(0, y, this.size.width + 1, underlineHeight),
+                    opaqueColor, transparentColor,
+                    LinearGradientMode.Horizontal)
+                // Opaque from left to 60%, then fade to 80% transparent on right
+                let blend = new ColorBlend(3)
+                blend.Positions <- [| 0.0f; 0.6f; 1.0f |]
+                let rightColor = Color.FromArgb(int(255.0f * 0.2f), int underlineColor.R, int underlineColor.G, int underlineColor.B)
+                blend.Colors <- [| opaqueColor; opaqueColor; rightColor |]
+                gradientBrush.InterpolationColors <- blend
+                g.FillRectangle(gradientBrush, rect)
+                g.Restore(state)
+            | None -> ()
+            // Draw colored border around tab (normal width for tab shape, underline-style bottom edge)
+            match this.displayInfo.borderColor with
+            | Some(borderColor) ->
+                let state = g.Save()
+                // Draw the tab shape border (top and sides) with normal 1px width
+                use shapePen = new Pen(new SolidBrush(borderColor), 1.0f)
+                g.DrawPath(shapePen, this.borderPath)
+                // Draw bottom/top edge using same logic as underline (SetClip + FillRectangle + gradient)
+                let underlineHeight = 3
+                g.SetClip(this.borderPath)
+                let y =
+                    match this.direction with
+                    | TabUp -> this.size.height - underlineHeight
+                    | TabDown -> 0
+                let rect = Rectangle(0, y, this.size.width, underlineHeight)
+                let opaqueColor = borderColor
+                let rightColor = Color.FromArgb(int(255.0f * 0.2f), int borderColor.R, int borderColor.G, int borderColor.B)
+                use gradientBrush = new LinearGradientBrush(
+                    Rectangle(0, y, this.size.width + 1, underlineHeight),
+                    opaqueColor, rightColor,
+                    LinearGradientMode.Horizontal)
+                let blend = new ColorBlend(3)
+                blend.Positions <- [| 0.0f; 0.6f; 1.0f |]
+                blend.Colors <- [| opaqueColor; opaqueColor; rightColor |]
+                gradientBrush.InterpolationColors <- blend
+                g.FillRectangle(gradientBrush, rect)
                 g.Restore(state)
             | None -> ()
             img

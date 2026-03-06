@@ -15,7 +15,7 @@ type TabGroupInfo = {
 }
 
 // Tab color decoration definitions
-type TabColorType = Fill | Underline
+type TabColorType = Fill | Underline | Border
 
 type TabColorDef = {
     color: Color
@@ -31,6 +31,7 @@ module TabColorDefs =
         let b = System.Convert.ToInt32(rrggbbaa.Substring(4, 2), 16)
         let a = System.Convert.ToInt32(rrggbbaa.Substring(6, 2), 16)
         Color.FromArgb(a, r, g, b)
+    // Color order: Red, Blue, Green, Yellow, Purple, Orange, Pink
     // Fill colors: RRGGBBAA format (AA=99 -> 60% opaque / 40% transparent)
     let fillDefs = [
         { color = c "D2323C99"; labelKey = "TabColorRed"; colorType = Fill }
@@ -39,8 +40,7 @@ module TabColorDefs =
         { color = c "F7D30399"; labelKey = "TabColorYellow"; colorType = Fill }
         { color = c "88179899"; labelKey = "TabColorPurple"; colorType = Fill }
         { color = c "F9731699"; labelKey = "TabColorOrange"; colorType = Fill }
-        { color = c "00B39599"; labelKey = "TabColorEmeraldGreen"; colorType = Fill }
-        { color = c "00AADD99"; labelKey = "TabColorLightBlue"; colorType = Fill }
+        { color = c "E91E8C99"; labelKey = "TabColorPink"; colorType = Fill }
     ]
     // Underline colors: RRGGBBAA format (AA=E6 -> 90% opaque / 10% transparent)
     let underlineDefs = [
@@ -50,10 +50,19 @@ module TabColorDefs =
         { color = c "F7D303E6"; labelKey = "TabColorYellowUnderline"; colorType = Underline }
         { color = c "881798E6"; labelKey = "TabColorPurpleUnderline"; colorType = Underline }
         { color = c "F97316E6"; labelKey = "TabColorOrangeUnderline"; colorType = Underline }
-        { color = c "00B395E6"; labelKey = "TabColorEmeraldGreenUnderline"; colorType = Underline }
-        { color = c "00AADDE6"; labelKey = "TabColorLightBlueUnderline"; colorType = Underline }
+        { color = c "E91E8CE6"; labelKey = "TabColorPinkUnderline"; colorType = Underline }
     ]
-    let allDefs = fillDefs @ underlineDefs
+    // Border colors: RRGGBBAA format (AA=E6 -> 90% opaque / 10% transparent)
+    let borderDefs = [
+        { color = c "D2323CE6"; labelKey = "TabColorRedBorder"; colorType = Border }
+        { color = c "2864D2E6"; labelKey = "TabColorBlueBorder"; colorType = Border }
+        { color = c "13A10EE6"; labelKey = "TabColorGreenBorder"; colorType = Border }
+        { color = c "F7D303E6"; labelKey = "TabColorYellowBorder"; colorType = Border }
+        { color = c "881798E6"; labelKey = "TabColorPurpleBorder"; colorType = Border }
+        { color = c "F97316E6"; labelKey = "TabColorOrangeBorder"; colorType = Border }
+        { color = c "E91E8CE6"; labelKey = "TabColorPinkBorder"; colorType = Border }
+    ]
+    let allDefs = fillDefs @ underlineDefs @ borderDefs
 
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
@@ -2738,6 +2747,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let tabColorSubMenu =
             let currentFill = group.getTabFillColor(hwnd)
             let currentUnderline = group.getTabUnderlineColor(hwnd)
+            let currentBorder = group.getTabBorderColor(hwnd)
             let tabText = this.ts.tabInfo(Tab(hwnd)).text
             let shortTabText =
                 if tabText.Length <= 9 then tabText
@@ -2746,6 +2756,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let isColorMatch (current: Color option) (defColor: Color) =
                 current |> Option.exists (fun c ->
                     int c.R = int defColor.R && int c.G = int defColor.G && int c.B = int defColor.B)
+            // Draw checkmark overlay on icon
+            let drawCheckmark (g: Graphics) =
+                g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
+                use outlinePen = new Pen(Color.FromArgb(200, 0, 0, 0), 3.0f)
+                g.DrawLine(outlinePen, 3, 8, 6, 12)
+                g.DrawLine(outlinePen, 6, 12, 13, 4)
+                use checkPen = new Pen(Color.White, 2.0f)
+                g.DrawLine(checkPen, 3, 8, 6, 12)
+                g.DrawLine(checkPen, 6, 12, 13, 4)
             // Create a filled color swatch icon (with optional checkmark overlay)
             let createFillIcon (color: Color) (isChecked: bool) =
                 let size = 16
@@ -2756,14 +2775,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.FillRectangle(brush, 1, 1, size - 2, size - 2)
                 use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
-                if isChecked then
-                    g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
-                    use outlinePen = new Pen(Color.FromArgb(200, 0, 0, 0), 3.0f)
-                    g.DrawLine(outlinePen, 3, 8, 6, 12)
-                    g.DrawLine(outlinePen, 6, 12, 13, 4)
-                    use checkPen = new Pen(Color.White, 2.0f)
-                    g.DrawLine(checkPen, 3, 8, 6, 12)
-                    g.DrawLine(checkPen, 6, 12, 13, 4)
+                if isChecked then drawCheckmark g
                 img
             // Create an underline color icon (colored line at bottom)
             let createUnderlineIcon (color: Color) (isChecked: bool) =
@@ -2773,7 +2785,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.Clear(Color.Transparent)
                 use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
-                // Draw colored underline at bottom
                 use underlineBrush = new SolidBrush(Color.FromArgb(255, int color.R, int color.G, int color.B))
                 g.FillRectangle(underlineBrush, 1, size - 4, size - 2, 3)
                 if isChecked then
@@ -2785,6 +2796,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     g.DrawLine(checkPen, 3, 7, 6, 11)
                     g.DrawLine(checkPen, 6, 11, 13, 3)
                 img
+            // Create a border color icon (colored rectangle outline)
+            let createBorderIcon (color: Color) (isChecked: bool) =
+                let size = 16
+                let img = Img(Sz(size, size))
+                let g = img.graphics
+                g.Clear(Color.Transparent)
+                use borderPen = new Pen(Color.FromArgb(255, int color.R, int color.G, int color.B), 2.0f)
+                g.DrawRectangle(borderPen, 1, 1, size - 3, size - 3)
+                if isChecked then drawCheckmark g
+                img
             // Fill color items
             let fillItems =
                 TabColorDefs.fillDefs |> List.map (fun def ->
@@ -2794,10 +2815,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = Some(createFillIcon def.color isChecked)
                         flags = List2()
                         click = fun() ->
-                            if isChecked then
-                                group.setTabFillColor(hwnd, None)
-                            else
-                                group.setTabFillColor(hwnd, Some(def.color))
+                            if isChecked then group.setTabFillColor(hwnd, None)
+                            else group.setTabFillColor(hwnd, Some(def.color))
                     })
                 )
             // Underline color items
@@ -2809,13 +2828,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = Some(createUnderlineIcon def.color isChecked)
                         flags = List2()
                         click = fun() ->
-                            if isChecked then
-                                group.setTabUnderlineColor(hwnd, None)
-                            else
-                                group.setTabUnderlineColor(hwnd, Some(def.color))
+                            if isChecked then group.setTabUnderlineColor(hwnd, None)
+                            else group.setTabUnderlineColor(hwnd, Some(def.color))
                     })
                 )
-            let hasAnyColor = currentFill.IsSome || currentUnderline.IsSome
+            // Border color items
+            let borderItems =
+                TabColorDefs.borderDefs |> List.map (fun def ->
+                    let isChecked = isColorMatch currentBorder def.color
+                    CmiRegular({
+                        text = Localization.getString(def.labelKey)
+                        image = Some(createBorderIcon def.color isChecked)
+                        flags = List2()
+                        click = fun() ->
+                            if isChecked then group.setTabBorderColor(hwnd, None)
+                            else group.setTabBorderColor(hwnd, Some(def.color))
+                    })
+                )
+            let hasAnyColor = currentFill.IsSome || currentUnderline.IsSome || currentBorder.IsSome
             let resetItems = [
                 CmiSeparator
                 CmiRegular({
@@ -2825,25 +2855,27 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() ->
                         group.setTabFillColor(hwnd, None)
                         group.setTabUnderlineColor(hwnd, None)
+                        group.setTabBorderColor(hwnd, None)
                 })
                 CmiRegular({
                     text = Localization.getString("TabColorResetAll")
                     image = None
                     flags =
                         let anyHasColor = this.ts.lorder.list |> List.exists (fun (Tab(h)) ->
-                            group.getTabFillColor(h).IsSome || group.getTabUnderlineColor(h).IsSome)
+                            group.getTabFillColor(h).IsSome || group.getTabUnderlineColor(h).IsSome || group.getTabBorderColor(h).IsSome)
                         if anyHasColor then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
                         this.ts.lorder.list |> List.iter (fun (Tab(h)) ->
                             group.setTabFillColor(h, None)
                             group.setTabUnderlineColor(h, None)
+                            group.setTabBorderColor(h, None)
                         )
                 })
             ]
             CmiPopUp({
                 text = Localization.getString("TabColorMenu")
                 image = None
-                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ resetItems)
+                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ resetItems)
                 flags = List2()
             })
 
