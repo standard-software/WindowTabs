@@ -119,13 +119,15 @@ This feature remains unchanged from the original WindowTabs functionality.
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
   - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin left tabs, Unpin right tabs)
-  - Tab Color Change (submenu: 6 color options, reset)
+  - Tab Color Change (submenu: fill / underline / border color options, reset)
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
   - Tab Position (Left / Center / Right per-tab-group)
   - Tab Name (rename / reset)
   ---
   - Settings
+
+![Popup Menu](README_Image/PopupMenu.png)
 
 
 #### Reposition
@@ -146,7 +148,7 @@ Top level menu options:
 - Snap Display / Snap Desktop - Resize to fill current display or entire desktop (without using Windows maximize)
 - DPI-aware percentage-based positioning for correct placement across different DPI displays
 
-![Popup Menu](README_Image/PopupMenu.png)
+![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
 #### Link to another group
 
@@ -166,7 +168,7 @@ and reposition or link to another group.
 
 #### Close Tab
 
-![Popup Menu](README_Image/PopupMenuCloseTab.png)
+![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
 
 ### Pinned Tabs
 
@@ -177,12 +179,23 @@ Pin tabs to keep them in a fixed position on the left side of the tab strip, sim
 - When using specified width, a pushpin icon allows unpinning
 - Dragging a tab into the pinned zone automatically pins it
 
+![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)  
+![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
+![Pinned Tabs Menu](README_Image/PinnedTabMenu.png)
+
 ### Tab Color
 
-Set a color overlay on individual tabs for visual identification.
+Set a color on individual tabs for visual identification. Three color types are available:
 
-- **6 colors**: Red, Blue, Green, Yellow, Purple, Orange (semi-transparent overlay)
+- **Fill**: Semi-transparent color overlay on the tab background
+- **Underline**: Colored line at the bottom of the tab with a left-to-right gradient
+- **Border**: Colored outline around the tab (1px curves + gradient bottom edge)
+
+**7 colors**: Red, Blue, Green, Yellow, Purple, Orange, Pink
+
 - Right-click a tab and use the "Tab Color Change" submenu
+- Fill, underline, and border are mutually exclusive (setting one clears the others)
+- Checkmark overlay on the color icon when the tab's current color matches
 - Reset per-tab or all tabs at once
 - Colors are persisted across restarts
 
@@ -268,7 +281,6 @@ Access settings by right-clicking the tray icon and selecting "Settings" or by r
 
 Configure which programs should use tabs and auto-grouping behavior.
 
-- **Show all settings**: Checkbox to display settings for programs not currently running
 - **Tabs**: Enable/disable tabbing for each program
 - **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
 - **Category 1-10**: Assign programs to a category for cross-application auto-grouping
@@ -277,6 +289,7 @@ Configure which programs should use tabs and auto-grouping behavior.
   - For example, assign Chrome, Edge, Firefox, etc. to the same category to auto-group browsers together
   - Category columns are only visible when Auto Grouping is enabled for a program
   - Programs are sorted by category number for better visibility
+- **Show all settings**: Checkbox to display settings for programs not currently running
 - **Delete button [x]**: Remove settings for non-running processes
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
@@ -297,8 +310,9 @@ Customize the visual appearance of tabs:
   - Import/export themes via clipboard
   - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme. We'd love for others to enjoy your cool color themes!
 
-![Settings Appearance](README_Image/SettingsAppearance.png)
-![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
+![Settings Appearance](README_Image/SettingsAppearance.png)  
+![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)  
+![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)  
 
 ### Behavior Tab
 

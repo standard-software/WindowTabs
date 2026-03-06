@@ -119,13 +119,15 @@ WindowTabs をスタートアップ時に起動:
   - タブを閉じる (サブメニュー: このタブ、左側のタブ/右側のタブ、その他タブ、すべてのタブ)
   ---
   - タブのピン止め (サブメニュー: ピン止め/解除、全てピン止め、全て解除、左側をピン止め、右側を解除)
-  - タブの色の変更 (サブメニュー: 6色のカラーオプション、リセット)
+  - タブの色変更 (サブメニュー: 塗りつぶし / 下線 / 枠線カラーオプション、リセット)
   ---
   - スナップ時のタブマージン (タブグループごとの切り替え)
   - タブ位置 (左 / 中央 / 右、タブグループごと)
   - タブの名前 (変更 / リセット)
   ---
   - 設定
+
+![Popup Menu](README_Image/PopupMenu.png)
 
 
 #### 位置移動
@@ -146,7 +148,7 @@ WindowTabs をスタートアップ時に起動:
 - スナップ ディスプレイ全体 / スナップ デスクトップ全体 - Windowsの最大化を使わずに現在のディスプレイまたはデスクトップ全体にリサイズ
 - 異なる DPI ディスプレイでも正確に配置するための、DPI を考慮したパーセンテージベースの位置指定
 
-![Popup Menu](README_Image/PopupMenu.png)
+![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
 #### 他のグループへ連結
 
@@ -167,7 +169,7 @@ WindowTabs をスタートアップ時に起動:
 
 #### タブを閉じる
 
-![Popup Menu](README_Image/PopupMenuCloseTab.png)
+![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
 
 ### ピン止めタブ
 
@@ -178,12 +180,23 @@ WindowTabs をスタートアップ時に起動:
 - サイズ指定のピン止めの場合、画鋲アイコンでピン止め解除可能
 - タブをピン止めゾーンにドラッグすると自動でピン止め
 
+![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
+![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
+![Pinned Tabs Menu](README_Image/PinnedTabMenu.png)
+
 ### タブのカラー
 
-タブごとに色のオーバーレイを設定して、視覚的に識別しやすくできます。
+タブごとに色を設定して、視覚的に識別しやすくできます。3つのカラータイプがあります:
 
-- **6色**: 赤、青、緑、黄色、紫、オレンジ（半透明オーバーレイ）
-- タブを右クリックして「タブの色の変更」サブメニューから操作
+- **塗りつぶし**: タブ背景に半透明のカラーオーバーレイ
+- **下線**: タブ下部に左から右へのグラデーション付きカラーライン
+- **枠線**: タブの周囲にカラーアウトライン（1pxの曲線 + グラデーション付き底辺）
+
+**7色**: 赤、青、緑、黄色、紫、オレンジ、ピンク
+
+- タブを右クリックして「タブの色変更」サブメニューから操作
+- 塗りつぶし、下線、枠線は排他的（1つ設定すると他はクリアされます）
+- タブの現在の色と一致する場合、色アイコンにチェックマークを表示
 - タブごと、または全タブ一括でリセット可能
 - 色の設定は再起動後も保持されます
 
@@ -268,7 +281,6 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 タブと自動グループ化の動作を使用するプログラムを構成できます。
 
-- **すべての設定を表示**: チェックボックスで、現在実行していないプログラムの設定も表示可能
 - **タブ**: プログラムごとにタブ機能の有効/無効を設定
 - **自動グループ化**: 有効にすると、同じプログラムのウィンドウが自動で同じタブグループにまとめられます
 - **カテゴリー 1-10**: プログラムにカテゴリーを割り当てて、異なるアプリ間の自動グループ化が可能
@@ -277,6 +289,7 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
   - 例えば、Chrome・Edge・Firefox などを同じカテゴリーに設定すれば、ブラウザが自動でグループ化されます
   - カテゴリー列は、自動グループ化が有効なプログラムにのみ表示されます
   - プログラムはカテゴリー番号順に並び替えられます
+- **すべての設定を表示**: チェックボックスで、現在実行していないプログラムの設定も表示可能
 - **削除ボタン [x]**: 実行中でないプロセスの設定を削除
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
@@ -298,7 +311,8 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
   - よいカラーテーマを作られた方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。他の方にもかっこいいカラーテーマを使っていただきたいです！
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
-![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
+![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
+![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
 ### タブの動作
 
