@@ -146,7 +146,9 @@ module Localization_English =
         ("PinLeftTabsFormat", "Pin {0} tabs to the left")
         ("UnpinRightTabsFormat", "Unpin {0} tabs to the right")
 
-        ("TabColorMenu", "Tab Color Change")
+        ("TabColorMenu", "Tab Color Settings")
+        ("TabColorApplyLeft", "Apply color to {0} left tab(s)")
+        ("TabColorApplyRight", "Apply color to {0} right tab(s)")
         ("TabColorReset", "Reset this tab color : {0}")
         ("TabColorResetAll", "Reset all tab colors")
         ("TabColorRed", "Red")

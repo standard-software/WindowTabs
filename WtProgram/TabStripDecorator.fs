@@ -2846,6 +2846,38 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                 )
             let hasAnyColor = currentFill.IsSome || currentUnderline.IsSome || currentBorder.IsSome
+            let currentTabIndex =
+                this.ts.lorder.list |> List.tryFindIndex (fun (Tab(h)) -> h = hwnd)
+                |> Option.defaultValue 0
+            let leftCount = currentTabIndex
+            let rightCount = this.ts.lorder.list.Length - currentTabIndex - 1
+            let applyItems = [
+                CmiSeparator
+                CmiRegular({
+                    text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
+                    image = None
+                    flags = if leftCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
+                    click = fun() ->
+                        this.ts.lorder.list |> List.iteri (fun i (Tab(h)) ->
+                            if i < currentTabIndex then
+                                group.setTabFillColor(h, currentFill)
+                                group.setTabUnderlineColor(h, currentUnderline)
+                                group.setTabBorderColor(h, currentBorder)
+                        )
+                })
+                CmiRegular({
+                    text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
+                    image = None
+                    flags = if rightCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
+                    click = fun() ->
+                        this.ts.lorder.list |> List.iteri (fun i (Tab(h)) ->
+                            if i > currentTabIndex then
+                                group.setTabFillColor(h, currentFill)
+                                group.setTabUnderlineColor(h, currentUnderline)
+                                group.setTabBorderColor(h, currentBorder)
+                        )
+                })
+            ]
             let resetItems = [
                 CmiSeparator
                 CmiRegular({
@@ -2875,7 +2907,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = Localization.getString("TabColorMenu")
                 image = None
-                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ resetItems)
+                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ applyItems @ resetItems)
                 flags = List2()
             })
 
