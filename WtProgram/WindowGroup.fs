@@ -346,15 +346,19 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.pinnedCount = this.ts.pinnedTabs.count
     member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
     member this.nonePinned = this.ts.pinnedTabs.count = 0
-    member this.unpinnedCountToLeft(hwnd) = this.ts.unpinnedCountToLeft(Tab(hwnd))
-    member this.pinnedCountToRight(hwnd) = this.ts.pinnedCountToRight(Tab(hwnd))
+    member this.countToLeft(hwnd) = this.ts.countToLeft(Tab(hwnd))
+    member this.countToRight(hwnd) = this.ts.countToRight(Tab(hwnd))
     member this.pinLeftTabs(hwnd) =
         this.ts.pinLeftTabs(Tab(hwnd))
-        // Sync all tabs' pinned state to global
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+    member this.pinRightTabs(hwnd) =
+        this.ts.pinRightTabs(Tab(hwnd))
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+    member this.unpinLeftTabs(hwnd) =
+        this.ts.unpinLeftTabs(Tab(hwnd))
         this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
     member this.unpinRightTabs(hwnd) =
         this.ts.unpinRightTabs(Tab(hwnd))
-        // Sync all tabs' pinned state to global
         this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
 
     member this.setTabFillColor(hwnd, color : Color option) =

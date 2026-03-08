@@ -142,6 +142,8 @@
   "PinAllTabs": "固定所有标签页",
   "UnpinAllTabs": "取消固定所有标签页",
   "PinLeftTabsFormat": "固定左侧{0}个标签页",
+  "PinRightTabsFormat": "固定右侧{0}个标签页",
+  "UnpinLeftTabsFormat": "取消固定左侧{0}个标签页",
   "UnpinRightTabsFormat": "取消固定右侧{0}个标签页",
 
   "TabColorMenu": "标签页颜色设置",

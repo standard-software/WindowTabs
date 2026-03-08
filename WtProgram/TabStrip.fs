@@ -485,51 +485,97 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.unpinAll() =
         pinnedTabsCell.set(Set2<Tab>())
 
-    // Count of unpinned tabs to the left of the given tab (in lorder)
-    member this.unpinnedCountToLeft(tab) =
+    // Count of same-pin-state tabs to the left of the given tab (including the tab itself)
+    member this.countToLeft(tab) =
+        let tabIsPinned = pinnedTabsCell.value.contains(tab)
         match lorderCell.value.tryFindIndex((=) tab) with
         | Some idx ->
             lorderCell.value.list
-            |> Seq.take idx
-            |> Seq.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
-            |> Seq.length
+            |> List.take (idx + 1)
+            |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
+            |> List.length
         | None -> 0
 
-    // Count of pinned tabs to the right of the given tab (in lorder)
-    member this.pinnedCountToRight(tab) =
+    // Count of same-pin-state tabs to the right of the given tab (including the tab itself)
+    member this.countToRight(tab) =
+        let tabIsPinned = pinnedTabsCell.value.contains(tab)
         match lorderCell.value.tryFindIndex((=) tab) with
         | Some idx ->
             lorderCell.value.list
-            |> Seq.skip (idx + 1)
-            |> Seq.filter (fun t -> pinnedTabsCell.value.contains(t))
-            |> Seq.length
+            |> List.skip idx
+            |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
+            |> List.length
         | None -> 0
 
-    // Pin all unpinned tabs to the left of the given tab
+    // Pin all tabs to the left of the given tab (including the tab itself)
     member this.pinLeftTabs(tab) =
         Cell.beginUpdate()
         match lorderCell.value.tryFindIndex((=) tab) with
         | Some idx ->
-            let mutable newPinned = pinnedTabsCell.value
-            lorderCell.value.list |> List.iteri (fun i t ->
-                if i <= idx && not (newPinned.contains(t)) then
-                    newPinned <- newPinned.add(t)
+            let tabsToPin =
+                lorderCell.value.list
+                |> List.mapi (fun i t -> (i, t))
+                |> List.filter (fun (i, t) -> i <= idx && not (pinnedTabsCell.value.contains(t)))
+                |> List.map snd
+            tabsToPin |> List.iter (fun t ->
+                pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+                let pinnedCount = lorderCell.value.where(fun tt -> pinnedTabsCell.value.contains(tt)).length
+                lorderCell.set(lorderCell.value.move((=) t, pinnedCount - 1))
             )
-            pinnedTabsCell.set(newPinned)
         | None -> ()
         Cell.endUpdate()
 
-    // Unpin all pinned tabs to the right of the given tab (including the tab itself)
+    // Pin all tabs to the right of the given tab (including the tab itself)
+    member this.pinRightTabs(tab) =
+        Cell.beginUpdate()
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            let tabsToPin =
+                lorderCell.value.list
+                |> List.mapi (fun i t -> (i, t))
+                |> List.filter (fun (i, t) -> i >= idx && not (pinnedTabsCell.value.contains(t)))
+                |> List.map snd
+            tabsToPin |> List.iter (fun t ->
+                pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+                let pinnedCount = lorderCell.value.where(fun tt -> pinnedTabsCell.value.contains(tt)).length
+                lorderCell.set(lorderCell.value.move((=) t, pinnedCount - 1))
+            )
+        | None -> ()
+        Cell.endUpdate()
+
+    // Unpin all tabs to the left of the given tab (including the tab itself)
+    member this.unpinLeftTabs(tab) =
+        Cell.beginUpdate()
+        match lorderCell.value.tryFindIndex((=) tab) with
+        | Some idx ->
+            let tabsToUnpin =
+                lorderCell.value.list
+                |> List.mapi (fun i t -> (i, t))
+                |> List.filter (fun (i, t) -> i <= idx && pinnedTabsCell.value.contains(t))
+                |> List.map snd
+            tabsToUnpin |> List.iter (fun t ->
+                pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
+                let pinnedCount = lorderCell.value.where(fun tt -> pinnedTabsCell.value.contains(tt)).length
+                lorderCell.set(lorderCell.value.move((=) t, pinnedCount))
+            )
+        | None -> ()
+        Cell.endUpdate()
+
+    // Unpin all tabs to the right of the given tab (including the tab itself)
     member this.unpinRightTabs(tab) =
         Cell.beginUpdate()
         match lorderCell.value.tryFindIndex((=) tab) with
         | Some idx ->
-            let mutable newPinned = pinnedTabsCell.value
-            lorderCell.value.list |> List.iteri (fun i t ->
-                if i >= idx && newPinned.contains(t) then
-                    newPinned <- newPinned.remove(t)
+            let tabsToUnpin =
+                lorderCell.value.list
+                |> List.mapi (fun i t -> (i, t))
+                |> List.filter (fun (i, t) -> i >= idx && pinnedTabsCell.value.contains(t))
+                |> List.map snd
+            tabsToUnpin |> List.iter (fun t ->
+                pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
+                let pinnedCount = lorderCell.value.where(fun tt -> pinnedTabsCell.value.contains(tt)).length
+                lorderCell.set(lorderCell.value.move((=) t, pinnedCount))
             )
-            pinnedTabsCell.set(newPinned)
         | None -> ()
         Cell.endUpdate()
 

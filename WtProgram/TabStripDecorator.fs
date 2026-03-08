@@ -2724,22 +2724,36 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         click = fun() -> group.unpinAll()
                     })
                     CmiSeparator
-                    (let leftCount = group.unpinnedCountToLeft(hwnd)
-                     let count = leftCount + 1
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
-                        image = None
-                        flags = if isPinned || leftCount = 0 then List2([MenuFlags.MF_GRAYED]) else List2()
-                        click = fun() -> group.pinLeftTabs(hwnd)
-                    }))
-                    (let rightCount = group.pinnedCountToRight(hwnd)
-                     let count = rightCount + 1
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
-                        image = None
-                        flags = if not isPinned || rightCount = 0 then List2([MenuFlags.MF_GRAYED]) else List2()
-                        click = fun() -> group.unpinRightTabs(hwnd)
-                    }))
+                    (let count = group.countToLeft(hwnd)
+                     if not isPinned then
+                        CmiRegular({
+                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
+                            image = None
+                            flags = List2()
+                            click = fun() -> group.pinLeftTabs(hwnd)
+                        })
+                     else
+                        CmiRegular({
+                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
+                            image = None
+                            flags = List2()
+                            click = fun() -> group.unpinLeftTabs(hwnd)
+                        }))
+                    (let count = group.countToRight(hwnd)
+                     if not isPinned then
+                        CmiRegular({
+                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
+                            image = None
+                            flags = List2()
+                            click = fun() -> group.pinRightTabs(hwnd)
+                        })
+                     else
+                        CmiRegular({
+                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
+                            image = None
+                            flags = List2()
+                            click = fun() -> group.unpinRightTabs(hwnd)
+                        }))
                 ])
                 flags = List2()
             })

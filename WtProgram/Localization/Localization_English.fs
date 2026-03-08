@@ -143,8 +143,10 @@ module Localization_English =
         ("UnpinThisTab", "Unpin this tab")
         ("PinAllTabs", "Pin all tabs")
         ("UnpinAllTabs", "Unpin all tabs")
-        ("PinLeftTabsFormat", "Pin {0} tabs to the left")
-        ("UnpinRightTabsFormat", "Unpin {0} tabs to the right")
+        ("PinLeftTabsFormat", "Pin {0} left tab(s)")
+        ("PinRightTabsFormat", "Pin {0} right tab(s)")
+        ("UnpinLeftTabsFormat", "Unpin {0} left tab(s)")
+        ("UnpinRightTabsFormat", "Unpin {0} right tab(s)")
 
         ("TabColorMenu", "Tab Color Settings")
         ("TabColorApplyLeft", "Apply color to {0} left tab(s)")

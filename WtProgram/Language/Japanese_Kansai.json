@@ -142,6 +142,8 @@
   "PinAllTabs": "全部のタブをピン止めするで",
   "UnpinAllTabs": "全部のタブのピン止め外すで",
   "PinLeftTabsFormat": "左側{0}タブをピン止めするで",
+  "PinRightTabsFormat": "右側{0}タブをピン止めするで",
+  "UnpinLeftTabsFormat": "左側{0}タブのピン止め外すで",
   "UnpinRightTabsFormat": "右側{0}タブのピン止め外すで",
 
   "TabColorMenu": "タブの色設定やで",

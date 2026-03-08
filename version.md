@@ -3,6 +3,7 @@
 ## version ss_jp_2026.03.07_next1
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items
   - Copies the current tab's color settings (fill/underline/border) to left or right tabs
+- Changed Pin tab menu: "Pin/Unpin left/right tabs" now toggles based on current tab's pin state
 
 ## version ss_jp_2026.03.07
 - Added "Same position" option to Detach, Split Right, and Split Left position menus
