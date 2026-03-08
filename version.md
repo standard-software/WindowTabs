@@ -1,5 +1,8 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.03.07_next1
+
+
 ## version ss_jp_2026.03.07
 - Added "Same position" option to Detach, Split Right, and Split Left position menus
 - Fixed tab color and pinned state not being preserved when splitting, detaching, or linking tabs to another group
