@@ -147,10 +147,10 @@
   "UnpinRightTabsFormat": "右側{0}タブのピン止め外すで",
 
   "TabColorMenu": "タブの色設定やで",
-  "TabColorApplyLeft": "左の{0}タブの色設定をこのタブに合わせるで",
-  "TabColorApplyRight": "右の{0}タブの色設定をこのタブに合わせるで",
   "TabColorReset": "このタブの色設定リセットするで : {0}",
   "TabColorResetAll": "全部のタブの色設定リセットするで",
+  "TabColorApplyLeft": "左の{0}タブの色設定をこのタブに合わせるで",
+  "TabColorApplyRight": "右の{0}タブの色設定をこのタブに合わせるで",
   "TabColorRed": "赤",
   "TabColorBlue": "青",
   "TabColorGreen": "緑",

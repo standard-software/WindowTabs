@@ -2921,7 +2921,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = Localization.getString("TabColorMenu")
                 image = None
-                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ applyItems @ resetItems)
+                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ resetItems @ applyItems)
                 flags = List2()
             })
 

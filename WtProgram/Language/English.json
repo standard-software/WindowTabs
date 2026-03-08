@@ -147,10 +147,10 @@
   "UnpinRightTabsFormat": "Unpin {0} right tab(s)",
 
   "TabColorMenu": "Tab Color Settings",
-  "TabColorApplyLeft": "Apply color to {0} left tab(s)",
-  "TabColorApplyRight": "Apply color to {0} right tab(s)",
   "TabColorReset": "Reset this tab color : {0}",
   "TabColorResetAll": "Reset all tab colors",
+  "TabColorApplyLeft": "Apply color to {0} left tab(s)",
+  "TabColorApplyRight": "Apply color to {0} right tab(s)",
   "TabColorRed": "Red",
   "TabColorBlue": "Blue",
   "TabColorGreen": "Green",
