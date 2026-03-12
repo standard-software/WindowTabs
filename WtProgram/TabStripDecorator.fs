@@ -2332,10 +2332,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
 
+        // Use group bounds (expanded by margin) for percentage calculation
+        let margin = group.getExeMargin(activeHwnd)
+        let groupWidth = bounds.size.width + margin * 2
+        let groupHeight = bounds.size.height + margin * 2
+        let groupX = bounds.location.x - margin
+        let groupY = bounds.location.y - margin
+
         // Calculate size percentages for DPI-aware placement
-        let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
-        let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
-        let topPercent = float(bounds.location.y - sourceWorkArea.Top) / float(sourceWorkArea.Height)
+        let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
+        let heightPercent = float(groupHeight) / float(sourceWorkArea.Height)
+        let topPercent = float(groupY - sourceWorkArea.Top) / float(sourceWorkArea.Height)
 
         // Restore window if minimized or maximized
         if window.isMinimized || window.isMaximized then
@@ -2346,8 +2353,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let newWidth = int(float(targetWorkArea.Width) * widthPercent)
         let newHeight = int(float(targetWorkArea.Height) * heightPercent)
 
-        // Calculate current position using percentages
-        let leftPercent = float(bounds.location.x - sourceWorkArea.Left) / float(sourceWorkArea.Width)
+        // Calculate current position using percentages (use group position, not margined position)
+        let leftPercent = float(groupX - sourceWorkArea.Left) / float(sourceWorkArea.Width)
         let currentX = targetWorkArea.Left + int(float(targetWorkArea.Width) * leftPercent)
         let currentY = targetWorkArea.Top + int(float(targetWorkArea.Height) * topPercent)
 
@@ -2379,7 +2386,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if currentDpi <> initialDpi then
             System.Threading.Thread.Sleep(20)
 
-        window.move (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
+        let moveBounds = Rect(Pt(finalX, finalY), Sz(newWidth, newHeight))
+        let finalBounds = group.applyExeMarginForWrite(activeHwnd, moveBounds)
+        window.move(finalBounds)
+        let margin = group.getExeMargin(activeHwnd)
+        if margin <> 0 then
+            group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
     member private this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
@@ -2392,13 +2404,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if window.isMinimized || window.isMaximized then
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
+        // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
+        let margin = group.getExeMargin(activeHwnd)
+        let snapWidth = bounds.size.width + margin * 2
+        let snapHeight = bounds.size.height + margin * 2
+
         let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
             snapDirection,
             screen.WorkingArea,
-            bounds.size.width,
-            bounds.size.height)
+            snapWidth,
+            snapHeight)
 
-        window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+        let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
+        // Apply per-exe margin (e.g., LINE.exe always needs 30px margin)
+        let finalBounds = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        window.move(finalBounds)
+        // Record shrunk size for tracking
+        let margin = group.getExeMargin(activeHwnd)
+        if margin <> 0 then
+            group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
     member private this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
@@ -2408,9 +2432,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
 
+        // Use group bounds (expanded by margin) for percentage calculation
+        let margin = group.getExeMargin(activeHwnd)
+        let groupWidth = bounds.size.width + margin * 2
+        let groupHeight = bounds.size.height + margin * 2
+
         // Calculate size percentages for DPI-aware placement
-        let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
-        let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+        let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
+        let heightPercent = float(groupHeight) / float(sourceWorkArea.Height)
 
         // Restore window if minimized or maximized
         if window.isMinimized || window.isMaximized then
@@ -2442,7 +2471,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if currentDpi <> initialDpi then
             System.Threading.Thread.Sleep(20)
 
-        window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
+        let snapBounds = Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))
+        // Apply per-exe margin (e.g., LINE.exe always needs 30px margin)
+        let finalBounds2 = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        window.move(finalBounds2)
+        let margin = group.getExeMargin(activeHwnd)
+        if margin <> 0 then
+            group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
 
     member private this.moveTabGroupToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position with percentage
@@ -2458,7 +2493,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             percent,
             screen.WorkingArea)
 
-        window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+        let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
+        let finalBounds = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        window.move(finalBounds)
+        let margin = group.getExeMargin(activeHwnd)
+        if margin <> 0 then
+            group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
     member private this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
@@ -2487,7 +2527,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if currentDpi <> initialDpi then
             System.Threading.Thread.Sleep(20)
 
-        window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+        let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
+        let finalBounds2 = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        window.move(finalBounds2)
+        let margin = group.getExeMargin(activeHwnd)
+        if margin <> 0 then
+            group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
 
     member private  this.contextMenu(hwnd, splitMenuEnabled: bool) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
