@@ -6,6 +6,7 @@
 - Changed Pin tab menu: "Pin/Unpin left/right tabs" now toggles based on current tab's pin state
 - Trial: Applied 30px margin to LINE.exe to prevent oversized resize frame from intercepting clicks
   - Both read and write directions: when LINE.exe is foreground, bounds are expanded for other windows; when background, bounds are shrunk
+- Changed per-exe margin from single value to 4-direction (top, left, right, bottom) support
 
 ## version ss_jp_2026.03.07
 - Added "Same position" option to Detach, Split Right, and Split Left position menus
