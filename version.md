@@ -2,14 +2,11 @@
 
 ## version ss_jp_2026.03.07_next1
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items
-  - Copies the current tab's color settings (fill/underline/border) to left or right tabs
 - Changed Pin tab menu: "Pin/Unpin left/right tabs" now toggles based on current tab's pin state
-- Trial: Applied 30px margin to LINE.exe to prevent oversized resize frame from intercepting clicks
-  - Both read and write directions: when LINE.exe is foreground, bounds are expanded for other windows; when background, bounds are shrunk
 - Changed per-exe margin from single value to 4-direction (top, left, right, bottom) support
-- Added Settings/Window_Margin.json for user-configurable per-exe margin settings
+  - Added Settings/Window_Margin.json for user-configurable per-exe margin settings
   - Margins are loaded at startup from the JSON file next to the executable
-  - Installer preserves existing settings file on upgrade (NeverOverwrite)
+  - Installer preserves existing settings file on upgrade (NeverOverwrite); creates if not exists
 - Fixed: Auto-grouping now triggers on window activation (HSHELL_WINDOWACTIVATED) in addition to window creation
 
 ## version ss_jp_2026.03.07
