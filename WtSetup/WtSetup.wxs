@@ -67,6 +67,15 @@
                   </Component>
                </Directory>
 
+               <!-- Settings folder (NeverOverwrite: preserve user-modified settings on upgrade) -->
+               <Directory Id="SettingsFolder" Name="Settings">
+                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes" NeverOverwrite="yes">
+                     <File Id="WindowMarginJson"
+                           Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
+                           KeyPath="yes" />
+                  </Component>
+               </Directory>
+
                <!-- Registry entries for installation path persistence -->
                <Component Id="RegistryEntries" Guid="A5B2E1C3-4D6F-7890-ABCD-EF1234567890" Win64="yes" Permanent="yes">
                   <RegistryKey Root="HKCU"
@@ -184,6 +193,7 @@
                ConfigurableDirectory="INSTALLFOLDER">
          <ComponentRef Id="MainExecutable"/>
          <ComponentRef Id="LanguageFiles"/>
+         <ComponentRef Id="SettingsFiles"/>
          <ComponentRef Id="RegistryEntries"/>
          <ComponentRef Id="ApplicationShortcut"/>
       </Feature>

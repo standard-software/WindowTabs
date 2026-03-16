@@ -1,5 +1,6 @@
 ﻿namespace Bemo
 open System
+open System.Collections.Generic
 open System.Diagnostics
 open System.Drawing
 open System.Drawing.Imaging
@@ -8,6 +9,52 @@ open System.Reflection
 open System.Threading
 open System.Windows.Forms
 open Bemo.Win32.Forms
+open Newtonsoft.Json.Linq
+
+// Per-exe margin settings loaded from Settings/Window_Margin.json
+module WindowMarginSettings =
+    // Cache: exe name (lowercase) -> (top, left, right, bottom)
+    let mutable private marginCache : Dictionary<string, (int * int * int * int)> option = None
+
+    let private loadSettings() =
+        let dict = Dictionary<string, (int * int * int * int)>(StringComparer.OrdinalIgnoreCase)
+        try
+            let exePath = Assembly.GetExecutingAssembly().Location
+            let exeDir = Path.GetDirectoryName(exePath)
+            let jsonPath = Path.Combine(exeDir, "Settings", "Window_Margin.json")
+            if File.Exists(jsonPath) then
+                let json = File.ReadAllText(jsonPath)
+                let jobj = JObject.Parse(json)
+                for prop in jobj.Properties() do
+                    let exeName = prop.Name
+                    match prop.Value with
+                    | :? JObject as marginObj ->
+                        let getInt (key:string) =
+                            match marginObj.getInt32(key) with
+                            | Some(v) -> v
+                            | None -> 0
+                        let top = getInt "top"
+                        let left = getInt "left"
+                        let right = getInt "right"
+                        let bottom = getInt "bottom"
+                        dict.[exeName] <- (top, left, right, bottom)
+                        System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Loaded: %s -> (%d,%d,%d,%d)" exeName top left right bottom)
+                    | _ -> ()
+            else
+                System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Settings file not found: %s" jsonPath)
+        with ex ->
+            System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Error loading settings: %s" ex.Message)
+        dict
+
+    let getMargin(exeName: string) =
+        if marginCache.IsNone then
+            marginCache <- Some(loadSettings())
+        match marginCache.Value.TryGetValue(exeName) with
+        | true, margin -> margin
+        | false, _ -> (0, 0, 0, 0)
+
+    let reload() =
+        marginCache <- Some(loadSettings())
 
 type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
@@ -502,15 +549,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Same DPI: move with position and size at once for better performance
             window.move(bounds)
 
-    // Get per-exe margin as (top, left, right, bottom)
+    // Get per-exe margin as (top, left, right, bottom) from Settings/Window_Margin.json
     // Positive = shrink window, Negative = expand window
     member this.getExeMargin(hwnd:IntPtr) =
         let window = this.os.windowFromHwnd(hwnd)
         let exeName = window.pid.exeName
-        // Trial: LINE.exe has invisible resize frame wider than visible window
-        // Trial: Notepad.exe gets expanded by 3px (negative margin = larger window)
-        if exeName = "line.exe" then (11, 11, 11, 11)
-        else (0, 0, 0, 0)
+        WindowMarginSettings.getMargin(exeName)
 
     // Check if a window has any non-zero margin
     member this.hasExeMargin(hwnd:IntPtr) =

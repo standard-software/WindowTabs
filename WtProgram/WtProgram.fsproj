@@ -77,6 +77,12 @@ if exist "$(TargetDir)Language" (
 mkdir "$(TargetDir)Language"
 copy /y "$(ProjectDir)Language\*.json" "$(TargetDir)Language\"
 
+echo ===== Copying Settings files =====
+if not exist "$(TargetDir)Settings" (
+  mkdir "$(TargetDir)Settings"
+)
+copy /y "$(ProjectDir)Settings\*.json" "$(TargetDir)Settings\"
+
 if $(ConfigurationName) == Release (
   echo ===== ILRepack処理開始 =====
 
