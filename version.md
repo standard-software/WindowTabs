@@ -10,6 +10,7 @@
 - Added Settings/Window_Margin.json for user-configurable per-exe margin settings
   - Margins are loaded at startup from the JSON file next to the executable
   - Installer preserves existing settings file on upgrade (NeverOverwrite)
+- Fixed: Auto-grouping now triggers on window activation (HSHELL_WINDOWACTIVATED) in addition to window creation
 
 ## version ss_jp_2026.03.07
 - Added "Same position" option to Detach, Split Right, and Split Left position menus

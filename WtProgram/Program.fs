@@ -123,6 +123,8 @@ type Program() as this =
             match shellEvent with
             | ShellEvent.HSHELL_WINDOWCREATED -> this.receive(ShellEvent(hwnd, shellEvent))
             | ShellEvent.HSHELL_WINDOWDESTROYED -> this.receive(ShellEvent(hwnd, shellEvent))
+            | ShellEvent.HSHELL_WINDOWACTIVATED
+            | ShellEvent.HSHELL_RUDEAPPACTIVATED -> this.receive(ShellEvent(hwnd, shellEvent))
             | _ -> ()
 
 
