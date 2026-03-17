@@ -2711,13 +2711,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             group.tabPosition <- "TopLeft"
                     })
                     CmiRegular({
-                        text = Localization.getString("AlignCenter")
-                        image = None
-                        flags = if currentPosition = "TopCenter" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.tabPosition <- "TopCenter"
-                    })
-                    CmiRegular({
                         text = Localization.getString("AlignRight")
                         image = None
                         flags = if currentPosition = "TopRight" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()

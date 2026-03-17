@@ -101,7 +101,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isForegroundExport = Cell.export <| fun() ->
         zorderCell.value.any((=) foregroundCell.value)
 
-    // Per-group tab position: always has a concrete value (TopLeft/TopCenter/TopRight)
+    // Per-group tab position: always has a concrete value (TopLeft/TopRight)
     let mutable perGroupTabPosition : string = "TopRight"
     // Per-group snap tab height margin: always has a concrete value
     let mutable perGroupSnapTabHeightMargin : bool = false
@@ -121,7 +121,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         let alignment =
             match defaultPosition with
             | "TopLeft" -> TabLeft
-            | "TopCenter" -> TabCenter
             | _ -> TabRight
         ts.setAlignment(ts.direction, alignment)
 
@@ -166,7 +165,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 let alignment =
                     match position with
                     | "TopLeft" -> TabLeft
-                    | "TopCenter" -> TabCenter
                     | _ -> TabRight
                 ts.setAlignment(ts.direction, alignment)
 
@@ -453,7 +451,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             let alignment =
                 match value with
                 | "TopLeft" -> TabLeft
-                | "TopCenter" -> TabCenter
                 | _ -> TabRight
             this.ts.setAlignment(this.ts.direction, alignment)
 
@@ -464,7 +461,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             let alignment =
                 match value with
                 | "TopLeft" -> TabLeft
-                | "TopCenter" -> TabCenter
                 | _ -> TabRight
             this.ts.setAlignment(this.ts.direction, alignment)
 

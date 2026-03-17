@@ -55,7 +55,6 @@ module Localization_English =
 
         ("TabPositionByDefault", "Tab position")
         ("AlignLeft", "Left")
-        ("AlignCenter", "Center")
         ("AlignRight", "Right")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
         ("HideTabsNever", "Never hide")

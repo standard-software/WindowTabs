@@ -566,7 +566,6 @@ type TabStripSprite<'id> when 'id : equality = {
             let widthOfEmptySpace = float(this.size.width) - lastTabRight
             match this.alignment with
             | TabLeft -> 0.0
-            | TabCenter -> widthOfEmptySpace / 2.0
             | TabRight -> widthOfEmptySpace
 
     member private this.tabYOffset =

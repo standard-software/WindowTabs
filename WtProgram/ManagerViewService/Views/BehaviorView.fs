@@ -50,18 +50,16 @@ type HotKeyView() =
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 100
             combo.Items.Add(Localization.getString("AlignLeft")) |> ignore
-            combo.Items.Add(Localization.getString("AlignCenter")) |> ignore
             combo.Items.Add(Localization.getString("AlignRight")) |> ignore
 
             let currentPosition = Services.settings.getValue("tabPositionByDefault") :?> string
             combo.SelectedIndex <-
                 match currentPosition with
                 | "TopLeft" -> 0
-                | "TopCenter" -> 1
-                | _ -> 2
+                | _ -> 1
 
             combo.SelectedIndexChanged.Add(fun _ ->
-                let value = match combo.SelectedIndex with | 0 -> "TopLeft" | 1 -> "TopCenter" | _ -> "TopRight"
+                let value = match combo.SelectedIndex with | 0 -> "TopLeft" | _ -> "TopRight"
                 Services.settings.setValue("tabPositionByDefault", value)
             )
 

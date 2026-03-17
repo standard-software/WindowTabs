@@ -235,9 +235,11 @@ type Settings(isStandAlone) as this =
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
                         tabPositionByDefault =
                             // Handle backward compatibility: convert old format to new TopXxx format
+                            // Note: "center"/"TopCenter" is deprecated and falls back to "TopLeft"
                             match settingsJson.getString("TabPositionByDefault") with
                             | Some("left") -> "TopLeft"
-                            | Some("center") -> "TopCenter"
+                            | Some("center") -> "TopLeft"
+                            | Some("TopCenter") -> "TopLeft"
                             | Some("right") -> "TopRight"
                             | Some(v) -> v  // Already in TopXxx format or other valid value
                             | None -> "TopRight"
