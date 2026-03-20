@@ -14,6 +14,7 @@
 - Renamed internal TabAlign values from TabLeft/TabRight to TopLeft/TopRight (preparation for future left-side tab support)
   - Serialization format changed to "TopLeft"/"TopRight" with backward compatibility for "Left"/"Right"
   - Localization keys renamed: AlignGroupLeft/Right → AlignGroupTopLeft/TopRight
+- Tab Position menu: renamed "Left"/"Right" to "Align Left"/"Align Right", added "Align all tabs to Left/Right" options
 
 ## version ss_jp_2026.03.18
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items

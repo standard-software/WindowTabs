@@ -52,6 +52,8 @@
   "TabPositionByDefault": "分頁位置",
   "AlignLeft": "靠左對齊",
   "AlignRight": "靠右對齊",
+  "AlignAllTopLeft": "將所有分頁靠左對齊",
+  "AlignAllTopRight": "將所有分頁靠右對齊",
   "HideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
   "HideTabsNever": "不隱藏",
   "HideTabsWhenDown": "指定時間後隱藏",

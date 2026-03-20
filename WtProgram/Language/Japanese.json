@@ -50,8 +50,10 @@
   "EnableHoverActivate": "マウスオーバーでタブをアクティブにする",
 
   "TabPositionByDefault": "タブの位置",
-  "AlignLeft": "左",
-  "AlignRight": "右",
+  "AlignLeft": "左寄せ",
+  "AlignRight": "右寄せ",
+  "AlignAllTopLeft": "全てのタブを左寄せ",
+  "AlignAllTopRight": "全てのタブを右寄せ",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
   "HideTabsNever": "隠さない",
   "HideTabsWhenDown": "指定した時間で隠す",

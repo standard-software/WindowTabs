@@ -2701,6 +2701,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         
         let tabPositionSubMenu =
             let currentAlignment = group.getTabAlign(hwnd)
+            let allTopLeft = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
+            let allTopRight = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
             CmiPopUp({
                 text = Localization.getString("TabPositionMenu")
                 image = None
@@ -2718,6 +2720,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         flags = if currentAlignment = TopRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
                             group.setTabAlign(hwnd, TopRight)
+                    })
+                    CmiSeparator
+                    CmiRegular({
+                        text = Localization.getString("AlignAllTopLeft")
+                        image = None
+                        flags = if allTopLeft then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() ->
+                            group.lorder.list |> List.iter (fun h -> group.setTabAlign(h, TopLeft))
+                    })
+                    CmiRegular({
+                        text = Localization.getString("AlignAllTopRight")
+                        image = None
+                        flags = if allTopRight then List2([MenuFlags.MF_GRAYED]) else List2()
+                        click = fun() ->
+                            group.lorder.list |> List.iter (fun h -> group.setTabAlign(h, TopRight))
                     })
                 ])
                 flags = List2()

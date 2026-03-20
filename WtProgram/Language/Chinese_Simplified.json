@@ -50,8 +50,10 @@
   "EnableHoverActivate": "鼠标悬停时切换标签页",
 
   "TabPositionByDefault": "标签页位置",
-  "AlignLeft": "左对齐",
-  "AlignRight": "右对齐",
+  "AlignLeft": "靠左对齐",
+  "AlignRight": "靠右对齐",
+  "AlignAllTopLeft": "将所有标签页靠左对齐",
+  "AlignAllTopRight": "将所有标签页靠右对齐",
   "HideTabsWhenDownByDefault": "标签页在下方时隐藏功能",
   "HideTabsNever": "不隐藏",
   "HideTabsWhenDown": "指定时间后隐藏",
