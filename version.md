@@ -8,6 +8,8 @@
   - Left-aligned tabs are positioned from the left edge, right-aligned tabs from the right edge
   - Drag & drop alignment detection: dragging past the center of the empty space changes tab alignment
   - Per-tab alignment is persisted across group transfers and application restarts
+  - Close left/right tabs, pin/unpin left/right tabs, apply color to left/right tabs, split left/right tabs now correctly account for per-tab alignment
+  - Pin/unpin left/right tabs now operates within same alignment group only
 
 ## version ss_jp_2026.03.18
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items

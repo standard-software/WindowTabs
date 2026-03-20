@@ -91,7 +91,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.updateGroupInfo() =
         try
             // Create a snapshot of current tab information
-            let tabs = this.ts.lorder
+            let tabs = this.ts.visualOrder
 
             // If no tabs remain, remove from groupInfos
             if tabs.count = 0 then
@@ -486,18 +486,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.onCloseRightTabWindows hwnd =
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let vo = this.ts.visualOrder
+        let tabIndex = vo.tryFindIndex((=) currentTab)
         tabIndex.iter <| fun index ->
-            let rightTabs = this.ts.lorder.skip(index + 1)
+            let rightTabs = vo.skip(index + 1)
             rightTabs.iter <| fun tab ->
                 let (Tab(tabHwnd)) = tab
                 this.onCloseWindow tabHwnd
 
     member private this.onCloseLeftTabWindows hwnd =
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let vo = this.ts.visualOrder
+        let tabIndex = vo.tryFindIndex((=) currentTab)
         tabIndex.iter <| fun index ->
-            let leftTabs = this.ts.lorder.take(index)
+            let leftTabs = vo.take(index)
             leftTabs.iter <| fun tab ->
                 let (Tab(tabHwnd)) = tab
                 this.onCloseWindow tabHwnd
@@ -1122,12 +1124,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Approach: First detach the first tab to position (this creates a new group),
         // then move remaining tabs to that new group using moveTabToGroup
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
             // Get tabs to split (from current tab to right, including current)
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1217,12 +1219,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Approach: First detach the first tab to position (this creates a new group),
         // then move remaining tabs to that new group
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
             // Get tabs to split (from left to current tab, including current)
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1311,12 +1313,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // [A,B,C,D] with B selected -> [A] stays, [B,C,D] moves to target group
         if targetGroup.hwnd <> group.hwnd then
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
             match tabIndex with
-            | Some index when index > 0 && this.ts.lorder.count > 1 ->
+            | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
                 // Get tabs to split (from current tab to right, including current)
-                let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+                let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
                 if tabsToSplit.Length > 0 then
                     Services.program.suspendTabMonitoring()
@@ -1334,12 +1336,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // [A,B,C,D] with B selected -> [C,D] stays, [A,B] moves to target group
         if targetGroup.hwnd <> group.hwnd then
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
             match tabIndex with
-            | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
+            | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
                 // Get tabs to split (from left to current tab, including current)
-                let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+                let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
                 if tabsToSplit.Length > 0 then
                     Services.program.suspendTabMonitoring()
@@ -1357,11 +1359,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Approach: First detach the first tab to screen position (this creates a new group),
         // then move remaining tabs to that new group
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1473,11 +1475,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Approach: First detach the first tab to screen position (this creates a new group),
         // then move remaining tabs to that new group
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1587,11 +1589,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitRightTabsToSnap(hwnd: IntPtr, snapDirection: string) =
         // Split tabs from current tab to right and snap to specified position
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1670,11 +1672,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitRightTabsToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Split tabs from current tab to right and snap to specified screen position
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1773,11 +1775,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitLeftTabsToSnap(hwnd: IntPtr, snapDirection: string) =
         // Split tabs from left to current tab and snap to specified position
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1856,11 +1858,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitLeftTabsToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Split tabs from left to current tab and snap to specified screen position
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -1959,11 +1961,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitRightTabsToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Split tabs from current tab to right and snap with percentage
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -2038,11 +2040,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitRightTabsToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Split tabs from current tab to right and snap with percentage to target screen
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index > 0 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.skip(index).list |> List.map (fun (Tab h) -> h)
+        | Some index when index > 0 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.skip(index).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -2130,11 +2132,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitLeftTabsToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Split tabs from left to current tab and snap with percentage
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -2209,11 +2211,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.splitLeftTabsToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Split tabs from left to current tab and snap with percentage to target screen
         let currentTab = Tab(hwnd)
-        let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+        let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
 
         match tabIndex with
-        | Some index when index < this.ts.lorder.count - 1 && this.ts.lorder.count > 1 ->
-            let tabsToSplit = this.ts.lorder.take(index + 1).list |> List.map (fun (Tab h) -> h)
+        | Some index when index < this.ts.visualOrder.count - 1 && this.ts.visualOrder.count > 1 ->
+            let tabsToSplit = this.ts.visualOrder.take(index + 1).list |> List.map (fun (Tab h) -> h)
 
             if tabsToSplit.Length > 0 then
                 let firstHwnd = tabsToSplit.Head
@@ -2758,31 +2760,39 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                     CmiSeparator
                     (let count = group.countToLeft(hwnd)
+                     let alignGroupName =
+                        match group.getTabAlign(hwnd) with
+                        | TabLeft -> Localization.getString("AlignGroupLeft")
+                        | TabRight -> Localization.getString("AlignGroupRight")
                      if not isPinned then
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
+                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count, alignGroupName)
                             image = None
                             flags = List2()
                             click = fun() -> group.pinLeftTabs(hwnd)
                         })
                      else
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
+                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count, alignGroupName)
                             image = None
                             flags = List2()
                             click = fun() -> group.unpinLeftTabs(hwnd)
                         }))
                     (let count = group.countToRight(hwnd)
+                     let alignGroupName =
+                        match group.getTabAlign(hwnd) with
+                        | TabLeft -> Localization.getString("AlignGroupLeft")
+                        | TabRight -> Localization.getString("AlignGroupRight")
                      if not isPinned then
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
+                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count, alignGroupName)
                             image = None
                             flags = List2()
                             click = fun() -> group.pinRightTabs(hwnd)
                         })
                      else
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
+                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count, alignGroupName)
                             image = None
                             flags = List2()
                             click = fun() -> group.unpinRightTabs(hwnd)
@@ -2893,11 +2903,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                 )
             let hasAnyColor = currentFill.IsSome || currentUnderline.IsSome || currentBorder.IsSome
+            let vo = this.ts.visualOrder
             let currentTabIndex =
-                this.ts.lorder.list |> List.tryFindIndex (fun (Tab(h)) -> h = hwnd)
+                vo.list |> List.tryFindIndex (fun (Tab(h)) -> h = hwnd)
                 |> Option.defaultValue 0
             let leftCount = currentTabIndex
-            let rightCount = this.ts.lorder.list.Length - currentTabIndex - 1
+            let rightCount = vo.list.Length - currentTabIndex - 1
             let applyItems = [
                 CmiSeparator
                 CmiRegular({
@@ -2905,7 +2916,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     image = None
                     flags = if leftCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
-                        this.ts.lorder.list |> List.iteri (fun i (Tab(h)) ->
+                        vo.list |> List.iteri (fun i (Tab(h)) ->
                             if i < currentTabIndex then
                                 group.setTabFillColor(h, currentFill)
                                 group.setTabUnderlineColor(h, currentUnderline)
@@ -2917,7 +2928,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     image = None
                     flags = if rightCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
-                        this.ts.lorder.list |> List.iteri (fun i (Tab(h)) ->
+                        vo.list |> List.iteri (fun i (Tab(h)) ->
                             if i > currentTabIndex then
                                 group.setTabFillColor(h, currentFill)
                                 group.setTabUnderlineColor(h, currentUnderline)
@@ -2940,11 +2951,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     text = Localization.getString("TabColorResetAll")
                     image = None
                     flags =
-                        let anyHasColor = this.ts.lorder.list |> List.exists (fun (Tab(h)) ->
+                        let anyHasColor = this.ts.visualOrder.list |> List.exists (fun (Tab(h)) ->
                             group.getTabFillColor(h).IsSome || group.getTabUnderlineColor(h).IsSome || group.getTabBorderColor(h).IsSome)
                         if anyHasColor then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
-                        this.ts.lorder.list |> List.iter (fun (Tab(h)) ->
+                        this.ts.visualOrder.list |> List.iter (fun (Tab(h)) ->
                             group.setTabFillColor(h, None)
                             group.setTabUnderlineColor(h, None)
                             group.setTabBorderColor(h, None)
@@ -2997,9 +3008,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let closeRightTabsItem =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
             let rightTabCount =
-                tabIndex |> Option.map(fun index -> this.ts.lorder.count - index - 1) |> Option.defaultValue 0
+                tabIndex |> Option.map(fun index -> this.ts.visualOrder.count - index - 1) |> Option.defaultValue 0
             let displayText =
                 let formatKey = "CloseTabsToTheRightFormat"
                 let formatString = Localization.getString(formatKey)
@@ -3020,7 +3031,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let closeLeftTabsItem =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
             let leftTabCount =
                 tabIndex |> Option.defaultValue 0
             let displayText =
@@ -3110,8 +3121,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Split right tabs to position submenu
         let splitRightTabsToPositionSubMenu =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-            let totalTabs = this.ts.lorder.count
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+            let totalTabs = this.ts.visualOrder.count
 
             let rightTabCount =
                 match tabIndex with
@@ -3168,8 +3179,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Split left tabs to position submenu
         let splitLeftTabsToPositionSubMenu =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-            let totalTabs = this.ts.lorder.count
+            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+            let totalTabs = this.ts.visualOrder.count
 
             // Calculate left tab count (from leftmost to current tab, including current)
             let leftTabCount =
@@ -3591,8 +3602,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // Build split right tabs to group menu
                 let splitRightTabsToGroupMenu =
                     let currentTab = Tab(hwnd)
-                    let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-                    let totalTabs = this.ts.lorder.count
+                    let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+                    let totalTabs = this.ts.visualOrder.count
 
                     let rightTabCount =
                         match tabIndex with
@@ -3668,8 +3679,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // Build split left tabs to group menu
                 let splitLeftTabsToGroupMenu =
                     let currentTab = Tab(hwnd)
-                    let tabIndex = this.ts.lorder.tryFindIndex((=) currentTab)
-                    let totalTabs = this.ts.lorder.count
+                    let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+                    let totalTabs = this.ts.visualOrder.count
 
                     let leftTabCount =
                         match tabIndex with
@@ -3937,7 +3948,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         member x.tabClose(Tab(hwnd)) =
             // Get all tabs and current tab index before closing
             let currentTab = Tab(hwnd)
-            let allTabs = this.ts.lorder
+            let allTabs = this.ts.visualOrder
             let currentIndex = allTabs.tryFindIndex((=) currentTab)
 
             // Check if this is the active tab

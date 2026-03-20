@@ -866,7 +866,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             
             // Check if this is the active window before removing
             let wasActiveWindow = (this.topWindow = hwnd)
-            let allTabs = this.ts.lorder
+            let allTabs = this.ts.visualOrder
             let closingTab = Tab(hwnd)
             let closingIndex = allTabs.tryFindIndex((=) closingTab)
 
@@ -901,13 +901,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             removedEvent.Trigger(hwnd)
     
     member this.activateIndex(index, force) =
-        let nextTab = this.ts.lorder.tryAt(index)
+        let nextTab = this.ts.visualOrder.tryAt(index)
         nextTab.iter <| fun(nextTab) ->
             this.tabActivate(nextTab, force)
 
-    member this.switchWindow(next,force) = 
+    member this.switchWindow(next,force) =
         if this.windowCount > 1 then
-            let lorder = this.ts.lorder
+            let lorder = this.ts.visualOrder
             let max = lorder.count - 1
             let top = zorderCell.value.tryHead
             top.iter <| fun top ->

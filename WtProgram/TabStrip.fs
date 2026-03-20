@@ -499,35 +499,49 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.unpinAll() =
         pinnedTabsCell.set(Set2<Tab>())
 
-    // Count of same-pin-state tabs to the left of the given tab (including the tab itself)
+    // Visual order: left-aligned tabs in lorder order, then right-aligned tabs in lorder order
+    member this.visualOrder =
+        let leftTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TabLeft)
+        let rightTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TabRight)
+        List2(leftTabs @ rightTabs)
+
+    // Get tabs in same alignment group as the given tab, in lorder order
+    member private this.sameAlignGroup(tab) =
+        let tabAlign = this.getTabAlign(tab)
+        lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = tabAlign)
+
+    // Count of same-pin-state, same-alignment tabs to the left (including the tab itself)
     member this.countToLeft(tab) =
         let tabIsPinned = pinnedTabsCell.value.contains(tab)
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
-            lorderCell.value.list
+            group
             |> List.take (idx + 1)
             |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
             |> List.length
         | None -> 0
 
-    // Count of same-pin-state tabs to the right of the given tab (including the tab itself)
+    // Count of same-pin-state, same-alignment tabs to the right (including the tab itself)
     member this.countToRight(tab) =
         let tabIsPinned = pinnedTabsCell.value.contains(tab)
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
-            lorderCell.value.list
+            group
             |> List.skip idx
             |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
             |> List.length
         | None -> 0
 
-    // Pin all tabs to the left of the given tab (including the tab itself)
+    // Pin same-alignment tabs to the left of the given tab (including the tab itself)
     member this.pinLeftTabs(tab) =
         Cell.beginUpdate()
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
             let tabsToPin =
-                lorderCell.value.list
+                group
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i <= idx && not (pinnedTabsCell.value.contains(t)))
                 |> List.map snd
@@ -539,13 +553,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> ()
         Cell.endUpdate()
 
-    // Pin all tabs to the right of the given tab (including the tab itself)
+    // Pin same-alignment tabs to the right of the given tab (including the tab itself)
     member this.pinRightTabs(tab) =
         Cell.beginUpdate()
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
             let tabsToPin =
-                lorderCell.value.list
+                group
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i >= idx && not (pinnedTabsCell.value.contains(t)))
                 |> List.map snd
@@ -557,13 +572,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> ()
         Cell.endUpdate()
 
-    // Unpin all tabs to the left of the given tab (including the tab itself)
+    // Unpin same-alignment tabs to the left of the given tab (including the tab itself)
     member this.unpinLeftTabs(tab) =
         Cell.beginUpdate()
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
             let tabsToUnpin =
-                lorderCell.value.list
+                group
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i <= idx && pinnedTabsCell.value.contains(t))
                 |> List.map snd
@@ -575,13 +591,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> ()
         Cell.endUpdate()
 
-    // Unpin all tabs to the right of the given tab (including the tab itself)
+    // Unpin same-alignment tabs to the right of the given tab (including the tab itself)
     member this.unpinRightTabs(tab) =
         Cell.beginUpdate()
-        match lorderCell.value.tryFindIndex((=) tab) with
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
             let tabsToUnpin =
-                lorderCell.value.list
+                group
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i >= idx && pinnedTabsCell.value.contains(t))
                 |> List.map snd
