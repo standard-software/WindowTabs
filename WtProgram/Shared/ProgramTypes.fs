@@ -97,6 +97,8 @@ type IProgram =
     abstract member getWindowBorderColor : IntPtr -> Color option
     abstract member setWindowPinned : IntPtr * bool -> unit
     abstract member isWindowPinned : IntPtr -> bool
+    abstract member setWindowAlignment : IntPtr * TabAlign option -> unit
+    abstract member getWindowAlignment : IntPtr -> TabAlign option
     abstract member appWindows : List2<IntPtr>
     abstract member getAutoGroupingEnabled : string -> bool
     abstract member setAutoGroupingEnabled : string -> bool -> unit

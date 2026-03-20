@@ -3,6 +3,11 @@
 ## version ss_jp_2026.03.18_next1
 - Removed Center tab alignment option (Left and Right only)
   - Existing Center settings are automatically converted to Left
+- Added per-tab alignment feature
+  - Each tab can now be individually set to Left or Right alignment
+  - Left-aligned tabs are positioned from the left edge, right-aligned tabs from the right edge
+  - Drag & drop alignment detection: dragging past the center of the empty space changes tab alignment
+  - Per-tab alignment is persisted across group transfers and application restarts
 
 ## version ss_jp_2026.03.18
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items

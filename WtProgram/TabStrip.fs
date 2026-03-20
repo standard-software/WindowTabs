@@ -39,6 +39,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Thread-safe snapshot of pinned tabs for cross-thread reads (e.g., save from main thread)
     [<VolatileField>]
     let mutable pinnedTabsSnapshot = Set2<Tab>()
+    let tabAlignmentCell = Cell.create(Map2<Tab, TabAlign>())
+    [<VolatileField>]
+    let mutable tabAlignmentSnapshot = Map2<Tab, TabAlign>()
+    let defaultAlignmentCell = Cell.create(TabRight)
     let alignment = Cell.create(TabRight)
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
@@ -137,6 +141,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Sync pinned tabs snapshot for thread-safe cross-thread reads
         Cell.listen <| fun() ->
             pinnedTabsSnapshot <- pinnedTabsCell.value
+        Cell.listen <| fun() ->
+            tabAlignmentSnapshot <- tabAlignmentCell.value
 
         // Sync tab color snapshots for thread-safe cross-thread reads
         Cell.listen <| fun() ->
@@ -185,7 +191,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             size = this.size
             slide = this.slide
             direction = direction
-            alignment = alignment.value
+            tabAlignments = tabAlignmentCell.value
             pinnedTabs = pinnedTabsCell.value
             transparent = this.transparent
             appearance = this.appearance
@@ -395,6 +401,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 l.map(fun l -> l.append(tab))
         addToEnd(lorderCell)
         addToEnd(zorderCell)
+        // Set default alignment for new tab
+        if tabAlignmentCell.value.tryFind(tab).IsNone then
+            tabAlignmentCell.map(fun m -> m.add tab defaultAlignmentCell.value)
         slide.iter <| fun slide ->
             this.slide <- Some(slide)
         Cell.endUpdate()
@@ -405,6 +414,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         Cell.beginUpdate()
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
+        tabAlignmentCell.map(fun m -> m.remove tab)
         tabFillColor.map(fun m -> m.remove tab)
         tabUnderlineColor.map(fun m -> m.remove tab)
         tabBorderColor.map(fun m -> m.remove tab)
@@ -421,8 +431,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.movedTab = this.ts.movedTab
 
-    member this.moveTab(tab, index) =
+    member this.moveTab(tab, index, ?newAlignment: TabAlign) =
         Cell.beginUpdate()
+        // Set alignment if provided (from drag alignment detection)
+        match newAlignment with
+        | Some(a) -> tabAlignmentCell.map(fun m -> m.add tab a)
+        | None -> ()
         lorderCell.set(lorderCell.value.move((=) tab, index))
         // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
         let newLorder = lorderCell.value
@@ -583,7 +597,22 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.getAlignment direction = alignment.value
 
-    member this.setAlignment((direction, newAlignment)) = alignment.set(newAlignment)
+    member this.setAlignment((direction, newAlignment)) =
+        alignment.set(newAlignment)
+        defaultAlignmentCell.set(newAlignment)
+
+    member this.setTabAlign(tab, newAlignment) =
+        tabAlignmentCell.map(fun m -> m.add tab newAlignment)
+
+    member this.getTabAlign(tab) =
+        match tabAlignmentCell.value.tryFind(tab) with
+        | Some(a) -> a
+        | None -> defaultAlignmentCell.value
+
+    member this.getTabAlignThreadSafe(tab) =
+        match tabAlignmentSnapshot.tryFind(tab) with
+        | Some(a) -> a
+        | None -> defaultAlignmentCell.value
             
     member this.direction = if showInsideCell.value then TabDown else TabUp
     
@@ -608,10 +637,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
         // Create a TabStrip with scaled size and single tab
         let baseTabStrip = this.tsBase(TabUp)
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab TabLeft
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
-                alignment = alignment.value  // Use actual alignment setting
+                tabAlignments = singleTabAligns
                 lorder = List2([tab])  // Only the dragged tab
                 zorder = List2([tab])
         }
@@ -629,10 +659,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
         // Create a TabStrip with scaled size and single tab
         let baseTabStrip = this.tsBase(TabUp)
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab TabLeft
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
-                alignment = alignment.value  // Use actual alignment setting
+                tabAlignments = singleTabAligns
                 lorder = List2([tab])  // Only the dragged tab
                 zorder = List2([tab])
         }

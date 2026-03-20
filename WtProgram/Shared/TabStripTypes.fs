@@ -34,7 +34,7 @@ and TabDirection =
     | TabUp
     | TabDown
 
-and TabAlignment =
+and TabAlign =
     | TabLeft
     | TabRight
 

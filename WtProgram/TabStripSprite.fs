@@ -444,7 +444,7 @@ type TabStripSprite<'id> when 'id : equality = {
     zorder: List2<'id>
     size: Sz
     slide: ('id * int) option
-    alignment: Bemo.TabAlignment
+    tabAlignments: Map2<'id, TabAlign>
     direction: TabDirection
     transparent: bool
     pinnedTabs: Set2<'id>
@@ -468,6 +468,52 @@ type TabStripSprite<'id> when 'id : equality = {
     member private this.unpinnedCount = this.count - this.pinnedCount
 
     member private this.isPinned (tab: 'id) = this.pinnedTabs.contains(tab)
+
+    member private this.getTabAlign (tab: 'id) =
+        match this.tabAlignments.tryFind(tab) with
+        | Some(a) -> a
+        | None -> TabLeft
+
+    member private this.getAdjustedAlignment (tab: 'id) =
+        match this.movedTab with
+        | Some(t, _, alignment) when t = tab -> alignment
+        | _ -> this.getTabAlign(tab)
+
+    member private this.calcGroupWidth (tabs: List2<'id>) =
+        if tabs.isEmpty then 0.0
+        else
+            let totalLen =
+                tabs.list |> List.sumBy (fun t ->
+                    if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
+            totalLen - float(tabs.length - 1) * this.tabOverlap
+
+    member private this.tabOffsetInGroup (tabs: List2<'id>) (tab: 'id) =
+        let idx = tabs.list |> List.findIndex ((=) tab)
+        tabs.list
+        |> Seq.take idx
+        |> Seq.fold (fun acc t ->
+            let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+            acc + tLen - this.tabOverlap
+        ) 0.0
+
+    member private this.hitInGroup (tabs: List2<'id>) (groupStartX: float) (x: float) : Option<'id> =
+        if tabs.isEmpty then None
+        else
+            let relX = x - groupStartX
+            let tabList = tabs.list
+            let mutable offset = 0.0
+            let mutable result = tabList |> List.last
+            let mutable found = false
+            for i in 0 .. tabList.Length - 1 do
+                if not found then
+                    let t = tabList.[i]
+                    let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+                    let boundary = offset + tLen - this.tabOverlap / 2.0
+                    if relX < boundary || i = tabList.Length - 1 then
+                        result <- t
+                        found <- true
+                    offset <- offset + tLen - this.tabOverlap
+            Some(result)
 
     // Pinned tab width: fixed at pinnedTabMaxLen unless space is too tight
     member private this.pinnedTabLength =
@@ -493,10 +539,6 @@ type TabStripSprite<'id> when 'id : equality = {
             let pinnedTotal = float(this.pinnedCount) * this.pinnedTabLength
             let unpinnedAvailable = availableWidth - pinnedTotal
             min (unpinnedAvailable / float(this.unpinnedCount)) this.unpinnedTabMaxLen
-
-    member private this.tabLengthFor index =
-        if index < this.pinnedCount then this.pinnedTabLength
-        else this.unpinnedTabLength
 
     member private this.tabSprite (tab:'id) =
         let isPinned = this.isPinned(tab)
@@ -547,27 +589,6 @@ type TabStripSprite<'id> when 'id : equality = {
         do  gr.FillRectangle(new SolidBrush(bgColor), bounds.Rectangle)
         img.img
 
-    // Tab offset: accounts for different widths of pinned vs unpinned tabs
-    member private this.tabOffset index =
-        if index <= 0 then 0.0
-        elif index <= this.pinnedCount then
-            float(index) * (this.pinnedTabLength - this.tabOverlap)
-        else
-            let pinnedOffset = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
-            let unpinnedLocalIndex = index - this.pinnedCount
-            pinnedOffset + float(unpinnedLocalIndex) * (this.unpinnedTabLength - this.tabOverlap)
-
-    member private this.alignmentOffset =
-        if this.count = 0 then 0.0
-        else
-            let lastIndex = this.count - 1
-            let lastTabLen = this.tabLengthFor lastIndex
-            let lastTabRight = this.tabOffset lastIndex + lastTabLen
-            let widthOfEmptySpace = float(this.size.width) - lastTabRight
-            match this.alignment with
-            | TabLeft -> 0.0
-            | TabRight -> widthOfEmptySpace
-
     member private this.tabYOffset =
         match this.direction with
         | TabUp -> 0
@@ -580,56 +601,90 @@ type TabStripSprite<'id> when 'id : equality = {
             let bounds = (0, this.size.width - int(tabLen))
             Pt(between bounds x, this.tabYOffset)
         | _ ->
-            // Compute offset by iterating through adjustedLorder with per-tab widths
-            // This correctly handles cross-zone drag where tab order differs from pinned zones
             let adjusted = this.adjustedLorder
-            let tabIdx = adjusted.findIndex((=)tab)
-            let offset =
-                adjusted.list
-                |> Seq.take tabIdx
-                |> Seq.fold (fun acc t ->
-                    let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
-                    acc + tLen - this.tabOverlap
-                ) 0.0
-            let x = offset + this.alignmentOffset
-            Pt(int(x), this.tabYOffset)
+            let tabAlignment = this.getAdjustedAlignment(tab)
+            let groupTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = tabAlignment)
+            let groupStartX =
+                match tabAlignment with
+                | TabLeft -> 0.0
+                | TabRight ->
+                    let groupWidth = this.calcGroupWidth(groupTabs)
+                    max 0.0 (float(this.size.width) - groupWidth)
+            let offset = this.tabOffsetInGroup groupTabs tab
+            Pt(int(groupStartX + offset), this.tabYOffset)
 
     member this.tabSize = Sz(int(this.unpinnedTabLength), (this.size.height) - 1)
 
-    member this.movedTab =
+    member this.movedTab : ('id * int * TabAlign) option =
         match this.slide with
         | Some(tab, x) ->
-            let index =
-                if this.count = 0 then 0
-                else
-                    let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
-                    let x = float(x) - this.alignmentOffset
-                    let centerX = x + dragTabLen / 2.0
-                    // Allow cross-zone drag (VSCode-style): determine target index
-                    // based on which zone the center of the dragged tab falls in
-                    let pinnedStep = this.pinnedTabLength - this.tabOverlap
-                    let pinnedZoneEnd = float(this.pinnedCount) * pinnedStep
-                    if this.pinnedCount > 0 && centerX < pinnedZoneEnd then
-                        // Center is in pinned zone
-                        if pinnedStep <= 0.0 then 0
-                        else
-                            let idx = int(centerX / pinnedStep)
-                            max 0 (min idx (this.count - 1))
+            if this.count = 0 then Some(tab, 0, TabLeft)
+            else
+                let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+                let centerX = float(x) + dragTabLen / 2.0
+
+                // Calculate group widths without the dragged tab
+                let leftWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TabLeft).list
+                let rightWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TabRight).list
+                let calcWidth (tabs: 'id list) =
+                    if tabs.IsEmpty then 0.0
                     else
-                        // Center is in unpinned zone
-                        let unpinnedStep = this.unpinnedTabLength - this.tabOverlap
-                        if unpinnedStep <= 0.0 then this.pinnedCount
-                        else
-                            let relX = centerX - pinnedZoneEnd
-                            let relIdx = int(relX / unpinnedStep)
-                            let idx = this.pinnedCount + relIdx
-                            max 0 (min idx (this.count - 1))
-            Some(tab, index)
+                        let total = tabs |> List.sumBy (fun t ->
+                            if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
+                        total - float(tabs.Length - 1) * this.tabOverlap
+                let leftWidth = calcWidth leftWithout
+                let rightWidth = calcWidth rightWithout
+                let rightStartX = float(this.size.width) - rightWidth
+                let emptyCenter = (leftWidth + rightStartX) / 2.0
+
+                // Determine target alignment
+                let targetAlignment = if centerX >= emptyCenter then TabRight else TabLeft
+
+                // Calculate target index within the alignment group
+                let (groupList, groupStartX) =
+                    match targetAlignment with
+                    | TabLeft -> (leftWithout, 0.0)
+                    | TabRight -> (rightWithout, rightStartX)
+
+                let groupIndex =
+                    if groupList.IsEmpty then 0
+                    else
+                        let mutable idx = groupList.Length
+                        let mutable offset = 0.0
+                        let mutable found = false
+                        for i in 0 .. groupList.Length - 1 do
+                            if not found then
+                                let t = groupList.[i]
+                                let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+                                let tabMid = groupStartX + offset + tLen / 2.0
+                                if centerX < tabMid then
+                                    idx <- i
+                                    found <- true
+                                offset <- offset + tLen - this.tabOverlap
+                        max 0 (min idx groupList.Length)
+
+                // Convert group index to lorder index (for List2.move)
+                let lorderWithout = this.lorder.where((<>) tab).list
+                let mutable groupCount = 0
+                let mutable lorderIdx = lorderWithout.Length
+                let mutable found2 = false
+                for i in 0 .. lorderWithout.Length - 1 do
+                    if not found2 then
+                        let t = lorderWithout.[i]
+                        if this.getTabAlign(t) = targetAlignment then
+                            if groupCount = groupIndex then
+                                lorderIdx <- i
+                                found2 <- true
+                            else
+                                groupCount <- groupCount + 1
+                                lorderIdx <- i + 1
+
+                Some(tab, lorderIdx, targetAlignment)
         | None -> None
 
     member this.adjustedLorder : List2<'id> =
         match this.movedTab with
-        | Some(tab, index) -> this.lorder.move((=)tab, index)
+        | Some(tab, index, _) -> this.lorder.move((=)tab, index)
         | None -> this.lorder
 
 
@@ -669,31 +724,18 @@ type TabStripSprite<'id> when 'id : equality = {
             let yOff = this.tabYOffset
             let tabH = (this.size.height) - 1
             if pt.y >= yOff && pt.y < yOff + tabH then
-                let relX = float(pt.x) - this.alignmentOffset
-                // Determine which zone the point falls in
-                let pinnedZoneEnd =
-                    if this.pinnedCount = 0 then 0.0
-                    else
-                        this.tabOffset this.pinnedCount
-                if relX < pinnedZoneEnd && this.pinnedCount > 0 then
-                    // In pinned zone
-                    let step = this.pinnedTabLength - this.tabOverlap
-                    if step <= 0.0 then Some(this.adjustedLorder.head)
-                    else
-                        let index = int(floor((relX - this.tabOverlap / 2.0) / step))
-                        let index = max 0 (min index (this.pinnedCount - 1))
-                        Some(this.adjustedLorder.skip(index).head)
+                let x = float(pt.x)
+                let adjusted = this.adjustedLorder
+                let leftTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TabLeft)
+                let rightTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TabRight)
+                let leftWidth = this.calcGroupWidth(leftTabs)
+                let rightWidth = this.calcGroupWidth(rightTabs)
+                let rightStartX = float(this.size.width) - rightWidth
+                if x < leftWidth && not leftTabs.isEmpty then
+                    this.hitInGroup leftTabs 0.0 x
+                elif x >= rightStartX && not rightTabs.isEmpty then
+                    this.hitInGroup rightTabs rightStartX x
                 else
-                    // In unpinned zone
-                    if this.unpinnedCount = 0 then None
-                    else
-                        let unpinnedStart = float(this.pinnedCount) * (this.pinnedTabLength - this.tabOverlap)
-                        let unpinnedRelX = relX - unpinnedStart
-                        let step = this.unpinnedTabLength - this.tabOverlap
-                        if step <= 0.0 then Some(this.adjustedLorder.skip(this.pinnedCount).head)
-                        else
-                            let index = int(floor((unpinnedRelX - this.tabOverlap / 2.0) / step))
-                            let index = max 0 (min index (this.unpinnedCount - 1))
-                            Some(this.adjustedLorder.skip(this.pinnedCount + index).head)
+                    None
             else
                 None

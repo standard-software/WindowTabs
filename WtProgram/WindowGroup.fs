@@ -444,6 +444,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.getTabBorderColor(hwnd) = this.ts.getTabBorderColor(Tab(hwnd))
     member this.getTabBorderColorThreadSafe(hwnd) = this.ts.getTabBorderColorThreadSafe(Tab(hwnd))
 
+    member this.setTabAlign(hwnd, alignment : TabAlign) =
+        this.ts.setTabAlign(Tab(hwnd), alignment)
+        Services.program.setWindowAlignment(hwnd, Some(alignment))
+    member this.getTabAlign(hwnd) = this.ts.getTabAlign(Tab(hwnd))
+
     member this.tabPosition
         with get() = perGroupTabPosition
         and set(value) =
@@ -845,6 +850,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Restore pinned state from global (persists across group transfers)
             if Services.program.isWindowPinned(hwnd) then
                 this.ts.pinTab(Tab(hwnd))
+            // Restore per-tab alignment from global (persists across group transfers)
+            match Services.program.getWindowAlignment(hwnd) with
+            | Some(a) -> this.ts.setTabAlign(Tab(hwnd), a)
+            | None -> ()
             this.adjustWindowPlacement(hwnd)
             addedEvent.Trigger(hwnd)
 

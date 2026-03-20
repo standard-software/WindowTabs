@@ -2698,7 +2698,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         
         let tabPositionSubMenu =
-            let currentPosition = group.tabPosition
+            let currentAlignment = group.getTabAlign(hwnd)
             CmiPopUp({
                 text = Localization.getString("TabPositionMenu")
                 image = None
@@ -2706,16 +2706,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     CmiRegular({
                         text = Localization.getString("AlignLeft")
                         image = None
-                        flags = if currentPosition = "TopLeft" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentAlignment = TabLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.tabPosition <- "TopLeft"
+                            group.setTabAlign(hwnd, TabLeft)
                     })
                     CmiRegular({
                         text = Localization.getString("AlignRight")
                         image = None
-                        flags = if currentPosition = "TopRight" then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentAlignment = TabRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.tabPosition <- "TopRight"
+                            group.setTabAlign(hwnd, TabRight)
                     })
                 ])
                 flags = List2()
@@ -4016,8 +4016,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 isDraggingCell.value <- false
                 this.ts.transparent <- true
                 match this.ts.movedTab with
-                | Some(tab, index) ->
-                    this.ts.moveTab(tab, index)
+                | Some(tab, index, newAlignment) ->
+                    this.ts.moveTab(tab, index, newAlignment)
+                    // Persist per-tab alignment to global
+                    let (Tab hwnd) = tab
+                    Services.program.setWindowAlignment(hwnd, Some(newAlignment))
                 | None -> ()
                 dragInfoCell.set(None)
                 this.updateTsSlide()

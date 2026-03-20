@@ -108,6 +108,7 @@ type Program() as this =
     let windowUnderlineColor = Cell.create(Map2() : Map2<IntPtr, Color>)
     let windowBorderColor = Cell.create(Map2() : Map2<IntPtr, Color>)
     let windowPinned = Cell.create(Set2<IntPtr>())
+    let windowAlignment = Cell.create(Map2() : Map2<IntPtr, TabAlign>)
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
    
@@ -431,6 +432,12 @@ type Program() as this =
                         match windowBorderColor.value.tryFind(hwnd) with
                         | Some(c) -> windowObj.setString("tabBorderColor", colorToRRGGBBAA c)
                         | None -> ()
+                        // Save per-tab alignment from global
+                        match windowAlignment.value.tryFind(hwnd) with
+                        | Some(a) ->
+                            let alignStr = match a with TabLeft -> "Left" | TabRight -> "Right"
+                            windowObj.setString("tabAlignment", alignStr)
+                        | None -> ()
                         windowsArray.Add(windowObj)
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
@@ -498,19 +505,24 @@ type Program() as this =
                                         let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
                                         let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
                                         let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
-                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor))
+                                        let tabAlign =
+                                            match obj.getString("tabAlignment") with
+                                            | Some("Left") -> Some(TabLeft)
+                                            | Some("Right") -> Some(TabRight)
+                                            | _ -> None
+                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign))
                                 | _ -> None)
                             |> List.ofSeq
 
                         // Filter to only windows that still exist
                         let matchedWindows =
                             savedWindowsList
-                            |> List.filter (fun (hwnd, _, _, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
+                            |> List.filter (fun (hwnd, _, _, _, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
 
                         // Create group with matched windows (preserving saved order)
                         if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor, underlineColor, borderColor) ->
+                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor, underlineColor, borderColor, tabAlign) ->
                                 // Restore to global maps BEFORE addWindow to avoid race condition
                                 // (addWindow is async on group thread, which reads from globals)
                                 match renamedTabName with
@@ -535,6 +547,11 @@ type Program() as this =
                                 // Restore pinned state to global
                                 if isPinned then
                                     windowPinned.set(windowPinned.value.add hwnd)
+                                // Restore per-tab alignment to global
+                                match tabAlign with
+                                | Some(a) ->
+                                    windowAlignment.set(windowAlignment.value.add hwnd a)
+                                | None -> ()
                                 group.addWindow(hwnd, false)
                             )
                             // Restore per-group tab position if saved
@@ -623,6 +640,14 @@ type Program() as this =
 
         member x.isWindowPinned(hwnd) =
             windowPinned.value.contains(hwnd)
+
+        member x.setWindowAlignment(hwnd, alignment : TabAlign option) =
+            match alignment with
+            | Some(a) -> windowAlignment.set(windowAlignment.value.add hwnd a)
+            | None -> windowAlignment.set(windowAlignment.value.remove hwnd)
+
+        member x.getWindowAlignment(hwnd) =
+            windowAlignment.value.tryFind(hwnd)
 
         member x.appWindows =
             os.windowsInZorder.where(this.isAppWindow).map(fun w -> w.hwnd)
