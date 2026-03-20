@@ -2708,16 +2708,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     CmiRegular({
                         text = Localization.getString("AlignLeft")
                         image = None
-                        flags = if currentAlignment = TabLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentAlignment = TopLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.setTabAlign(hwnd, TabLeft)
+                            group.setTabAlign(hwnd, TopLeft)
                     })
                     CmiRegular({
                         text = Localization.getString("AlignRight")
                         image = None
-                        flags = if currentAlignment = TabRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                        flags = if currentAlignment = TopRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
                         click = fun() ->
-                            group.setTabAlign(hwnd, TabRight)
+                            group.setTabAlign(hwnd, TopRight)
                     })
                 ])
                 flags = List2()
@@ -2762,8 +2762,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     (let count = group.countToLeft(hwnd)
                      let alignGroupName =
                         match group.getTabAlign(hwnd) with
-                        | TabLeft -> Localization.getString("AlignGroupLeft")
-                        | TabRight -> Localization.getString("AlignGroupRight")
+                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
+                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      if not isPinned then
                         CmiRegular({
                             text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count, alignGroupName)
@@ -2781,8 +2781,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     (let count = group.countToRight(hwnd)
                      let alignGroupName =
                         match group.getTabAlign(hwnd) with
-                        | TabLeft -> Localization.getString("AlignGroupLeft")
-                        | TabRight -> Localization.getString("AlignGroupRight")
+                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
+                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      if not isPinned then
                         CmiRegular({
                             text = System.String.Format(Localization.getString("PinRightTabsFormat"), count, alignGroupName)
@@ -2909,10 +2909,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 |> Option.defaultValue 0
             let leftCount = currentTabIndex
             let rightCount = vo.list.Length - currentTabIndex - 1
+            let leftKey = if hasAnyColor then "TabColorApplyLeft" else "TabColorResetLeft"
+            let rightKey = if hasAnyColor then "TabColorApplyRight" else "TabColorResetRight"
             let applyItems = [
                 CmiSeparator
                 CmiRegular({
-                    text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
+                    text = String.Format(Localization.getString(leftKey), leftCount)
                     image = None
                     flags = if leftCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
@@ -2924,7 +2926,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         )
                 })
                 CmiRegular({
-                    text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
+                    text = String.Format(Localization.getString(rightKey), rightCount)
                     image = None
                     flags = if rightCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->

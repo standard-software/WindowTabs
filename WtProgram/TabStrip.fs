@@ -42,8 +42,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let tabAlignmentCell = Cell.create(Map2<Tab, TabAlign>())
     [<VolatileField>]
     let mutable tabAlignmentSnapshot = Map2<Tab, TabAlign>()
-    let defaultAlignmentCell = Cell.create(TabRight)
-    let alignment = Cell.create(TabRight)
+    let defaultAlignmentCell = Cell.create(TopRight)
+    let alignment = Cell.create(TopRight)
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
     let slideCell = Cell.create(None)
@@ -501,8 +501,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     // Visual order: left-aligned tabs in lorder order, then right-aligned tabs in lorder order
     member this.visualOrder =
-        let leftTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TabLeft)
-        let rightTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TabRight)
+        let leftTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TopLeft)
+        let rightTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TopRight)
         List2(leftTabs @ rightTabs)
 
     // Get tabs in same alignment group as the given tab, in lorder order
@@ -654,7 +654,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
         // Create a TabStrip with scaled size and single tab
         let baseTabStrip = this.tsBase(TabUp)
-        let singleTabAligns = Map2<Tab, TabAlign>().add tab TabLeft
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab TopLeft
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
@@ -676,7 +676,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
         // Create a TabStrip with scaled size and single tab
         let baseTabStrip = this.tsBase(TabUp)
-        let singleTabAligns = Map2<Tab, TabAlign>().add tab TabLeft
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab TopLeft
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)

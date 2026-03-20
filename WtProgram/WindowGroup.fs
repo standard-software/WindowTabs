@@ -120,8 +120,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         perGroupTabPosition <- defaultPosition
         let alignment =
             match defaultPosition with
-            | "TopLeft" -> TabLeft
-            | _ -> TabRight
+            | "TopLeft" -> TopLeft
+            | _ -> TopRight
         ts.setAlignment(ts.direction, alignment)
 
         // Apply default setting for snap tab height margin
@@ -164,8 +164,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 perGroupTabPosition <- position
                 let alignment =
                     match position with
-                    | "TopLeft" -> TabLeft
-                    | _ -> TabRight
+                    | "TopLeft" -> TopLeft
+                    | _ -> TopRight
                 ts.setAlignment(ts.direction, alignment)
 
         // Listen for snapTabHeightMargin changes (apply to all groups)
@@ -455,8 +455,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             perGroupTabPosition <- value
             let alignment =
                 match value with
-                | "TopLeft" -> TabLeft
-                | _ -> TabRight
+                | "TopLeft" -> TopLeft
+                | _ -> TopRight
             this.ts.setAlignment(this.ts.direction, alignment)
 
     member this.perGroupTabPositionValue
@@ -465,8 +465,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             perGroupTabPosition <- value
             let alignment =
                 match value with
-                | "TopLeft" -> TabLeft
-                | _ -> TabRight
+                | "TopLeft" -> TopLeft
+                | _ -> TopRight
             this.ts.setAlignment(this.ts.direction, alignment)
 
     member this.snapTabHeightMargin

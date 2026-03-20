@@ -35,8 +35,8 @@ and TabDirection =
     | TabDown
 
 and TabAlign =
-    | TabLeft
-    | TabRight
+    | TopLeft
+    | TopRight
 
 and TabDock =
     | TabDockTop

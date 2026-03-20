@@ -472,7 +472,7 @@ type TabStripSprite<'id> when 'id : equality = {
     member private this.getTabAlign (tab: 'id) =
         match this.tabAlignments.tryFind(tab) with
         | Some(a) -> a
-        | None -> TabLeft
+        | None -> TopLeft
 
     member private this.getAdjustedAlignment (tab: 'id) =
         match this.movedTab with
@@ -606,8 +606,8 @@ type TabStripSprite<'id> when 'id : equality = {
             let groupTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = tabAlignment)
             let groupStartX =
                 match tabAlignment with
-                | TabLeft -> 0.0
-                | TabRight ->
+                | TopLeft -> 0.0
+                | TopRight ->
                     let groupWidth = this.calcGroupWidth(groupTabs)
                     max 0.0 (float(this.size.width) - groupWidth)
             let offset = this.tabOffsetInGroup groupTabs tab
@@ -618,14 +618,14 @@ type TabStripSprite<'id> when 'id : equality = {
     member this.movedTab : ('id * int * TabAlign) option =
         match this.slide with
         | Some(tab, x) ->
-            if this.count = 0 then Some(tab, 0, TabLeft)
+            if this.count = 0 then Some(tab, 0, TopLeft)
             else
                 let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
                 let centerX = float(x) + dragTabLen / 2.0
 
                 // Calculate group widths without the dragged tab
-                let leftWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TabLeft).list
-                let rightWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TabRight).list
+                let leftWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopLeft).list
+                let rightWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopRight).list
                 let calcWidth (tabs: 'id list) =
                     if tabs.IsEmpty then 0.0
                     else
@@ -638,13 +638,13 @@ type TabStripSprite<'id> when 'id : equality = {
                 let emptyCenter = (leftWidth + rightStartX) / 2.0
 
                 // Determine target alignment
-                let targetAlignment = if centerX >= emptyCenter then TabRight else TabLeft
+                let targetAlignment = if centerX >= emptyCenter then TopRight else TopLeft
 
                 // Calculate target index within the alignment group
                 let (groupList, groupStartX) =
                     match targetAlignment with
-                    | TabLeft -> (leftWithout, 0.0)
-                    | TabRight -> (rightWithout, rightStartX)
+                    | TopLeft -> (leftWithout, 0.0)
+                    | TopRight -> (rightWithout, rightStartX)
 
                 let groupIndex =
                     if groupList.IsEmpty then 0
@@ -726,8 +726,8 @@ type TabStripSprite<'id> when 'id : equality = {
             if pt.y >= yOff && pt.y < yOff + tabH then
                 let x = float(pt.x)
                 let adjusted = this.adjustedLorder
-                let leftTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TabLeft)
-                let rightTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TabRight)
+                let leftTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopLeft)
+                let rightTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopRight)
                 let leftWidth = this.calcGroupWidth(leftTabs)
                 let rightWidth = this.calcGroupWidth(rightTabs)
                 let rightStartX = float(this.size.width) - rightWidth

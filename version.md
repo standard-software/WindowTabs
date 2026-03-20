@@ -10,6 +10,10 @@
   - Per-tab alignment is persisted across group transfers and application restarts
   - Close left/right tabs, pin/unpin left/right tabs, apply color to left/right tabs, split left/right tabs now correctly account for per-tab alignment
   - Pin/unpin left/right tabs now operates within same alignment group only
+  - Apply color left/right menu shows "Reset color" text when current tab has no color settings
+- Renamed internal TabAlign values from TabLeft/TabRight to TopLeft/TopRight (preparation for future left-side tab support)
+  - Serialization format changed to "TopLeft"/"TopRight" with backward compatibility for "Left"/"Right"
+  - Localization keys renamed: AlignGroupLeft/Right → AlignGroupTopLeft/TopRight
 
 ## version ss_jp_2026.03.18
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items

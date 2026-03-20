@@ -435,7 +435,7 @@ type Program() as this =
                         // Save per-tab alignment from global
                         match windowAlignment.value.tryFind(hwnd) with
                         | Some(a) ->
-                            let alignStr = match a with TabLeft -> "Left" | TabRight -> "Right"
+                            let alignStr = match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"
                             windowObj.setString("tabAlignment", alignStr)
                         | None -> ()
                         windowsArray.Add(windowObj)
@@ -507,8 +507,8 @@ type Program() as this =
                                         let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
                                         let tabAlign =
                                             match obj.getString("tabAlignment") with
-                                            | Some("Left") -> Some(TabLeft)
-                                            | Some("Right") -> Some(TabRight)
+                                            | Some("TopLeft") | Some("Left") -> Some(TopLeft)
+                                            | Some("TopRight") | Some("Right") -> Some(TopRight)
                                             | _ -> None
                                         (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign))
                                 | _ -> None)
