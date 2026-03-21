@@ -3,20 +3,13 @@
 ## version ss_jp_2026.03.18_next1
 - Removed Center tab alignment option (Left and Right only)
   - Existing Center settings are automatically converted to Left
-- Added per-tab alignment feature
-  - Each tab can now be individually set to Left or Right alignment
-  - Left-aligned tabs are positioned from the left edge, right-aligned tabs from the right edge
-  - Drag & drop alignment detection: dragging past the center of the empty space changes tab alignment
-  - Per-tab alignment is persisted across group transfers and application restarts
+- Added per-tab left/right alignment feature
+  - Drag & drop to switch between left and right alignment
   - Close left/right tabs, pin/unpin left/right tabs, apply color to left/right tabs, split left/right tabs now correctly account for per-tab alignment
-  - Pin/unpin left/right tabs now operates within same alignment group only
-  - Apply color left/right menu shows "Reset color" text when current tab has no color settings
-- Renamed internal TabAlign values from TabLeft/TabRight to TopLeft/TopRight (preparation for future left-side tab support)
-  - Serialization format changed to "TopLeft"/"TopRight" with backward compatibility for "Left"/"Right"
-  - Localization keys renamed: AlignGroupLeft/Right → AlignGroupTopLeft/TopRight
 - Tab Position menu: renamed "Left"/"Right" to "Align Left"/"Align Right", added "Align all tabs to Left/Right" options
 - Tab Position menu: added "Align X left/right tab(s) in [group] to [target]" menu items
   - Operates within same alignment group, similar to pin left/right tabs
+- Apply color left/right menu shows "Reset color" text when current tab has no color settings
 
 ## version ss_jp_2026.03.18
 - Added "Apply color to X left tab(s)" and "Apply color to X right tab(s)" menu items
