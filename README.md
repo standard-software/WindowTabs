@@ -118,11 +118,11 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
-  - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin left tabs, Unpin right tabs)
+  - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin/Unpin left/right tabs in alignment group)
   - Tab Color Change (submenu: fill / underline / border color options, reset)
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
-  - Tab Position (Left / Center / Right per-tab-group)
+  - Tab Position (Align Left / Align Right per-tab, Align all tabs, Align left/right tabs in group)
   - Tab Name (rename / reset)
   ---
   - Settings
@@ -175,6 +175,7 @@ and reposition or link to another group.
 Pin tabs to keep them in a fixed position on the left side of the tab strip, similar to browser pinned tabs.
 
 - Pin or unpin individual tabs, or pin/unpin all tabs in a group at once
+- Pin/unpin left or right tabs within the same alignment group
 - Pinned tab width can be set to icon-only size or a specified fixed width
 - When using specified width, a pushpin icon allows unpinning
 - Dragging a tab into the pinned zone automatically pins it
@@ -200,6 +201,18 @@ Set a color on individual tabs for visual identification. Three color types are 
 - Colors are persisted across restarts
 
 ![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
+
+### Per-Tab Alignment
+
+Each tab can be individually set to left or right alignment within a tab group:
+
+- **Align Left**: Tab is positioned from the left edge of the tab strip
+- **Align Right**: Tab is positioned from the right edge of the tab strip
+- Drag & drop alignment detection: dragging past the center of the empty space changes tab alignment
+- "Align all tabs to Left/Right" to change all tabs at once
+- "Align X left/right tab(s) in [group] to [target]" to change multiple tabs within the same alignment group
+- Per-tab alignment is persisted across group transfers and application restarts
+- Close, color, and split operations use visual order; pin and align operations work within the same alignment group
 
 ### Menu Dark Mode / Light Mode
 
