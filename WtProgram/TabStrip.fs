@@ -610,6 +610,40 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> ()
         Cell.endUpdate()
 
+    // Count of same-alignment tabs to the left (including the tab itself), regardless of pin state
+    member this.alignCountToLeft(tab) =
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
+        | Some idx -> idx + 1
+        | None -> 0
+
+    // Count of same-alignment tabs to the right (including the tab itself), regardless of pin state
+    member this.alignCountToRight(tab) =
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
+        | Some idx -> group.Length - idx
+        | None -> 0
+
+    // Change alignment of same-alignment tabs to the left (including the tab itself)
+    member this.alignLeftTabs(tab, newAlignment) =
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
+        | Some idx ->
+            group
+            |> List.take (idx + 1)
+            |> List.iter (fun t -> tabAlignmentCell.map(fun m -> m.add t newAlignment))
+        | None -> ()
+
+    // Change alignment of same-alignment tabs to the right (including the tab itself)
+    member this.alignRightTabs(tab, newAlignment) =
+        let group = this.sameAlignGroup(tab)
+        match group |> List.tryFindIndex ((=) tab) with
+        | Some idx ->
+            group
+            |> List.skip idx
+            |> List.iter (fun t -> tabAlignmentCell.map(fun m -> m.add t newAlignment))
+        | None -> ()
+
     member this.isMouseOver = isMouseOverExport :> ICellOutput<_>
 
     member this.getAlignment direction = alignment.value

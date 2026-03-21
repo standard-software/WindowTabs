@@ -148,6 +148,8 @@
   "UnpinRightTabsFormat": "Unpin {0} right tab(s) in {1}",
   "AlignGroupTopLeft": "left-aligned",
   "AlignGroupTopRight": "right-aligned",
+  "AlignLeftTabsFormat": "Align {0} left tab(s) in {1} to {2}",
+  "AlignRightTabsFormat": "Align {0} right tab(s) in {1} to {2}",
 
   "TabColorMenu": "Tab Color Settings",
   "TabColorReset": "Reset this tab color : {0}",

@@ -58,6 +58,8 @@ module Localization_English =
         ("AlignRight", "Align Right")
         ("AlignAllTopLeft", "Align all tabs to Left")
         ("AlignAllTopRight", "Align all tabs to Right")
+        ("AlignLeftTabsFormat", "Align {0} left tab(s) in {1} to {2}")
+        ("AlignRightTabsFormat", "Align {0} right tab(s) in {1} to {2}")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
         ("HideTabsNever", "Never hide")
         ("HideTabsWhenDown", "Hide after specified time")

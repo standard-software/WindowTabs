@@ -448,6 +448,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         this.ts.setTabAlign(Tab(hwnd), alignment)
         Services.program.setWindowAlignment(hwnd, Some(alignment))
     member this.getTabAlign(hwnd) = this.ts.getTabAlign(Tab(hwnd))
+    member this.alignCountToLeft(hwnd) = this.ts.alignCountToLeft(Tab(hwnd))
+    member this.alignCountToRight(hwnd) = this.ts.alignCountToRight(Tab(hwnd))
+    member this.alignLeftTabs(hwnd, newAlignment) =
+        this.ts.alignLeftTabs(Tab(hwnd), newAlignment)
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
+    member this.alignRightTabs(hwnd, newAlignment) =
+        this.ts.alignRightTabs(Tab(hwnd), newAlignment)
+        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
 
     member this.tabPosition
         with get() = perGroupTabPosition

@@ -148,6 +148,8 @@
   "UnpinRightTabsFormat": "取消固定{1}中右侧{0}个标签页",
   "AlignGroupTopLeft": "靠左标签页",
   "AlignGroupTopRight": "靠右标签页",
+  "AlignLeftTabsFormat": "将{1}中左侧{0}个标签页设为{2}",
+  "AlignRightTabsFormat": "将{1}中右侧{0}个标签页设为{2}",
 
   "TabColorMenu": "标签页颜色设置",
   "TabColorReset": "重置此标签页颜色设置 : {0}",

@@ -148,6 +148,8 @@
   "UnpinRightTabsFormat": "取消釘選{1}中右側{0}個分頁",
   "AlignGroupTopLeft": "靠左分頁",
   "AlignGroupTopRight": "靠右分頁",
+  "AlignLeftTabsFormat": "將{1}中左側{0}個分頁設為{2}",
+  "AlignRightTabsFormat": "將{1}中右側{0}個分頁設為{2}",
 
   "TabColorMenu": "分頁顏色設定",
   "TabColorReset": "重設此分頁顏色設定 : {0}",

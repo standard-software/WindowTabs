@@ -148,6 +148,8 @@
   "UnpinRightTabsFormat": "{1}の右さ{0}タブのピン止め外すべ",
   "AlignGroupTopLeft": "左寄せタブ",
   "AlignGroupTopRight": "右寄せタブ",
+  "AlignLeftTabsFormat": "{1}の左さ{0}タブを{2}にすっぺ",
+  "AlignRightTabsFormat": "{1}の右さ{0}タブを{2}にすっぺ",
 
   "TabColorMenu": "タブの色設定だべ",
   "TabColorReset": "このタブの色設定リセットすっぺ : {0}",
