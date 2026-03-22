@@ -439,18 +439,21 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> ()
         lorderCell.set(lorderCell.value.move((=) tab, index))
         // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
+        // Only consider tabs in the same alignment group for pin zone detection
         let newLorder = lorderCell.value
-        let tabIndex = newLorder.tryFindIndex((=) tab)
-        match tabIndex with
+        let tabAlign = this.getTabAlign(tab)
+        let sameGroupTabs = newLorder.where(fun t -> this.getTabAlign(t) = tabAlign)
+        let tabIndexInGroup = sameGroupTabs.tryFindIndex((=) tab)
+        match tabIndexInGroup with
         | Some idx ->
-            let currentPinnedCount =
-                newLorder.where(fun t -> pinnedTabsCell.value.contains(t)).length
-            if idx < currentPinnedCount then
-                // Dropped in pinned zone -> pin the tab
+            let pinnedCountInGroup =
+                sameGroupTabs.where(fun t -> pinnedTabsCell.value.contains(t)).length
+            if idx < pinnedCountInGroup then
+                // Dropped in pinned zone of same alignment group -> pin the tab
                 if not (pinnedTabsCell.value.contains(tab)) then
                     pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
             else
-                // Dropped in unpinned zone -> unpin the tab
+                // Dropped in unpinned zone of same alignment group -> unpin the tab
                 if pinnedTabsCell.value.contains(tab) then
                     pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
         | None -> ()

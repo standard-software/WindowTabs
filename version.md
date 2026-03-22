@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.03.22_next1
+- Fixed: Auto-pin/unpin on drag now only considers tabs in the same alignment group
+  - Previously, dragging an unpinned tab between pinned tabs of different alignment groups would incorrectly pin the tab
 
 ## version ss_jp_2026.03.22
 - Removed Center tab alignment option (Left and Right only)
