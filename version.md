@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.03.22_next1
+
 ## version ss_jp_2026.03.22
 - Removed Center tab alignment option (Left and Right only)
   - Existing Center settings are automatically converted to Left
