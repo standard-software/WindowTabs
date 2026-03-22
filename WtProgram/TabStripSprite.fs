@@ -623,7 +623,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
                 let centerX = float(x) + dragTabLen / 2.0
 
-                // Calculate group widths without the dragged tab
+                // Calculate group tabs and widths
                 let leftWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopLeft).list
                 let rightWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopRight).list
                 let calcWidth (tabs: 'id list) =
@@ -632,19 +632,37 @@ type TabStripSprite<'id> when 'id : equality = {
                         let total = tabs |> List.sumBy (fun t ->
                             if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
                         total - float(tabs.Length - 1) * this.tabOverlap
-                let leftWidth = calcWidth leftWithout
-                let rightWidth = calcWidth rightWithout
-                let rightStartX = float(this.size.width) - rightWidth
-                let emptyCenter = (leftWidth + rightStartX) / 2.0
+                let leftWidthWithout = calcWidth leftWithout
+                let rightWidthWithout = calcWidth rightWithout
+
+                // For alignment detection, use widths without the dragged tab
+                let rightStartXWithout = float(this.size.width) - rightWidthWithout
+                let emptyCenterWithout = (leftWidthWithout + rightStartXWithout) / 2.0
 
                 // Determine target alignment
-                let targetAlignment = if centerX >= emptyCenter then TopRight else TopLeft
+                let targetAlignment = if centerX >= emptyCenterWithout then TopRight else TopLeft
+
+                // For position calculation within the group, include the dragged tab
+                // in the target alignment group to match how tabLocation renders
+                let leftWidthFull =
+                    if targetAlignment = TopLeft then
+                        let overlap = if leftWithout.IsEmpty then 0.0 else this.tabOverlap
+                        leftWidthWithout + dragTabLen - overlap
+                    else leftWidthWithout
+                let rightWidthFull =
+                    if targetAlignment = TopRight then
+                        let overlap = if rightWithout.IsEmpty then 0.0 else this.tabOverlap
+                        rightWidthWithout + dragTabLen - overlap
+                    else rightWidthWithout
 
                 // Calculate target index within the alignment group
+                // Use full width (including dragged tab) for groupStartX to match rendering
                 let (groupList, groupStartX) =
                     match targetAlignment with
                     | TopLeft -> (leftWithout, 0.0)
-                    | TopRight -> (rightWithout, rightStartX)
+                    | TopRight ->
+                        let startX = float(this.size.width) - rightWidthFull
+                        (rightWithout, startX)
 
                 let groupIndex =
                     if groupList.IsEmpty then 0
@@ -656,11 +674,14 @@ type TabStripSprite<'id> when 'id : equality = {
                             if not found then
                                 let t = groupList.[i]
                                 let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
-                                let tabMid = groupStartX + offset + tLen / 2.0
-                                if centerX < tabMid then
+                                let step = tLen - this.tabOverlap
+                                // Use step boundary (next tab's left edge) instead of tab center
+                                // This matches the original behavior where tab position only changes
+                                // when the dragged tab's center passes the next tab's start position
+                                if centerX < groupStartX + offset + step then
                                     idx <- i
                                     found <- true
-                                offset <- offset + tLen - this.tabOverlap
+                                offset <- offset + step
                         max 0 (min idx groupList.Length)
 
                 // Convert group index to lorder index (for List2.move)
