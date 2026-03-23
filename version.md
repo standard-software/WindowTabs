@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.03.23_next1
+## version ss_jp_2026.03.24
 - Fixed: "New Tab" did not move to the correct position when the invoking tab was right-aligned
   - New tabs were created with the default alignment, causing incorrect behavior
 - Fixed: Pin/unpin tab position now correctly stays within the same alignment group
