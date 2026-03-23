@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.03.23_next1
+
 ## version ss_jp_2026.03.23
 - Fixed: Tab drag & drop position calculation was too sensitive, causing tabs to swap with minimal movement
   - Restored original step-based calculation where tab position only changes when dragged tab's center passes the next tab's start position

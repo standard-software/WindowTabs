@@ -44,7 +44,7 @@ Can be compiled with Visual Studio 2026 Community Edition.
 
 ## Version
 
-Latest version: **ss_jp_2026.03.23**
+Latest version: **ss_jp_2026.03.23_next1**
 
 For detailed version history and changelog, see [version.md](version.md).
 
