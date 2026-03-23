@@ -320,6 +320,12 @@ type Program() as this =
                             wg.ts.moveTab(newTab, invokerIdx + 1)
                         | _ -> ()
                     | None -> ()
+                    // If invoker tab is pinned, pin the new tab too
+                    // This handles the case where the invoker is the rightmost pinned tab
+                    // in its group - without this, the new tab would end up unpinned
+                    if wg.ts.isPinned(invokerTab) && not (wg.ts.isPinned(newTab)) then
+                        wg.ts.pinTab(newTab)
+                        Services.program.setWindowPinned(hwnd, true)
             | _ -> ()
         // For auto-grouping, position new tab next to same-exe tabs
         elif not isNewGroup && not isDropped then

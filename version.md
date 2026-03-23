@@ -4,6 +4,7 @@
 - Fixed: "New Tab" did not move to the correct position when the invoking tab was right-aligned
   - New tabs were created with the default alignment, causing incorrect behavior
 - Fixed: Pin/unpin tab position now correctly stays within the same alignment group
+- "New Tab" created from a pinned tab is now automatically pinned
 
 ## version ss_jp_2026.03.23
 - Fixed: Tab drag & drop position calculation was too sensitive, causing tabs to swap with minimal movement
