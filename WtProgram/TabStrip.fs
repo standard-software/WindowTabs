@@ -498,33 +498,51 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | Some idx -> idx
         | None -> 0
 
+    // Move tab to pinned zone end within its alignment group
+    // Must be called AFTER adding tab to pinnedTabsCell
+    member private this.moveToPinnedZone(tab) =
+        let lorder = lorderCell.value.list
+        let tabIdx = lorder |> List.findIndex ((=) tab)
+        let tabAlign = this.getTabAlign(tab)
+        // Find the position after the last OTHER pinned tab in the group
+        let mutable rawTargetIdx = this.firstTabIdxInGroup(tabAlign)
+        lorder |> List.iteri (fun i t ->
+            if t <> tab && this.getTabAlign(t) = tabAlign && pinnedTabsCell.value.contains(t) then
+                rawTargetIdx <- i + 1
+        )
+        // Only move if tab is outside pinned zone (after the last pinned tab)
+        // If tab is already within the pinned zone, keep it in place
+        if tabIdx >= rawTargetIdx then
+            // Adjust for List2.move: it removes first, then inserts
+            let targetIdx = if tabIdx < rawTargetIdx then rawTargetIdx - 1 else rawTargetIdx
+            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
+
+    // Move tab to unpinned zone start within its alignment group
+    // Must be called AFTER removing tab from pinnedTabsCell
+    member private this.moveToUnpinnedZone(tab) =
+        let lorder = lorderCell.value.list
+        let tabIdx = lorder |> List.findIndex ((=) tab)
+        let tabAlign = this.getTabAlign(tab)
+        let lastPinned = this.lastPinnedIdxInGroup(tabAlign)
+        let rawTargetIdx =
+            if lastPinned >= 0 then lastPinned + 1
+            else this.firstTabIdxInGroup(tabAlign)
+        // Only move if tab is inside pinned zone (before the unpinned zone start)
+        // If tab is already in the unpinned zone, keep it in place
+        if tabIdx < rawTargetIdx then
+            // Adjust for List2.move: it removes first, then inserts
+            let targetIdx = if tabIdx < rawTargetIdx then rawTargetIdx - 1 else rawTargetIdx
+            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
+
     member this.pinTab(tab) =
         if not (pinnedTabsCell.value.contains(tab)) then
             pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
-            // Move to end of pinned zone in same alignment group
-            let lastPinned = this.lastPinnedIdxInGroup(this.getTabAlign(tab))
-            // lastPinned now includes tab itself if it's already in correct position
-            // We need to find where other pinned tabs end
-            // Since tab is now pinned, lastPinned could be tab itself
-            // Use the position of last OTHER pinned tab + 1, or group start
-            let lorder = lorderCell.value.list
-            let mutable targetIdx = this.firstTabIdxInGroup(this.getTabAlign(tab))
-            lorder |> List.iteri (fun i t ->
-                if t <> tab && this.getTabAlign(t) = this.getTabAlign(tab) && pinnedTabsCell.value.contains(t) then
-                    targetIdx <- i + 1
-            )
-            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
+            this.moveToPinnedZone(tab)
 
     member this.unpinTab(tab) =
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
-            // Move to start of unpinned zone in same alignment group
-            // = right after the last remaining pinned tab in the group
-            let lastPinned = this.lastPinnedIdxInGroup(this.getTabAlign(tab))
-            let targetIdx =
-                if lastPinned >= 0 then lastPinned + 1
-                else this.firstTabIdxInGroup(this.getTabAlign(tab))
-            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
+            this.moveToUnpinnedZone(tab)
 
     member this.pinAll() =
         let allTabs = lorderCell.value
@@ -579,17 +597,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i <= idx && not (pinnedTabsCell.value.contains(t)))
                 |> List.map snd
-            let tabAlign = this.getTabAlign(tab)
             tabsToPin |> List.iter (fun t ->
                 pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-                // Find last OTHER pinned tab in group, move after it
-                let lorder = lorderCell.value.list
-                let mutable targetIdx = this.firstTabIdxInGroup(tabAlign)
-                lorder |> List.iteri (fun i tt ->
-                    if tt <> t && this.getTabAlign(tt) = tabAlign && pinnedTabsCell.value.contains(tt) then
-                        targetIdx <- i + 1
-                )
-                lorderCell.set(lorderCell.value.move((=) t, targetIdx))
+                this.moveToPinnedZone(t)
             )
         | None -> ()
         Cell.endUpdate()
@@ -605,16 +615,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i >= idx && not (pinnedTabsCell.value.contains(t)))
                 |> List.map snd
-            let tabAlign = this.getTabAlign(tab)
             tabsToPin |> List.iter (fun t ->
                 pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-                let lorder = lorderCell.value.list
-                let mutable targetIdx = this.firstTabIdxInGroup(tabAlign)
-                lorder |> List.iteri (fun i tt ->
-                    if tt <> t && this.getTabAlign(tt) = tabAlign && pinnedTabsCell.value.contains(tt) then
-                        targetIdx <- i + 1
-                )
-                lorderCell.set(lorderCell.value.move((=) t, targetIdx))
+                this.moveToPinnedZone(t)
             )
         | None -> ()
         Cell.endUpdate()
@@ -630,12 +633,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i <= idx && pinnedTabsCell.value.contains(t))
                 |> List.map snd
-            let tabAlign = this.getTabAlign(tab)
             tabsToUnpin |> List.iter (fun t ->
                 pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-                let lastPinned = this.lastPinnedIdxInGroup(tabAlign)
-                let targetIdx = if lastPinned >= 0 then lastPinned + 1 else this.firstTabIdxInGroup(tabAlign)
-                lorderCell.set(lorderCell.value.move((=) t, targetIdx))
+                this.moveToUnpinnedZone(t)
             )
         | None -> ()
         Cell.endUpdate()
@@ -651,12 +651,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 |> List.mapi (fun i t -> (i, t))
                 |> List.filter (fun (i, t) -> i >= idx && pinnedTabsCell.value.contains(t))
                 |> List.map snd
-            let tabAlign = this.getTabAlign(tab)
             tabsToUnpin |> List.iter (fun t ->
                 pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-                let lastPinned = this.lastPinnedIdxInGroup(tabAlign)
-                let targetIdx = if lastPinned >= 0 then lastPinned + 1 else this.firstTabIdxInGroup(tabAlign)
-                lorderCell.set(lorderCell.value.move((=) t, targetIdx))
+                this.moveToUnpinnedZone(t)
             )
         | None -> ()
         Cell.endUpdate()
