@@ -305,9 +305,14 @@ type Program() as this =
             | :? GroupInfo as gi ->
                 gi.invokeGroup <| fun() ->
                     let wg = gi.group
-                    let tabs = wg.ts.lorder
                     let newTab = Tab(hwnd)
                     let invokerTab = Tab(invokerHwnd)
+                    // Set new tab's alignment to match the invoker tab
+                    let invokerAlign = wg.ts.getTabAlign(invokerTab)
+                    wg.ts.setTabAlign(newTab, invokerAlign)
+                    Services.program.setWindowAlignment(hwnd, Some(invokerAlign))
+                    // Position new tab after the invoker tab in lorder
+                    let tabs = wg.ts.lorder
                     match tabs.tryFindIndex((=) invokerTab) with
                     | Some(invokerIdx) ->
                         match tabs.tryFindIndex((=) newTab) with
