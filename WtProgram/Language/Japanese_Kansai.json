@@ -156,8 +156,6 @@
   "TabColorResetAll": "全部のタブの色設定リセットするで",
   "TabColorApplyLeft": "左の{0}タブの色設定をこのタブに合わせるで",
   "TabColorApplyRight": "右の{0}タブの色設定をこのタブに合わせるで",
-  "TabColorResetLeft": "左の{0}タブの色設定リセットするで",
-  "TabColorResetRight": "右の{0}タブの色設定リセットするで",
   "TabColorRed": "赤",
   "TabColorBlue": "青",
   "TabColorGreen": "緑",
