@@ -2738,10 +2738,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                     CmiSeparator
                     (let leftCount = group.alignCountToLeft(hwnd)
-                     let alignGroupName =
-                        match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
-                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      let targetAlignName =
                         match currentAlignment with
                         | TopLeft -> Localization.getString("AlignGroupTopRight")
@@ -2751,17 +2747,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | TopLeft -> TopRight
                         | TopRight -> TopLeft
                      CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignLeftTabsFormat"), leftCount, alignGroupName, targetAlignName)
+                        text = System.String.Format(Localization.getString("AlignLeftTabsFormat"), leftCount, targetAlignName)
                         image = None
                         flags = if leftCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
                             group.alignLeftTabs(hwnd, targetAlign)
                     }))
                     (let rightCount = group.alignCountToRight(hwnd)
-                     let alignGroupName =
-                        match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
-                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      let targetAlignName =
                         match currentAlignment with
                         | TopLeft -> Localization.getString("AlignGroupTopRight")
@@ -2771,7 +2763,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | TopLeft -> TopRight
                         | TopRight -> TopLeft
                      CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignRightTabsFormat"), rightCount, alignGroupName, targetAlignName)
+                        text = System.String.Format(Localization.getString("AlignRightTabsFormat"), rightCount, targetAlignName)
                         image = None
                         flags = if rightCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
@@ -2818,39 +2810,31 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                     CmiSeparator
                     (let count = group.countToLeft(hwnd)
-                     let alignGroupName =
-                        match group.getTabAlign(hwnd) with
-                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
-                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      if not isPinned then
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count, alignGroupName)
+                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
                             image = None
                             flags = List2()
                             click = fun() -> group.pinLeftTabs(hwnd)
                         })
                      else
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count, alignGroupName)
+                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
                             image = None
                             flags = List2()
                             click = fun() -> group.unpinLeftTabs(hwnd)
                         }))
                     (let count = group.countToRight(hwnd)
-                     let alignGroupName =
-                        match group.getTabAlign(hwnd) with
-                        | TopLeft -> Localization.getString("AlignGroupTopLeft")
-                        | TopRight -> Localization.getString("AlignGroupTopRight")
                      if not isPinned then
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count, alignGroupName)
+                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
                             image = None
                             flags = List2()
                             click = fun() -> group.pinRightTabs(hwnd)
                         })
                      else
                         CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count, alignGroupName)
+                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
                             image = None
                             flags = List2()
                             click = fun() -> group.unpinRightTabs(hwnd)
