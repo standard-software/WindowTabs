@@ -677,9 +677,15 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let group = this.sameAlignGroup(tab)
         match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
-            group
-            |> List.take (idx + 1)
-            |> List.iter (fun t -> tabAlignmentCell.map(fun m -> m.add t newAlignment))
+            let tabsToAlign = group |> List.take (idx + 1)
+            tabsToAlign |> List.iter (fun t ->
+                tabAlignmentCell.map(fun m -> m.add t newAlignment)
+                // Reposition tab to correct pin zone in the new alignment group
+                if pinnedTabsCell.value.contains(t) then
+                    this.moveToPinnedZone(t)
+                else
+                    this.moveToUnpinnedZone(t)
+            )
         | None -> ()
 
     // Change alignment of same-alignment tabs to the right (including the tab itself)
@@ -687,9 +693,15 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let group = this.sameAlignGroup(tab)
         match group |> List.tryFindIndex ((=) tab) with
         | Some idx ->
-            group
-            |> List.skip idx
-            |> List.iter (fun t -> tabAlignmentCell.map(fun m -> m.add t newAlignment))
+            let tabsToAlign = group |> List.skip idx
+            tabsToAlign |> List.iter (fun t ->
+                tabAlignmentCell.map(fun m -> m.add t newAlignment)
+                // Reposition tab to correct pin zone in the new alignment group
+                if pinnedTabsCell.value.contains(t) then
+                    this.moveToPinnedZone(t)
+                else
+                    this.moveToUnpinnedZone(t)
+            )
         | None -> ()
 
     member this.isMouseOver = isMouseOverExport :> ICellOutput<_>
@@ -702,6 +714,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.setTabAlign(tab, newAlignment) =
         tabAlignmentCell.map(fun m -> m.add tab newAlignment)
+        // Reposition tab to correct pin zone in the new alignment group
+        if pinnedTabsCell.value.contains(tab) then
+            this.moveToPinnedZone(tab)
+        else
+            this.moveToUnpinnedZone(tab)
 
     member this.getTabAlign(tab) =
         match tabAlignmentCell.value.tryFind(tab) with
