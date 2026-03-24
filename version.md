@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.03.24_next1
+## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
 - Simplified pin/unpin and align left/right tab menu text by removing alignment group name
 - Removed "Reset color" text variant from apply color left/right menu (always shows "Apply color" regardless of current tab's color state)
