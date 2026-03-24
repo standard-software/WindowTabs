@@ -2951,12 +2951,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 |> Option.defaultValue 0
             let leftCount = currentTabIndex
             let rightCount = vo.list.Length - currentTabIndex - 1
-            let leftKey = if hasAnyColor then "TabColorApplyLeft" else "TabColorResetLeft"
-            let rightKey = if hasAnyColor then "TabColorApplyRight" else "TabColorResetRight"
             let applyItems = [
                 CmiSeparator
                 CmiRegular({
-                    text = String.Format(Localization.getString(leftKey), leftCount)
+                    text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
                     image = None
                     flags = if leftCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
@@ -2968,7 +2966,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         )
                 })
                 CmiRegular({
-                    text = String.Format(Localization.getString(rightKey), rightCount)
+                    text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
                     image = None
                     flags = if rightCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
                     click = fun() ->
