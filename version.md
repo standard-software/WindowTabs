@@ -2,6 +2,7 @@
 
 ## version ss_jp_2026.03.24_next1
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
+- Simplified pin/unpin and align left/right tab menu text by removing alignment group name
 
 ## version ss_jp_2026.03.24
 - Fixed: "New Tab" did not move to the correct position when the invoking tab was right-aligned
