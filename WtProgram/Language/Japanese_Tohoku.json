@@ -52,8 +52,6 @@
   "TabPositionByDefault": "タブの位置",
   "AlignLeft": "左寄せ",
   "AlignRight": "右寄せ",
-  "AlignAllTopLeft": "全部のタブを左寄せにすっぺ",
-  "AlignAllTopRight": "全部のタブを右寄せにすっぺ",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
   "HideTabsNever": "隠さね",
   "HideTabsWhenDown": "指定した時間で隠すべ",
@@ -136,7 +134,15 @@
 
   "SnapTabMarginMenu": "スナップん時のタブの余白だべ",
   "SnapTabMarginTop": "上に余白あけっぺ",
+
   "TabPositionMenu": "タブの位置だべ",
+  "AlignAllTopLeft": "全部のタブを左寄せにすっぺ",
+  "AlignAllTopRight": "全部のタブを右寄せにすっぺ",
+  "AlignGroupTopLeft": "左寄せ",
+  "AlignGroupTopRight": "右寄せ",
+  "AlignLeftTabsFormat": "左さ{0}タブを{1}にすっぺ",
+  "AlignRightTabsFormat": "右さ{0}タブを{1}にすっぺ",
+
   "PinTabMenu": "タブのピン止めだべ",
   "PinThisTab": "このタブをピン止めすっぺ",
   "UnpinThisTab": "このタブのピン止め外すべ",
@@ -146,10 +152,6 @@
   "PinRightTabsFormat": "右さ{0}タブピン止めすっぺ",
   "UnpinLeftTabsFormat": "左さ{0}タブのピン止め外すべ",
   "UnpinRightTabsFormat": "右さ{0}タブのピン止め外すべ",
-  "AlignGroupTopLeft": "左寄せタブ",
-  "AlignGroupTopRight": "右寄せタブ",
-  "AlignLeftTabsFormat": "左さ{0}タブを{1}にすっぺ",
-  "AlignRightTabsFormat": "右さ{0}タブを{1}にすっぺ",
 
   "TabColorMenu": "タブの色設定だべ",
   "TabColorReset": "このタブの色設定リセットすっぺ : {0}",

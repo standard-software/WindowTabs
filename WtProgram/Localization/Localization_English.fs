@@ -56,10 +56,6 @@ module Localization_English =
         ("TabPositionByDefault", "Tab position")
         ("AlignLeft", "Align Left")
         ("AlignRight", "Align Right")
-        ("AlignAllTopLeft", "Align all tabs to Left")
-        ("AlignAllTopRight", "Align all tabs to Right")
-        ("AlignLeftTabsFormat", "Align {0} left tab(s) to {1}")
-        ("AlignRightTabsFormat", "Align {0} right tab(s) to {1}")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
         ("HideTabsNever", "Never hide")
         ("HideTabsWhenDown", "Hide after specified time")
@@ -140,7 +136,15 @@ module Localization_English =
 
         ("SnapTabMarginMenu", "Tab Margin When Snapping")
         ("SnapTabMarginTop", "Add margin at top")
+
         ("TabPositionMenu", "Tab Position")
+        ("AlignAllTopLeft", "Align all tabs to Left")
+        ("AlignAllTopRight", "Align all tabs to Right")
+        ("AlignGroupTopLeft", "Left")
+        ("AlignGroupTopRight", "Right")
+        ("AlignLeftTabsFormat", "Align {0} left tab(s) to {1}")
+        ("AlignRightTabsFormat", "Align {0} right tab(s) to {1}")
+
         ("PinTabMenu", "Tab Pin")
         ("PinThisTab", "Pin this tab")
         ("UnpinThisTab", "Unpin this tab")
@@ -150,8 +154,6 @@ module Localization_English =
         ("PinRightTabsFormat", "Pin {0} right tab(s)")
         ("UnpinLeftTabsFormat", "Unpin {0} left tab(s)")
         ("UnpinRightTabsFormat", "Unpin {0} right tab(s)")
-        ("AlignGroupTopLeft", "left-aligned")
-        ("AlignGroupTopRight", "right-aligned")
 
         ("TabColorMenu", "Tab Color Settings")
         ("TabColorReset", "Reset this tab color : {0}")
