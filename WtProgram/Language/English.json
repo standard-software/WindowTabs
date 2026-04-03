@@ -135,13 +135,13 @@
   "SnapTabMarginMenu": "Tab Margin When Snapping",
   "SnapTabMarginTop": "Add margin at top",
 
-  "TabPositionMenu": "Tab Position",
+  "TabAlignMenu": "Tab Position",
+  "AlignTopLeft": "Left",
+  "AlignTopRight": "Right",
   "AlignAllTopLeft": "Align all tabs to Left",
   "AlignAllTopRight": "Align all tabs to Right",
-  "AlignGroupTopLeft": "Left",
-  "AlignGroupTopRight": "Right",
-  "AlignLeftTabsFormat": "Align {0} left tab(s) to {1}",
-  "AlignRightTabsFormat": "Align {0} right tab(s) to {1}",
+  "AlignLeftTabsChange": "Align {0} left tab(s) to {1}",
+  "AlignRightTabsChange": "Align {0} right tab(s) to {1}",
 
   "PinTabMenu": "Tab Pin",
   "PinThisTab": "Pin this tab",

@@ -135,13 +135,13 @@
   "SnapTabMarginMenu": "スナップ時のタブの余白",
   "SnapTabMarginTop": "上に余白をあける",
 
-  "TabPositionMenu": "タブの位置",
+  "TabAlignMenu": "タブの位置",
+  "AlignTopLeft": "左寄せ",
+  "AlignTopRight": "右寄せ",
   "AlignAllTopLeft": "全てのタブを左寄せ",
   "AlignAllTopRight": "全てのタブを右寄せ",
-  "AlignGroupTopLeft": "左寄せ",
-  "AlignGroupTopRight": "右寄せ",
-  "AlignLeftTabsFormat": "左側{0}タブを{1}にする",
-  "AlignRightTabsFormat": "右側{0}タブを{1}にする",
+  "AlignLeftTabsChange": "左側{0}タブを{1}にする",
+  "AlignRightTabsChange": "右側{0}タブを{1}にする",
 
   "PinTabMenu": "タブのピン止め",
   "PinThisTab": "このタブをピン止め",
