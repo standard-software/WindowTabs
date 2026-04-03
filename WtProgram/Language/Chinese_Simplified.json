@@ -135,13 +135,13 @@
   "SnapTabMarginMenu": "吸附时的标签页边距",
   "SnapTabMarginTop": "顶部添加边距",
 
-  "TabPositionMenu": "标签页位置",
+  "TabAlignMenu": "标签页位置",
+  "AlignTopLeft": "靠左",
+  "AlignTopRight": "靠右",
   "AlignAllTopLeft": "将所有标签页靠左对齐",
   "AlignAllTopRight": "将所有标签页靠右对齐",
-  "AlignGroupTopLeft": "靠左",
-  "AlignGroupTopRight": "靠右",
-  "AlignLeftTabsFormat": "将左侧{0}个标签页设为{1}",
-  "AlignRightTabsFormat": "将右侧{0}个标签页设为{1}",
+  "AlignLeftTabsChange": "将左侧{0}个标签页设为{1}",
+  "AlignRightTabsChange": "将右侧{0}个标签页设为{1}",
 
   "PinTabMenu": "固定标签页",
   "PinThisTab": "固定此标签页",

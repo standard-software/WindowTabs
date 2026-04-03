@@ -2704,7 +2704,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allTopLeft = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
             let allTopRight = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
             CmiPopUp({
-                text = Localization.getString("TabPositionMenu")
+                text = Localization.getString("TabAlignMenu")
                 image = None
                 items = List2([
                     CmiRegular({
@@ -2740,14 +2740,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     (let leftCount = group.alignCountToLeft(hwnd)
                      let targetAlignName =
                         match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignGroupTopRight")
-                        | TopRight -> Localization.getString("AlignGroupTopLeft")
+                        | TopLeft -> Localization.getString("AlignTopRight")
+                        | TopRight -> Localization.getString("AlignTopLeft")
                      let targetAlign =
                         match currentAlignment with
                         | TopLeft -> TopRight
                         | TopRight -> TopLeft
                      CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignLeftTabsFormat"), leftCount, targetAlignName)
+                        text = System.String.Format(Localization.getString("AlignLeftTabsChange"), leftCount, targetAlignName)
                         image = None
                         flags = if leftCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
@@ -2756,14 +2756,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     (let rightCount = group.alignCountToRight(hwnd)
                      let targetAlignName =
                         match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignGroupTopRight")
-                        | TopRight -> Localization.getString("AlignGroupTopLeft")
+                        | TopLeft -> Localization.getString("AlignTopRight")
+                        | TopRight -> Localization.getString("AlignTopLeft")
                      let targetAlign =
                         match currentAlignment with
                         | TopLeft -> TopRight
                         | TopRight -> TopLeft
                      CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignRightTabsFormat"), rightCount, targetAlignName)
+                        text = System.String.Format(Localization.getString("AlignRightTabsChange"), rightCount, targetAlignName)
                         image = None
                         flags = if rightCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
