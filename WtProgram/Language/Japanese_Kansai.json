@@ -74,14 +74,15 @@
 
   "NewTab": "新しいタブやで : {0}起動",
 
-  "MoveEdgeLeft": "左端 移動",
-  "MoveEdgeRight": "右端 移動",
-  "MoveEdgeTop": "上端 移動",
-  "MoveEdgeBottom": "下端 移動",
-  "SnapLeft": "└スナップ",
-  "SnapRight": "└スナップ",
-  "SnapTop": "└スナップ",
-  "SnapBottom": "└スナップ",
+  "MoveEdgeMenu": "移動やで",
+  "MoveEdgeLeft": "左端",
+  "MoveEdgeRight": "右端",
+  "MoveEdgeTop": "上端",
+  "MoveEdgeBottom": "下端",
+  "SnapLeft": "左スナップ",
+  "SnapRight": "右スナップ",
+  "SnapTop": "上スナップ",
+  "SnapBottom": "下スナップ",
   "MoveSnapMenuCombined": {
     "MoveEdgeLeft": "左端 移動",
     "MoveEdgeRight": "右端 移動",

@@ -4,6 +4,8 @@
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
 - Unified tab name truncation across all menus (12 half-width chars, full-width counts as 2)
 - Renamed localization keys: TabPositionMenu→TabAlignMenu, AlignGroupTopLeft/Right→AlignTopLeft/Right, AlignLeftTabsFormat/Right→AlignLeftTabsChange/Right
+- Restructured Move/Snap menu: Snap Left/Right at top level, Move submenu inside "Position Other"
+- Removed "Combined Move and Snap Menu" setting (enableSplitMoveSnapMenu)
 
 ## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group

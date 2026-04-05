@@ -74,14 +74,15 @@
 
   "NewTab": "New tab : execute {0}",
 
-  "MoveEdgeLeft": "Move Left Edge",
-  "MoveEdgeRight": "Move Right Edge",
-  "MoveEdgeTop": "Move Top Edge",
-  "MoveEdgeBottom": "Move Bottom Edge",
-  "SnapLeft": "└Snap",
-  "SnapRight": "└Snap",
-  "SnapTop": "└Snap",
-  "SnapBottom": "└Snap",
+  "MoveEdgeMenu": "Move",
+  "MoveEdgeLeft": "Left Edge",
+  "MoveEdgeRight": "Right Edge",
+  "MoveEdgeTop": "Top Edge",
+  "MoveEdgeBottom": "Bottom Edge",
+  "SnapLeft": "Snap Left",
+  "SnapRight": "Snap Right",
+  "SnapTop": "Snap Top",
+  "SnapBottom": "Snap Bottom",
   "MoveSnapMenuCombined": {
     "MoveEdgeLeft": "Move Left",
     "MoveEdgeRight": "Move Right",

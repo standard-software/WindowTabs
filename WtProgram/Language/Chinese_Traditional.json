@@ -74,14 +74,15 @@
 
   "NewTab": "新增分頁 : 啟動{0}",
 
-  "MoveEdgeLeft": "移動 左端",
-  "MoveEdgeRight": "移動 右端",
-  "MoveEdgeTop": "移動 上端",
-  "MoveEdgeBottom": "移動 下端",
-  "SnapLeft": "└貼靠",
-  "SnapRight": "└貼靠",
-  "SnapTop": "└貼靠",
-  "SnapBottom": "└貼靠",
+  "MoveEdgeMenu": "移動",
+  "MoveEdgeLeft": "左端",
+  "MoveEdgeRight": "右端",
+  "MoveEdgeTop": "上端",
+  "MoveEdgeBottom": "下端",
+  "SnapLeft": "貼靠左側",
+  "SnapRight": "貼靠右側",
+  "SnapTop": "貼靠上方",
+  "SnapBottom": "貼靠下方",
   "MoveSnapMenuCombined": {
     "MoveEdgeLeft": "移動 左端",
     "MoveEdgeRight": "移動 右端",

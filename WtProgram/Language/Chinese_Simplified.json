@@ -74,14 +74,15 @@
 
   "NewTab": "新建标签页 : 启动{0}",
 
-  "MoveEdgeLeft": "移动 左端",
-  "MoveEdgeRight": "移动 右端",
-  "MoveEdgeTop": "移动 上端",
-  "MoveEdgeBottom": "移动 下端",
-  "SnapLeft": "└贴靠",
-  "SnapRight": "└贴靠",
-  "SnapTop": "└贴靠",
-  "SnapBottom": "└贴靠",
+  "MoveEdgeMenu": "移动",
+  "MoveEdgeLeft": "左端",
+  "MoveEdgeRight": "右端",
+  "MoveEdgeTop": "上端",
+  "MoveEdgeBottom": "下端",
+  "SnapLeft": "贴靠左侧",
+  "SnapRight": "贴靠右侧",
+  "SnapTop": "贴靠上方",
+  "SnapBottom": "贴靠下方",
   "MoveSnapMenuCombined": {
     "MoveEdgeLeft": "移动 左端",
     "MoveEdgeRight": "移动 右端",
