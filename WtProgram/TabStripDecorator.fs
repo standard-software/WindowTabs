@@ -2718,7 +2718,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 use checkPen = new Pen(Color.White, 2.0f)
                 g.DrawLine(checkPen, 3, 8, 6, 12)
                 g.DrawLine(checkPen, 6, 12, 13, 4)
-            // Create a filled color swatch icon (with optional checkmark overlay)
             let createFillIcon (color: Color) (isChecked: bool) =
                 let size = 16
                 let img = Img(Sz(size, size))
@@ -2730,7 +2729,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
                 if isChecked then drawCheckmark g
                 img
-            // Create an underline color icon (colored line at bottom)
             let createUnderlineIcon (color: Color) (isChecked: bool) =
                 let size = 16
                 let img = Img(Sz(size, size))
@@ -2749,7 +2747,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     g.DrawLine(checkPen, 3, 7, 6, 11)
                     g.DrawLine(checkPen, 6, 11, 13, 3)
                 img
-            // Create a border color icon (colored rectangle outline)
             let createBorderIcon (color: Color) (isChecked: bool) =
                 let size = 16
                 let img = Img(Sz(size, size))
@@ -2759,109 +2756,113 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.DrawRectangle(borderPen, 1, 1, size - 3, size - 3)
                 if isChecked then drawCheckmark g
                 img
-            // Fill color items
-            let fillItems =
-                TabColorDefs.fillDefs |> List.map (fun def ->
-                    let isChecked = isColorMatch currentFill def.color
+            // Build color selection submenu items for a set of target hwnds
+            let buildColorItems (targetHwnds: IntPtr list) =
+                let fillItems =
+                    TabColorDefs.fillDefs |> List.map (fun def ->
+                        let isChecked = isColorMatch currentFill def.color
+                        CmiRegular({
+                            text = Localization.getString(def.labelKey)
+                            image = Some(createFillIcon def.color isChecked)
+                            flags = List2()
+                            click = fun() ->
+                                let color = if isChecked then None else Some(def.color)
+                                targetHwnds |> List.iter (fun h -> group.setTabFillColor(h, color))
+                        })
+                    )
+                let underlineItems =
+                    TabColorDefs.underlineDefs |> List.map (fun def ->
+                        let isChecked = isColorMatch currentUnderline def.color
+                        CmiRegular({
+                            text = Localization.getString(def.labelKey)
+                            image = Some(createUnderlineIcon def.color isChecked)
+                            flags = List2()
+                            click = fun() ->
+                                let color = if isChecked then None else Some(def.color)
+                                targetHwnds |> List.iter (fun h -> group.setTabUnderlineColor(h, color))
+                        })
+                    )
+                let borderItems =
+                    TabColorDefs.borderDefs |> List.map (fun def ->
+                        let isChecked = isColorMatch currentBorder def.color
+                        CmiRegular({
+                            text = Localization.getString(def.labelKey)
+                            image = Some(createBorderIcon def.color isChecked)
+                            flags = List2()
+                            click = fun() ->
+                                let color = if isChecked then None else Some(def.color)
+                                targetHwnds |> List.iter (fun h -> group.setTabBorderColor(h, color))
+                        })
+                    )
+                let resetItem =
                     CmiRegular({
-                        text = Localization.getString(def.labelKey)
-                        image = Some(createFillIcon def.color isChecked)
+                        text = Localization.getString("TabColorResetSimple")
+                        image = None
                         flags = List2()
                         click = fun() ->
-                            if isChecked then group.setTabFillColor(hwnd, None)
-                            else group.setTabFillColor(hwnd, Some(def.color))
+                            targetHwnds |> List.iter (fun h ->
+                                group.setTabFillColor(h, None)
+                                group.setTabUnderlineColor(h, None)
+                                group.setTabBorderColor(h, None)
+                            )
                     })
-                )
-            // Underline color items
-            let underlineItems =
-                TabColorDefs.underlineDefs |> List.map (fun def ->
-                    let isChecked = isColorMatch currentUnderline def.color
-                    CmiRegular({
-                        text = Localization.getString(def.labelKey)
-                        image = Some(createUnderlineIcon def.color isChecked)
-                        flags = List2()
-                        click = fun() ->
-                            if isChecked then group.setTabUnderlineColor(hwnd, None)
-                            else group.setTabUnderlineColor(hwnd, Some(def.color))
-                    })
-                )
-            // Border color items
-            let borderItems =
-                TabColorDefs.borderDefs |> List.map (fun def ->
-                    let isChecked = isColorMatch currentBorder def.color
-                    CmiRegular({
-                        text = Localization.getString(def.labelKey)
-                        image = Some(createBorderIcon def.color isChecked)
-                        flags = List2()
-                        click = fun() ->
-                            if isChecked then group.setTabBorderColor(hwnd, None)
-                            else group.setTabBorderColor(hwnd, Some(def.color))
-                    })
-                )
-            let hasAnyColor = currentFill.IsSome || currentUnderline.IsSome || currentBorder.IsSome
+                fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ [CmiSeparator; resetItem]
+
             let vo = this.ts.visualOrder
             let currentTabIndex =
                 vo.list |> List.tryFindIndex (fun (Tab(h)) -> h = hwnd)
                 |> Option.defaultValue 0
-            let leftCount = currentTabIndex
-            let rightCount = vo.list.Length - currentTabIndex - 1
-            let applyItems = [
-                CmiSeparator
-                CmiRegular({
+            // Counts include the current tab itself
+            let leftCount = currentTabIndex + 1
+            let rightCount = vo.list.Length - currentTabIndex
+
+            // This tab color submenu
+            let thisTabSubMenu =
+                CmiPopUp({
+                    text = String.Format(Localization.getString("TabColorThisTab"), shortTabText)
+                    image = None
+                    items = List2(buildColorItems [hwnd])
+                    flags = List2()
+                })
+            // Left tabs color submenu (includes current tab)
+            let leftTabsSubMenu =
+                let leftHwnds = vo.list |> List.take (currentTabIndex + 1) |> List.map (fun (Tab(h)) -> h)
+                CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
                     image = None
-                    flags = if leftCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
-                    click = fun() ->
-                        vo.list |> List.iteri (fun i (Tab(h)) ->
-                            if i < currentTabIndex then
-                                group.setTabFillColor(h, currentFill)
-                                group.setTabUnderlineColor(h, currentUnderline)
-                                group.setTabBorderColor(h, currentBorder)
-                        )
+                    items = List2(buildColorItems leftHwnds)
+                    flags = List2()
                 })
-                CmiRegular({
+            // Right tabs color submenu (includes current tab)
+            let rightTabsSubMenu =
+                let rightHwnds = vo.list |> List.skip currentTabIndex |> List.map (fun (Tab(h)) -> h)
+                CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
                     image = None
-                    flags = if rightCount > 0 then List2() else List2([MenuFlags.MF_GRAYED])
-                    click = fun() ->
-                        vo.list |> List.iteri (fun i (Tab(h)) ->
-                            if i > currentTabIndex then
-                                group.setTabFillColor(h, currentFill)
-                                group.setTabUnderlineColor(h, currentUnderline)
-                                group.setTabBorderColor(h, currentBorder)
-                        )
+                    items = List2(buildColorItems rightHwnds)
+                    flags = List2()
                 })
-            ]
-            let resetItems = [
-                CmiSeparator
-                CmiRegular({
-                    text = String.Format(Localization.getString("TabColorReset"), shortTabText)
+            // All tabs color submenu
+            let allTabsSubMenu =
+                let allHwnds = vo.list |> List.map (fun (Tab(h)) -> h)
+                CmiPopUp({
+                    text = Localization.getString("TabColorAllTabs")
                     image = None
-                    flags = if hasAnyColor then List2() else List2([MenuFlags.MF_GRAYED])
-                    click = fun() ->
-                        group.setTabFillColor(hwnd, None)
-                        group.setTabUnderlineColor(hwnd, None)
-                        group.setTabBorderColor(hwnd, None)
+                    items = List2(buildColorItems allHwnds)
+                    flags = List2()
                 })
-                CmiRegular({
-                    text = Localization.getString("TabColorResetAll")
-                    image = None
-                    flags =
-                        let anyHasColor = this.ts.visualOrder.list |> List.exists (fun (Tab(h)) ->
-                            group.getTabFillColor(h).IsSome || group.getTabUnderlineColor(h).IsSome || group.getTabBorderColor(h).IsSome)
-                        if anyHasColor then List2() else List2([MenuFlags.MF_GRAYED])
-                    click = fun() ->
-                        this.ts.visualOrder.list |> List.iter (fun (Tab(h)) ->
-                            group.setTabFillColor(h, None)
-                            group.setTabUnderlineColor(h, None)
-                            group.setTabBorderColor(h, None)
-                        )
-                })
-            ]
+
             CmiPopUp({
                 text = Localization.getString("TabColorMenu")
                 image = None
-                items = List2(fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ resetItems @ applyItems)
+                items = List2([
+                    thisTabSubMenu
+                    CmiSeparator
+                    leftTabsSubMenu
+                    rightTabsSubMenu
+                    CmiSeparator
+                    allTabsSubMenu
+                ])
                 flags = List2()
             })
 
