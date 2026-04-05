@@ -49,8 +49,8 @@ type HotKeyView() =
             let combo = new ComboBox()
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 100
-            combo.Items.Add(Localization.getString("AlignLeft")) |> ignore
-            combo.Items.Add(Localization.getString("AlignRight")) |> ignore
+            combo.Items.Add(Localization.getString("AlignTopLeft")) |> ignore
+            combo.Items.Add(Localization.getString("AlignTopRight")) |> ignore
 
             let currentPosition = Services.settings.getValue("tabPositionByDefault") :?> string
             combo.SelectedIndex <-

@@ -54,8 +54,6 @@ module Localization_English =
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
         ("TabPositionByDefault", "Tab position")
-        ("AlignLeft", "Align Left")
-        ("AlignRight", "Align Right")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
         ("HideTabsNever", "Never hide")
         ("HideTabsWhenDown", "Hide after specified time")
@@ -138,10 +136,11 @@ module Localization_English =
         ("SnapTabMarginTop", "Add margin at top")
 
         ("TabAlignMenu", "Tab Position")
-        ("AlignTopLeft", "Left")
-        ("AlignTopRight", "Right")
         ("AlignAllTopLeft", "Align all tabs to Left")
         ("AlignAllTopRight", "Align all tabs to Right")
+        ("AlignTabSubMenu", "Individual Tab Alignment")
+        ("AlignTopLeft", "Left")
+        ("AlignTopRight", "Right")
         ("AlignLeftTabsChange", "Align {0} left tab(s) to {1}")
         ("AlignRightTabsChange", "Align {0} right tab(s) to {1}")
 
