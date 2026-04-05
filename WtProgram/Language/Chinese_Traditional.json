@@ -50,8 +50,6 @@
   "EnableHoverActivate": "滑鼠懸停時切換分頁",
 
   "TabPositionByDefault": "分頁位置",
-  "AlignLeft": "靠左對齊",
-  "AlignRight": "靠右對齊",
   "HideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
   "HideTabsNever": "不隱藏",
   "HideTabsWhenDown": "指定時間後隱藏",
@@ -136,10 +134,11 @@
   "SnapTabMarginTop": "頂部新增邊距",
 
   "TabAlignMenu": "分頁位置",
-  "AlignTopLeft": "靠左",
-  "AlignTopRight": "靠右",
   "AlignAllTopLeft": "將所有分頁靠左對齊",
   "AlignAllTopRight": "將所有分頁靠右對齊",
+  "AlignTabSubMenu": "單一分頁對齊",
+  "AlignTopLeft": "靠左",
+  "AlignTopRight": "靠右",
   "AlignLeftTabsChange": "將左側{0}個分頁設為{1}",
   "AlignRightTabsChange": "將右側{0}個分頁設為{1}",
 

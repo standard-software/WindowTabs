@@ -64,6 +64,24 @@ module TabColorDefs =
     ]
     let allDefs = fillDefs @ underlineDefs @ borderDefs
 
+module TabNameHelper =
+    // Truncate tab name for menu display (max 12 half-width chars, full-width counts as 2)
+    let truncate (text: string) =
+        let mutable width = 0
+        let mutable endIdx = text.Length
+        let mutable found = false
+        for i in 0 .. text.Length - 1 do
+            if not found then
+                let c = text.[i]
+                let charWidth = if int c > 0x7F then 2 else 1
+                if width + charWidth > 12 then
+                    endIdx <- i
+                    found <- true
+                else
+                    width <- width + charWidth
+        if endIdx < text.Length then text.Substring(0, endIdx) + "..."
+        else text
+
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
@@ -2703,25 +2721,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let currentAlignment = group.getTabAlign(hwnd)
             let allTopLeft = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
             let allTopRight = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
+            let shortTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             CmiPopUp({
                 text = Localization.getString("TabAlignMenu")
                 image = None
                 items = List2([
-                    CmiRegular({
-                        text = Localization.getString("AlignLeft")
-                        image = None
-                        flags = if currentAlignment = TopLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.setTabAlign(hwnd, TopLeft)
-                    })
-                    CmiRegular({
-                        text = Localization.getString("AlignRight")
-                        image = None
-                        flags = if currentAlignment = TopRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.setTabAlign(hwnd, TopRight)
-                    })
-                    CmiSeparator
                     CmiRegular({
                         text = Localization.getString("AlignAllTopLeft")
                         image = None
@@ -2737,47 +2741,67 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             group.lorder.list |> List.iter (fun h -> group.setTabAlign(h, TopRight))
                     })
                     CmiSeparator
-                    (let leftCount = group.alignCountToLeft(hwnd)
-                     let targetAlignName =
-                        match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignTopRight")
-                        | TopRight -> Localization.getString("AlignTopLeft")
-                     let targetAlign =
-                        match currentAlignment with
-                        | TopLeft -> TopRight
-                        | TopRight -> TopLeft
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignLeftTabsChange"), leftCount, targetAlignName)
+                    CmiPopUp({
+                        text = Localization.getString("AlignTabSubMenu")
                         image = None
-                        flags = if leftCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
-                        click = fun() ->
-                            group.alignLeftTabs(hwnd, targetAlign)
-                    }))
-                    (let rightCount = group.alignCountToRight(hwnd)
-                     let targetAlignName =
-                        match currentAlignment with
-                        | TopLeft -> Localization.getString("AlignTopRight")
-                        | TopRight -> Localization.getString("AlignTopLeft")
-                     let targetAlign =
-                        match currentAlignment with
-                        | TopLeft -> TopRight
-                        | TopRight -> TopLeft
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("AlignRightTabsChange"), rightCount, targetAlignName)
-                        image = None
-                        flags = if rightCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
-                        click = fun() ->
-                            group.alignRightTabs(hwnd, targetAlign)
-                    }))
+                        items = List2([
+                            CmiRegular({
+                                text = Localization.getString("AlignTopLeft") + " : " + shortTabName
+                                image = None
+                                flags = if currentAlignment = TopLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                                click = fun() ->
+                                    group.setTabAlign(hwnd, TopLeft)
+                            })
+                            CmiRegular({
+                                text = Localization.getString("AlignTopRight") + " : " + shortTabName
+                                image = None
+                                flags = if currentAlignment = TopRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                                click = fun() ->
+                                    group.setTabAlign(hwnd, TopRight)
+                            })
+                            CmiSeparator
+                            (let leftCount = group.alignCountToLeft(hwnd)
+                             let targetAlignName =
+                                match currentAlignment with
+                                | TopLeft -> Localization.getString("AlignTopRight")
+                                | TopRight -> Localization.getString("AlignTopLeft")
+                             let targetAlign =
+                                match currentAlignment with
+                                | TopLeft -> TopRight
+                                | TopRight -> TopLeft
+                             CmiRegular({
+                                text = System.String.Format(Localization.getString("AlignLeftTabsChange"), leftCount, targetAlignName)
+                                image = None
+                                flags = if leftCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
+                                click = fun() ->
+                                    group.alignLeftTabs(hwnd, targetAlign)
+                            }))
+                            (let rightCount = group.alignCountToRight(hwnd)
+                             let targetAlignName =
+                                match currentAlignment with
+                                | TopLeft -> Localization.getString("AlignTopRight")
+                                | TopRight -> Localization.getString("AlignTopLeft")
+                             let targetAlign =
+                                match currentAlignment with
+                                | TopLeft -> TopRight
+                                | TopRight -> TopLeft
+                             CmiRegular({
+                                text = System.String.Format(Localization.getString("AlignRightTabsChange"), rightCount, targetAlignName)
+                                image = None
+                                flags = if rightCount <= 0 then List2([MenuFlags.MF_GRAYED]) else List2()
+                                click = fun() ->
+                                    group.alignRightTabs(hwnd, targetAlign)
+                            }))
+                        ])
+                        flags = List2()
+                    })
                 ])
                 flags = List2()
             })
 
         let tabPinSubMenu =
             let isPinned = group.isPinned(hwnd)
-            let tabName =
-                let ti = this.ts.tabInfo(Tab(hwnd))
-                if ti.text.Length > 20 then ti.text.Substring(0, 20) + "..." else ti.text
+            let tabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             let pinToggleText =
                 if isPinned then
                     Localization.getString("UnpinThisTab") + " : " + tabName
@@ -2847,10 +2871,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let currentFill = group.getTabFillColor(hwnd)
             let currentUnderline = group.getTabUnderlineColor(hwnd)
             let currentBorder = group.getTabBorderColor(hwnd)
-            let tabText = this.ts.tabInfo(Tab(hwnd)).text
-            let shortTabText =
-                if tabText.Length <= 9 then tabText
-                else tabText.Substring(0, 9) + "..."
+            let shortTabText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             // Check if color matches by RGB (ignore alpha) and type
             let isColorMatch (current: Color option) (defColor: Color) =
                 current |> Option.exists (fun c ->
@@ -3034,13 +3055,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
                  
-        let closeTabItem = 
-            let tabText = this.ts.tabInfo(Tab(hwnd)).text
-            let displayText = 
-                if tabText.Length <= 9 then
-                    tabText
-                else
-                    tabText.Substring(0, 9) + "..."
+        let closeTabItem =
+            let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             CmiRegular({
                 text = String.Format(Localization.getString("CloseTab"), displayText)
                 image = None

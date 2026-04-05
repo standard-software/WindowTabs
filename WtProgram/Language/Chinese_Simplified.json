@@ -50,8 +50,6 @@
   "EnableHoverActivate": "鼠标悬停时切换标签页",
 
   "TabPositionByDefault": "标签页位置",
-  "AlignLeft": "靠左对齐",
-  "AlignRight": "靠右对齐",
   "HideTabsWhenDownByDefault": "标签页在下方时隐藏功能",
   "HideTabsNever": "不隐藏",
   "HideTabsWhenDown": "指定时间后隐藏",
@@ -136,10 +134,11 @@
   "SnapTabMarginTop": "顶部添加边距",
 
   "TabAlignMenu": "标签页位置",
-  "AlignTopLeft": "靠左",
-  "AlignTopRight": "靠右",
   "AlignAllTopLeft": "将所有标签页靠左对齐",
   "AlignAllTopRight": "将所有标签页靠右对齐",
+  "AlignTabSubMenu": "单个标签页对齐",
+  "AlignTopLeft": "靠左",
+  "AlignTopRight": "靠右",
   "AlignLeftTabsChange": "将左侧{0}个标签页设为{1}",
   "AlignRightTabsChange": "将右侧{0}个标签页设为{1}",
 

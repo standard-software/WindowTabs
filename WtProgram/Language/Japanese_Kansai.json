@@ -50,8 +50,6 @@
   "EnableHoverActivate": "マウス乗せたらタブ切り替わるで",
 
   "TabPositionByDefault": "タブの位置",
-  "AlignLeft": "左寄せ",
-  "AlignRight": "右寄せ",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
   "HideTabsNever": "隠さへん",
   "HideTabsWhenDown": "指定した時間で隠すで",
@@ -136,10 +134,11 @@
   "SnapTabMarginTop": "上に余白あけるで",
 
   "TabAlignMenu": "タブの位置やで",
-  "AlignTopLeft": "左寄せ",
-  "AlignTopRight": "右寄せ",
   "AlignAllTopLeft": "全部のタブを左寄せにするで",
   "AlignAllTopRight": "全部のタブを右寄せにするで",
+  "AlignTabSubMenu": "個別タブ配置やで",
+  "AlignTopLeft": "左寄せ",
+  "AlignTopRight": "右寄せ",
   "AlignLeftTabsChange": "左{0}タブを{1}にするで",
   "AlignRightTabsChange": "右{0}タブを{1}にするで",
 
