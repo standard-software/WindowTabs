@@ -225,7 +225,7 @@ type AppearanceView() as this =
     // Row indices for each section
     // Upper panel: int properties -> dark mode
     let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
-    let splitMenuRow = darkModeRow + 1
+    // splitMenuRow removed (EnableSplitMoveSnapMenu setting deleted)
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -434,25 +434,7 @@ type AppearanceView() as this =
         upperPanel.SetColumn(checkbox, 1)
         checkbox
 
-    // Create split menu checkbox at the row below dark mode
-    let splitMenuLabel =
-        let label = Label()
-        label.AutoSize <- true
-        label.Text <- Localization.getString("EnableSplitMoveSnapMenu")
-        label.TextAlign <- ContentAlignment.MiddleLeft
-        label.Margin <- Padding(0,8,0,5)
-        upperPanel.Controls.Add(label)
-        upperPanel.SetRow(label, splitMenuRow)
-        upperPanel.SetColumn(label, 0)
-        label
-
-    let splitMenuCheckbox =
-        let checkbox = settingsCheckboxBool "EnableSplitMoveSnapMenu" true
-        checkbox.Margin <- Padding(0,5,0,5)
-        upperPanel.Controls.Add(checkbox)
-        upperPanel.SetRow(checkbox, splitMenuRow)
-        upperPanel.SetColumn(checkbox, 1)
-        checkbox
+    // EnableSplitMoveSnapMenu setting removed
 
     let setEditorValues appearance =
         allPropertyKeys |> List.iter (fun key ->
