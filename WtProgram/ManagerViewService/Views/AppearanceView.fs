@@ -112,7 +112,7 @@ type AppearanceView() as this =
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 3  // int props + pinned width row + dark mode + split menu
+    let upperRowCount = intProperties.length + 2  // int props + pinned width row + dark mode
     let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
@@ -225,7 +225,6 @@ type AppearanceView() as this =
     // Row indices for each section
     // Upper panel: int properties -> dark mode
     let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
-    // splitMenuRow removed (EnableSplitMoveSnapMenu setting deleted)
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -433,8 +432,6 @@ type AppearanceView() as this =
         upperPanel.SetRow(checkbox, darkModeRow)
         upperPanel.SetColumn(checkbox, 1)
         checkbox
-
-    // EnableSplitMoveSnapMenu setting removed
 
     let setEditorValues appearance =
         allPropertyKeys |> List.iter (fun key ->

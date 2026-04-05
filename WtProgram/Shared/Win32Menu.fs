@@ -22,12 +22,8 @@ and CmiPopUp = {
     }
 
 module Win32Menu =
-    /// Whether the last menu click was in the right half of the menu item
-    let mutable lastClickInRightHalf = false
     /// Top-level menu handle (valid while menu is displayed)
     let mutable lastTopMenuHandle = IntPtr.Zero
-    /// Optional callback fired after menu is created but before TrackPopupMenuEx
-    let mutable onMenuCreated : (IntPtr -> unit) option = None
     /// Whether dark mode is enabled for the current menu
     let mutable isDarkMode = false
 
@@ -99,25 +95,12 @@ module Win32Menu =
         )
         trackTimer.Start()
 
-        match onMenuCreated with
-        | Some(callback) -> callback(hMenu)
-        | None -> ()
-
         let id = WinUserApi.TrackPopupMenuEx(hMenu, TrackPopupMenuFlags.TPM_RETURNCMD, pt.x, pt.y, hwnd, IntPtr.Zero)
 
         trackTimer.Stop()
         trackTimer.Dispose()
 
-        // Determine click position using cached data from while menu was displayed
-        lastClickInRightHalf <- false
         if id <> 0 then
-            match (!cachedItemRects).TryFind(id) with
-            | Some(rect) ->
-                let cursor = !cachedCursor
-                let midX = (rect.Left + rect.Right) / 2
-                lastClickInRightHalf <- cursor.X > midX
-            | None -> ()
-
             match handlers.Value.tryFind id with
             | Some(click) -> click()
             | None -> ()

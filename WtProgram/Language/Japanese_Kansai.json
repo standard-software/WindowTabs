@@ -17,7 +17,6 @@
   "Indent Normal": "上方向タブの端からの距離",
   "Indent Flipped": "下方向タブの端からの距離",
   "MenuDarkMode": "メニューをダークモードにするで",
-  "EnableSplitMoveSnapMenu": "移動とスナップメニューを合わせて表示するで",
 
   "ColorTheme": "カラーテーマ",
   "SaveAs": "名前を付けて保存するで",
@@ -83,16 +82,6 @@
   "SnapRight": "右スナップ",
   "SnapTop": "上スナップ",
   "SnapBottom": "下スナップ",
-  "MoveSnapMenuCombined": {
-    "MoveEdgeLeft": "左端 移動",
-    "MoveEdgeRight": "右端 移動",
-    "MoveEdgeTop": "上端 移動",
-    "MoveEdgeBottom": "下端 移動",
-    "SnapLeft": "スナップ",
-    "SnapRight": "スナップ",
-    "SnapTop": "スナップ",
-    "SnapBottom": "スナップ"
-  },
   "MoveCorner": "コーナー",
   "MoveEdgeTopLeft": "左上",
   "MoveEdgeTopRight": "右上",
