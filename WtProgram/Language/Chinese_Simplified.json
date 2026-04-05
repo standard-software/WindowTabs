@@ -17,7 +17,6 @@
   "Indent Normal": "标签页在上方时的边缘距离",
   "Indent Flipped": "标签页在下方时的边缘距离",
   "MenuDarkMode": "菜单使用深色模式",
-  "EnableSplitMoveSnapMenu": "合并显示移动和贴靠菜单",
 
   "ColorTheme": "颜色主题",
   "SaveAs": "另存为",
@@ -83,16 +82,6 @@
   "SnapRight": "贴靠右侧",
   "SnapTop": "贴靠上方",
   "SnapBottom": "贴靠下方",
-  "MoveSnapMenuCombined": {
-    "MoveEdgeLeft": "移动 左端",
-    "MoveEdgeRight": "移动 右端",
-    "MoveEdgeTop": "移动 上端",
-    "MoveEdgeBottom": "移动 下端",
-    "SnapLeft": "贴靠",
-    "SnapRight": "贴靠",
-    "SnapTop": "贴靠",
-    "SnapBottom": "贴靠"
-  },
   "MoveCorner": "角落",
   "MoveEdgeTopLeft": "左上",
   "MoveEdgeTopRight": "右上",

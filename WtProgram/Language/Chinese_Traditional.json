@@ -17,7 +17,6 @@
   "Indent Normal": "分頁在上方時的邊緣距離",
   "Indent Flipped": "分頁在下方時的邊緣距離",
   "MenuDarkMode": "選單使用深色模式",
-  "EnableSplitMoveSnapMenu": "合併顯示移動和貼靠選單",
 
   "ColorTheme": "顏色主題",
   "SaveAs": "另存新檔",
@@ -83,16 +82,6 @@
   "SnapRight": "貼靠右側",
   "SnapTop": "貼靠上方",
   "SnapBottom": "貼靠下方",
-  "MoveSnapMenuCombined": {
-    "MoveEdgeLeft": "移動 左端",
-    "MoveEdgeRight": "移動 右端",
-    "MoveEdgeTop": "移動 上端",
-    "MoveEdgeBottom": "移動 下端",
-    "SnapLeft": "貼靠",
-    "SnapRight": "貼靠",
-    "SnapTop": "貼靠",
-    "SnapBottom": "貼靠"
-  },
   "MoveCorner": "角落",
   "MoveEdgeTopLeft": "左上",
   "MoveEdgeTopRight": "右上",

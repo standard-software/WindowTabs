@@ -17,7 +17,6 @@
   "Indent Normal": "Distance from edge when tabs up",
   "Indent Flipped": "Distance from edge when tabs down",
   "MenuDarkMode": "Menu Dark Mode",
-  "EnableSplitMoveSnapMenu": "Combined Move and Snap Menu",
 
   "ColorTheme": "Color Theme",
   "SaveAs": "Save As",
@@ -83,16 +82,6 @@
   "SnapRight": "Snap Right",
   "SnapTop": "Snap Top",
   "SnapBottom": "Snap Bottom",
-  "MoveSnapMenuCombined": {
-    "MoveEdgeLeft": "Move Left",
-    "MoveEdgeRight": "Move Right",
-    "MoveEdgeTop": "Move Top",
-    "MoveEdgeBottom": "Move Bottom",
-    "SnapLeft": "Snap",
-    "SnapRight": "Snap",
-    "SnapTop": "Snap",
-    "SnapBottom": "Snap"
-  },
   "MoveCorner": "Corner",
   "MoveEdgeTopLeft": "Top Left",
   "MoveEdgeTopRight": "Top Right",
