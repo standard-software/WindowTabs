@@ -184,6 +184,12 @@
   "SplitLeftTabsToGroupFormat": "左側{0}個分頁分割並連結到其他群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
+  "SystemMenu": "系統",
+  "SystemCopyExePath": "複製{0}路徑",
+  "SystemCopyWindowTitle": "複製視窗標題 : {0}",
+  "SystemOpenExeFolder": "開啟{0}的資料夾",
+  "SystemKillProcess": "強制結束此處理程序",
+
   "SettingsMenu": "設定...",
 
   "Settings": "設定",

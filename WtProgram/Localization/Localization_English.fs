@@ -188,6 +188,12 @@ module Localization_English =
         ("SplitLeftTabsToGroupFormat", "Split left {0} tabs and link to group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
 
+        ("SystemMenu", "System")
+        ("SystemCopyExePath", "Copy {0} path")
+        ("SystemCopyWindowTitle", "Copy window title : {0}")
+        ("SystemOpenExeFolder", "Open folder of {0}")
+        ("SystemKillProcess", "Force kill this process")
+
         ("SettingsMenu", "Settings...")
 
         ("Settings", "Settings...")

@@ -184,6 +184,12 @@
   "SplitLeftTabsToGroupFormat": "左側{0}タブを分割して他のグループにくっつけるで",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
+  "SystemMenu": "システムやで",
+  "SystemCopyExePath": "{0}のパスコピーするで",
+  "SystemCopyWindowTitle": "ウィンドウタイトルコピーするで : {0}",
+  "SystemOpenExeFolder": "{0}のフォルダ開くで",
+  "SystemKillProcess": "このプロセス強制終了するで",
+
   "SettingsMenu": "設定やで...",
 
   "Settings": "設定やで",

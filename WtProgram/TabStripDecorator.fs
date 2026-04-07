@@ -2893,7 +2893,57 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
-                 
+        let systemSubMenu =
+            let window = os.windowFromHwnd(hwnd)
+            let exeName = try System.IO.Path.GetFileName(window.pid.processPath) with _ -> "unknown.exe"
+            let exePath = try window.pid.processPath with _ -> ""
+            let windowTitle = try window.text with _ -> ""
+            let shortWindowTitle = TabNameHelper.truncate windowTitle
+            CmiPopUp({
+                text = Localization.getString("SystemMenu")
+                image = None
+                items = List2([
+                    CmiRegular({
+                        text = String.Format(Localization.getString("SystemCopyExePath"), exeName)
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            try System.Windows.Forms.Clipboard.SetText(exePath) with _ -> ()
+                    })
+                    CmiRegular({
+                        text = String.Format(Localization.getString("SystemCopyWindowTitle"), shortWindowTitle)
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            try System.Windows.Forms.Clipboard.SetText(windowTitle) with _ -> ()
+                    })
+                    CmiSeparator
+                    CmiRegular({
+                        text = String.Format(Localization.getString("SystemOpenExeFolder"), exeName)
+                        image = None
+                        flags = if exePath <> "" then List2() else List2([MenuFlags.MF_GRAYED])
+                        click = fun() ->
+                            try
+                                let folder = System.IO.Path.GetDirectoryName(exePath)
+                                let psi = System.Diagnostics.ProcessStartInfo(folder)
+                                psi.UseShellExecute <- true
+                                System.Diagnostics.Process.Start(psi) |> ignore
+                            with _ -> ()
+                    })
+                    CmiRegular({
+                        text = Localization.getString("SystemKillProcess")
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            try
+                                let proc = System.Diagnostics.Process.GetProcessById(window.pid.pid)
+                                proc.Kill()
+                            with _ -> ()
+                    })
+                ])
+                flags = List2()
+            })
+
         let closeTabItem =
             let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             CmiRegular({
@@ -3722,6 +3772,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(tabPinSubMenu)
             Some(tabColorSubMenu)
             Some(tabNameSubMenu)
+            Some(CmiSeparator)
+            Some(systemSubMenu)
             Some(CmiSeparator)
             Some(managerItem)
         ]).choose(id)
