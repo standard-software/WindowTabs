@@ -10,6 +10,7 @@
 - Renamed "Move Other" menu to "Position Other"
 - Replaced "Corner" submenu with "Move" submenu containing edge and corner positions
 - TopMost windows are no longer excluded from tab management
+- Added System submenu: copy exe path, copy window title, open exe folder, force kill process
 
 ## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
