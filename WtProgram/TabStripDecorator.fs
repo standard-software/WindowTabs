@@ -2444,13 +2444,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             [
                 CmiSeparator
                 CmiPopUp({
-                    text = Localization.getString("MoveCorner")
+                    text = Localization.getString("MoveEdgeMenu")
                     image = None
                     items = List2([
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
+                        CmiSeparator
                         CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
                         CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() })
+                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
                     ])
                     flags = List2()
                 })

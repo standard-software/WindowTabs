@@ -105,7 +105,7 @@ module Localization_English =
         ("SnapCenterVertical", "Center Vertically")
         ("SnapMaximizeDisplay", "Snap Display")
         ("SnapMaximizeDesktop", "Snap Desktop")
-        ("MovePositionOther", "Move Other")
+        ("MovePositionOther", "Position Other")
         ("Display", "Display")
         ("Left", "Left")
         ("Right", "Right")
