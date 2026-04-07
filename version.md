@@ -7,6 +7,8 @@
 - Restructured Move/Snap menu: Snap Left/Right at top level, Move submenu inside "Position Other"
 - Removed "Combined Move and Snap Menu" setting and all related split menu code
 - Restructured Tab Color Settings menu: color selection in submenus per scope (this tab, left/right tabs, all tabs) with shared Reset item
+- Renamed "Move Other" menu to "Position Other"
+- Replaced "Corner" submenu with "Move" submenu containing edge and corner positions
 
 ## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
