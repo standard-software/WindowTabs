@@ -39,7 +39,6 @@ type FilterService() as this =
             fun() -> window.pid.isCurrentProcess.not
             fun() -> window.isWindow
             fun() -> window.isVisibleOnScreen
-            fun() -> window.isTopMost.not
             fun() -> this.isValidOwner(window)
             //Win32 Dialogue class
             fun() -> window.className <> "#32770"
