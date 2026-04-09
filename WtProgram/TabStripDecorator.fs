@@ -2583,20 +2583,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         text = Localization.getString("AlignTabSubMenu")
                         image = None
                         items = List2([
-                            CmiRegular({
-                                text = Localization.getString("AlignTopLeft") + " : " + shortTabName
+                            (let targetAlign = match currentAlignment with TopLeft -> TopRight | TopRight -> TopLeft
+                             let targetAlignLabel = match currentAlignment with
+                                                    | TopLeft -> Localization.getString("AlignThisTabRight")
+                                                    | TopRight -> Localization.getString("AlignThisTabLeft")
+                             CmiRegular({
+                                text = targetAlignLabel + " : " + shortTabName
                                 image = None
-                                flags = if currentAlignment = TopLeft then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
+                                flags = List2()
                                 click = fun() ->
-                                    group.setTabAlign(hwnd, TopLeft)
-                            })
-                            CmiRegular({
-                                text = Localization.getString("AlignTopRight") + " : " + shortTabName
-                                image = None
-                                flags = if currentAlignment = TopRight then List2([MenuFlags.MF_GRAYED; MenuFlags.MF_CHECKED]) else List2()
-                                click = fun() ->
-                                    group.setTabAlign(hwnd, TopRight)
-                            })
+                                    group.setTabAlign(hwnd, targetAlign)
+                            }))
                             CmiSeparator
                             (let leftCount = group.alignCountToLeft(hwnd)
                              let targetAlignName =
