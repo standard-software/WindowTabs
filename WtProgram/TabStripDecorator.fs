@@ -3746,8 +3746,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 image = None
                 items = List2([
                     closeTabItem
+                    CmiSeparator
                     closeLeftTabsItem
                     closeRightTabsItem
+                    CmiSeparator
                     closeOtherTabsItem
                     closeAllTabsItem
                 ])
