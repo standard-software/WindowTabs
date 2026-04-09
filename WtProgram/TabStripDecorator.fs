@@ -2655,49 +2655,47 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             else group.pinTab(hwnd)
                     })
                     CmiSeparator
+                    (let count = group.countToLeft(hwnd)
+                     CmiRegular({
+                        text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
+                        image = None
+                        flags = List2()
+                        click = fun() -> group.pinLeftTabs(hwnd)
+                    }))
+                    (let count = group.countToLeft(hwnd)
+                     CmiRegular({
+                        text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
+                        image = None
+                        flags = List2()
+                        click = fun() -> group.unpinLeftTabs(hwnd)
+                    }))
+                    (let count = group.countToRight(hwnd)
+                     CmiRegular({
+                        text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
+                        image = None
+                        flags = List2()
+                        click = fun() -> group.pinRightTabs(hwnd)
+                    }))
+                    (let count = group.countToRight(hwnd)
+                     CmiRegular({
+                        text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
+                        image = None
+                        flags = List2()
+                        click = fun() -> group.unpinRightTabs(hwnd)
+                    }))
+                    CmiSeparator
                     CmiRegular({
                         text = Localization.getString("PinAllTabs")
                         image = None
-                        flags = if group.allPinned then List2([MenuFlags.MF_GRAYED]) else List2()
+                        flags = List2()
                         click = fun() -> group.pinAll()
                     })
                     CmiRegular({
                         text = Localization.getString("UnpinAllTabs")
                         image = None
-                        flags = if group.nonePinned then List2([MenuFlags.MF_GRAYED]) else List2()
+                        flags = List2()
                         click = fun() -> group.unpinAll()
                     })
-                    CmiSeparator
-                    (let count = group.countToLeft(hwnd)
-                     if not isPinned then
-                        CmiRegular({
-                            text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
-                            image = None
-                            flags = List2()
-                            click = fun() -> group.pinLeftTabs(hwnd)
-                        })
-                     else
-                        CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
-                            image = None
-                            flags = List2()
-                            click = fun() -> group.unpinLeftTabs(hwnd)
-                        }))
-                    (let count = group.countToRight(hwnd)
-                     if not isPinned then
-                        CmiRegular({
-                            text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
-                            image = None
-                            flags = List2()
-                            click = fun() -> group.pinRightTabs(hwnd)
-                        })
-                     else
-                        CmiRegular({
-                            text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
-                            image = None
-                            flags = List2()
-                            click = fun() -> group.unpinRightTabs(hwnd)
-                        }))
                 ])
                 flags = List2()
             })
