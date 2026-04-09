@@ -403,10 +403,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         Services.program.setWindowPinned(hwnd, false)
     member this.pinAll() =
         this.ts.pinAll()
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, true))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, true))
     member this.unpinAll() =
         this.ts.unpinAll()
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, false))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, false))
     member this.pinnedCount = this.ts.pinnedTabs.count
     member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
     member this.nonePinned = this.ts.pinnedTabs.count = 0
@@ -414,16 +414,16 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.countToRight(hwnd) = this.ts.countToRight(Tab(hwnd))
     member this.pinLeftTabs(hwnd) =
         this.ts.pinLeftTabs(Tab(hwnd))
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
     member this.pinRightTabs(hwnd) =
         this.ts.pinRightTabs(Tab(hwnd))
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
     member this.unpinLeftTabs(hwnd) =
         this.ts.unpinLeftTabs(Tab(hwnd))
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
     member this.unpinRightTabs(hwnd) =
         this.ts.unpinRightTabs(Tab(hwnd))
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, this.ts.isPinned(Tab(h))))
 
     member this.setTabFillColor(hwnd, color : Color option) =
         this.ts.setTabFillColor(Tab(hwnd), color)
@@ -452,10 +452,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.alignCountToRight(hwnd) = this.ts.alignCountToRight(Tab(hwnd))
     member this.alignLeftTabs(hwnd, newAlignment) =
         this.ts.alignLeftTabs(Tab(hwnd), newAlignment)
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
     member this.alignRightTabs(hwnd, newAlignment) =
         this.ts.alignRightTabs(Tab(hwnd), newAlignment)
-        this.ts.lorder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
+        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowAlignment(h, Some(this.ts.getTabAlign(Tab(h)))))
 
     member this.tabPosition
         with get() = perGroupTabPosition
@@ -915,11 +915,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.switchWindow(next,force) =
         if this.windowCount > 1 then
-            let lorder = this.ts.visualOrder
-            let max = lorder.count - 1
+            let order = this.ts.visualOrder
+            let max = order.count - 1
             let top = zorderCell.value.tryHead
             top.iter <| fun top ->
-                (lorder.tryFindIndex((=)(Tab(top)))).iter <| fun index ->
+                (order.tryFindIndex((=)(Tab(top)))).iter <| fun index ->
                     let targetIndex = if next then index + 1 else index - 1
                     let targetIndex = 
                         if targetIndex > max then 0
@@ -1001,6 +1001,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.foregroundChanged = foregroundEvent.Publish
     member this.flash = flashEvent.Publish
     member this.removed = removedEvent.Publish
-    member this.lorder = this.ts.lorder.map(fun(Tab(hwnd)) -> hwnd)
+    member this.visualOrder = this.ts.visualOrder.map(fun(Tab(hwnd)) -> hwnd)
 
     

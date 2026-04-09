@@ -6,6 +6,7 @@
 - Renamed localization keys: TabPositionMenu→TabAlignMenu, AlignGroupTopLeft/Right→AlignTopLeft/Right, AlignLeftTabsFormat/Right→AlignLeftTabsChange/Right
 - Restructured Move/Snap menu: Snap Left/Right at top level, Move submenu inside "Position Other"
 - Removed "Combined Move and Snap Menu" setting and all related split menu code
+- Internal: unified the redundant `lorder` and `visualOrder` tab list representations into a single `visualOrder` list, kept canonically sorted as left-pinned, left-unpinned, right-pinned, right-unpinned so the stored order always matches the on-screen order
 - Restructured Tab Color Settings menu: color selection in submenus per scope (this tab, left/right tabs, all tabs) with shared "Clear color setting" item
   - Checkmarks and toggle-off behavior now apply only inside the "this tab" submenu; left/right/all-tab submenus always apply the clicked color without showing checkmarks
   - Renamed "Reset" to "Clear color setting" across all languages

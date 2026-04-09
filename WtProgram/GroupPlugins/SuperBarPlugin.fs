@@ -271,7 +271,7 @@ type SuperBarPlugin() as this =
                             window.setForeground(true)
                         else
                             window.minimize()
-                    tabs = this.ts.lorder.map <| fun tab ->
+                    tabs = this.ts.visualOrder.map <| fun tab ->
                         tab.GetHashCode().ToString(), {
                             close = fun() -> 
                                 let (Tab(hwnd)) = tab
@@ -294,7 +294,7 @@ type SuperBarPlugin() as this =
                             icon = this.ts.tabInfo(tab).iconSmall
                         }
                     close = fun() ->
-                        this.ts.lorder.iter <| fun tab ->
+                        this.ts.visualOrder.iter <| fun tab ->
                             let (Tab(hwnd)) = tab
                             this.os.windowFromHwnd(hwnd).close()
                         

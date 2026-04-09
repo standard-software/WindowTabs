@@ -311,8 +311,8 @@ type Program() as this =
                     let invokerAlign = wg.ts.getTabAlign(invokerTab)
                     wg.ts.setTabAlign(newTab, invokerAlign)
                     Services.program.setWindowAlignment(hwnd, Some(invokerAlign))
-                    // Position new tab after the invoker tab in lorder
-                    let tabs = wg.ts.lorder
+                    // Position new tab after the invoker tab in visual order
+                    let tabs = wg.ts.visualOrder
                     match tabs.tryFindIndex((=) invokerTab) with
                     | Some(invokerIdx) ->
                         match tabs.tryFindIndex((=) newTab) with
@@ -334,7 +334,7 @@ type Program() as this =
             | :? GroupInfo as gi ->
                 gi.invokeGroup <| fun() ->
                     let wg = gi.group
-                    let tabs = wg.ts.lorder
+                    let tabs = wg.ts.visualOrder
                     let newTab = Tab(hwnd)
                     // Find the rightmost tab of the same exe (excluding the new tab)
                     let mutable lastSameExeIdx = -1
@@ -417,7 +417,7 @@ type Program() as this =
             let groupsArray = JArray()
             this.desktop.groups.iter <| fun gi ->
                 let windowsArray = JArray()
-                gi.lorder.iter <| fun hwnd ->
+                gi.visualOrder.iter <| fun hwnd ->
                     let window = os.windowFromHwnd(hwnd)
                     if window.isWindow then
                         let windowObj = JObject()
@@ -750,8 +750,8 @@ type Program() as this =
             if value then
                 // When disabling, save current tab group configuration first (with per-group tab position)
                 let groupConfigs = this.desktop.groups.map <| fun gi ->
-                    let pinnedHwnds = gi.lorder.where(fun hwnd -> gi.isPinned(hwnd))
-                    (gi.lorder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, pinnedHwnds)
+                    let pinnedHwnds = gi.visualOrder.where(fun hwnd -> gi.isPinned(hwnd))
+                    (gi.visualOrder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, pinnedHwnds)
                 savedTabGroups.set(groupConfigs)
 
                 // Set disabled state before destroying groups

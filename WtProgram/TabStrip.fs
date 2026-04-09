@@ -29,7 +29,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let sizeCell = Cell.create(Sz.empty)
     let alphaCell = Cell.create(byte(0xFF))
     let locationCell = Cell.create(Pt.empty)
-    let lorderCell = Cell.create(List2())
+    let visualOrderCell = Cell.create(List2())
     let zorderCell = Cell.create(List2())
     let visibleCell = Cell.create(false)
     let transparentCell = Cell.create(true)
@@ -186,7 +186,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             )
             hover = hoverCell.value
             captured = capturedCell.value
-            lorder = lorderCell.value
+            visualOrder = visualOrderCell.value
             zorder = zorderCell.value
             size = this.size
             slide = this.slide
@@ -365,7 +365,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member private this.appearance = appearanceCell.value.Value
     member private this.top = zorderCell.value.head
-    member private this.isEmpty = this.lorder.isEmpty
+    member private this.isEmpty = this.visualOrder.isEmpty
     member private this.contentOffset = this.appearance.tabHeightOffset
     member private this.location = locationCell.value 
     
@@ -399,11 +399,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let addToEnd(l:Cell<List2<_>>)=
             if l.value.any((=) tab).not then
                 l.map(fun l -> l.append(tab))
-        addToEnd(lorderCell)
+        addToEnd(visualOrderCell)
         addToEnd(zorderCell)
         // Set default alignment for new tab
         if tabAlignmentCell.value.tryFind(tab).IsNone then
             tabAlignmentCell.map(fun m -> m.add tab defaultAlignmentCell.value)
+        // Ensure the newly added tab sits in the correct visual zone
+        this.normalizeVisualOrder()
         slide.iter <| fun slide ->
             this.slide <- Some(slide)
         Cell.endUpdate()
@@ -418,15 +420,15 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tabFillColor.map(fun m -> m.remove tab)
         tabUnderlineColor.map(fun m -> m.remove tab)
         tabBorderColor.map(fun m -> m.remove tab)
-        lorderCell.map(fun l -> l.where((<>) tab))
+        visualOrderCell.map(fun l -> l.where((<>) tab))
         zorderCell.map(fun z -> z.where((<>) tab))
         tabInfoCell.map(fun m -> m.remove tab)
         Cell.endUpdate()
 
-    member this.tabs : Set2<Tab> = Set2(lorderCell.value)
+    member this.tabs : Set2<Tab> = Set2(visualOrderCell.value)
 
-    member this.lorder 
-        with get() : List2<_> = lorderCell.value
+    member this.visualOrder
+        with get() : List2<_> = visualOrderCell.value
 
 
     member this.movedTab = this.ts.movedTab
@@ -437,12 +439,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         match newAlignment with
         | Some(a) -> tabAlignmentCell.map(fun m -> m.add tab a)
         | None -> ()
-        lorderCell.set(lorderCell.value.move((=) tab, index))
+        visualOrderCell.set(visualOrderCell.value.move((=) tab, index))
         // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
         // Only consider tabs in the same alignment group for pin zone detection
-        let newLorder = lorderCell.value
+        let newOrder = visualOrderCell.value
         let tabAlign = this.getTabAlign(tab)
-        let sameGroupTabs = newLorder.where(fun t -> this.getTabAlign(t) = tabAlign)
+        let sameGroupTabs = newOrder.where(fun t -> this.getTabAlign(t) = tabAlign)
         let tabIndexInGroup = sameGroupTabs.tryFindIndex((=) tab)
         match tabIndexInGroup with
         | Some idx ->
@@ -457,6 +459,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 if pinnedTabsCell.value.contains(tab) then
                     pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
         | None -> ()
+        // Restore the canonical visual ordering after any alignment/pin changes
+        this.normalizeVisualOrder()
         Cell.endUpdate()
         monitor.tabMoved(tab, index)
         tabMovedEvent.Trigger(tab, index)
@@ -481,86 +485,49 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isPinnedThreadSafe(tab) = pinnedTabsSnapshot.contains(tab)
 
-    // Find the lorder index of the last pinned tab in same alignment group, or -1 if none
-    member private this.lastPinnedIdxInGroup(tabAlign) =
-        let lorder = lorderCell.value.list
-        let mutable lastIdx = -1
-        lorder |> List.iteri (fun i t ->
-            if this.getTabAlign(t) = tabAlign && pinnedTabsCell.value.contains(t) then
-                lastIdx <- i
-        )
-        lastIdx
+    // Canonical visual zone for a tab: left-pinned (0), left-unpinned (1),
+    // right-pinned (2), right-unpinned (3). The stored visualOrder list is kept
+    // sorted by this zone so that it exactly matches the on-screen left-to-right order.
+    member private this.visualZoneOf(tab) =
+        let align = this.getTabAlign(tab)
+        let pinned = pinnedTabsCell.value.contains(tab)
+        match align, pinned with
+        | TopLeft, true -> 0
+        | TopLeft, false -> 1
+        | TopRight, true -> 2
+        | TopRight, false -> 3
 
-    // Find the lorder index of the first tab in same alignment group, or 0 if none
-    member private this.firstTabIdxInGroup(tabAlign) =
-        let lorder = lorderCell.value.list
-        match lorder |> List.tryFindIndex (fun t -> this.getTabAlign(t) = tabAlign) with
-        | Some idx -> idx
-        | None -> 0
-
-    // Move tab to pinned zone end within its alignment group
-    // Must be called AFTER adding tab to pinnedTabsCell
-    member private this.moveToPinnedZone(tab) =
-        let lorder = lorderCell.value.list
-        let tabIdx = lorder |> List.findIndex ((=) tab)
-        let tabAlign = this.getTabAlign(tab)
-        // Find the position after the last OTHER pinned tab in the group
-        let mutable rawTargetIdx = this.firstTabIdxInGroup(tabAlign)
-        lorder |> List.iteri (fun i t ->
-            if t <> tab && this.getTabAlign(t) = tabAlign && pinnedTabsCell.value.contains(t) then
-                rawTargetIdx <- i + 1
-        )
-        // Only move if tab is outside pinned zone (after the last pinned tab)
-        // If tab is already within the pinned zone, keep it in place
-        if tabIdx >= rawTargetIdx then
-            // Adjust for List2.move: it removes first, then inserts
-            let targetIdx = if tabIdx < rawTargetIdx then rawTargetIdx - 1 else rawTargetIdx
-            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
-
-    // Move tab to unpinned zone start within its alignment group
-    // Must be called AFTER removing tab from pinnedTabsCell
-    member private this.moveToUnpinnedZone(tab) =
-        let lorder = lorderCell.value.list
-        let tabIdx = lorder |> List.findIndex ((=) tab)
-        let tabAlign = this.getTabAlign(tab)
-        let lastPinned = this.lastPinnedIdxInGroup(tabAlign)
-        let rawTargetIdx =
-            if lastPinned >= 0 then lastPinned + 1
-            else this.firstTabIdxInGroup(tabAlign)
-        // Only move if tab is inside pinned zone (before the unpinned zone start)
-        // If tab is already in the unpinned zone, keep it in place
-        if tabIdx < rawTargetIdx then
-            // Adjust for List2.move: it removes first, then inserts
-            let targetIdx = if tabIdx < rawTargetIdx then rawTargetIdx - 1 else rawTargetIdx
-            lorderCell.set(lorderCell.value.move((=) tab, targetIdx))
+    // Re-sort the stored list into canonical visual order while preserving the
+    // relative order within each zone (stable sort).
+    member private this.normalizeVisualOrder() =
+        let current = visualOrderCell.value.list
+        let sorted = current |> List.sortBy this.visualZoneOf
+        if sorted <> current then
+            visualOrderCell.set(List2(sorted))
 
     member this.pinTab(tab) =
         if not (pinnedTabsCell.value.contains(tab)) then
             pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
-            this.moveToPinnedZone(tab)
+            this.normalizeVisualOrder()
 
     member this.unpinTab(tab) =
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
-            this.moveToUnpinnedZone(tab)
+            this.normalizeVisualOrder()
 
     member this.pinAll() =
-        let allTabs = lorderCell.value
+        let allTabs = visualOrderCell.value
         pinnedTabsCell.set(allTabs.fold (Set2<Tab>()) (fun s t -> s.add(t)))
+        this.normalizeVisualOrder()
 
     member this.unpinAll() =
         pinnedTabsCell.set(Set2<Tab>())
+        this.normalizeVisualOrder()
 
-    // Visual order: left-aligned tabs in lorder order, then right-aligned tabs in lorder order
-    member this.visualOrder =
-        let leftTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TopLeft)
-        let rightTabs = lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = TopRight)
-        List2(leftTabs @ rightTabs)
-
-    // Get tabs in same alignment group as the given tab, in lorder order
+    // Get tabs in same alignment group as the given tab, in visual order
     member private this.sameAlignGroup(tab) =
         let tabAlign = this.getTabAlign(tab)
-        lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = tabAlign)
+        visualOrderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = tabAlign)
 
     // Tabs to the left of (and including) the given tab in visual order, regardless of alignment or pin state
     member private this.visualLeftTabs(tab) =
@@ -590,8 +557,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.visualLeftTabs(tab)
         |> List.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
         |> List.iter (fun t ->
-            pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-            this.moveToPinnedZone(t))
+            pinnedTabsCell.set(pinnedTabsCell.value.add(t)))
+        this.normalizeVisualOrder()
         Cell.endUpdate()
 
     // Pin all visual-right tabs of the given tab (including the tab itself), regardless of alignment
@@ -600,8 +567,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.visualRightTabs(tab)
         |> List.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
         |> List.iter (fun t ->
-            pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-            this.moveToPinnedZone(t))
+            pinnedTabsCell.set(pinnedTabsCell.value.add(t)))
+        this.normalizeVisualOrder()
         Cell.endUpdate()
 
     // Unpin all visual-left tabs of the given tab (including the tab itself), regardless of alignment
@@ -610,8 +577,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.visualLeftTabs(tab)
         |> List.filter (fun t -> pinnedTabsCell.value.contains(t))
         |> List.iter (fun t ->
-            pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-            this.moveToUnpinnedZone(t))
+            pinnedTabsCell.set(pinnedTabsCell.value.remove(t)))
+        this.normalizeVisualOrder()
         Cell.endUpdate()
 
     // Unpin all visual-right tabs of the given tab (including the tab itself), regardless of alignment
@@ -620,8 +587,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.visualRightTabs(tab)
         |> List.filter (fun t -> pinnedTabsCell.value.contains(t))
         |> List.iter (fun t ->
-            pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-            this.moveToUnpinnedZone(t))
+            pinnedTabsCell.set(pinnedTabsCell.value.remove(t)))
+        this.normalizeVisualOrder()
         Cell.endUpdate()
 
     // Count of same-alignment tabs to the left (including the tab itself), regardless of pin state
@@ -645,13 +612,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | Some idx ->
             let tabsToAlign = group |> List.take (idx + 1)
             tabsToAlign |> List.iter (fun t ->
-                tabAlignmentCell.map(fun m -> m.add t newAlignment)
-                // Reposition tab to correct pin zone in the new alignment group
-                if pinnedTabsCell.value.contains(t) then
-                    this.moveToPinnedZone(t)
-                else
-                    this.moveToUnpinnedZone(t)
-            )
+                tabAlignmentCell.map(fun m -> m.add t newAlignment))
+            this.normalizeVisualOrder()
         | None -> ()
 
     // Change alignment of same-alignment tabs to the right (including the tab itself)
@@ -661,13 +623,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | Some idx ->
             let tabsToAlign = group |> List.skip idx
             tabsToAlign |> List.iter (fun t ->
-                tabAlignmentCell.map(fun m -> m.add t newAlignment)
-                // Reposition tab to correct pin zone in the new alignment group
-                if pinnedTabsCell.value.contains(t) then
-                    this.moveToPinnedZone(t)
-                else
-                    this.moveToUnpinnedZone(t)
-            )
+                tabAlignmentCell.map(fun m -> m.add t newAlignment))
+            this.normalizeVisualOrder()
         | None -> ()
 
     member this.isMouseOver = isMouseOverExport :> ICellOutput<_>
@@ -680,11 +637,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.setTabAlign(tab, newAlignment) =
         tabAlignmentCell.map(fun m -> m.add tab newAlignment)
-        // Reposition tab to correct pin zone in the new alignment group
-        if pinnedTabsCell.value.contains(tab) then
-            this.moveToPinnedZone(tab)
-        else
-            this.moveToUnpinnedZone(tab)
+        // Restore canonical visual ordering after changing alignment
+        this.normalizeVisualOrder()
 
     member this.getTabAlign(tab) =
         match tabAlignmentCell.value.tryFind(tab) with
@@ -724,7 +678,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
                 tabAlignments = singleTabAligns
-                lorder = List2([tab])  // Only the dragged tab
+                visualOrder = List2([tab])  // Only the dragged tab
                 zorder = List2([tab])
         }
 
@@ -746,7 +700,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
                 tabAlignments = singleTabAligns
-                lorder = List2([tab])  // Only the dragged tab
+                visualOrder = List2([tab])  // Only the dragged tab
                 zorder = List2([tab])
         }
 

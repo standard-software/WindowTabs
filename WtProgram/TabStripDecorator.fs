@@ -2557,8 +2557,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         
         let tabPositionSubMenu =
             let currentAlignment = group.getTabAlign(hwnd)
-            let allTopLeft = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
-            let allTopRight = group.lorder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
+            let allTopLeft = group.visualOrder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
+            let allTopRight = group.visualOrder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
             let shortTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             CmiPopUp({
                 text = Localization.getString("TabAlignMenu")
@@ -2569,14 +2569,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = None
                         flags = if allTopLeft then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.lorder.list |> List.iter (fun h -> group.setTabAlign(h, TopLeft))
+                            group.visualOrder.list |> List.iter (fun h -> group.setTabAlign(h, TopLeft))
                     })
                     CmiRegular({
                         text = Localization.getString("AlignAllTopRight")
                         image = None
                         flags = if allTopRight then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.lorder.list |> List.iter (fun h -> group.setTabAlign(h, TopRight))
+                            group.visualOrder.list |> List.iter (fun h -> group.setTabAlign(h, TopRight))
                     })
                     CmiSeparator
                     CmiPopUp({
