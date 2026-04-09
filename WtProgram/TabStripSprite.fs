@@ -440,7 +440,7 @@ type TabStripSprite<'id> when 'id : equality = {
     appearance: TabAppearanceInfo
     hover: ('id * TabPart) option
     captured : ('id * TabPart) option
-    lorder: List2<'id>
+    visualOrder: List2<'id>
     zorder: List2<'id>
     size: Sz
     slide: ('id * int) option
@@ -462,9 +462,9 @@ type TabStripSprite<'id> when 'id : equality = {
         if this.appearance.tabPinnedTabWidthIcon then this.pinnedTabMinLen
         else max this.pinnedTabMinLen this.pinnedTabSettingLen
 
-    member private this.count = this.lorder.length
+    member private this.count = this.visualOrder.length
     member private this.pinnedCount =
-        this.lorder.where(fun tab -> this.pinnedTabs.contains(tab)).length
+        this.visualOrder.where(fun tab -> this.pinnedTabs.contains(tab)).length
     member private this.unpinnedCount = this.count - this.pinnedCount
 
     member private this.isPinned (tab: 'id) = this.pinnedTabs.contains(tab)
@@ -601,7 +601,7 @@ type TabStripSprite<'id> when 'id : equality = {
             let bounds = (0, this.size.width - int(tabLen))
             Pt(between bounds x, this.tabYOffset)
         | _ ->
-            let adjusted = this.adjustedLorder
+            let adjusted = this.adjustedVisualOrder
             let tabAlignment = this.getAdjustedAlignment(tab)
             let groupTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = tabAlignment)
             let groupStartX =
@@ -624,8 +624,8 @@ type TabStripSprite<'id> when 'id : equality = {
                 let centerX = float(x) + dragTabLen / 2.0
 
                 // Calculate group tabs and widths
-                let leftWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopLeft).list
-                let rightWithout = this.lorder.where(fun t -> t <> tab && this.getTabAlign(t) = TopRight).list
+                let leftWithout = this.visualOrder.where(fun t -> t <> tab && this.getTabAlign(t) = TopLeft).list
+                let rightWithout = this.visualOrder.where(fun t -> t <> tab && this.getTabAlign(t) = TopRight).list
                 let calcWidth (tabs: 'id list) =
                     if tabs.IsEmpty then 0.0
                     else
@@ -684,29 +684,29 @@ type TabStripSprite<'id> when 'id : equality = {
                                 offset <- offset + step
                         max 0 (min idx groupList.Length)
 
-                // Convert group index to lorder index (for List2.move)
-                let lorderWithout = this.lorder.where((<>) tab).list
+                // Convert group index to visual order index (for List2.move)
+                let visualWithout = this.visualOrder.where((<>) tab).list
                 let mutable groupCount = 0
-                let mutable lorderIdx = lorderWithout.Length
+                let mutable visualIdx = visualWithout.Length
                 let mutable found2 = false
-                for i in 0 .. lorderWithout.Length - 1 do
+                for i in 0 .. visualWithout.Length - 1 do
                     if not found2 then
-                        let t = lorderWithout.[i]
+                        let t = visualWithout.[i]
                         if this.getTabAlign(t) = targetAlignment then
                             if groupCount = groupIndex then
-                                lorderIdx <- i
+                                visualIdx <- i
                                 found2 <- true
                             else
                                 groupCount <- groupCount + 1
-                                lorderIdx <- i + 1
+                                visualIdx <- i + 1
 
-                Some(tab, lorderIdx, targetAlignment)
+                Some(tab, visualIdx, targetAlignment)
         | None -> None
 
-    member this.adjustedLorder : List2<'id> =
+    member this.adjustedVisualOrder : List2<'id> =
         match this.movedTab with
-        | Some(tab, index, _) -> this.lorder.move((=)tab, index)
-        | None -> this.lorder
+        | Some(tab, index, _) -> this.visualOrder.move((=)tab, index)
+        | None -> this.visualOrder
 
 
     member this.sprite =
@@ -746,7 +746,7 @@ type TabStripSprite<'id> when 'id : equality = {
             let tabH = (this.size.height) - 1
             if pt.y >= yOff && pt.y < yOff + tabH then
                 let x = float(pt.x)
-                let adjusted = this.adjustedLorder
+                let adjusted = this.adjustedVisualOrder
                 let leftTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopLeft)
                 let rightTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopRight)
                 let leftWidth = this.calcGroupWidth(leftTabs)
