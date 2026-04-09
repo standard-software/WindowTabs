@@ -2756,11 +2756,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.DrawRectangle(borderPen, 1, 1, size - 3, size - 3)
                 if isChecked then drawCheckmark g
                 img
-            // Build color selection submenu items for a set of target hwnds
-            let buildColorItems (targetHwnds: IntPtr list) =
+            // Build color selection submenu items for a set of target hwnds.
+            // showChecked=true enables the checkmark display and the toggle-off behavior,
+            // and is only used for the "this tab" submenu.
+            let buildColorItems (targetHwnds: IntPtr list) (showChecked: bool) =
                 let fillItems =
                     TabColorDefs.fillDefs |> List.map (fun def ->
-                        let isChecked = isColorMatch currentFill def.color
+                        let isChecked = showChecked && isColorMatch currentFill def.color
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createFillIcon def.color isChecked)
@@ -2772,7 +2774,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let underlineItems =
                     TabColorDefs.underlineDefs |> List.map (fun def ->
-                        let isChecked = isColorMatch currentUnderline def.color
+                        let isChecked = showChecked && isColorMatch currentUnderline def.color
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createUnderlineIcon def.color isChecked)
@@ -2784,7 +2786,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let borderItems =
                     TabColorDefs.borderDefs |> List.map (fun def ->
-                        let isChecked = isColorMatch currentBorder def.color
+                        let isChecked = showChecked && isColorMatch currentBorder def.color
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createBorderIcon def.color isChecked)
@@ -2821,7 +2823,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = String.Format(Localization.getString("TabColorThisTab"), shortTabText)
                     image = None
-                    items = List2(buildColorItems [hwnd])
+                    items = List2(buildColorItems [hwnd] true)
                     flags = List2()
                 })
             // Left tabs color submenu (includes current tab)
@@ -2830,7 +2832,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
                     image = None
-                    items = List2(buildColorItems leftHwnds)
+                    items = List2(buildColorItems leftHwnds false)
                     flags = List2()
                 })
             // Right tabs color submenu (includes current tab)
@@ -2839,7 +2841,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
                     image = None
-                    items = List2(buildColorItems rightHwnds)
+                    items = List2(buildColorItems rightHwnds false)
                     flags = List2()
                 })
             // All tabs color submenu
@@ -2848,7 +2850,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = Localization.getString("TabColorAllTabs")
                     image = None
-                    items = List2(buildColorItems allHwnds)
+                    items = List2(buildColorItems allHwnds false)
                     flags = List2()
                 })
 

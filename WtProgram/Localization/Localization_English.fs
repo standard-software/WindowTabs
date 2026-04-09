@@ -153,7 +153,7 @@ module Localization_English =
         ("TabColorApplyLeft", "Left {0} tab(s) color")
         ("TabColorApplyRight", "Right {0} tab(s) color")
         ("TabColorAllTabs", "All tabs color")
-        ("TabColorResetSimple", "Reset")
+        ("TabColorResetSimple", "Clear color setting")
         ("TabColorRed", "Red")
         ("TabColorBlue", "Blue")
         ("TabColorGreen", "Green")
