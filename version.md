@@ -6,7 +6,9 @@
 - Renamed localization keys: TabPositionMenu→TabAlignMenu, AlignGroupTopLeft/Right→AlignTopLeft/Right, AlignLeftTabsFormat/Right→AlignLeftTabsChange/Right
 - Restructured Move/Snap menu: Snap Left/Right at top level, Move submenu inside "Position Other"
 - Removed "Combined Move and Snap Menu" setting and all related split menu code
-- Restructured Tab Color Settings menu: color selection in submenus per scope (this tab, left/right tabs, all tabs) with shared Reset item
+- Restructured Tab Color Settings menu: color selection in submenus per scope (this tab, left/right tabs, all tabs) with shared "Clear color setting" item
+  - Checkmarks and toggle-off behavior now apply only inside the "this tab" submenu; left/right/all-tab submenus always apply the clicked color without showing checkmarks
+  - Renamed "Reset" to "Clear color setting" across all languages
 - Renamed "Move Other" menu to "Position Other"
 - Replaced "Corner" submenu with "Move" submenu containing edge and corner positions
 - TopMost windows are no longer excluded from tab management
