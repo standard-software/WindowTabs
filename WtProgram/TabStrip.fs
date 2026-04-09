@@ -562,100 +562,66 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let tabAlign = this.getTabAlign(tab)
         lorderCell.value.list |> List.filter (fun t -> this.getTabAlign(t) = tabAlign)
 
-    // Count of same-pin-state, same-alignment tabs to the left (including the tab itself)
+    // Tabs to the left of (and including) the given tab in visual order, regardless of alignment or pin state
+    member private this.visualLeftTabs(tab) =
+        let order = this.visualOrder.list
+        match order |> List.tryFindIndex ((=) tab) with
+        | Some idx -> order |> List.take (idx + 1)
+        | None -> []
+
+    // Tabs to the right of (and including) the given tab in visual order, regardless of alignment or pin state
+    member private this.visualRightTabs(tab) =
+        let order = this.visualOrder.list
+        match order |> List.tryFindIndex ((=) tab) with
+        | Some idx -> order |> List.skip idx
+        | None -> []
+
+    // Count of tabs to the left (including the tab itself) in visual order, regardless of alignment or pin state
     member this.countToLeft(tab) =
-        let tabIsPinned = pinnedTabsCell.value.contains(tab)
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            group
-            |> List.take (idx + 1)
-            |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
-            |> List.length
-        | None -> 0
+        this.visualLeftTabs(tab) |> List.length
 
-    // Count of same-pin-state, same-alignment tabs to the right (including the tab itself)
+    // Count of tabs to the right (including the tab itself) in visual order, regardless of alignment or pin state
     member this.countToRight(tab) =
-        let tabIsPinned = pinnedTabsCell.value.contains(tab)
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            group
-            |> List.skip idx
-            |> List.filter (fun t -> pinnedTabsCell.value.contains(t) = tabIsPinned)
-            |> List.length
-        | None -> 0
+        this.visualRightTabs(tab) |> List.length
 
-    // Pin same-alignment tabs to the left of the given tab (including the tab itself)
+    // Pin all visual-left tabs of the given tab (including the tab itself), regardless of alignment
     member this.pinLeftTabs(tab) =
         Cell.beginUpdate()
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            let tabsToPin =
-                group
-                |> List.mapi (fun i t -> (i, t))
-                |> List.filter (fun (i, t) -> i <= idx && not (pinnedTabsCell.value.contains(t)))
-                |> List.map snd
-            tabsToPin |> List.iter (fun t ->
-                pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-                this.moveToPinnedZone(t)
-            )
-        | None -> ()
+        this.visualLeftTabs(tab)
+        |> List.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
+        |> List.iter (fun t ->
+            pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+            this.moveToPinnedZone(t))
         Cell.endUpdate()
 
-    // Pin same-alignment tabs to the right of the given tab (including the tab itself)
+    // Pin all visual-right tabs of the given tab (including the tab itself), regardless of alignment
     member this.pinRightTabs(tab) =
         Cell.beginUpdate()
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            let tabsToPin =
-                group
-                |> List.mapi (fun i t -> (i, t))
-                |> List.filter (fun (i, t) -> i >= idx && not (pinnedTabsCell.value.contains(t)))
-                |> List.map snd
-            tabsToPin |> List.iter (fun t ->
-                pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-                this.moveToPinnedZone(t)
-            )
-        | None -> ()
+        this.visualRightTabs(tab)
+        |> List.filter (fun t -> not (pinnedTabsCell.value.contains(t)))
+        |> List.iter (fun t ->
+            pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+            this.moveToPinnedZone(t))
         Cell.endUpdate()
 
-    // Unpin same-alignment tabs to the left of the given tab (including the tab itself)
+    // Unpin all visual-left tabs of the given tab (including the tab itself), regardless of alignment
     member this.unpinLeftTabs(tab) =
         Cell.beginUpdate()
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            let tabsToUnpin =
-                group
-                |> List.mapi (fun i t -> (i, t))
-                |> List.filter (fun (i, t) -> i <= idx && pinnedTabsCell.value.contains(t))
-                |> List.map snd
-            tabsToUnpin |> List.iter (fun t ->
-                pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-                this.moveToUnpinnedZone(t)
-            )
-        | None -> ()
+        this.visualLeftTabs(tab)
+        |> List.filter (fun t -> pinnedTabsCell.value.contains(t))
+        |> List.iter (fun t ->
+            pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
+            this.moveToUnpinnedZone(t))
         Cell.endUpdate()
 
-    // Unpin same-alignment tabs to the right of the given tab (including the tab itself)
+    // Unpin all visual-right tabs of the given tab (including the tab itself), regardless of alignment
     member this.unpinRightTabs(tab) =
         Cell.beginUpdate()
-        let group = this.sameAlignGroup(tab)
-        match group |> List.tryFindIndex ((=) tab) with
-        | Some idx ->
-            let tabsToUnpin =
-                group
-                |> List.mapi (fun i t -> (i, t))
-                |> List.filter (fun (i, t) -> i >= idx && pinnedTabsCell.value.contains(t))
-                |> List.map snd
-            tabsToUnpin |> List.iter (fun t ->
-                pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
-                this.moveToUnpinnedZone(t)
-            )
-        | None -> ()
+        this.visualRightTabs(tab)
+        |> List.filter (fun t -> pinnedTabsCell.value.contains(t))
+        |> List.iter (fun t ->
+            pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
+            this.moveToUnpinnedZone(t))
         Cell.endUpdate()
 
     // Count of same-alignment tabs to the left (including the tab itself), regardless of pin state

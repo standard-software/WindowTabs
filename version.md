@@ -12,6 +12,9 @@
 - TopMost windows are no longer excluded from tab management
 - Added System submenu: copy exe path, copy window title, open exe folder, force kill process
 - Individual tab alignment menu now shows only the opposite alignment option (e.g. "Align this tab to Right" when currently left-aligned)
+- Restructured Pin Tab submenu
+  - Items are ordered as pin/unpin this tab, paired pin/unpin left and right tab actions, then pin/unpin all tabs
+  - Left/right tab counts include all tabs on the specified side regardless of alignment or pin state (including the target tab)
 
 ## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
