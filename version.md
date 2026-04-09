@@ -11,6 +11,7 @@
 - Replaced "Corner" submenu with "Move" submenu containing edge and corner positions
 - TopMost windows are no longer excluded from tab management
 - Added System submenu: copy exe path, copy window title, open exe folder, force kill process
+- Individual tab alignment menu now shows only the opposite alignment option (e.g. "Align this tab to Right" when currently left-aligned)
 
 ## version ss_jp_2026.03.25
 - Fixed: Changing tab alignment now correctly repositions pinned/unpinned tabs within the new alignment group
