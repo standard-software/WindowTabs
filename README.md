@@ -107,8 +107,8 @@ This feature remains unchanged from the original WindowTabs functionality.
 - **Tab Context Menu**: Right-click on tabs to access various options
   - New tab
   ---
-  - Move Left / Move Right (with Snap)
-  - Move Other
+  - Snap Left / Snap Right
+  - Position Other (submenu: Move and Snap to edges/corners with percentage options)
   ---
   - Display Left / Display Main / Display Right
   ---
@@ -118,12 +118,14 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
-  - Tab Pin (submenu: Pin/Unpin this tab, Pin all, Unpin all, Pin/Unpin left/right tabs in alignment group)
-  - Tab Color Change (submenu: fill / underline / border color options, reset)
+  - Tab Pin (submenu: pin/unpin this tab, paired pin/unpin left/right tabs, pin/unpin all tabs)
+  - Tab Color Change (submenu: per-scope color selection — this tab, left/right tabs, all tabs — with fill / underline / border types)
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
-  - Tab Position (Align Left / Align Right per-tab, Align all tabs, Align left/right tabs in group)
+  - Tab Align (Align all tabs to Left/Right at top level, individual tab alignment in submenu showing only the opposite side)
   - Tab Name (rename / reset)
+  ---
+  - System (submenu: copy exe path, copy window title, open exe folder, force kill process)
   ---
   - Settings
 
@@ -133,13 +135,11 @@ This feature remains unchanged from the original WindowTabs functionality.
 #### Reposition
 
 Top level menu options:
-- Move Left / Move Right - Move to the left or right edge of the current display
 - Snap Left / Snap Right - Snap to the left or right side of the screen (full height)
 
-"Move Other" submenu:
-- Move Top / Move Bottom
+"Position Other" submenu:
+- "Move" submenu: Left, Right, Top, Bottom edges and Top-Left, Top-Right, Bottom-Left, Bottom-Right corners
 - Snap Top / Snap Bottom
-- "Corner" submenu: Top-Left, Top-Right, Bottom-Left, Bottom-Right
 
 "Snap x%" submenu:
 - Left / Right / Top / Bottom
@@ -195,9 +195,10 @@ Set a color on individual tabs for visual identification. Three color types are 
 **7 colors**: Red, Blue, Green, Yellow, Purple, Orange, Pink
 
 - Right-click a tab and use the "Tab Color Change" submenu
+- Color selection is organized into per-scope submenus: this tab, left tabs, right tabs, all tabs
 - Fill, underline, and border are mutually exclusive (setting one clears the others)
-- Checkmark overlay on the color icon when the tab's current color matches
-- Reset per-tab or all tabs at once
+- Checkmark overlay (in the "this tab" submenu) on the color icon when the tab's current color matches
+- "Clear color setting" to remove color from the target scope
 - Colors are persisted across restarts
 
 ![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
@@ -243,6 +244,11 @@ WindowTabs fully supports Windows virtual desktops (Win+Tab):
 - Automatically handles UWP window Z-order for proper tab visibility
 - Maintains tab visibility when working with UWP apps
 - Properly detects cloaked state when apps are on other virtual desktops
+
+### TopMost Window Support
+
+- TopMost (always-on-top) windows are also managed as tabs
+- Previously excluded from tab management, now included like normal windows
 
 
 ### Multi-Language Support
@@ -314,7 +320,6 @@ Customize the visual appearance of tabs:
 - Pinned tab width: "Icon Only" or specify a custom width
 - Distance from edge settings
 - Menu Dark Mode toggle
-- Combined Move and Snap Menu: displays Move and Snap as a single combined line in the context menu
 - Color settings for each tab state (Inactive, Mouse Over, Active, Flash)
   - Tab color, text color, and border color
 - Color theme with preset themes (Light, Light Mono, Dark, Dark Blue, Dark Mono, Dark Red Frame)
