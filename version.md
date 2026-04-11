@@ -2,6 +2,7 @@
 
 ## version ss_jp_2026.03.25_next1
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
+  - Individual tab alignment menu now shows only the opposite alignment option (e.g. "Align this tab to Right" when currently left-aligned)
 - Unified tab name truncation across all menus (12 half-width chars, full-width counts as 2)
 - Renamed localization keys: TabPositionMenu→TabAlignMenu, AlignGroupTopLeft/Right→AlignTopLeft/Right, AlignLeftTabsFormat/Right→AlignLeftTabsChange/Right
 - Restructured Move/Snap menu: Snap Left/Right at top level, Move submenu inside "Position Other"
@@ -14,7 +15,6 @@
 - Replaced "Corner" submenu with "Move" submenu containing edge and corner positions
 - TopMost windows are no longer excluded from tab management
 - Added System submenu: copy exe path, copy window title, open exe folder, force kill process
-- Individual tab alignment menu now shows only the opposite alignment option (e.g. "Align this tab to Right" when currently left-aligned)
 - Restructured Pin Tab submenu
   - Items are ordered as pin/unpin this tab, paired pin/unpin left and right tab actions, then pin/unpin all tabs
   - Left/right tab counts include all tabs on the specified side regardless of alignment or pin state (including the target tab)
