@@ -4,7 +4,7 @@
    <Product Id="*"
             Name="WindowTabs"
             Language="1033"
-            Version="26.04.12.3"
+            Version="26.04.12.4"
             Manufacturer="Satoshi Yamamoto (standard-software)"
             UpgradeCode="6763D234-BCFA-4172-8190-756DEE9CF2B1">
 
@@ -48,7 +48,7 @@
 
                <!-- Language folder -->
                <Directory Id="LanguageFolder" Name="Language">
-                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes" Permanent="yes">
+                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes">
                      <File Id="FileListJson"
                            Source="$(var.WtProgram.TargetDir)Language\FileList.json"
                            KeyPath="yes" />
@@ -69,7 +69,7 @@
 
                <!-- Settings folder -->
                <Directory Id="SettingsFolder" Name="Settings">
-                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes" Permanent="yes">
+                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes">
                      <File Id="WindowMarginJson"
                            Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
                            KeyPath="yes" />
@@ -179,6 +179,12 @@
                     Execute="immediate"
                     Return="ignore" />
 
+      <CustomAction Id="DeleteLanguageSettingsFiles"
+                    Property="POWERSHELLEXE"
+                    ExeCommand="-NoProfile -EncodedCommand JABwAD0AKABnAHAAIAAnAEgASwBDAFUAOgBcAFMAbwBmAHQAdwBhAHIAZQBcAFcAaQBuAGQAbwB3AFQAYQBiAHMAJwAgAEkAbgBzAHQAYQBsAGwAUABhAHQAaAAgAC0ARQBBACAAMAApAC4ASQBuAHMAdABhAGwAbABQAGEAdABoADsAaQBmACgAJABwACkAewBmAG8AcgBlAGEAYwBoACgAJABzACAAaQBuACAAQAAoACcATABhAG4AZwB1AGEAZwBlACcALAAnAFMAZQB0AHQAaQBuAGcAcwAnACkAKQB7ACQAcwByAD0ASgBvAGkAbgAtAFAAYQB0AGgAIAAkAHAAIAAkAHMAOwBpAGYAKABUAGUAcwB0AC0AUABhAHQAaAAgACQAcwByACkAewBSAGUAbQBvAHYAZQAtAEkAdABlAG0AIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABzAHIAIAAnACoALgBqAHMAbwBuACcAKQAgAC0ARgBvAHIAYwBlACAALQBFAEEAIAAwAH0AfQB9AA=="
+                    Execute="immediate"
+                    Return="ignore" />
+
       <CustomAction Id="StoreFileHashes"
                     Property="POWERSHELLEXE"
                     ExeCommand="-NoProfile -EncodedCommand JABwAD0AKABnAHAAIAAnAEgASwBDAFUAOgBcAFMAbwBmAHQAdwBhAHIAZQBcAFcAaQBuAGQAbwB3AFQAYQBiAHMAJwAgAEkAbgBzAHQAYQBsAGwAUABhAHQAaAAgAC0ARQBBACAAMAApAC4ASQBuAHMAdABhAGwAbABQAGEAdABoADsAaQBmACgAJABwACkAewAkAGgAcwA9AEAAewB9ADsAJABzAGgAYQA9AFsAUwB5AHMAdABlAG0ALgBTAGUAYwB1AHIAaQB0AHkALgBDAHIAeQBwAHQAbwBnAHIAYQBwAGgAeQAuAFMASABBADIANQA2AF0AOgA6AEMAcgBlAGEAdABlACgAKQA7AGYAbwByAGUAYQBjAGgAKAAkAHMAIABpAG4AIABAACgAJwBMAGEAbgBnAHUAYQBnAGUAJwAsACcAUwBlAHQAdABpAG4AZwBzACcAKQApAHsAJABzAHIAPQBKAG8AaQBuAC0AUABhAHQAaAAgACQAcAAgACQAcwA7AGkAZgAoAFQAZQBzAHQALQBQAGEAdABoACAAJABzAHIAKQB7AEcAZQB0AC0AQwBoAGkAbABkAEkAdABlAG0AIAAkAHMAcgAgAC0ARgBpAGwAZQAgAC0AUgBlAGMAdQByAHMAZQB8AEYAbwByAEUAYQBjAGgALQBPAGIAagBlAGMAdAB7ACQAcgBlAGwAPQAkAF8ALgBGAHUAbABsAE4AYQBtAGUALgBTAHUAYgBzAHQAcgBpAG4AZwAoACQAcAAuAEwAZQBuAGcAdABoACkALgBUAHIAaQBtAFMAdABhAHIAdAAoACcAXAAnACkAOwAkAGgAcwBbACQAcgBlAGwAXQA9AFsAQgBpAHQAQwBvAG4AdgBlAHIAdABlAHIAXQA6ADoAVABvAFMAdAByAGkAbgBnACgAJABzAGgAYQAuAEMAbwBtAHAAdQB0AGUASABhAHMAaAAoAFsASQBPAC4ARgBpAGwAZQBdADoAOgBSAGUAYQBkAEEAbABsAEIAeQB0AGUAcwAoACQAXwAuAEYAdQBsAGwATgBhAG0AZQApACkAKQAgAC0AcgBlAHAAbABhAGMAZQAgACcALQAnACwAJwAnAH0AfQB9ADsAcwBwACAAJwBIAEsAQwBVADoAXABTAG8AZgB0AHcAYQByAGUAXABXAGkAbgBkAG8AdwBUAGEAYgBzACcAIABGAGkAbABlAEgAYQBzAGgAZQBzACAAKABDAG8AbgB2AGUAcgB0AFQAbwAtAEoAcwBvAG4AIAAtAEMAbwBtAHAAcgBlAHMAcwAgACQAaABzACkAfQA="
@@ -187,6 +193,9 @@
 
       <InstallExecuteSequence>
          <Custom Action="BackupModifiedFiles" Before="InstallInitialize">
+            1
+         </Custom>
+         <Custom Action="DeleteLanguageSettingsFiles" After="RemoveExistingProducts">
             REINSTALL OR NOT REMOVE
          </Custom>
          <Custom Action="StoreFileHashes" After="InstallFinalize">
