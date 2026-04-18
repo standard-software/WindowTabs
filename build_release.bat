@@ -106,6 +106,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Copy Settings folder
+mkdir "%OUTPUT_DIR%\Settings"
+xcopy /Y /E "WtProgram\bin\Release\Settings\*" "%OUTPUT_DIR%\Settings\" >nul
+if errorlevel 1 (
+    echo ERROR: Failed to copy Settings folder
+    exit /b 1
+)
+
 :: Compress to ZIP
 set ZIP_FILE=exe\zip\WindowTabs.zip
 if exist "%ZIP_FILE%" del "%ZIP_FILE%"

@@ -46,9 +46,9 @@
                         Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.txt" />
                </Component>
 
-               <!-- Language folder -->
+               <!-- Language folder (Permanent: files kept on uninstall; modified files backed up via custom action before install) -->
                <Directory Id="LanguageFolder" Name="Language">
-                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes">
+                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes" Permanent="yes">
                      <File Id="FileListJson"
                            Source="$(var.WtProgram.TargetDir)Language\FileList.json"
                            KeyPath="yes" />
@@ -67,9 +67,9 @@
                   </Component>
                </Directory>
 
-               <!-- Settings folder (NeverOverwrite: preserve user-modified settings on upgrade) -->
+               <!-- Settings folder (Permanent: files kept on uninstall; modified files backed up via custom action before install) -->
                <Directory Id="SettingsFolder" Name="Settings">
-                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes" NeverOverwrite="yes">
+                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes" Permanent="yes">
                      <File Id="WindowMarginJson"
                            Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
                            KeyPath="yes" />
@@ -168,19 +168,28 @@
                               TerminateProcess="0"
                               Timeout="5" />
 
-      <!-- Backup Language folder before install/upgrade using PowerShell -->
-      <!-- Read InstallPath from registry and backup Language folder if exists -->
-      <!-- Runs on both upgrade and reinstall (NOT REMOVE = not uninstall) -->
+      <!-- Backup user-modified Language/Settings files and record file hashes using PowerShell -->
+      <!-- BackupModifiedFiles: compare each file's current hash against stored hash, copy modified files to Backup_YYYY-MM-DD_HH-MM-SS/... -->
+      <!-- StoreFileHashes: after install, record hashes of all installed Language/Settings files in HKCU\Software\WindowTabs\FileHashes -->
       <Property Id="POWERSHELLEXE" Value="powershell.exe" />
 
-      <CustomAction Id="BackupLanguageFolder"
+      <CustomAction Id="BackupModifiedFiles"
                     Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p -and (Test-Path($p+'\Language'))){ren($p+'\Language')('Backup_Language_'+(Get-Date -f yyyy-MM-dd_HH-mm-ss))}&quot;"
+                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hj=(gp 'HKCU:\Software\WindowTabs' FileHashes -EA 0).FileHashes;$hs=if($hj){$hj|ConvertFrom-Json}else{$null};$bd=Join-Path $p ('Backup_'+(Get-Date -f yyyy-MM-dd_HH-mm-ss));foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$mod=$true;if($hs -and ($hs.PSObject.Properties.Name -contains $rel)){$ch=(Get-FileHash $_.FullName -Algorithm SHA256).Hash;if($ch -eq $hs.$rel){$mod=$false}};if($mod){$df=Join-Path $bd $rel;$dd=Split-Path $df -Parent;if(-not(Test-Path $dd)){ni -Path $dd -ItemType Directory -Force|Out-Null};cp $_.FullName $df -Force}}}}}&quot;"
+                    Execute="immediate"
+                    Return="ignore" />
+
+      <CustomAction Id="StoreFileHashes"
+                    Property="POWERSHELLEXE"
+                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hs=@{};foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$hs[$rel]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash}}};sp 'HKCU:\Software\WindowTabs' FileHashes (ConvertTo-Json -Compress $hs)}&quot;"
                     Execute="immediate"
                     Return="ignore" />
 
       <InstallExecuteSequence>
-         <Custom Action="BackupLanguageFolder" Before="InstallInitialize">
+         <Custom Action="BackupModifiedFiles" Before="InstallInitialize">
+            NOT REMOVE
+         </Custom>
+         <Custom Action="StoreFileHashes" After="InstallFinalize">
             NOT REMOVE
          </Custom>
       </InstallExecuteSequence>
