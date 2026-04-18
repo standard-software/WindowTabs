@@ -4,7 +4,7 @@
    <Product Id="*"
             Name="WindowTabs"
             Language="1033"
-            Version="26.04.12.1"
+            Version="26.04.12.2"
             Manufacturer="Satoshi Yamamoto (standard-software)"
             UpgradeCode="6763D234-BCFA-4172-8190-756DEE9CF2B1">
 
@@ -175,13 +175,13 @@
 
       <CustomAction Id="BackupModifiedFiles"
                     Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hj=(gp 'HKCU:\Software\WindowTabs' FileHashes -EA 0).FileHashes;$hs=if($hj){$hj|ConvertFrom-Json}else{$null};$bd=Join-Path $p ('Backup_'+(Get-Date -f yyyy-MM-dd_HH-mm-ss));foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$mod=$true;if($hs -and ($hs.PSObject.Properties.Name -contains $rel)){$ch=(Get-FileHash $_.FullName -Algorithm SHA256).Hash;if($ch -eq $hs.$rel){$mod=$false}};if($mod){$df=Join-Path $bd $rel;$dd=Split-Path $df -Parent;if(-not(Test-Path $dd)){ni -Path $dd -ItemType Directory -Force|Out-Null};cp $_.FullName $df -Force}}}}}&quot;"
+                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hj=(gp 'HKCU:\Software\WindowTabs' FileHashes -EA 0).FileHashes;$hs=if($hj){$hj|ConvertFrom-Json}else{$null};$bd=Join-Path $p ('Backup_'+(Get-Date -f yyyy-MM-dd_HH-mm-ss));$sha=[System.Security.Cryptography.SHA256]::Create();foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$mod=$true;if($hs -and ($hs.PSObject.Properties.Name -contains $rel)){$ch=[BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($_.FullName))) -replace '-','';if($ch -eq $hs.$rel){$mod=$false}};if($mod){$df=Join-Path $bd $rel;$dd=Split-Path $df -Parent;if(-not(Test-Path $dd)){ni -Path $dd -ItemType Directory -Force|Out-Null};cp $_.FullName $df -Force}}}}}&quot;"
                     Execute="immediate"
                     Return="ignore" />
 
       <CustomAction Id="StoreFileHashes"
                     Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hs=@{};foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$hs[$rel]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash}}};sp 'HKCU:\Software\WindowTabs' FileHashes (ConvertTo-Json -Compress $hs)}&quot;"
+                    ExeCommand="-NoProfile -Command &quot;$p=(gp 'HKCU:\Software\WindowTabs' InstallPath -EA 0).InstallPath;if($p){$hs=@{};$sha=[System.Security.Cryptography.SHA256]::Create();foreach($s in @('Language','Settings')){$sr=Join-Path $p $s;if(Test-Path $sr){Get-ChildItem $sr -File -Recurse|ForEach-Object{$rel=$_.FullName.Substring($p.Length).TrimStart('\');$hs[$rel]=[BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($_.FullName))) -replace '-',''}}};sp 'HKCU:\Software\WindowTabs' FileHashes (ConvertTo-Json -Compress $hs)}&quot;"
                     Execute="immediate"
                     Return="ignore" />
 
