@@ -1,7 +1,7 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.04.12_next3
-- Installer: user-modified Language/Settings files are backed up into `Backup_YYYY-MM-DD_HH-MM-SS` on install/upgrade/repair (no folder when nothing changed); both folders are preserved across uninstall
+## version ss_jp_2026.04.12_next4
+- Installer: Language/Settings files are always rewritten with the new defaults on install/upgrade/repair; user-edited files are backed up to `Backup_YYYY-MM-DD_HH-MM-SS/` first (no folder when nothing changed; kept after uninstall)
 - Build script: include the Settings folder in the portable ZIP distribution
 
 ## version ss_jp_2026.04.12

@@ -44,7 +44,7 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 
 ## バージョン
 
-最新のバージョン: **ss_jp_2026.04.12_next3**
+最新のバージョン: **ss_jp_2026.04.12_next4**
 
 詳細な更新履歴と変更ログについては、[version.md](version.md) を参照してください。
 
