@@ -1,5 +1,8 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.04.12_next2
+- Installer: compute SHA256 via .NET classes instead of the `Get-FileHash` cmdlet so the hash store/compare works on environments where the built-in PowerShell Utility module is masked by PowerShell 7
+
 ## version ss_jp_2026.04.12_next1
 - Installer: back up only user-modified Language/Settings files into a single `Backup_YYYY-MM-DD_HH-MM-SS` folder (no folder created when nothing is modified)
 - Installer: Language and Settings folders are now Permanent (kept on uninstall, files preserved during upgrade)
