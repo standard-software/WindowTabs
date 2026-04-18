@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.04.12_next1
+
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
   - Individual tab alignment menu now shows only the opposite alignment option (e.g. "Align this tab to Right" when currently left-aligned)
