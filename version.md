@@ -1,6 +1,10 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.04.12_next1
+- Installer: back up only user-modified Language/Settings files into a single `Backup_YYYY-MM-DD_HH-MM-SS` folder (no folder created when nothing is modified)
+- Installer: Language and Settings folders are now Permanent (kept on uninstall, files preserved during upgrade)
+- Fixed: Settings folder was deleted on upgrade and not recreated
+- Build script: include the Settings folder in the portable ZIP distribution
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
