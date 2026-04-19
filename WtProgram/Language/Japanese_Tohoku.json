@@ -72,6 +72,10 @@
   "Reset": "リセット",
 
   "NewTab": "新しいタブだべ : {0}起動",
+  "NewLaunchMenu": "新規起動だべ : {0}起動",
+  "NewTabInGroup": "新しいタブだべ : このタブ({0})の右だべ",
+  "NewWindowPositionMenu": "新しいウィンドウだべ 位置指定",
+  "NewWindowLinkGroupMenu": "新しいウィンドウだべ 他のグループへ連結",
 
   "MoveEdgeMenu": "移動だべ",
   "MoveEdgeLeft": "左端",

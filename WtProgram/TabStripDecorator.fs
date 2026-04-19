@@ -2169,7 +2169,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     | None -> ()
         | _ -> ()
 
-    member private this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
+    member this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
         // Move the entire tab group to the specified position
         // Always use the active window (topWindow) as the reference point
         let activeHwnd = group.topWindow
@@ -2194,7 +2194,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if newX <> bounds.location.x || newY <> bounds.location.y then
             window.setPositionOnly newX newY
 
-    member private this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
+    member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
         // Always use the active window (topWindow) as the reference point
         let activeHwnd = group.topWindow
@@ -2263,7 +2263,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
-    member private this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
+    member this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -2293,7 +2293,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
-    member private this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+    member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -2347,7 +2347,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
 
-    member private this.moveTabGroupToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
+    member this.moveTabGroupToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position with percentage
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -2367,7 +2367,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
-    member private this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
+    member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -2404,9 +2404,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
 
-        // Helper: build position menu items for move/snap operations
-        // Top-level: Snap Left / Snap Right (when includeLeftRight = true) + a single "Position Other" submenu
-        // containing the remaining Top/Bottom, Move, Snap percent, and Maximize options
+        // Helper: build a flat list of position menu items (Snap Left/Right, Snap Top/Bottom, Move edge submenu,
+        // Snap percent submenus, Maximize Display/Desktop). Used directly by per-screen submenus so they stay flat.
         let buildPositionMenuItems (includeLeftRight: bool) (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             let snapPercentSubMenu (pct: int) =
                 CmiPopUp({
@@ -2436,7 +2435,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
                     ]
                 else []
-            let moveEdgeSubMenu =
+            let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
+            let topBottomItems =
+                [
+                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                ]
+            leftRightItems @ separatorIfLeftRight @ topBottomItems @
+            [
+                CmiSeparator
                 CmiPopUp({
                     text = Localization.getString("MoveEdgeMenu")
                     image = None
@@ -2453,31 +2460,43 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     ])
                     flags = List2()
                 })
-            let positionOtherItems =
-                [
-                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
-                    CmiSeparator
-                    moveEdgeSubMenu
-                    CmiSeparator
-                    snapPercentSubMenu 90
-                    snapPercentSubMenu 70
-                    snapPercentSubMenu 50
-                    snapPercentSubMenu 30
-                    CmiSeparator
-                    CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
-                ] @
-                (if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
-                    [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
-                 else [])
-            let positionOtherMenu =
-                CmiPopUp({
+                CmiSeparator
+                snapPercentSubMenu 90
+                snapPercentSubMenu 70
+                snapPercentSubMenu 50
+                snapPercentSubMenu 30
+                CmiSeparator
+                CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+            ] @
+            (if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
+                [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
+             else [])
+
+        // Helper: build position menu items with the remaining options collapsed into a "Position Other" submenu.
+        // Used by top-level detach/split position menus.
+        let buildPositionMenuItemsWithOther (includeLeftRight: bool) (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
+            let flatItems = buildPositionMenuItems includeLeftRight includeSnapDesktop moveFn snapFn snapPercentFn
+            if includeLeftRight then
+                // Keep Snap Left / Snap Right at the top, push everything after the first separator into a "Position Other" submenu.
+                match flatItems with
+                | snapLeft :: snapRight :: CmiSeparator :: rest ->
+                    let positionOtherMenu =
+                        CmiPopUp({
+                            text = Localization.getString("MovePositionOther")
+                            image = None
+                            items = List2(rest)
+                            flags = List2()
+                        })
+                    [snapLeft; snapRight; positionOtherMenu]
+                | _ -> flatItems
+            else
+                // Without Snap Left/Right at top, wrap everything in the "Position Other" submenu.
+                [CmiPopUp({
                     text = Localization.getString("MovePositionOther")
                     image = None
-                    items = List2(positionOtherItems)
+                    items = List2(flatItems)
                     flags = List2()
-                })
-            leftRightItems @ [positionOtherMenu]
+                })]
 
         // Helper: build screen position submenu
         let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (includeLeftRight: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =
@@ -2514,52 +2533,220 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             else
                 None
 
-        let newWindowItem =
-            let exeName = System.IO.Path.GetFileName(processPath)
+        // Resolve the actual path to hand to Process.Start.
+        // For known UWP apps we use an alternative launch command (e.g. wt.exe).
+        // Returns None only for UWP apps with no alternative - the caller then surfaces an error.
+        let resolveLaunchPath () =
+            if processPath.Contains("WindowsApps") then
+                getAlternativeLaunchCommand(processPath)
+            else
+                Some(processPath)
+
+        // Shared error reporting wrapper used by all three new-launch menu items
+        let handleLaunchError (launchCall: string -> unit) =
+            try
+                match resolveLaunchPath() with
+                | Some(path) -> launchCall path
+                | None ->
+                    // UWP app with no alternative launch command
+                    let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
+                    let message =
+                        match Localization.currentLanguage with
+                        | "Japanese" ->
+                            sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
+                        | _ ->
+                            sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
+                    MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+            with
+            | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
+                let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
+                let message =
+                    match Localization.currentLanguage with
+                    | "Japanese" ->
+                        sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
+                    | _ ->
+                        sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
+                MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
+            | :? System.ComponentModel.Win32Exception as ex ->
+                let message = sprintf "Failed to launch process:\n\nPath: %s\nError: %s" processPath ex.Message
+                MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
+            | ex ->
+                let message = sprintf "Unexpected error starting process:\n%s" ex.Message
+                MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
+
+        // Find the decorator whose group contains the given window hwnd.
+        // Used by the "new window + position" callback to reach the newly created group.
+        let findDecoratorForWindow (winHwnd: IntPtr) =
+            lock decorators (fun () ->
+                decorators.Values
+                |> Seq.tryFind (fun d ->
+                    try
+                        WinUserApi.IsWindow(d.group.hwnd) && d.group.windows.contains(winHwnd)
+                    with _ -> false))
+
+        // Item 1: "New tab : right of this tab (<name>)" — launch and dock into the current tab group
+        let currentTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+        let newTabInGroupItem =
             CmiRegular({
-                text = String.Format(Localization.getString("NewTab"), exeName)
+                text = String.Format(Localization.getString("NewTabInGroup"), currentTabName)
                 flags = List2()
                 image = None
                 click = fun() ->
-                    try
-                        // Check if this is a known UWP app and use alternative launch command
-                        let launchCommand =
-                            if processPath.Contains("WindowsApps") then
-                                getAlternativeLaunchCommand(processPath)
-                            else
-                                None
+                    handleLaunchError (fun path -> Services.program.launchNewWindow group.hwnd hwnd path)
+            })
 
-                        match launchCommand with
-                        | Some(cmd) ->
-                            // Use alternative launch command for known UWP apps and dock to current group
-                            Services.program.launchNewWindow group.hwnd hwnd cmd
-                        | None ->
-                            // Launch new window and dock to current group (regardless of auto-grouping settings)
-                            Services.program.launchNewWindow group.hwnd hwnd processPath
-                    with
-                    | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
-                        // UWP app that we don't have an alternative for
-                        let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
-                        let message =
-                            match Localization.currentLanguage with
-                            | "Japanese" ->
-                                sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
-                            | _ ->
-                                sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
-                        MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
-                        System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
-                    | :? System.ComponentModel.Win32Exception as ex ->
-                        // Non-UWP app error
-                        let message = sprintf "Failed to start new tab:\n%s\n\nPath: %s\nError: %s"
-                                              (Localization.getString("NewTab"))
-                                              processPath
-                                              ex.Message
-                        MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
-                        System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
-                    | ex ->
-                        let message = sprintf "Unexpected error starting new window:\n%s" ex.Message
-                        MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
-                        System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
+        // Item 2: "New window (position)" submenu — launch as standalone then apply a position to the new group
+        let newWindowPositionItem =
+            let launchStandaloneThen (postAction: TabStripDecorator -> IntPtr -> unit) =
+                handleLaunchError (fun path ->
+                    Services.program.launchStandaloneWindow path (fun newHwnd ->
+                        // The decorator for the new group is registered asynchronously on the group's thread,
+                        // and the new window needs a moment to settle before it can be repositioned.
+                        // Poll a few times until the decorator is available.
+                        async {
+                            do! Async.Sleep 200
+                            let mutable attempts = 20
+                            let mutable applied = false
+                            while not applied && attempts > 0 do
+                                match findDecoratorForWindow newHwnd with
+                                | Some(newDec) ->
+                                    applied <- true
+                                    try
+                                        newDec.group.invokeSync(fun () -> postAction newDec newHwnd)
+                                    with _ -> ()
+                                | None ->
+                                    do! Async.Sleep 100
+                                    attempts <- attempts - 1
+                        } |> Async.Start))
+            let samePositionItem =
+                CmiRegular({
+                    text = Localization.getString("DetachTabSamePosition")
+                    image = None
+                    click = (fun() -> launchStandaloneThen (fun _ _ -> ()))
+                    flags = List2()
+                })
+            let baseMenuItems =
+                [samePositionItem; CmiSeparator] @
+                buildPositionMenuItemsWithOther true true
+                    (fun pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToPosition(h, pos)))
+                    (fun dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnap(h, dir)))
+                    (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
+            let allScreens = this.getAllScreensSorted()
+            let currentScreen = this.getCurrentScreenForWindow(hwnd)
+            let positionItems =
+                if allScreens.Length > 1 then
+                    let screenSubMenus =
+                        allScreens
+                        |> Array.map (fun screen ->
+                            let isCurrentScreen = screen.Equals(currentScreen)
+                            buildScreenPositionSubMenu screen isCurrentScreen true
+                                (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
+                                (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
+                                (fun s dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnapWithPercent(h, s, dir, pct)))
+                                (fun s -> this.getScreenName(s)))
+                        |> Array.toList
+                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
+                else
+                    baseMenuItems
+            CmiPopUp({
+                text = Localization.getString("NewWindowPositionMenu")
+                image = None
+                items = List2(positionItems)
+                flags = List2()
+            })
+
+        // Item 3: "New window (link to group)" submenu — launch as a new tab docked into an existing other group
+        let newWindowLinkGroupItem =
+            let allDecorators = lock decorators (fun () ->
+                decorators.Values
+                |> List.ofSeq
+                |> List.filter (fun d ->
+                    try
+                        d.ts.hwnd <> IntPtr.Zero &&
+                        WinUserApi.IsWindow(d.group.hwnd) &&
+                        WinUserApi.IsWindow(d.ts.hwnd)
+                    with _ -> false))
+            this.updateGroupInfo()
+            let updateTasks =
+                allDecorators
+                |> List.filter (fun d -> d.group.hwnd <> group.hwnd)
+                |> List.map (fun d ->
+                    async {
+                        try
+                            if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
+                                d.group.invokeSync(fun () -> d.updateGroupInfo())
+                        with _ -> ()
+                    })
+            updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
+            let otherGroupInfos = lock groupInfos (fun () ->
+                groupInfos.Values
+                |> List.ofSeq
+                |> List.filter (fun info -> info.hwnd <> group.hwnd && info.tabCount > 0))
+            let groupItems =
+                if List.isEmpty otherGroupInfos then []
+                else
+                    let uniqueGroupInfos = otherGroupInfos |> List.distinctBy (fun info -> info.hwnd)
+                    uniqueGroupInfos
+                    |> List.choose (fun info ->
+                        try
+                            let targetDecorator = lock decorators (fun () ->
+                                decorators.Values
+                                |> Seq.tryFind (fun d ->
+                                    d.group.hwnd = info.hwnd &&
+                                    WinUserApi.IsWindow(d.group.hwnd) &&
+                                    WinUserApi.IsWindow(d.ts.hwnd)))
+                            match targetDecorator with
+                            | Some decorator ->
+                                let fullNameString =
+                                    if info.tabCount = 1 then
+                                        let tabName = info.tabNames |> List.head
+                                        if tabName.Length > 22 then tabName.Substring(0, 22) + "..." else tabName
+                                    elif info.tabCount = 2 then
+                                        let tabNames = info.tabNames |> List.take 2
+                                        let truncatedNames =
+                                            tabNames
+                                            |> List.map (fun name -> if name.Length > 9 then name.Substring(0, 9) + "..." else name)
+                                        String.Join(" ", truncatedNames)
+                                    else
+                                        let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
+                                        let truncatedNames =
+                                            tabNames
+                                            |> List.map (fun name -> if name.Length > 5 then name.Substring(0, 5) + "..." else name)
+                                        let nameString = String.Join(" ", truncatedNames)
+                                        if info.tabCount > 3 then nameString + "..." else nameString
+                                let formatString = Localization.getString("MoveTabGroupFormat")
+                                let tabWord =
+                                    if info.tabCount = 1 then Localization.getString("TabSingular")
+                                    else Localization.getString("TabPlural")
+                                let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
+                                Some(CmiRegular({
+                                    text = menuText
+                                    image = info.firstTabIcon
+                                    click = fun() ->
+                                        handleLaunchError (fun path ->
+                                            Services.program.launchNewWindow decorator.group.hwnd hwnd path)
+                                    flags = List2()
+                                }))
+                            | None -> None
+                        with _ -> None)
+            CmiPopUp({
+                text = Localization.getString("NewWindowLinkGroupMenu")
+                image = None
+                items = List2(groupItems)
+                flags = if List.isEmpty groupItems then List2([MenuFlags.MF_GRAYED]) else List2()
+            })
+
+        // Top-level wrapper: "New launch : execute <exe>" containing the three variants
+        let newLaunchMenu =
+            let exeName = System.IO.Path.GetFileName(processPath)
+            CmiPopUp({
+                text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
+                image = None
+                items = List2([newTabInGroupItem; newWindowPositionItem; newWindowLinkGroupItem])
+                flags = List2()
             })
 
         
@@ -3040,7 +3227,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItems true true
+                buildPositionMenuItemsWithOther true true
                     (fun pos -> this.detachTabToPosition(hwnd, pos))
                     (fun dir -> this.detachTabToSnap(hwnd, dir))
                     (fun dir pct -> this.detachTabToSnapWithPercent(hwnd, dir, pct))
@@ -3098,7 +3285,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItems true true
+                buildPositionMenuItemsWithOther true true
                     (fun pos -> this.splitRightTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitRightTabsToSnap(hwnd, dir))
                     (fun dir pct -> this.splitRightTabsToSnapWithPercent(hwnd, dir, pct))
@@ -3158,7 +3345,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItems true true
+                buildPositionMenuItemsWithOther true true
                     (fun pos -> this.splitLeftTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitLeftTabsToSnap(hwnd, dir))
                     (fun dir pct -> this.splitLeftTabsToSnapWithPercent(hwnd, dir, pct))
@@ -3423,7 +3610,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 []
 
         List2([
-            Some(newWindowItem)
+            Some(newLaunchMenu)
             Some(CmiSeparator)
         ] @ (topLevelMoveSnapItems |> List.map Some) @ [
             moveTabGroupSubMenu

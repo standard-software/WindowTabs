@@ -72,6 +72,10 @@
   "Reset": "リセット",
 
   "NewTab": "新しいタブやで : {0}起動",
+  "NewLaunchMenu": "新規起動やで : {0}起動",
+  "NewTabInGroup": "新しいタブやで : このタブ({0})の右やで",
+  "NewWindowPositionMenu": "新しいウィンドウやで 位置指定",
+  "NewWindowLinkGroupMenu": "新しいウィンドウやで 他のグループへ連結",
 
   "MoveEdgeMenu": "移動やで",
   "MoveEdgeLeft": "左端",
