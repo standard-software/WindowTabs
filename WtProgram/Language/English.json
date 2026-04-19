@@ -71,7 +71,6 @@
   "Diagnostics": "Diagnostics",
   "Reset": "Reset",
 
-  "NewTab": "New tab : execute {0}",
   "NewLaunchMenu": "New launch : execute {0}",
   "NewTabInGroup": "New tab : right of this tab ({0})",
   "NewWindowPositionMenu": "New window (position)",
@@ -141,11 +140,9 @@
   "PinTabMenu": "Tab Pin",
   "PinThisTab": "Pin this tab",
   "UnpinThisTab": "Unpin this tab",
-  "PinAllTabs": "Pin all tabs",
-  "UnpinAllTabs": "Unpin all tabs",
   "PinLeftTabsFormat": "Pin {0} left tab(s)",
-  "PinRightTabsFormat": "Pin {0} right tab(s)",
   "UnpinLeftTabsFormat": "Unpin {0} left tab(s)",
+  "PinRightTabsFormat": "Pin {0} right tab(s)",
   "UnpinRightTabsFormat": "Unpin {0} right tab(s)",
 
   "TabColorMenu": "Tab Color Settings",

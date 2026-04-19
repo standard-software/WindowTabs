@@ -5,6 +5,7 @@
 - Build script: include the Settings folder in the portable ZIP distribution
 - Detach/Split position submenu: Snap Left/Right at top, rest under "Position Other"
 - Tab menu: "New tab" replaced by a "New launch : &lt;exe&gt;" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
+- Pin Tab submenu: removed "Pin all tabs"/"Unpin all tabs" items and added a separator between the left-tab and right-tab groups
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu

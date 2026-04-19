@@ -2864,6 +2864,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         flags = List2()
                         click = fun() -> group.unpinLeftTabs(hwnd)
                     }))
+                    CmiSeparator
                     (let count = group.countToRight(hwnd)
                      CmiRegular({
                         text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
@@ -2878,19 +2879,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         flags = List2()
                         click = fun() -> group.unpinRightTabs(hwnd)
                     }))
-                    CmiSeparator
-                    CmiRegular({
-                        text = Localization.getString("PinAllTabs")
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.pinAll()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("UnpinAllTabs")
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.unpinAll()
-                    })
                 ])
                 flags = List2()
             })

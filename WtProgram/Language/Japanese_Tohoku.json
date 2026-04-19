@@ -71,7 +71,6 @@
   "Diagnostics": "診断",
   "Reset": "リセット",
 
-  "NewTab": "新しいタブだべ : {0}起動",
   "NewLaunchMenu": "新規起動だべ : {0}起動",
   "NewTabInGroup": "新しいタブだべ : このタブ({0})の右だべ",
   "NewWindowPositionMenu": "新しいウィンドウだべ 位置指定",
@@ -141,11 +140,9 @@
   "PinTabMenu": "タブのピン止めだべ",
   "PinThisTab": "このタブをピン止めすっぺ",
   "UnpinThisTab": "このタブのピン止め外すべ",
-  "PinAllTabs": "全部のタブをピン止めすっぺ",
-  "UnpinAllTabs": "全部のタブのピン止め外すべ",
   "PinLeftTabsFormat": "左さ{0}タブピン止めすっぺ",
-  "PinRightTabsFormat": "右さ{0}タブピン止めすっぺ",
   "UnpinLeftTabsFormat": "左さ{0}タブのピン止め外すべ",
+  "PinRightTabsFormat": "右さ{0}タブピン止めすっぺ",
   "UnpinRightTabsFormat": "右さ{0}タブのピン止め外すべ",
 
   "TabColorMenu": "タブの色設定だべ",
