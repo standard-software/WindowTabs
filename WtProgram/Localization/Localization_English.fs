@@ -151,10 +151,11 @@ module Localization_English =
 
         ("TabColorMenu", "Tab Color Settings")
         ("TabColorThisTab", "This tab color : {0}")
+        ("TabColorClearThisTab", "Clear this tab color")
         ("TabColorApplyLeft", "Left {0} tab(s) color")
+        ("TabColorClearLeft", "Clear left {0} tab(s) color")
         ("TabColorApplyRight", "Right {0} tab(s) color")
-        ("TabColorAllTabs", "All tabs color")
-        ("TabColorResetSimple", "Clear color setting")
+        ("TabColorClearRight", "Clear right {0} tab(s) color")
         ("TabColorRed", "Red")
         ("TabColorBlue", "Blue")
         ("TabColorGreen", "Green")

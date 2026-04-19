@@ -147,10 +147,11 @@
 
   "TabColorMenu": "分頁顏色設定",
   "TabColorThisTab": "此分頁顏色 : {0}",
+  "TabColorClearThisTab": "清除此分頁顏色",
   "TabColorApplyLeft": "左側{0}個分頁顏色",
+  "TabColorClearLeft": "清除左側{0}個分頁顏色",
   "TabColorApplyRight": "右側{0}個分頁顏色",
-  "TabColorAllTabs": "所有分頁顏色",
-  "TabColorResetSimple": "清除顏色設定",
+  "TabColorClearRight": "清除右側{0}個分頁顏色",
   "TabColorRed": "紅色",
   "TabColorBlue": "藍色",
   "TabColorGreen": "綠色",
