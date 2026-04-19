@@ -147,10 +147,11 @@
 
   "TabColorMenu": "标签页颜色设置",
   "TabColorThisTab": "此标签页颜色 : {0}",
+  "TabColorClearThisTab": "清除此标签页颜色",
   "TabColorApplyLeft": "左侧{0}个标签页颜色",
+  "TabColorClearLeft": "清除左侧{0}个标签页颜色",
   "TabColorApplyRight": "右侧{0}个标签页颜色",
-  "TabColorAllTabs": "所有标签页颜色",
-  "TabColorResetSimple": "清除颜色设置",
+  "TabColorClearRight": "清除右侧{0}个标签页颜色",
   "TabColorRed": "红色",
   "TabColorBlue": "蓝色",
   "TabColorGreen": "绿色",

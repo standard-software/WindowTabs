@@ -2979,19 +2979,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 targetHwnds |> List.iter (fun h -> group.setTabBorderColor(h, color))
                         })
                     )
-                let resetItem =
-                    CmiRegular({
-                        text = Localization.getString("TabColorResetSimple")
-                        image = None
-                        flags = List2()
-                        click = fun() ->
-                            targetHwnds |> List.iter (fun h ->
-                                group.setTabFillColor(h, None)
-                                group.setTabUnderlineColor(h, None)
-                                group.setTabBorderColor(h, None)
-                            )
-                    })
-                fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems @ [CmiSeparator; resetItem]
+                fillItems @ [CmiSeparator] @ underlineItems @ [CmiSeparator] @ borderItems
+
+            // Clear all color settings (fill, underline, border) for a list of target tabs
+            let clearColorFor (targetHwnds: IntPtr list) () =
+                targetHwnds |> List.iter (fun h ->
+                    group.setTabFillColor(h, None)
+                    group.setTabUnderlineColor(h, None)
+                    group.setTabBorderColor(h, None)
+                )
 
             let vo = this.ts.visualOrder
             let currentTabIndex =
@@ -3001,6 +2997,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let leftCount = currentTabIndex + 1
             let rightCount = vo.list.Length - currentTabIndex
 
+            let leftHwnds = vo.list |> List.take (currentTabIndex + 1) |> List.map (fun (Tab(h)) -> h)
+            let rightHwnds = vo.list |> List.skip currentTabIndex |> List.map (fun (Tab(h)) -> h)
+
             // This tab color submenu
             let thisTabSubMenu =
                 CmiPopUp({
@@ -3009,32 +3008,42 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     items = List2(buildColorItems [hwnd] true)
                     flags = List2()
                 })
+            let clearThisTabItem =
+                CmiRegular({
+                    text = Localization.getString("TabColorClearThisTab")
+                    image = None
+                    flags = List2()
+                    click = clearColorFor [hwnd]
+                })
             // Left tabs color submenu (includes current tab)
             let leftTabsSubMenu =
-                let leftHwnds = vo.list |> List.take (currentTabIndex + 1) |> List.map (fun (Tab(h)) -> h)
                 CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
                     image = None
                     items = List2(buildColorItems leftHwnds false)
                     flags = List2()
                 })
+            let clearLeftTabsItem =
+                CmiRegular({
+                    text = String.Format(Localization.getString("TabColorClearLeft"), leftCount)
+                    image = None
+                    flags = List2()
+                    click = clearColorFor leftHwnds
+                })
             // Right tabs color submenu (includes current tab)
             let rightTabsSubMenu =
-                let rightHwnds = vo.list |> List.skip currentTabIndex |> List.map (fun (Tab(h)) -> h)
                 CmiPopUp({
                     text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
                     image = None
                     items = List2(buildColorItems rightHwnds false)
                     flags = List2()
                 })
-            // All tabs color submenu
-            let allTabsSubMenu =
-                let allHwnds = vo.list |> List.map (fun (Tab(h)) -> h)
-                CmiPopUp({
-                    text = Localization.getString("TabColorAllTabs")
+            let clearRightTabsItem =
+                CmiRegular({
+                    text = String.Format(Localization.getString("TabColorClearRight"), rightCount)
                     image = None
-                    items = List2(buildColorItems allHwnds false)
                     flags = List2()
+                    click = clearColorFor rightHwnds
                 })
 
             CmiPopUp({
@@ -3042,11 +3051,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 image = None
                 items = List2([
                     thisTabSubMenu
+                    clearThisTabItem
                     CmiSeparator
                     leftTabsSubMenu
-                    rightTabsSubMenu
+                    clearLeftTabsItem
                     CmiSeparator
-                    allTabsSubMenu
+                    rightTabsSubMenu
+                    clearRightTabsItem
                 ])
                 flags = List2()
             })

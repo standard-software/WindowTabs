@@ -6,6 +6,7 @@
 - Detach/Split position submenu: Snap Left/Right at top, rest under "Position Other"
 - Tab menu: "New tab" replaced by a "New launch : &lt;exe&gt;" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
 - Pin Tab submenu: removed "Pin all tabs"/"Unpin all tabs" items and added a separator between the left-tab and right-tab groups
+- Tab Color submenu: added "Clear color" items next to this/left/right color submenus; removed the in-submenu "Clear color setting" item and the "All tabs color" submenu
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu

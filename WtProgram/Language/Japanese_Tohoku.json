@@ -147,10 +147,11 @@
 
   "TabColorMenu": "タブの色設定だべ",
   "TabColorThisTab": "このタブの色設定すっぺ : {0}",
+  "TabColorClearThisTab": "このタブの色設定解除すっぺ",
   "TabColorApplyLeft": "左{0}タブの色設定すっぺ",
+  "TabColorClearLeft": "左{0}タブの色設定解除すっぺ",
   "TabColorApplyRight": "右{0}タブの色設定すっぺ",
-  "TabColorAllTabs": "全部のタブの色設定すっぺ",
-  "TabColorResetSimple": "色設定の解除だべ",
+  "TabColorClearRight": "右{0}タブの色設定解除すっぺ",
   "TabColorRed": "赤",
   "TabColorBlue": "青",
   "TabColorGreen": "緑",
