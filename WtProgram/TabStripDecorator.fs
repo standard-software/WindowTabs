@@ -2405,6 +2405,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
 
         // Helper: build position menu items for move/snap operations
+        // Top-level: Snap Left / Snap Right (when includeLeftRight = true) + a single "Position Other" submenu
+        // containing the remaining Top/Bottom, Move, Snap percent, and Maximize options
         let buildPositionMenuItems (includeLeftRight: bool) (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             let snapPercentSubMenu (pct: int) =
                 CmiPopUp({
@@ -2434,15 +2436,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
                     ]
                 else []
-            let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
-            let topBottomItems =
-                [
-                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
-                ]
-            leftRightItems @ separatorIfLeftRight @ topBottomItems @
-            [
-                CmiSeparator
+            let moveEdgeSubMenu =
                 CmiPopUp({
                     text = Localization.getString("MoveEdgeMenu")
                     image = None
@@ -2459,17 +2453,31 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     ])
                     flags = List2()
                 })
-                CmiSeparator
-                snapPercentSubMenu 90
-                snapPercentSubMenu 70
-                snapPercentSubMenu 50
-                snapPercentSubMenu 30
-                CmiSeparator
-                CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
-            ] @
-            (if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
-                [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
-             else [])
+            let positionOtherItems =
+                [
+                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                    CmiSeparator
+                    moveEdgeSubMenu
+                    CmiSeparator
+                    snapPercentSubMenu 90
+                    snapPercentSubMenu 70
+                    snapPercentSubMenu 50
+                    snapPercentSubMenu 30
+                    CmiSeparator
+                    CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+                ] @
+                (if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
+                    [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
+                 else [])
+            let positionOtherMenu =
+                CmiPopUp({
+                    text = Localization.getString("MovePositionOther")
+                    image = None
+                    items = List2(positionOtherItems)
+                    flags = List2()
+                })
+            leftRightItems @ [positionOtherMenu]
 
         // Helper: build screen position submenu
         let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (includeLeftRight: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =

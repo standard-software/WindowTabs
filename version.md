@@ -3,6 +3,7 @@
 ## version ss_jp_2026.04.12_next4
 - Installer: Language/Settings files are always rewritten with the new defaults on install/upgrade/repair; user-edited files are backed up to `Backup_YYYY-MM-DD_HH-MM-SS/` first (no folder when nothing changed; kept after uninstall)
 - Build script: include the Settings folder in the portable ZIP distribution
+- Detach/Split position submenu: Snap Left/Right at top, rest under "Position Other"
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
