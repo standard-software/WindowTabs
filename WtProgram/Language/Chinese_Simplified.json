@@ -72,6 +72,10 @@
   "Reset": "重置",
 
   "NewTab": "新建标签页 : 启动{0}",
+  "NewLaunchMenu": "新建启动 : 启动{0}",
+  "NewTabInGroup": "新建标签页 : 此标签页({0})的右侧",
+  "NewWindowPositionMenu": "新窗口 位置指定",
+  "NewWindowLinkGroupMenu": "新窗口 连接到其他组",
 
   "MoveEdgeMenu": "移动",
   "MoveEdgeLeft": "左端",

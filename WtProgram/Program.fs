@@ -100,6 +100,11 @@ type Program() as this =
     let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * IntPtr * DateTime>())
     // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
     let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
+    // Track pending standalone launches: process path -> (postAction, timestamp)
+    // postAction is invoked with the new window hwnd after it has been added to its new group.
+    let pendingStandaloneLaunches = Cell.create(Map2<string, (IntPtr -> unit) * DateTime>())
+    // Carry a standalone launch's postAction from tryStandaloneLaunch to addWindowToGroup, keyed by new window hwnd
+    let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
@@ -185,6 +190,21 @@ type Program() as this =
                 match this.desktop.groups.tryFind(fun g -> g.hwnd = groupHwnd) with
                 | Some(group) -> Some(Some(group))
                 | None -> None
+            else
+                None
+        | None -> None
+
+    // Handler for standalone-launched windows: force a new tab group (bypass auto-grouping)
+    // and schedule the registered postAction to run after the window is added to that new group.
+    member this.tryStandaloneLaunch(window:Window) =
+        let processPath = window.pid.processPath
+        match pendingStandaloneLaunches.value.tryFind(processPath) with
+        | Some((postAction, timestamp)) ->
+            pendingStandaloneLaunches.map(fun m -> m.remove processPath)
+            if (DateTime.Now - timestamp).TotalSeconds < 30.0 then
+                // Remember the action so addWindowToGroup can invoke it after the window is grouped
+                pendingStandalonePostActions.map(fun m -> m.add window.hwnd postAction)
+                Some(None)  // None = do not attach to any existing group; a fresh group will be created
             else
                 None
         | None -> None
@@ -280,6 +300,7 @@ type Program() as this =
         let handlers = List2([
             this.tryDropped
             launcher.findGroup
+            this.tryStandaloneLaunch
             this.tryNewWindowLaunch
             this.tryAutoGroup
             ])
@@ -353,6 +374,13 @@ type Program() as this =
                             wg.ts.moveTab(newTab, lastSameExeIdx + 1)
                         | _ -> ()
             | _ -> ()
+
+        // Run any post-action registered for a standalone launch (position, etc.)
+        match pendingStandalonePostActions.value.tryFind(hwnd) with
+        | Some(action) ->
+            pendingStandalonePostActions.map(fun m -> m.remove hwnd)
+            invoker.asyncInvoke(fun () -> action hwnd)
+        | None -> ()
 
     member this.receive message =
         let mutable skipFullUpdate = false
@@ -810,6 +838,19 @@ type Program() as this =
             | _ ->
                 // If launch fails, remove the pending entry
                 pendingNewWindowLaunches.map(fun m -> m.remove processPath)
+
+        member x.launchStandaloneWindow(processPath)(postAction) =
+            // Register the pending launch: the new window must land in its own fresh group
+            // regardless of auto-grouping settings, and postAction runs afterwards.
+            pendingStandaloneLaunches.map(fun m -> m.add processPath (postAction, DateTime.Now))
+            try
+                let psi = ProcessStartInfo()
+                psi.UseShellExecute <- true
+                psi.FileName <- processPath
+                Process.Start(psi) |> ignore
+            with
+            | _ ->
+                pendingStandaloneLaunches.map(fun m -> m.remove processPath)
 
         member x.getAllConfiguredProcessPaths() =
             let paths = System.Collections.Generic.HashSet<string>()

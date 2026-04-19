@@ -126,6 +126,9 @@ type IProgram =
     abstract member isShuttingDown : bool
     abstract member saveTabGroupsBeforeExit : unit -> unit
     abstract member launchNewWindow : IntPtr -> IntPtr -> string -> unit
+    // Launch a process as a standalone tab group (bypassing auto-grouping).
+    // postAction runs after the new window has been added to its new group.
+    abstract member launchStandaloneWindow : string -> (IntPtr -> unit) -> unit
     abstract member getAllConfiguredProcessPaths : unit -> List2<string>
     abstract member removeProcessSettings : string -> unit
 

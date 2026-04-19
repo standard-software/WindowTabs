@@ -76,6 +76,10 @@ module Localization_English =
         ("Reset", "Reset")
 
         ("NewTab", "New tab : execute {0}")
+        ("NewLaunchMenu", "New launch : execute {0}")
+        ("NewTabInGroup", "New tab : right of this tab ({0})")
+        ("NewWindowPositionMenu", "New window (position)")
+        ("NewWindowLinkGroupMenu", "New window (link to group)")
 
         ("MoveEdgeMenu", "Move")
         ("MoveEdgeLeft", "Left Edge")

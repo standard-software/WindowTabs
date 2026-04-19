@@ -72,6 +72,10 @@
   "Reset": "重設",
 
   "NewTab": "新增分頁 : 啟動{0}",
+  "NewLaunchMenu": "新啟動 : 啟動{0}",
+  "NewTabInGroup": "新增分頁 : 此分頁({0})的右側",
+  "NewWindowPositionMenu": "新視窗 位置指定",
+  "NewWindowLinkGroupMenu": "新視窗 連接到其他群組",
 
   "MoveEdgeMenu": "移動",
   "MoveEdgeLeft": "左端",
