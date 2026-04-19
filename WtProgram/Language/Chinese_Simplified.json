@@ -71,7 +71,6 @@
   "Diagnostics": "诊断",
   "Reset": "重置",
 
-  "NewTab": "新建标签页 : 启动{0}",
   "NewLaunchMenu": "新建启动 : 启动{0}",
   "NewTabInGroup": "新建标签页 : 此标签页({0})的右侧",
   "NewWindowPositionMenu": "新窗口 位置指定",
@@ -141,11 +140,9 @@
   "PinTabMenu": "固定标签页",
   "PinThisTab": "固定此标签页",
   "UnpinThisTab": "取消固定此标签页",
-  "PinAllTabs": "固定所有标签页",
-  "UnpinAllTabs": "取消固定所有标签页",
   "PinLeftTabsFormat": "固定左侧{0}个标签页",
-  "PinRightTabsFormat": "固定右侧{0}个标签页",
   "UnpinLeftTabsFormat": "取消固定左侧{0}个标签页",
+  "PinRightTabsFormat": "固定右侧{0}个标签页",
   "UnpinRightTabsFormat": "取消固定右侧{0}个标签页",
 
   "TabColorMenu": "标签页颜色设置",

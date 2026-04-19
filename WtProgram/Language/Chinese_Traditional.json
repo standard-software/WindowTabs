@@ -71,7 +71,6 @@
   "Diagnostics": "診斷",
   "Reset": "重設",
 
-  "NewTab": "新增分頁 : 啟動{0}",
   "NewLaunchMenu": "新啟動 : 啟動{0}",
   "NewTabInGroup": "新增分頁 : 此分頁({0})的右側",
   "NewWindowPositionMenu": "新視窗 位置指定",
@@ -141,11 +140,9 @@
   "PinTabMenu": "固定分頁",
   "PinThisTab": "固定此分頁",
   "UnpinThisTab": "取消固定此分頁",
-  "PinAllTabs": "固定所有分頁",
-  "UnpinAllTabs": "取消固定所有分頁",
   "PinLeftTabsFormat": "釘選左側{0}個分頁",
-  "PinRightTabsFormat": "釘選右側{0}個分頁",
   "UnpinLeftTabsFormat": "取消釘選左側{0}個分頁",
+  "PinRightTabsFormat": "釘選右側{0}個分頁",
   "UnpinRightTabsFormat": "取消釘選右側{0}個分頁",
 
   "TabColorMenu": "分頁顏色設定",
