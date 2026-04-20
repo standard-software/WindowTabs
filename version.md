@@ -3,8 +3,7 @@
 ## version ss_jp_2026.04.12_next4
 - Bug fix
   - Build script: include the Settings folder in the portable ZIP distribution
-  - Performance: reduced CPU load for apps like LibreOffice
-  - Tab strip tracking: the `EVENT_OBJECT_LOCATIONCHANGE` dispatch throttle now has a trailing edge (previously leading-only), so when the user drags a window and stops abruptly the tab strip settles at the final position within the throttle interval instead of being left ~50 ms behind. The event rate cap itself is unchanged, so CPU savings for noisy apps and existing stability are preserved.
+  - Performance: reduced CPU load for heavy apps like LibreOffice; improved tab-strip tracking and rendering
 - Installer: Language/Settings files are always rewritten with the new defaults on install/upgrade/repair; user-edited files are backed up to `Backup_YYYY-MM-DD_HH-MM-SS/` first (no folder when nothing changed; kept after uninstall)
 - Detach/Split position submenu: Snap Left/Right at top, rest under "Position Other"
 - Tab menu: "New tab" replaced by a "New launch : exe" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
