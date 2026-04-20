@@ -317,7 +317,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         groupBounds.x groupBounds.y groupBounds.width groupBounds.height
                         targetBounds.x targetBounds.y targetBounds.width targetBounds.height
                         correctBounds.x correctBounds.y correctBounds.width correctBounds.height)
-                    window.move(correctBounds)
+                    // Skip the move if size already matches - SetWindowPos is expensive and apps that
+                    // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
+                    // otherwise trigger redundant work and follow-up events on every spurious change.
+                    if currentBounds.size <> correctBounds.size then
+                        window.move(correctBounds)
                     // Track the margin-shrunk size for this window
                     if this.hasExeMargin(hwnd) then
                         marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
@@ -528,6 +532,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // Common method to apply window bounds with DPI-aware logic
     member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect) =
         let window = this.os.windowFromHwnd(hwnd)
+
+        // Skip the move if bounds already match - SetWindowPos is expensive and apps that
+        // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
+        // otherwise trigger redundant work and cascading follow-up events.
+        if window.bounds = bounds then () else
 
         // Get current DPI (before move) and target DPI (after move)
         let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -813,17 +822,27 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
        if this.windows.contains(hwnd).not then
             if withDelay then System.Threading.Thread.Sleep(250)
             let window = this.os.windowFromHwnd(hwnd)                
-            let conflateEvents = Set2(List2([WinEvent.EVENT_SYSTEM_MINIMIZESTART; WinEvent.EVENT_SYSTEM_MINIMIZEEND]))
+            // Per-event leading throttle intervals. LOCATIONCHANGE fires very frequently for
+            // some apps (e.g. LibreOffice) even when the window has not actually moved, so throttle
+            // it to at most one handler call every 50ms. MINIMIZE events need to be coalesced over
+            // a full second because they can fire in rapid pairs as windows show/hide.
+            let conflateIntervals =
+                Map.ofList [
+                    WinEvent.EVENT_OBJECT_LOCATIONCHANGE, TimeSpan.FromMilliseconds(50.0)
+                    WinEvent.EVENT_SYSTEM_MINIMIZESTART,  TimeSpan.FromSeconds(1.0)
+                    WinEvent.EVENT_SYSTEM_MINIMIZEEND,    TimeSpan.FromSeconds(1.0)
+                ]
             let window = this.os.windowFromHwnd(hwnd)
             this.setWindows(this.windows.add hwnd)
             if prevTop.value.IsNone then
                 prevTop.set(Some(hwnd))
                 this.saveTopWindowPlacement()
-            let registerEvent evt = 
+            let registerEvent evt =
                 let handler = fun() -> this.main(hwnd, evt)
                 let handler =
-                    if conflateEvents.contains(evt) then Helper.conflate (TimeSpan(0,0,1)) handler
-                    else handler
+                    match Map.tryFind evt conflateIntervals with
+                    | Some(interval) -> Helper.conflate interval handler
+                    | None -> handler
                 window.setWinEventHook evt handler
             let hooks = 
                 List2([
