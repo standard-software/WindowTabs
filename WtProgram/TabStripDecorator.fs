@@ -2543,37 +2543,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 Some(processPath)
 
         // Shared error reporting wrapper used by all three new-launch menu items
+        let showUwpError () =
+            let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
+            let message = String.Format(Localization.getString("NewLaunchErrorUWP"), appName)
+            MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
         let handleLaunchError (launchCall: string -> unit) =
             try
                 match resolveLaunchPath() with
                 | Some(path) -> launchCall path
-                | None ->
-                    // UWP app with no alternative launch command
-                    let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
-                    let message =
-                        match Localization.currentLanguage with
-                        | "Japanese" ->
-                            sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
-                        | _ ->
-                            sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
-                    MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                | None -> showUwpError ()
             with
             | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
-                let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
-                let message =
-                    match Localization.currentLanguage with
-                    | "Japanese" ->
-                        sprintf "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション (%s) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。" appName
-                    | _ ->
-                        sprintf "Failed to start new window.\n\nThis application (%s) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead." appName
-                MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                showUwpError ()
                 System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
             | :? System.ComponentModel.Win32Exception as ex ->
-                let message = sprintf "Failed to launch process:\n\nPath: %s\nError: %s" processPath ex.Message
+                let message = String.Format(Localization.getString("NewLaunchErrorProcess"), processPath, ex.Message)
                 MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
                 System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
             | ex ->
-                let message = sprintf "Unexpected error starting process:\n%s" ex.Message
+                let message = String.Format(Localization.getString("NewLaunchErrorUnexpected"), ex.Message)
                 MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
                 System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
 

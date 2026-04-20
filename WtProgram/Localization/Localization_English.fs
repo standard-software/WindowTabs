@@ -79,6 +79,9 @@ module Localization_English =
         ("NewTabInGroup", "New tab : right of this tab ({0})")
         ("NewWindowPositionMenu", "New window (position)")
         ("NewWindowLinkGroupMenu", "New window (link to group)")
+        ("NewLaunchErrorUWP", "Failed to start new window.\n\nThis application ({0}) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead.")
+        ("NewLaunchErrorProcess", "Failed to launch process.\n\nPath: {0}\nError: {1}")
+        ("NewLaunchErrorUnexpected", "Unexpected error starting process:\n{0}")
 
         ("MoveEdgeMenu", "Move")
         ("MoveEdgeLeft", "Left Edge")

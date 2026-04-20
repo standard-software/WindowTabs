@@ -75,6 +75,9 @@
   "NewTabInGroup": "新增分頁 : 此分頁({0})的右側",
   "NewWindowPositionMenu": "新視窗 位置指定",
   "NewWindowLinkGroupMenu": "新視窗 連接到其他群組",
+  "NewLaunchErrorUWP": "啟動新視窗失敗。\n\n此應用程式 ({0}) 是 UWP 應用,\n無法直接啟動。\n\n請改從開始選單啟動。",
+  "NewLaunchErrorProcess": "啟動程序失敗。\n\n路徑: {0}\n錯誤: {1}",
+  "NewLaunchErrorUnexpected": "啟動程序時發生意外錯誤:\n{0}",
 
   "MoveEdgeMenu": "移動",
   "MoveEdgeLeft": "左端",
