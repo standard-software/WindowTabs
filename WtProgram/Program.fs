@@ -116,6 +116,11 @@ type Program() as this =
     let windowAlignment = Cell.create(Map2() : Map2<IntPtr, TabAlign>)
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
+    // Trailing debounce for updateAppWindows: apps such as LibreOffice fire shell events
+    // (HSHELL_WINDOWACTIVATED / HSHELL_WINDOWCREATED etc.) in rapid bursts and each one would
+    // otherwise trigger a full window-scan. Coalesce the bursts into a single update.
+    let mutable pendingUpdateAppWindowsToken : IDisposable option = None
+    let updateAppWindowsDebounceMs = 50
    
     let isFirstRun = settingsManager.fileExists.not
 
@@ -382,6 +387,13 @@ type Program() as this =
             invoker.asyncInvoke(fun () -> action hwnd)
         | None -> ()
 
+    member this.scheduleUpdateAppWindows() =
+        pendingUpdateAppWindowsToken |> Option.iter (fun t -> t.Dispose())
+        pendingUpdateAppWindowsToken <-
+            Some(ThreadHelper.cancelablePostBack updateAppWindowsDebounceMs (fun () ->
+                pendingUpdateAppWindowsToken <- None
+                this.updateAppWindows()))
+
     member this.receive message =
         let mutable skipFullUpdate = false
         match message with
@@ -402,7 +414,7 @@ type Program() as this =
         | Timer -> ()
 
         if not skipFullUpdate then
-            this.updateAppWindows()
+            this.scheduleUpdateAppWindows()
 
     member this.exitIfNeeded() =
         if inShutdown.value then

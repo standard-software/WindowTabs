@@ -7,6 +7,7 @@
 - Tab menu: "New tab" replaced by a "New launch : &lt;exe&gt;" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
 - Pin Tab submenu: removed "Pin all tabs"/"Unpin all tabs" items and added a separator between the left-tab and right-tab groups
 - Tab Color submenu: added "Clear color" items next to this/left/right color submenus; removed the in-submenu "Clear color setting" item and the "All tabs color" submenu
+- Performance: reduce CPU load for apps that fire shell / LOCATIONCHANGE events in rapid bursts (e.g. LibreOffice) — coalesce `updateAppWindows` calls with a 50 ms trailing debounce, throttle `EVENT_OBJECT_LOCATIONCHANGE` handling to 50 ms, and skip redundant `SetWindowPos` calls when a background window's bounds/size already match the target
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu
