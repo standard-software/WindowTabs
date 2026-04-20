@@ -105,7 +105,7 @@ This feature remains unchanged from the original WindowTabs functionality.
 ### Tab Management
 
 - **Tab Context Menu**: Right-click on tabs to access various options
-  - New tab
+  - New launch : (exe name) (submenu: new tab in the same group, new window with position, new window linked to another group)
   ---
   - Snap Left / Snap Right
   - Position Other (submenu: Move and Snap to edges/corners with percentage options)
@@ -114,12 +114,12 @@ This feature remains unchanged from the original WindowTabs functionality.
   ---
   - Link to another group
   ---
-  - Tab Detach and Split (submenu)
+  - Tab Detach and Split (submenu: Snap Left/Right at top, rest under "Position Other")
   ---
   - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
   ---
-  - Tab Pin (submenu: pin/unpin this tab, paired pin/unpin left/right tabs, pin/unpin all tabs)
-  - Tab Color Change (submenu: per-scope color selection — this tab, left/right tabs, all tabs — with fill / underline / border types)
+  - Tab Pin (submenu: pin/unpin this tab, paired pin/unpin left/right tabs, with a separator between the left-tab and right-tab groups)
+  - Tab Color Change (per-scope submenus — this tab, left tabs, right tabs — with fill / underline / border types, each paired with a "Clear color" item)
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
   - Tab Align (Align all tabs to Left/Right at top level, individual tab alignment in submenu showing only the opposite side)
@@ -130,6 +130,16 @@ This feature remains unchanged from the original WindowTabs functionality.
   - Settings
 
 ![Popup Menu](README_Image/PopupMenu.png)
+
+
+#### New Launch
+
+Launch a new instance of the tab's executable directly from the tab context menu, with three variants:
+
+- **New tab in the same group**: the new window joins the current tab group
+- **New window with position**: a standalone window that does not auto-group; choose Snap Left/Right or a position from the Position Other submenu
+- **New window linked to another group**: a standalone window that joins a selected existing group
+- The two "new window" variants bypass auto-grouping so the launched window does not get merged into an unrelated group
 
 
 #### Reposition
@@ -174,8 +184,8 @@ and reposition or link to another group.
 
 Pin tabs to keep them in a fixed position on the left side of the tab strip, similar to browser pinned tabs.
 
-- Pin or unpin individual tabs, or pin/unpin all tabs in a group at once
-- Pin/unpin left or right tabs within the same alignment group
+- Pin or unpin individual tabs
+- Pin/unpin left or right tabs within the same alignment group (left-tab and right-tab groups separated by a divider)
 - Pinned tab width can be set to icon-only size or a specified fixed width
 - When using specified width, a pushpin icon allows unpinning
 - Dragging a tab into the pinned zone automatically pins it
@@ -195,10 +205,10 @@ Set a color on individual tabs for visual identification. Three color types are 
 **7 colors**: Red, Blue, Green, Yellow, Purple, Orange, Pink
 
 - Right-click a tab and use the "Tab Color Change" submenu
-- Color selection is organized into per-scope submenus: this tab, left tabs, right tabs, all tabs
+- Color selection is organized into per-scope submenus: this tab, left tabs, right tabs
+- Each scope submenu is paired with a "Clear color" item at the top level for quick removal
 - Fill, underline, and border are mutually exclusive (setting one clears the others)
 - Checkmark overlay (in the "this tab" submenu) on the color icon when the tab's current color matches
-- "Clear color setting" to remove color from the target scope
 - Colors are persisted across restarts
 
 ![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
