@@ -445,17 +445,20 @@ and
 
     member this.showNoActivate() = WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE).ignore
 
-    member this.update(image:Img, location:Pt, alpha) =       
-        let image =
-            let imageWithBg = new Bitmap(image.width, image.height)
-            let gfx = Graphics.FromImage(imageWithBg)
-            let b = new SolidBrush(Color.Transparent)
-            gfx.FillRectangle(b, new Rectangle(Point.Empty, image.size.Size))
-            b.Dispose()
-            gfx.DrawImage(image.bitmap, Point.Empty)
-            gfx.Dispose()
-            imageWithBg
-        Win32Helper.UpdateLayeredWindow(hwnd, location.Point, image, alpha)
+    member this.update(image:Img, location:Pt, alpha) =
+        // Build a fresh bitmap with a transparent background and the rendered
+        // image composited on top, then push it to the layered window.
+        // `UpdateLayeredWindow` below internally calls GetHbitmap and cleans up
+        // the resulting HBITMAP/DC, so once it returns we own nothing but the
+        // managed Bitmap/Graphics/SolidBrush — all disposed by `use`. Without
+        // this the per-frame allocation leaked LOH pixel buffers, which used
+        // to be masked by a forced GC.Collect on every render.
+        use imageWithBg = new Bitmap(image.width, image.height)
+        use gfx = Graphics.FromImage(imageWithBg)
+        use b = new SolidBrush(Color.Transparent)
+        gfx.FillRectangle(b, new Rectangle(Point.Empty, image.size.Size))
+        gfx.DrawImage(image.bitmap, Point.Empty)
+        Win32Helper.UpdateLayeredWindow(hwnd, location.Point, imageWithBg, alpha)
         this.showNoActivate()
     
     member this.updateLocation(location:Pt) =       
