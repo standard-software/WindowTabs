@@ -75,6 +75,9 @@
   "NewTabInGroup": "新しいタブやで : このタブ({0})の右やで",
   "NewWindowPositionMenu": "新しいウィンドウやで 位置指定",
   "NewWindowLinkGroupMenu": "新しいウィンドウやで 他のグループへ連結",
+  "NewLaunchErrorUWP": "新規ウィンドウの起動に失敗してもうたで。\n\nこのアプリ ({0}) はUWPアプリやから、\n直接起動できひんのや。\n\n代わりにスタートメニューから起動してな。",
+  "NewLaunchErrorProcess": "プロセスの起動に失敗してもうたで。\n\nパス: {0}\nエラー: {1}",
+  "NewLaunchErrorUnexpected": "プロセスの起動で変なエラー出たで:\n{0}",
 
   "MoveEdgeMenu": "移動やで",
   "MoveEdgeLeft": "左端",

@@ -75,6 +75,9 @@
   "NewTabInGroup": "新しいタブ : このタブ({0})の右",
   "NewWindowPositionMenu": "新しいウィンドウ 位置指定",
   "NewWindowLinkGroupMenu": "新しいウィンドウ 他のグループへ連結",
+  "NewLaunchErrorUWP": "新規ウィンドウの起動に失敗しました。\n\nこのアプリケーション ({0}) はUWPアプリのため、\n直接起動できません。\n\n代わりにスタートメニューから起動してください。",
+  "NewLaunchErrorProcess": "プロセスの起動に失敗しました。\n\nパス: {0}\nエラー: {1}",
+  "NewLaunchErrorUnexpected": "プロセスの起動で予期しないエラーが発生しました:\n{0}",
 
   "MoveEdgeMenu": "移動",
   "MoveEdgeLeft": "左端",
