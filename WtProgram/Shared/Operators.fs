@@ -350,3 +350,51 @@ module Helper =
             match last with
             | Some(last) -> if now.Subtract last > interval then f()
             | None -> f()
+
+    // Leading + trailing throttle. `f()` fires immediately on the first call
+    // (leading edge), subsequent calls within the interval are coalesced, and
+    // if any were coalesced the handler fires once more at the end of the
+    // interval with the latest state (trailing edge). Compared to plain
+    // `conflate`, the trailing edge ensures the handler sees the *final* state
+    // after a burst — e.g. when the user drags a window and stops abruptly,
+    // the last LOCATIONCHANGE event isn't silently discarded, so the tab strip
+    // settles at the stopped position instead of being left at the last fire.
+    // Uses `System.Windows.Forms.Timer` for the trailing callback so it fires
+    // on the thread that originally wrapped the handler (the UI thread, where
+    // all tab-strip / event-hook work runs).
+    let conflateWithTrailing (interval:TimeSpan) f =
+        let lastFire = ref DateTime.MinValue
+        let pendingTrailing : System.Windows.Forms.Timer ref = ref null
+        let hasDropped = ref false
+        let cancelTrailing() =
+            if not (isNull !pendingTrailing) then
+                (!pendingTrailing).Stop()
+                (!pendingTrailing).Dispose()
+                pendingTrailing := null
+        fun () ->
+            let now = DateTime.Now
+            if now - lastFire.Value > interval then
+                // Leading edge: fire now and reset drop flag / trailing timer.
+                cancelTrailing()
+                hasDropped := false
+                lastFire := now
+                f()
+            else
+                // Within throttle window: mark as dropped; schedule trailing
+                // timer if one isn't already pending.
+                hasDropped := true
+                if isNull !pendingTrailing then
+                    let remaining = (lastFire.Value + interval) - now
+                    let delayMs = max 1 (int remaining.TotalMilliseconds)
+                    let timer = new System.Windows.Forms.Timer()
+                    timer.Interval <- delayMs
+                    timer.Tick.Add(fun _ ->
+                        timer.Stop()
+                        timer.Dispose()
+                        pendingTrailing := null
+                        if !hasDropped then
+                            hasDropped := false
+                            lastFire := DateTime.Now
+                            f())
+                    pendingTrailing := timer
+                    timer.Start()

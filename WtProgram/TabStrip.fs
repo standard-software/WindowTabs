@@ -369,10 +369,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.contentOffset = this.appearance.tabHeightOffset
     member private this.location = locationCell.value 
     
-    member private this.update() = 
-        if this.visible then 
+    member private this.update() =
+        if this.visible then
             this.window.update(this.render, this.location, this.alpha)
-            GC.Collect()
         else this.window.hide()
     
     member private this.render : Img = 

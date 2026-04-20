@@ -1,13 +1,15 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.04.12_next4
+- Bug fix
+  - Build script: include the Settings folder in the portable ZIP distribution
+  - Performance: reduced CPU load for apps like LibreOffice
+  - Tab strip tracking: the `EVENT_OBJECT_LOCATIONCHANGE` dispatch throttle now has a trailing edge (previously leading-only), so when the user drags a window and stops abruptly the tab strip settles at the final position within the throttle interval instead of being left ~50 ms behind. The event rate cap itself is unchanged, so CPU savings for noisy apps and existing stability are preserved.
 - Installer: Language/Settings files are always rewritten with the new defaults on install/upgrade/repair; user-edited files are backed up to `Backup_YYYY-MM-DD_HH-MM-SS/` first (no folder when nothing changed; kept after uninstall)
-- Build script: include the Settings folder in the portable ZIP distribution
 - Detach/Split position submenu: Snap Left/Right at top, rest under "Position Other"
-- Tab menu: "New tab" replaced by a "New launch : &lt;exe&gt;" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
+- Tab menu: "New tab" replaced by a "New launch : exe" submenu with 3 variants (in-group tab, new window with position, new window linked to another group; new-window variants bypass auto-grouping)
 - Pin Tab submenu: removed "Pin all tabs"/"Unpin all tabs" items and added a separator between the left-tab and right-tab groups
 - Tab Color submenu: added "Clear color" items next to this/left/right color submenus; removed the in-submenu "Clear color setting" item and the "All tabs color" submenu
-- Performance: reduce CPU load for apps that fire shell / LOCATIONCHANGE events in rapid bursts (e.g. LibreOffice) — coalesce `updateAppWindows` calls with a 50 ms trailing debounce, throttle `EVENT_OBJECT_LOCATIONCHANGE` handling to 50 ms, and skip redundant `SetWindowPos` calls when a background window's bounds/size already match the target
 
 ## version ss_jp_2026.04.12
 - Restructured Tab Position menu: "Align all" at top level, individual tab alignment in submenu

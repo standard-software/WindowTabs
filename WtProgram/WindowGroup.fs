@@ -841,7 +841,15 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 let handler = fun() -> this.main(hwnd, evt)
                 let handler =
                     match Map.tryFind evt conflateIntervals with
-                    | Some(interval) -> Helper.conflate interval handler
+                    | Some(interval) ->
+                        // LOCATIONCHANGE uses leading+trailing so the tab strip
+                        // settles at the final position after a drag stops instead
+                        // of being left ~50 ms behind. Other events (MINIMIZE pair
+                        // coalescing) don't need the trailing edge.
+                        match evt with
+                        | WinEvent.EVENT_OBJECT_LOCATIONCHANGE ->
+                            Helper.conflateWithTrailing interval handler
+                        | _ -> Helper.conflate interval handler
                     | None -> handler
                 window.setWinEventHook evt handler
             let hooks = 
