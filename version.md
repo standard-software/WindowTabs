@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.04.12_next4
+## version ss_jp_2026.04.22
 - Bug fix
   - Build script: include the Settings folder in the portable ZIP distribution
   - Performance: reduced CPU load for heavy apps like LibreOffice; improved tab-strip tracking and rendering
