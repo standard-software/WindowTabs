@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.04.22_next1
+
 ## version ss_jp_2026.04.22
 - Bug fix
   - Build script: include the Settings folder in the portable ZIP distribution
