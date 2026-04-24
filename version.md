@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.04.22_next1
+- Tab context menu: position-move items that used to sit at the top level are now nested under a single "Position Move" submenu; the Detach / Split tab menus use the same layout.
 
 ## version ss_jp_2026.04.22
 - Bug fix
