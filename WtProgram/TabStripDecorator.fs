@@ -2404,112 +2404,98 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
 
-        // Helper: build a flat list of position menu items (Snap Left/Right, Snap Top/Bottom, Move edge submenu,
-        // Snap percent submenus, Maximize Display/Desktop). Used directly by per-screen submenus so they stay flat.
-        let buildPositionMenuItems (includeLeftRight: bool) (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
-            let snapPercentSubMenu (pct: int) =
-                CmiPopUp({
-                    text = String.Format(Localization.getString("SnapPercent"), pct)
-                    image = None
-                    items = List2([
-                        CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> snapPercentFn "snapcenter" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> snapPercentFn "snapcenterhorizontal" pct); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> snapPercentFn "snapcentervertical" pct); flags = List2() })
-                    ])
-                    flags = List2()
-                })
-            let leftRightItems =
-                if includeLeftRight then
-                    [
-                        CmiRegular({ text = Localization.getString("SnapLeft"); image = None; click = (fun() -> snapFn("snapleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
-                    ]
+        // Build the "Snap Percent" submenu (e.g. "Snap 90%") containing Left/Right/Top/Bottom,
+        // corner variants, and Center options at the given percent.
+        let buildSnapPercentSubMenu (snapPercentFn: string -> int -> unit) (pct: int) =
+            CmiPopUp({
+                text = String.Format(Localization.getString("SnapPercent"), pct)
+                image = None
+                items = List2([
+                    CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
+                    CmiSeparator
+                    CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
+                    CmiSeparator
+                    CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> snapPercentFn "snapcenter" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> snapPercentFn "snapcenterhorizontal" pct); flags = List2() })
+                    CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> snapPercentFn "snapcentervertical" pct); flags = List2() })
+                ])
+                flags = List2()
+            })
+
+        // Build the "Move" submenu (edge + corner moves that keep the current size).
+        let buildMoveEdgeSubMenu (moveFn: string option -> unit) =
+            CmiPopUp({
+                text = Localization.getString("MoveEdgeMenu")
+                image = None
+                items = List2([
+                    CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
+                    CmiSeparator
+                    CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() })
+                    CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
+                ])
+                flags = List2()
+            })
+
+        // Build the "Snap Other" submenu (the percent-variant snaps + Snap Display / Snap Desktop).
+        // `includeSnapDesktop` adds the desktop-maximize item when there are multiple monitors.
+        let buildSnapOtherSubMenu (includeSnapDesktop: bool) (snapPercentFn: string -> int -> unit) =
+            let desktopSnap =
+                if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
+                    [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
                 else []
-            let separatorIfLeftRight = if includeLeftRight then [CmiSeparator] else []
-            let topBottomItems =
-                [
-                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> snapFn("snaptop")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
-                ]
-            leftRightItems @ separatorIfLeftRight @ topBottomItems @
+            CmiPopUp({
+                text = Localization.getString("SnapOtherMenu")
+                image = None
+                items = List2([
+                    buildSnapPercentSubMenu snapPercentFn 90
+                    buildSnapPercentSubMenu snapPercentFn 70
+                    buildSnapPercentSubMenu snapPercentFn 50
+                    buildSnapPercentSubMenu snapPercentFn 30
+                    CmiSeparator
+                    CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+                ] @ desktopSnap)
+                flags = List2()
+            })
+
+        // Inner items for a "Position Move" submenu: the four direct snaps, the Snap Other
+        // percent-and-maximize submenu, then a separator and the Move edge submenu below it.
+        // Display submenus are appended separately by the caller when needed.
+        let buildPositionMoveInnerItems (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             [
+                CmiRegular({ text = Localization.getString("SnapLeft");   image = None; click = (fun() -> snapFn("snapleft"));   flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapRight");  image = None; click = (fun() -> snapFn("snapright"));  flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                buildSnapOtherSubMenu includeSnapDesktop snapPercentFn
                 CmiSeparator
-                CmiPopUp({
-                    text = Localization.getString("MoveEdgeMenu")
-                    image = None
-                    items = List2([
-                        CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
-                    ])
-                    flags = List2()
-                })
-                CmiSeparator
-                snapPercentSubMenu 90
-                snapPercentSubMenu 70
-                snapPercentSubMenu 50
-                snapPercentSubMenu 30
-                CmiSeparator
-                CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
-            ] @
-            (if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
-                [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
-             else [])
+                buildMoveEdgeSubMenu moveFn
+            ]
 
-        // Helper: build position menu items with the remaining options collapsed into a "Position Other" submenu.
-        // Used by top-level detach/split position menus.
-        let buildPositionMenuItemsWithOther (includeLeftRight: bool) (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
-            let flatItems = buildPositionMenuItems includeLeftRight includeSnapDesktop moveFn snapFn snapPercentFn
-            if includeLeftRight then
-                // Keep Snap Left / Snap Right at the top, push everything after the first separator into a "Position Other" submenu.
-                match flatItems with
-                | snapLeft :: snapRight :: CmiSeparator :: rest ->
-                    let positionOtherMenu =
-                        CmiPopUp({
-                            text = Localization.getString("MovePositionOther")
-                            image = None
-                            items = List2(rest)
-                            flags = List2()
-                        })
-                    [snapLeft; snapRight; positionOtherMenu]
-                | _ -> flatItems
-            else
-                // Without Snap Left/Right at top, wrap everything in the "Position Other" submenu.
-                [CmiPopUp({
-                    text = Localization.getString("MovePositionOther")
-                    image = None
-                    items = List2(flatItems)
-                    flags = List2()
-                })]
-
-        // Helper: build screen position submenu
-        let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (includeLeftRight: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =
+        // Per-display submenu. For non-current displays, a "Same position on this display"
+        // item appears at the top; the current display's submenu is grayed because the
+        // position is already on that display.
+        let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =
             let screenItems =
                 let samePositionItems =
                     if isCurrentScreen then []
                     else
                         [
-                            CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> moveFn screen None); flags = List2() })
+                            CmiRegular({ text = Localization.getString("SamePositionThisDisplay"); image = None; click = (fun() -> moveFn screen None); flags = List2() })
                             CmiSeparator
                         ]
                 samePositionItems @
-                buildPositionMenuItems includeLeftRight false
+                buildPositionMoveInnerItems false
                     (fun pos -> moveFn screen pos)
                     (fun dir -> snapFn screen dir)
                     (fun dir pct -> snapPercentFn screen dir pct)
@@ -2518,6 +2504,38 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 image = None
                 items = List2(screenItems)
                 flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
+            })
+
+        // Build the full "Position Move" popup: the inner items plus per-display submenus
+        // (when multiple monitors are present).
+        let buildPositionMovePopup
+                (contextHwnd: IntPtr)
+                (moveFn: string option -> unit)
+                (snapFn: string -> unit)
+                (snapPercentFn: string -> int -> unit)
+                (screenMoveFn: System.Windows.Forms.Screen -> string option -> unit)
+                (screenSnapFn: System.Windows.Forms.Screen -> string -> unit)
+                (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) =
+            let innerItems = buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
+            let displayItems =
+                let allScreens = this.getAllScreensSorted()
+                let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
+                if allScreens.Length > 1 then
+                    let screenSubMenus =
+                        allScreens
+                        |> Array.map (fun screen ->
+                            let isCurrentScreen = screen.Equals(currentScreen)
+                            buildScreenPositionSubMenu screen isCurrentScreen
+                                screenMoveFn screenSnapFn screenSnapPercentFn
+                                (fun s -> this.getScreenName(s)))
+                        |> Array.toList
+                    CmiSeparator :: screenSubMenus
+                else []
+            CmiPopUp({
+                text = Localization.getString("PositionMoveMenu")
+                image = None
+                items = List2(innerItems @ displayItems)
+                flags = List2()
             })
 
         let window = os.windowFromHwnd(hwnd)
@@ -2618,7 +2636,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 })
             let baseMenuItems =
                 [samePositionItem; CmiSeparator] @
-                buildPositionMenuItemsWithOther true true
+                buildPositionMoveInnerItems true
                     (fun pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToPosition(h, pos)))
                     (fun dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnap(h, dir)))
                     (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
@@ -2630,7 +2648,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         allScreens
                         |> Array.map (fun screen ->
                             let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen true
+                            buildScreenPositionSubMenu screen isCurrentScreen
                                 (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
                                 (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
                                 (fun s dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnapWithPercent(h, s, dir, pct)))
@@ -3214,7 +3232,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItemsWithOther true true
+                buildPositionMoveInnerItems true
                     (fun pos -> this.detachTabToPosition(hwnd, pos))
                     (fun dir -> this.detachTabToSnap(hwnd, dir))
                     (fun dir pct -> this.detachTabToSnapWithPercent(hwnd, dir, pct))
@@ -3225,7 +3243,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         allScreens
                         |> Array.map (fun screen ->
                             let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen true
+                            buildScreenPositionSubMenu screen isCurrentScreen
                                 (fun s pos -> this.detachTabToScreen(hwnd, s, pos))
                                 (fun s dir -> this.detachTabToScreenSnap(hwnd, s, dir))
                                 (fun s dir pct -> this.detachTabToScreenSnapWithPercent(hwnd, s, dir, pct))
@@ -3272,7 +3290,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItemsWithOther true true
+                buildPositionMoveInnerItems true
                     (fun pos -> this.splitRightTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitRightTabsToSnap(hwnd, dir))
                     (fun dir pct -> this.splitRightTabsToSnapWithPercent(hwnd, dir, pct))
@@ -3283,7 +3301,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         allScreens
                         |> Array.map (fun screen ->
                             let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen true
+                            buildScreenPositionSubMenu screen isCurrentScreen
                                 (fun s pos -> this.splitRightTabsToScreen(hwnd, s, pos))
                                 (fun s dir -> this.splitRightTabsToScreenSnap(hwnd, s, dir))
                                 (fun s dir pct -> this.splitRightTabsToScreenSnapWithPercent(hwnd, s, dir, pct))
@@ -3332,7 +3350,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let baseMenuItems =
                 samePositionItem @
-                buildPositionMenuItemsWithOther true true
+                buildPositionMoveInnerItems true
                     (fun pos -> this.splitLeftTabsToPosition(hwnd, pos))
                     (fun dir -> this.splitLeftTabsToSnap(hwnd, dir))
                     (fun dir pct -> this.splitLeftTabsToSnapWithPercent(hwnd, dir, pct))
@@ -3343,7 +3361,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         allScreens
                         |> Array.map (fun screen ->
                             let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen true
+                            buildScreenPositionSubMenu screen isCurrentScreen
                                 (fun s pos -> this.splitLeftTabsToScreen(hwnd, s, pos))
                                 (fun s dir -> this.splitLeftTabsToScreenSnap(hwnd, s, dir))
                                 (fun s dir pct -> this.splitLeftTabsToScreenSnapWithPercent(hwnd, s, dir, pct))
@@ -3362,87 +3380,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
             }))
 
-        // Top-level: Snap Left, Snap Right
-        let topLevelMoveSnapItems =
-            [
-                CmiRegular({
-                    text = Localization.getString("SnapLeft")
-                    image = None
-                    click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapleft"))
-                    flags = List2()
-                })
-                CmiRegular({
-                    text = Localization.getString("SnapRight")
-                    image = None
-                    click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapright"))
-                    flags = List2()
-                })
-            ]
-
-        let moveTabGroupSubMenu =
-            let snapPercentSubMenu (pct: int) =
-                CmiPopUp({
-                    text = String.Format(Localization.getString("SnapPercent"), pct)
-                    image = None
-                    items = List2([
-                        CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapleft", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapright", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptop", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottom", pct)); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptopleft", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snaptopright", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottomleft", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapbottomright", pct)); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapcenter", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapcenterhorizontal", pct)); flags = List2() })
-                        CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapcentervertical", pct)); flags = List2() })
-                    ])
-                    flags = List2()
-                })
-            let moveSubMenu =
-                CmiPopUp({
-                    text = Localization.getString("MoveEdgeMenu")
-                    image = None
-                    items = List2([
-                        CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "left")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "right")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "top")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "bottom")); flags = List2() })
-                        CmiSeparator
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "topleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "topright")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomleft")); flags = List2() })
-                        CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> this.moveTabGroupToPosition(hwnd, Some "bottomright")); flags = List2() })
-                    ])
-                    flags = List2()
-                })
-            let desktopSnapItem =
-                if System.Windows.Forms.Screen.AllScreens.Length > 1 then
-                    [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapmaximizedesktop", 100)); flags = List2() })]
-                else []
-            let baseMenuItems =
-                [
-                    CmiRegular({ text = Localization.getString("SnapTop"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snaptop")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> this.moveTabGroupToSnap(hwnd, "snapbottom")); flags = List2() })
-                    CmiSeparator
-                    moveSubMenu
-                    CmiSeparator
-                    snapPercentSubMenu 90
-                    snapPercentSubMenu 70
-                    snapPercentSubMenu 50
-                    snapPercentSubMenu 30
-                    CmiSeparator
-                    CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> this.moveTabGroupToSnapWithPercent(hwnd, "snapmaximizedisplay", 100)); flags = List2() })
-                ] @ desktopSnapItem
-
-            Some(CmiPopUp({
-                text = Localization.getString("MovePositionOther")
-                image = None
-                items = List2(baseMenuItems)
-                flags = List2()
-            }))
+        // Unified "Position Move" submenu for the tab group: direct Snap Left/Right/Top/Bottom,
+        // Move submenu, Snap Other submenu (percent variants + display/desktop max), and — when
+        // multiple monitors are attached — per-display submenus.
+        let positionMovePopup =
+            buildPositionMovePopup
+                hwnd
+                (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
+                (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
+                (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
+                (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
+                (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
+                (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
 
         let moveTabGroupToGroupMenu =
             // Update all group infos before building menu (same as moveTabMenu)
@@ -3577,31 +3526,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     flags = List2([MenuFlags.MF_GRAYED])
                 })
 
-        let screenDisplayItems =
-            let allScreens = this.getAllScreensSorted()
-            let currentScreen = this.getCurrentScreenForWindow(hwnd)
-            if allScreens.Length > 1 then
-                let screenSubMenus =
-                    allScreens
-                    |> Array.map (fun screen ->
-                        let isCurrentScreen = screen.Equals(currentScreen)
-                        Some(buildScreenPositionSubMenu screen isCurrentScreen true
-                            (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
-                            (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
-                            (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
-                            (fun s -> this.getScreenName(s)))
-                    )
-                    |> Array.toList
-                [Some(CmiSeparator)] @ screenSubMenus @ [Some(CmiSeparator)]
-            else
-                []
-
         List2([
             Some(newLaunchMenu)
             Some(CmiSeparator)
-        ] @ (topLevelMoveSnapItems |> List.map Some) @ [
-            moveTabGroupSubMenu
-        ] @ screenDisplayItems @ [
+            Some(positionMovePopup)
             Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
