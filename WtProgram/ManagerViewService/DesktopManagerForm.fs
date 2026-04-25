@@ -53,13 +53,14 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 6 (dark-mode-6): kitchen-sink combination — branch 4's full
-        // owner-draw pass plus a SetPreferredAppMode(ForceDark) call so the
-        // entire process is treated as a dark-mode app. Covers WinForms-side
-        // recoloring, per-control SetWindowTheme, TabControl + GroupBox
-        // owner-draw, and OS-wide dark-mode hint in one go.
+        // Branch 7 (dark-mode-7): branch 6's kitchen sink plus targeted fixes
+        // for the long-standing problem cases — TabControl background frame
+        // (extra Paint-time fill that overdraws the system frame) and the
+        // HotKey common control (msctls_hotkey32, detected by class name and
+        // hit with multiple SetWindowTheme variants since it ignores
+        // WM_CTLCOLOREDIT).
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeKitchenSinkToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeWithExtrasToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed

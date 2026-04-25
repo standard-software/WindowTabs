@@ -257,6 +257,97 @@ module DarkMode =
         for child in control.Controls do
             attachDarkOwnerDrawHandlers(child)
 
+    // === Branch-7 specific helpers ====================================
+    // Two long-standing problem cases:
+    //  - TabControl background frame: even after owner-drawing the headers,
+    //    the system still paints a 2-pixel light frame around the tab pages.
+    //  - HotKeyControl (msctls_hotkey32): a Win32 common control whose
+    //    painting ignores SetWindowTheme(DarkMode_*) hints AND doesn't fire
+    //    WM_CTLCOLOREDIT to its parent, so neither the WinMerge approach nor
+    //    the standard WinForms recolor reaches it.
+
+    // Aggressively repaint the TabControl client area on every paint with a
+    // dark fill before the system paints its frame. Combined with owner-drawn
+    // headers in branch 4 this kills the lit frame between the strip and the
+    // page area.
+    let attachDarkTabControlBackgroundFill (tabControl: TabControl) =
+        // Paint event runs after the system has drawn its frame, so we draw a
+        // dark rectangle over the visible non-tab-page area. We compute the
+        // strip area and the gap below it, leaving the tab page itself alone.
+        tabControl.Paint.Add(fun e ->
+            let g = e.Graphics
+            use brush = new SolidBrush(darkSurface)
+            // Determine the strip rectangle (top of control, height = first
+            // tab's bounds height + a couple of pixels).
+            let stripBottom =
+                if tabControl.TabPages.Count > 0 && tabControl.TabPages.[0].IsHandleCreated then
+                    let r = tabControl.GetTabRect(0)
+                    r.Bottom
+                else 24
+            // Fill from the bottom of the strip to the top of the page area
+            // (the thin frame the system would otherwise paint).
+            let frameTop = stripBottom
+            let frameBottom = tabControl.ClientSize.Height
+            let pageRect =
+                if tabControl.SelectedIndex >= 0 && tabControl.SelectedIndex < tabControl.TabPages.Count then
+                    tabControl.TabPages.[tabControl.SelectedIndex].Bounds
+                else Rectangle.Empty
+            // Top frame strip
+            if pageRect.Top > frameTop then
+                g.FillRectangle(brush, Rectangle(0, frameTop, tabControl.ClientSize.Width, pageRect.Top - frameTop))
+            // Bottom frame strip
+            if pageRect.Bottom < frameBottom then
+                g.FillRectangle(brush, Rectangle(0, pageRect.Bottom, tabControl.ClientSize.Width, frameBottom - pageRect.Bottom))
+            // Left and right frame strips
+            if pageRect.Left > 0 then
+                g.FillRectangle(brush, Rectangle(0, frameTop, pageRect.Left, frameBottom - frameTop))
+            if pageRect.Right < tabControl.ClientSize.Width then
+                g.FillRectangle(brush, Rectangle(pageRect.Right, frameTop, tabControl.ClientSize.Width - pageRect.Right, frameBottom - frameTop)))
+
+    // Throw multiple theme names at the HotKey common control to find one it
+    // accepts, plus force its WinForms-side properties. If none stick, the
+    // user at least sees the control clearly because its parent (set up by
+    // applyDarkColorsToControl) is dark.
+    let tryDarkenHotKeyLikeControl (control: Control) =
+        try
+            // The HotKey common control class name is "msctls_hotkey32".
+            // We can't easily detect that from F# without P/Invoking GetClassName;
+            // detect by the (already-public) BackColor/ForeColor write attempt
+            // and the fact that this is called from a HotKey-aware caller.
+            control.BackColor <- darkPanel
+            control.ForeColor <- darkText
+            if control.IsHandleCreated then
+                // The HOTKEY common control occasionally responds to the modern
+                // explorer dark-mode theme; try a few candidates.
+                setControlTheme control.Handle "DarkMode_CFD"
+                setControlTheme control.Handle "DarkMode_Explorer"
+                setControlTheme control.Handle "DarkMode"
+        with _ -> ()
+
+    // Detect candidates by class name and apply the HotKey-specific treatment.
+    [<DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetClassNameW")>]
+    extern int private GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount)
+
+    let private classNameOf (handle: IntPtr) =
+        let buf = System.Text.StringBuilder(64)
+        let len = GetClassName(handle, buf, buf.Capacity)
+        if len > 0 then buf.ToString() else ""
+
+    let rec applyDarkExtraTreatments (control: Control) =
+        try
+            // TabControl: extra background fill on top of owner-drawn headers
+            match control with
+            | :? TabControl as tc -> attachDarkTabControlBackgroundFill tc
+            | _ -> ()
+            // HotKey common control: identified by class name
+            if control.IsHandleCreated then
+                let cls = classNameOf control.Handle
+                if cls = "msctls_hotkey32" || cls.StartsWith("msctls_hotkey") then
+                    tryDarkenHotKeyLikeControl control
+        with _ -> ()
+        for child in control.Controls do
+            applyDarkExtraTreatments(child)
+
     let applyDarkThemeToForm (form: Form) (enabled: bool) =
         if enabled then
             useImmersiveDarkMode form.Handle true |> ignore
@@ -302,4 +393,21 @@ module DarkMode =
                 attachDarkOwnerDrawHandlers(child)
             for child in form.Controls do
                 applyDarkNativeThemeToControl(child)
+            form.Invalidate(true)
+
+    // Branch-7 entry point: branch 6 plus extra treatments for the long-standing
+    // problem cases (TabControl background frame and the HotKey common control).
+    let applyDarkThemeWithExtrasToForm (form: Form) (enabled: bool) =
+        if enabled then
+            setPreferredAppModeForceDark()
+            useImmersiveDarkMode form.Handle true |> ignore
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            for child in form.Controls do
+                applyDarkExtraTreatments(child)
             form.Invalidate(true)
