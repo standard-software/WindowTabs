@@ -165,9 +165,22 @@ module DarkMode =
             | :? CheckBox as cb ->
                 cb.BackColor <- darkSurface
                 cb.ForeColor <- darkText
+                // FlatStyle.Flat lets FlatAppearance colors take effect on the
+                // check glyph so the inside of the box reads as dark with a
+                // grey border instead of a stark system-white square.
+                cb.FlatStyle <- FlatStyle.Flat
+                cb.FlatAppearance.CheckedBackColor <- darkAccent
+                cb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
+                cb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
+                cb.FlatAppearance.MouseDownBackColor <- darkAccent
             | :? RadioButton as rb ->
                 rb.BackColor <- darkSurface
                 rb.ForeColor <- darkText
+                rb.FlatStyle <- FlatStyle.Flat
+                rb.FlatAppearance.CheckedBackColor <- darkAccent
+                rb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
+                rb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
+                rb.FlatAppearance.MouseDownBackColor <- darkAccent
             | :? ComboBox as cmb ->
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText

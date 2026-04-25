@@ -190,10 +190,6 @@ type ProgramView() as this=
         host.AutoSize <- true
         ts.Items.Add(host) |> ignore
         ts
-    let statusBar = 
-        let sb = StatusBar()
-        sb.Text <- "Ready"
-        sb
     let tree,model =
         let tree = TreeViewAdv()
         let model = TreeModel()
@@ -291,10 +287,8 @@ type ProgramView() as this=
         let panel = Panel()
         toolBar.Dock <- DockStyle.Top
         tree.Dock <- DockStyle.Fill
-        statusBar.Dock <- DockStyle.Bottom
         panel.Controls.Add(tree)
         panel.Controls.Add(toolBar)
-        panel.Controls.Add(statusBar)
         panel
 
     do  
@@ -308,8 +302,6 @@ type ProgramView() as this=
         ThreadHelper.queueBackground <| fun() ->
             let os = OS()
             let procs = Services.program.appWindows.fold (Map2()) <| fun procs hwnd ->
-                invoker.asyncInvoke <| fun() ->
-                    statusBar.Text <- sprintf "Scanning window 0x%x" hwnd
                 let window = os.windowFromHwnd(hwnd)
                 let procPath = window.pid.processPath
                 procs.add procPath (procs.tryFind(procPath).def(List2()).append(window))
@@ -337,7 +329,6 @@ type ProgramView() as this=
                 model.Nodes.Clear()
                 // Sort by category number first (0 = unset first, then 1-5), then by name
                 allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
-                statusBar.Text <- "Ready"
 
     interface ISettingsView with
         member x.key = SettingsViewType.ProgramSettings
