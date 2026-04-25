@@ -11,6 +11,20 @@ module DesktopManagerFormState =
     let mutable mutex : Mutex option = None
 
 type DesktopManagerForm() =
+    // Branch 10: flip HotKeyControl to its managed (TextBox-based) code path
+    // BEFORE the views are constructed so the hosted hot-key controls are
+    // born as themable Edit windows instead of the comctl32 "msctls_hotkey32"
+    // common control. The managed path stores the same HKM_GETHOTKEY-format
+    // packed int so the rest of the program is unaffected.
+    do
+        try
+            let darkOn =
+                match Services.settings.root.getBool("EnableMenuDarkMode") with
+                | Some(value) -> value
+                | None -> false
+            Bemo.Win32.HotKeyControl.UseManaged <- darkOn
+        with _ -> ()
+
     let title = sprintf "WindowTabs Settings (version %s)"  (Services.program.version)
     let tabs = List2([
         ProgramView() :> ISettingsView
