@@ -269,7 +269,9 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
         container.Margin <- Padding(0, 0, 0, 0)
         container.Padding <- Padding(0)
         container.Anchor <- AnchorStyles.Right
-        container.BackColor <- SystemColors.Window
+        container.BackColor <-
+            if DropdownButton.UseDarkMode then DarkMode.darkPanel
+            else SystemColors.Window
         container.BorderStyle <- BorderStyle.FixedSingle
         container.Cursor <- Cursors.Hand
 
@@ -291,21 +293,34 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
         dropdownBtn.Cursor <- Cursors.Hand
         dropdownBtn.TabStop <- true
 
-        // Helper to update label highlight state based on color mode
+        // Helper to update label highlight state based on color mode.
+        // When DropdownButton.UseDarkMode is on, swap the system Highlight /
+        // HighlightText / ControlText colors for the dark palette so the
+        // focused label doesn't end up as a system-blue rectangle with light
+        // text vanishing into a dark surrounding.
         let updateLabelHighlight () =
+            let dark = DropdownButton.UseDarkMode
+            let highlightBg =
+                if dark then DarkMode.darkAccent else SystemColors.Highlight
+            let highlightFg =
+                if dark then DarkMode.darkText else SystemColors.HighlightText
+            let normalBg =
+                if dark then DarkMode.darkPanel else Color.Transparent
+            let normalFg =
+                if dark then DarkMode.darkText else SystemColors.ControlText
             match colorMode with
             | ComboboxColor ->
                 // ComboBox style: highlight label when focused AND menu is closed
                 if isFocused && not isMenuOpen then
-                    textLabel.BackColor <- SystemColors.Highlight
-                    textLabel.ForeColor <- SystemColors.HighlightText
+                    textLabel.BackColor <- highlightBg
+                    textLabel.ForeColor <- highlightFg
                 else
-                    textLabel.BackColor <- Color.Transparent
-                    textLabel.ForeColor <- SystemColors.ControlText
+                    textLabel.BackColor <- normalBg
+                    textLabel.ForeColor <- normalFg
             | DropdownButtonColor ->
                 // Button style: label never highlights
-                textLabel.BackColor <- Color.Transparent
-                textLabel.ForeColor <- SystemColors.ControlText
+                textLabel.BackColor <- normalBg
+                textLabel.ForeColor <- normalFg
             // Invalidate dropdown button to update its visual state
             dropdownBtn.Invalidate()
 
@@ -332,19 +347,30 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
             if not isMenuOpen then isMouseDown <- false
             dropdownBtn.Invalidate()
 
-        // Custom paint to draw ComboBox-style dropdown button
+        // Custom paint to draw ComboBox-style dropdown button. When dark mode
+        // is on, paint a flat dark surface and a light chevron ourselves so
+        // the system theme's white arrow background doesn't leak through.
         dropdownBtn.Paint.Add <| fun e ->
-            let state =
-                if not dropdownBtn.Enabled then ComboBoxState.Disabled
-                elif isMenuOpen || isMouseDown then ComboBoxState.Pressed
-                elif isMouseOver then ComboBoxState.Hot
-                elif colorMode = DropdownButtonColor && isFocused then ComboBoxState.Hot
-                else ComboBoxState.Normal
-            if ComboBoxRenderer.IsSupported then
-                ComboBoxRenderer.DrawDropDownButton(e.Graphics, dropdownBtn.ClientRectangle, state)
+            if DropdownButton.UseDarkMode then
+                let bgColor =
+                    if isMenuOpen || isMouseDown then DarkMode.darkAccent
+                    elif isMouseOver then Color.FromArgb(60, 60, 60)
+                    else DarkMode.darkPanel
+                use bg = new SolidBrush(bgColor)
+                e.Graphics.FillRectangle(bg, dropdownBtn.ClientRectangle)
+                DarkMode.drawDarkArrow e.Graphics dropdownBtn.ClientRectangle true
             else
-                ControlPaint.DrawComboButton(e.Graphics, dropdownBtn.ClientRectangle,
-                    if isMenuOpen || isMouseDown then ButtonState.Pushed else ButtonState.Normal)
+                let state =
+                    if not dropdownBtn.Enabled then ComboBoxState.Disabled
+                    elif isMenuOpen || isMouseDown then ComboBoxState.Pressed
+                    elif isMouseOver then ComboBoxState.Hot
+                    elif colorMode = DropdownButtonColor && isFocused then ComboBoxState.Hot
+                    else ComboBoxState.Normal
+                if ComboBoxRenderer.IsSupported then
+                    ComboBoxRenderer.DrawDropDownButton(e.Graphics, dropdownBtn.ClientRectangle, state)
+                else
+                    ControlPaint.DrawComboButton(e.Graphics, dropdownBtn.ClientRectangle,
+                        if isMenuOpen || isMouseDown then ButtonState.Pushed else ButtonState.Normal)
 
         // Menu keyboard events
         menu.PreviewKeyDown.Add <| fun e ->
