@@ -408,6 +408,17 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
         container.SetRow(dropdownBtn, 0)
         container.SetColumn(dropdownBtn, 1)
 
+        // Apply dark renderer to the popup menu when the static flag is on so
+        // the clipboard/dropdown menus match the rest of the dialog.
+        if DropdownButton.UseDarkMode then
+            DarkMode.attachDarkContextMenuStripTheme menu
+
+    /// Static flag — when true the menu is rendered with the dark
+    /// ProfessionalRenderer from DarkMode. Set this *before* constructing the
+    /// DropdownButton (e.g. in DesktopManagerForm's `do` block when the
+    /// EnableMenuDarkMode setting is on).
+    static member val UseDarkMode = false with get, set
+
     /// Add a menu item with click handler
     member this.AddItem(itemText: string, handler: unit -> unit) =
         let item = new ToolStripMenuItem(itemText)

@@ -11,11 +11,11 @@ module DesktopManagerFormState =
     let mutable mutex : Mutex option = None
 
 type DesktopManagerForm() =
-    // Branch 10: flip HotKeyControl to its managed (TextBox-based) code path
-    // BEFORE the views are constructed so the hosted hot-key controls are
-    // born as themable Edit windows instead of the comctl32 "msctls_hotkey32"
-    // common control. The managed path stores the same HKM_GETHOTKEY-format
-    // packed int so the rest of the program is unaffected.
+    // Branch 10/12: flip code-path flags BEFORE the views are constructed
+    // so child controls are born in their dark-aware variants:
+    //  - HotKeyControl: managed (TextBox-based) path instead of comctl32
+    //    "msctls_hotkey32" common control.
+    //  - DropdownButton: ContextMenuStrip auto-themed with the dark renderer.
     do
         try
             let darkOn =
@@ -23,6 +23,7 @@ type DesktopManagerForm() =
                 | Some(value) -> value
                 | None -> false
             Bemo.Win32.HotKeyControl.UseManaged <- darkOn
+            Bemo.DropdownButton.UseDarkMode <- darkOn
         with _ -> ()
 
     let title = sprintf "WindowTabs Settings (version %s)"  (Services.program.version)
@@ -67,15 +68,12 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 9 (dark-mode-9): branch 7 plus targeted source-level fixes
-        // for TreeViewAdv (column headers + node text via a dark-mode flag in
-        // Aga.Controls), a NativeWindow subclass that fills the TabControl
-        // background dark on WM_ERASEBKGND so the gaps around the tab strip
-        // and below selected tabs go dark, StatusBar coloring, and a ComboBox
-        // drop-down theming hook (popup listbox is its own HWND so it needs
-        // SetWindowTheme separately).
+        // Branch 12 (dark-mode-12): branch 11's foundation plus NativeWindow
+        // subclasses that overpaint the ComboBox drop-down arrow and the
+        // NumericUpDown spin buttons in dark, plus a custom dark
+        // ProfessionalRenderer for ContextMenuStrip pop-ups.
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeAggressivelyToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeBranch12ToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
