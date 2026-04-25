@@ -29,7 +29,14 @@ type DesktopManagerForm() =
                     base.OnKeyDown(e)
         }
 
-    let form = 
+    let isDarkModeEnabled() =
+        try
+            match Services.settings.root.getBool("EnableMenuDarkMode") with
+            | Some(value) -> value
+            | None -> false
+        with _ -> false
+
+    let form =
         let form = Form()
         tabs.iter <| fun view ->
             let page = TabPage(view.title)
@@ -46,7 +53,14 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        form.FormClosed.Add(fun _ -> 
+        // Branch 4 (dark-mode-4): the most aggressive treatment. Title bar +
+        // recursive WinForms colors + SetWindowTheme native pass + owner-draw
+        // handlers for the TabControl headers and every GroupBox. This is
+        // what's needed to make the tab strip and group frames render in
+        // dark instead of falling back to the system theme.
+        form.Shown.Add(fun _ ->
+            DarkMode.applyDarkThemeFullToForm form (isDarkModeEnabled()))
+        form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
             match DesktopManagerFormState.mutex with
