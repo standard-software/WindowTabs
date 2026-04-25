@@ -507,14 +507,59 @@ module DarkMode =
             else
                 base.WndProc(&m)
 
+    // Branch-13 TabControl frame killer. The WM_ERASEBKGND subclass above
+    // covers the initial background, but the system still draws a 2-3 px
+    // light frame around the tab page during WM_PAINT. This subclass
+    // intercepts WM_PAINT, lets the system paint normally (so the
+    // owner-drawn tabs appear), then immediately overpaints the four frame
+    // strips around the selected tab page with darkSurface.
+    type private DarkTabControlFrameSubclass(tc: TabControl) as this =
+        inherit NativeWindow()
+        let WM_PAINT = 0x000F
+        let attach() =
+            try if tc.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(tc.Handle)
+            with _ -> ()
+        do
+            attach()
+            tc.HandleCreated.Add(fun _ -> attach())
+            tc.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+        override this.WndProc(m: byref<Message>) =
+            base.WndProc(&m)
+            if m.Msg = WM_PAINT then
+                try
+                    if tc.SelectedIndex >= 0 && tc.SelectedIndex < tc.TabPages.Count && tc.TabPages.Count > 0 then
+                        use g = Graphics.FromHwnd(tc.Handle)
+                        use brush = new SolidBrush(darkSurface)
+                        let stripBottom =
+                            try (tc.GetTabRect(0)).Bottom
+                            with _ -> 24
+                        let pageRect = tc.TabPages.[tc.SelectedIndex].Bounds
+                        let cr = tc.ClientRectangle
+                        // Top frame strip (between tab strip and page top)
+                        if pageRect.Top > stripBottom then
+                            g.FillRectangle(brush, Rectangle(0, stripBottom, cr.Width, pageRect.Top - stripBottom))
+                        // Left frame strip
+                        if pageRect.Left > 0 then
+                            g.FillRectangle(brush, Rectangle(0, stripBottom, pageRect.Left, cr.Height - stripBottom))
+                        // Right frame strip
+                        if pageRect.Right < cr.Width then
+                            g.FillRectangle(brush, Rectangle(pageRect.Right, stripBottom, cr.Width - pageRect.Right, cr.Height - stripBottom))
+                        // Bottom frame strip
+                        if pageRect.Bottom < cr.Height then
+                            g.FillRectangle(brush, Rectangle(0, pageRect.Bottom, cr.Width, cr.Height - pageRect.Bottom))
+                with _ -> ()
+
     // Walk the control tree and attach the dark-erase subclass to TabControls
     // and to any other control where the system paints a light background that
     // can't be covered via BackColor alone (notably TreeViewAdv's scrollbar
-    // box corner).
+    // box corner). For TabControls also attach the frame-killer subclass so
+    // the post-WM_PAINT system frame around the selected tab page is
+    // overdrawn dark.
     let rec attachDarkBackgroundSubclassRecursive (control: Control) =
         match control with
-        | :? TabControl ->
+        | :? TabControl as tc ->
             DarkBackgroundSubclass(control) |> ignore
+            DarkTabControlFrameSubclass(tc) |> ignore
         | _ -> ()
         for child in control.Controls do
             attachDarkBackgroundSubclassRecursive(child)
@@ -753,6 +798,33 @@ module DarkMode =
         for child in control.Controls do
             attachDarkContextMenuStripsRecursive(child)
 
+    // StatusBar owner-draw — the legacy StatusBar panels paint with system
+    // raised borders and can leak system colors. Switching each panel to
+    // OwnerDraw and rendering ourselves guarantees a dark surface with light
+    // text regardless of system theme.
+    let attachDarkStatusBarOwnerDraw (sb: StatusBar) =
+        for panel in sb.Panels do
+            try panel.Style <- StatusBarPanelStyle.OwnerDraw with _ -> ()
+        sb.DrawItem.Add(fun e ->
+            let g = e.Graphics
+            use brush = new SolidBrush(darkSurface)
+            g.FillRectangle(brush, e.Bounds)
+            let panel = e.Panel
+            if not (String.IsNullOrEmpty(panel.Text)) then
+                use textBrush = new SolidBrush(darkText)
+                use format = new StringFormat()
+                format.LineAlignment <- StringAlignment.Center
+                format.Trimming <- StringTrimming.EllipsisCharacter
+                let r = RectangleF(float32 (e.Bounds.X + 2), float32 e.Bounds.Y, float32 (e.Bounds.Width - 4), float32 e.Bounds.Height)
+                g.DrawString(panel.Text, sb.Font, textBrush, r, format))
+
+    let rec attachDarkStatusBarOwnerDrawRecursive (control: Control) =
+        match control with
+        | :? StatusBar as sb -> attachDarkStatusBarOwnerDraw sb
+        | _ -> ()
+        for child in control.Controls do
+            attachDarkStatusBarOwnerDrawRecursive(child)
+
     // Branch-12 entry point: branch-9 + the spinner / arrow subclasses + the
     // ContextMenuStrip dark renderer + the inactive-selection brush update
     // that ships in attachDarkTreeViewAdvOverlay above.
@@ -777,6 +849,36 @@ module DarkMode =
                 attachDarkSpinnerAndArrowSubclassesRecursive(child)
             for child in form.Controls do
                 attachDarkContextMenuStripsRecursive(child)
+            for child in form.Controls do
+                invalidateTreeViewAdvs(child)
+            form.Invalidate(true)
+
+    // Branch-13 entry point: branch 12 plus the TabControl frame killer
+    // (DarkTabControlFrameSubclass attached in attachDarkBackgroundSubclassRecursive)
+    // and the StatusBar owner-draw pass.
+    let applyDarkThemeBranch13ToForm (form: Form) (enabled: bool) =
+        if enabled then
+            setPreferredAppModeForceDark()
+            useImmersiveDarkMode form.Handle true |> ignore
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            for child in form.Controls do
+                applyDarkExtraTreatments(child)
+            for child in form.Controls do
+                attachDarkBackgroundSubclassRecursive(child)
+            for child in form.Controls do
+                attachDarkTreeViewAdvOverlayRecursive(child)
+            for child in form.Controls do
+                attachDarkSpinnerAndArrowSubclassesRecursive(child)
+            for child in form.Controls do
+                attachDarkContextMenuStripsRecursive(child)
+            for child in form.Controls do
+                attachDarkStatusBarOwnerDrawRecursive(child)
             for child in form.Controls do
                 invalidateTreeViewAdvs(child)
             form.Invalidate(true)
