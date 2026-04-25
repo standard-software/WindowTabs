@@ -92,6 +92,9 @@ type ColorEditor() as this =
         btn.Margin <- Padding(0)
         btn.Dock <- DockStyle.None
         btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left  // Left align
+        // Tag the button so the dark-mode theming walker can skip recoloring
+        // it — the BackColor is the *content* (the chosen color), not chrome.
+        btn.Tag <- box "DarkModePreserveColor"
         btn
         
     let textBox =
