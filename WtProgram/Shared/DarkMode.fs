@@ -582,19 +582,30 @@ module DarkMode =
                             x <- x + col.Width
                 with _ -> ()
 
+    // Long-lived brush for the inactive-selection background so we don't
+    // allocate one per draw call.
+    let private inactiveSelectionBrush = new SolidBrush(Color.FromArgb(60, 60, 60))
+
     let attachDarkTreeViewAdvOverlay (tva: TreeViewAdv) =
         // Header overpaint via NativeWindow subclass (Paint event doesn't
         // fire because TreeViewAdv.OnPaint omits the base call).
         DarkTreeViewAdvSubclass(tva) |> ignore
         // Hook DrawText on each NodeControl that's a BaseTextControl. Active
         // selection keeps system highlight colors so the focus row stays
-        // distinguishable; everything else goes light.
+        // distinguishable; everything else goes light. Inactive selection
+        // (focus elsewhere) gets a slightly-lighter dark surface so the
+        // selection state is still visible — fixes the workspace-tab "initial
+        // selection looks white" issue where SystemBrushes.InactiveBorder
+        // resolves to a light shade against our dark background.
         for nc in tva.NodeControls do
             match nc with
             | :? Aga.Controls.Tree.NodeControls.BaseTextControl as btc ->
                 btc.DrawText.Add(fun args ->
                     match args.Context.DrawSelection with
                     | DrawSelectionMode.Active -> ()
+                    | DrawSelectionMode.Inactive ->
+                        args.TextColor <- darkText
+                        args.BackgroundBrush <- inactiveSelectionBrush :> Brush
                     | _ -> args.TextColor <- darkText)
             | _ -> ()
 
@@ -604,6 +615,171 @@ module DarkMode =
         | _ -> ()
         for child in control.Controls do
             attachDarkTreeViewAdvOverlayRecursive(child)
+
+    // Helper to draw a dark-themed downward chevron (▼) glyph centered in a
+    // given rectangle. Used by the ComboBox and NumericUpDown subclasses to
+    // overpaint the system-themed dropdown / spinner glyphs.
+    let drawDarkArrow (g: Graphics) (rect: Rectangle) (down: bool) =
+        let cx = rect.X + rect.Width / 2
+        let cy = rect.Y + rect.Height / 2
+        let w = 4
+        let pts =
+            if down then
+                [| Point(cx - w, cy - 2); Point(cx + w, cy - 2); Point(cx, cy + 3) |]
+            else
+                [| Point(cx - w, cy + 2); Point(cx + w, cy + 2); Point(cx, cy - 3) |]
+        use brush = new SolidBrush(darkText)
+        g.FillPolygon(brush, pts)
+
+    // After a ComboBox paints itself, overdraw the right-edge dropdown arrow
+    // area in dark and re-render the chevron in light text. The arrow rect
+    // is the rightmost ~17 px of the client rectangle.
+    type private DarkComboBoxSubclass(cmb: ComboBox) as this =
+        inherit NativeWindow()
+        let WM_PAINT = 0x000F
+        let attach() =
+            try if cmb.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(cmb.Handle)
+            with _ -> ()
+        do
+            attach()
+            cmb.HandleCreated.Add(fun _ -> attach())
+            cmb.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+        override this.WndProc(m: byref<Message>) =
+            base.WndProc(&m)
+            if m.Msg = WM_PAINT then
+                try
+                    use g = Graphics.FromHwnd(cmb.Handle)
+                    let arrowWidth = SystemInformation.HorizontalScrollBarArrowWidth
+                    let r = cmb.ClientRectangle
+                    let arrowRect = Rectangle(r.Right - arrowWidth, r.Top, arrowWidth, r.Height)
+                    use bg = new SolidBrush(darkPanel)
+                    g.FillRectangle(bg, arrowRect)
+                    use sep = new Pen(darkBorder)
+                    g.DrawLine(sep, arrowRect.Left, arrowRect.Top + 2, arrowRect.Left, arrowRect.Bottom - 2)
+                    drawDarkArrow g arrowRect true
+                with _ -> ()
+
+    // NumericUpDown: the spin button child window paints its own up/down
+    // arrows via the system theme. We subclass that child to overpaint in
+    // dark colors. Find it via NumericUpDown.Controls (spin buttons are
+    // exposed as a child Control of type System.Windows.Forms.UpDownBase+UpDownButtons).
+    type private DarkUpDownButtonsSubclass(spinControl: Control) as this =
+        inherit NativeWindow()
+        let WM_PAINT = 0x000F
+        let attach() =
+            try if spinControl.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(spinControl.Handle)
+            with _ -> ()
+        do
+            attach()
+            spinControl.HandleCreated.Add(fun _ -> attach())
+            spinControl.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+        override this.WndProc(m: byref<Message>) =
+            base.WndProc(&m)
+            if m.Msg = WM_PAINT then
+                try
+                    use g = Graphics.FromHwnd(spinControl.Handle)
+                    let r = spinControl.ClientRectangle
+                    use bg = new SolidBrush(darkPanel)
+                    g.FillRectangle(bg, r)
+                    let half = r.Height / 2
+                    let upRect = Rectangle(r.X, r.Y, r.Width, half)
+                    let downRect = Rectangle(r.X, r.Y + half, r.Width, r.Height - half)
+                    use sep = new Pen(darkBorder)
+                    g.DrawLine(sep, r.Left, r.Y + half, r.Right, r.Y + half)
+                    g.DrawLine(sep, r.Left, r.Top, r.Left, r.Bottom)
+                    drawDarkArrow g upRect false
+                    drawDarkArrow g downRect true
+                with _ -> ()
+
+    // Walk a control tree and attach the ComboBox / NumericUpDown subclasses.
+    let rec attachDarkSpinnerAndArrowSubclassesRecursive (control: Control) =
+        try
+            match control with
+            | :? ComboBox as cmb -> DarkComboBoxSubclass(cmb) |> ignore
+            | :? NumericUpDown as nud ->
+                // NumericUpDown's child controls include the editing TextBox
+                // and a spin-buttons control. Subclass anything that isn't
+                // the textbox.
+                for child in nud.Controls do
+                    if not (child :? TextBox) then
+                        DarkUpDownButtonsSubclass(child) |> ignore
+            | _ -> ()
+        with _ -> ()
+        for child in control.Controls do
+            attachDarkSpinnerAndArrowSubclassesRecursive(child)
+
+    // Custom ProfessionalColorTable that returns dark tones so any
+    // ContextMenuStrip wearing ToolStripProfessionalRenderer renders dark.
+    type private DarkColorTable() =
+        inherit ProfessionalColorTable()
+        override _.MenuItemSelected = darkAccent
+        override _.MenuItemSelectedGradientBegin = darkAccent
+        override _.MenuItemSelectedGradientEnd = darkAccent
+        override _.MenuItemBorder = darkAccent
+        override _.MenuBorder = darkBorder
+        override _.MenuStripGradientBegin = darkPanel
+        override _.MenuStripGradientEnd = darkPanel
+        override _.ToolStripDropDownBackground = darkPanel
+        override _.ImageMarginGradientBegin = darkPanel
+        override _.ImageMarginGradientMiddle = darkPanel
+        override _.ImageMarginGradientEnd = darkPanel
+        override _.SeparatorDark = darkBorder
+        override _.SeparatorLight = darkBorder
+        override _.ToolStripBorder = darkBorder
+        override _.MenuItemPressedGradientBegin = darkAccent
+        override _.MenuItemPressedGradientEnd = darkAccent
+
+    let private darkRenderer = new ToolStripProfessionalRenderer(DarkColorTable())
+
+    let attachDarkContextMenuStripTheme (cms: ContextMenuStrip) =
+        cms.Renderer <- darkRenderer
+        cms.BackColor <- darkPanel
+        cms.ForeColor <- darkText
+        for item in cms.Items do
+            try
+                item.BackColor <- darkPanel
+                item.ForeColor <- darkText
+            with _ -> ()
+
+    // Walk the entire form tree finding ContextMenuStrip instances. They live
+    // off the Control.ContextMenuStrip property AND off DropdownButton's menu
+    // (a custom class — not directly on the visual tree). For the latter we
+    // catch any ToolStripDropDown known to the WinForms message loop.
+    let rec attachDarkContextMenuStripsRecursive (control: Control) =
+        try
+            if not (isNull control.ContextMenuStrip) then
+                attachDarkContextMenuStripTheme control.ContextMenuStrip
+        with _ -> ()
+        for child in control.Controls do
+            attachDarkContextMenuStripsRecursive(child)
+
+    // Branch-12 entry point: branch-9 + the spinner / arrow subclasses + the
+    // ContextMenuStrip dark renderer + the inactive-selection brush update
+    // that ships in attachDarkTreeViewAdvOverlay above.
+    let applyDarkThemeBranch12ToForm (form: Form) (enabled: bool) =
+        if enabled then
+            setPreferredAppModeForceDark()
+            useImmersiveDarkMode form.Handle true |> ignore
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            for child in form.Controls do
+                applyDarkExtraTreatments(child)
+            for child in form.Controls do
+                attachDarkBackgroundSubclassRecursive(child)
+            for child in form.Controls do
+                attachDarkTreeViewAdvOverlayRecursive(child)
+            for child in form.Controls do
+                attachDarkSpinnerAndArrowSubclassesRecursive(child)
+            for child in form.Controls do
+                attachDarkContextMenuStripsRecursive(child)
+            for child in form.Controls do
+                invalidateTreeViewAdvs(child)
+            form.Invalidate(true)
 
     // Branch-9 entry point: branch 7 plus the TreeViewAdv overlay (column
     // header overpaint + DrawText-event cell text tinting), the dark
