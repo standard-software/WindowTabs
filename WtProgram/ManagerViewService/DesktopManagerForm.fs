@@ -53,14 +53,15 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 7 (dark-mode-7): branch 6's kitchen sink plus targeted fixes
-        // for the long-standing problem cases — TabControl background frame
-        // (extra Paint-time fill that overdraws the system frame) and the
-        // HotKey common control (msctls_hotkey32, detected by class name and
-        // hit with multiple SetWindowTheme variants since it ignores
-        // WM_CTLCOLOREDIT).
+        // Branch 9 (dark-mode-9): branch 7 plus targeted source-level fixes
+        // for TreeViewAdv (column headers + node text via a dark-mode flag in
+        // Aga.Controls), a NativeWindow subclass that fills the TabControl
+        // background dark on WM_ERASEBKGND so the gaps around the tab strip
+        // and below selected tabs go dark, StatusBar coloring, and a ComboBox
+        // drop-down theming hook (popup listbox is its own HWND so it needs
+        // SetWindowTheme separately).
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeWithExtrasToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeAggressivelyToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed

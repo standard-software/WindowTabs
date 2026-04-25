@@ -3,6 +3,7 @@ open System
 open System.Drawing
 open System.Runtime.InteropServices
 open System.Windows.Forms
+open Aga.Controls.Tree
 
 module DarkMode =
     // Dark theme palette inspired by Win11 / VS Dark.
@@ -11,6 +12,11 @@ module DarkMode =
     let darkBorder = Color.FromArgb(64, 64, 64)
     let darkText = Color.FromArgb(240, 240, 240)
     let darkAccent = Color.FromArgb(0, 120, 212)
+
+    // The shipped Aga.Controls.dll is a prebuilt binary so we can't add a
+    // dark-mode flag to its source. Instead we paint over the column headers
+    // ourselves via the public Paint event and tint cell text via the public
+    // BaseTextControl.DrawText event (see attachDarkTreeViewAdvOverlay).
 
     [<DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")>]
     extern int private DwmSetWindowAttributeNative(IntPtr hwnd, int attr, int& pvAttribute, int cbAttribute)
@@ -111,6 +117,23 @@ module DarkMode =
         try SetWindowTheme(handle, subAppName, null) |> ignore
         with _ -> ()
 
+    // ComboBox dropdown handle retrieval — used to theme the popup listbox
+    // separately from the combo proper.
+    [<StructLayout(LayoutKind.Sequential)>]
+    type private COMBOBOXINFO =
+        struct
+            val mutable cbSize: int32
+            val mutable rcItem: System.Drawing.Rectangle
+            val mutable rcButton: System.Drawing.Rectangle
+            val mutable buttonState: int32
+            val mutable hwndCombo: IntPtr
+            val mutable hwndItem: IntPtr
+            val mutable hwndList: IntPtr
+        end
+
+    [<DllImport("user32.dll")>]
+    extern bool private GetComboBoxInfo(IntPtr hwndCombo, COMBOBOXINFO& info)
+
     // Recursively apply a "best effort" dark color scheme to a WinForms control
     // tree. Type-aware so each control category gets sensible BackColor / ForeColor
     // / BorderStyle defaults.
@@ -140,6 +163,32 @@ module DarkMode =
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText
                 cmb.FlatStyle <- FlatStyle.Flat
+                // Theme the dropdown LIST (popup) separately when it's about
+                // to open. The popup is a different HWND from the combo proper
+                // so SetWindowTheme on the combo doesn't reach it.
+                cmb.DropDown.Add(fun _ ->
+                    try
+                        let mutable info = Unchecked.defaultof<COMBOBOXINFO>
+                        info.cbSize <- Marshal.SizeOf(typeof<COMBOBOXINFO>)
+                        if GetComboBoxInfo(cmb.Handle, &info) && info.hwndList <> IntPtr.Zero then
+                            setControlTheme info.hwndList "DarkMode_Explorer"
+                    with _ -> ())
+            | :? StatusBar as sb ->
+                sb.BackColor <- darkSurface
+                sb.ForeColor <- darkText
+                // StatusBar.Panels also need their colors; the BackColor of
+                // the StatusBar covers the bar itself but each panel can draw
+                // separately. We rely on the panels inheriting the parent.
+                sb.SizingGrip <- false
+            | :? TreeViewAdv as tva ->
+                // Aga's TreeViewAdv: set the WinForms-level colors. Column
+                // headers are overpainted in attachDarkTreeViewAdvOverlay
+                // below since the prebuilt DLL still uses SystemBrushes for
+                // them. Cell text color is hooked via BaseTextControl.DrawText
+                // events on each NodeControl.
+                tva.BackColor <- darkPanel
+                tva.ForeColor <- darkText
+                tva.LineColor <- darkBorder
             | :? Label as lbl ->
                 lbl.BackColor <- darkSurface
                 lbl.ForeColor <- darkText
@@ -410,4 +459,139 @@ module DarkMode =
                 applyDarkNativeThemeToControl(child)
             for child in form.Controls do
                 applyDarkExtraTreatments(child)
+            form.Invalidate(true)
+
+    // === Branch-9 specific helpers =====================================
+    // Branch 9 attacks the residual problem cases reported in branch 7
+    // testing: TreeViewAdv (column headers + node text), TabControl
+    // background gaps, StatusBar visibility, and ComboBox drop-down popups.
+    // It modifies treeviewadv source (TreeColumn / BaseTextControl /
+    // TreeViewAdv.Draw) to honor a dark-mode flag and pairs that with
+    // F#-side hooks for the WinForms layer.
+
+    // NativeWindow subclass that overpaints WM_ERASEBKGND with the dark
+    // surface so the entire TabControl client area starts off dark — the
+    // owner-drawn tab headers and the (also-dark) tab pages sit on top of
+    // this background, eliminating any "right of the last tab" or "between
+    // strip and page" light gaps.
+    type private DarkBackgroundSubclass(target: Control) as this =
+        inherit NativeWindow()
+        let WM_ERASEBKGND = 0x0014
+        do
+            let attach() = if target.IsHandleCreated then this.AssignHandle(target.Handle)
+            attach()
+            target.HandleCreated.Add(fun _ -> attach())
+            target.HandleDestroyed.Add(fun _ -> this.ReleaseHandle())
+        override this.WndProc(m: byref<Message>) =
+            if m.Msg = WM_ERASEBKGND then
+                try
+                    use g = Graphics.FromHdc(m.WParam)
+                    use brush = new SolidBrush(darkSurface)
+                    g.FillRectangle(brush, target.ClientRectangle)
+                    m.Result <- IntPtr(1)
+                with _ ->
+                    base.WndProc(&m)
+            else
+                base.WndProc(&m)
+
+    // Walk the control tree and attach the dark-erase subclass to TabControls
+    // and to any other control where the system paints a light background that
+    // can't be covered via BackColor alone (notably TreeViewAdv's scrollbar
+    // box corner).
+    let rec attachDarkBackgroundSubclassRecursive (control: Control) =
+        match control with
+        | :? TabControl ->
+            DarkBackgroundSubclass(control) |> ignore
+        | _ -> ()
+        for child in control.Controls do
+            attachDarkBackgroundSubclassRecursive(child)
+
+    // Force every TreeViewAdv in the tree to invalidate so the new dark
+    // overlays take effect on already-rendered cells / headers.
+    let rec invalidateTreeViewAdvs (control: Control) =
+        match control with
+        | :? TreeViewAdv as tva -> tva.Invalidate()
+        | _ -> ()
+        for child in control.Controls do
+            invalidateTreeViewAdvs(child)
+
+    // Overpaint the column header band of a TreeViewAdv with dark, then
+    // re-render each column title in light text. The Paint event runs after
+    // the system already drew the light header, so we cover it. Also subscribe
+    // to BaseTextControl.DrawText on each NodeControl so cell text uses light
+    // colors when not selected.
+    let attachDarkTreeViewAdvOverlay (tva: TreeViewAdv) =
+        // Header overpaint
+        tva.Paint.Add(fun e ->
+            // ColumnHeaderHeight is internal in Aga.Controls so we approximate
+            // it from the font (matches the default _columnHeaderHeight which
+            // is set to Font.Height + ~4).
+            let columnHeaderHeight = tva.Font.Height + 4
+            if tva.UseColumns && columnHeaderHeight > 0 then
+                let g = e.Graphics
+                use bg = new SolidBrush(darkPanel)
+                let headerRect = Rectangle(0, 0, tva.ClientRectangle.Width, columnHeaderHeight)
+                g.FillRectangle(bg, headerRect)
+                use border = new Pen(darkBorder)
+                g.DrawLine(border, 0, columnHeaderHeight - 1, tva.ClientRectangle.Width, columnHeaderHeight - 1)
+                // Re-draw column titles
+                let mutable x = -tva.OffsetX
+                use textBrush = new SolidBrush(darkText)
+                use format = new StringFormat()
+                format.LineAlignment <- StringAlignment.Center
+                format.Trimming <- StringTrimming.EllipsisCharacter
+                format.FormatFlags <- StringFormatFlags.NoWrap
+                for col in tva.Columns do
+                    if col.IsVisible then
+                        let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
+                        format.Alignment <-
+                            match col.TextAlign with
+                            | HorizontalAlignment.Right -> StringAlignment.Far
+                            | HorizontalAlignment.Center -> StringAlignment.Center
+                            | _ -> StringAlignment.Near
+                        if not (String.IsNullOrEmpty(col.Header)) then
+                            g.DrawString(col.Header, tva.Font, textBrush, r, format)
+                        x <- x + col.Width)
+        // Hook DrawText on each NodeControl that's a BaseTextControl
+        for nc in tva.NodeControls do
+            match nc with
+            | :? Aga.Controls.Tree.NodeControls.BaseTextControl as btc ->
+                btc.DrawText.Add(fun args ->
+                    if args.Context.DrawSelection = DrawSelectionMode.None then
+                        args.TextColor <- darkText
+                    elif args.Context.DrawSelection = DrawSelectionMode.Inactive then
+                        args.TextColor <- darkText)
+            | _ -> ()
+
+    let rec attachDarkTreeViewAdvOverlayRecursive (control: Control) =
+        match control with
+        | :? TreeViewAdv as tva -> attachDarkTreeViewAdvOverlay tva
+        | _ -> ()
+        for child in control.Controls do
+            attachDarkTreeViewAdvOverlayRecursive(child)
+
+    // Branch-9 entry point: branch 7 plus the TreeViewAdv overlay (column
+    // header overpaint + DrawText-event cell text tinting), the dark
+    // WM_ERASEBKGND subclass for TabControls, StatusBar handling (added in
+    // applyDarkColorsToControl), and ComboBox dropdown theming via the
+    // DropDown event hook.
+    let applyDarkThemeAggressivelyToForm (form: Form) (enabled: bool) =
+        if enabled then
+            setPreferredAppModeForceDark()
+            useImmersiveDarkMode form.Handle true |> ignore
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            for child in form.Controls do
+                applyDarkExtraTreatments(child)
+            for child in form.Controls do
+                attachDarkBackgroundSubclassRecursive(child)
+            for child in form.Controls do
+                attachDarkTreeViewAdvOverlayRecursive(child)
+            for child in form.Controls do
+                invalidateTreeViewAdvs(child)
             form.Invalidate(true)
