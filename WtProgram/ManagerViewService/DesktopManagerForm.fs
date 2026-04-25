@@ -68,12 +68,12 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 12 (dark-mode-12): branch 11's foundation plus NativeWindow
-        // subclasses that overpaint the ComboBox drop-down arrow and the
-        // NumericUpDown spin buttons in dark, plus a custom dark
-        // ProfessionalRenderer for ContextMenuStrip pop-ups.
+        // Branch 13 (dark-mode-13): branch 12 + TabControl frame killer
+        // (DarkTabControlFrameSubclass overpaints the system frame around
+        // the selected tab page after WM_PAINT) + StatusBar owner-draw so
+        // each panel is rendered dark.
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeBranch12ToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeBranch13ToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
