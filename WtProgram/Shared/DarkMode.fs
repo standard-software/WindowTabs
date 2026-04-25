@@ -149,10 +149,19 @@ module DarkMode =
                 nud.ForeColor <- darkText
                 nud.BorderStyle <- BorderStyle.FixedSingle
             | :? Button as btn ->
-                btn.BackColor <- darkPanel
-                btn.ForeColor <- darkText
-                btn.FlatStyle <- FlatStyle.Flat
-                btn.FlatAppearance.BorderColor <- darkBorder
+                // Skip buttons whose BackColor IS the content (e.g. the
+                // ColorEditor's color-swatch button). They are tagged with
+                // "DarkModePreserveColor" so we don't overwrite the chosen
+                // color when applying the theme.
+                let preserve =
+                    match btn.Tag with
+                    | :? string as s when s = "DarkModePreserveColor" -> true
+                    | _ -> false
+                if not preserve then
+                    btn.BackColor <- darkPanel
+                    btn.ForeColor <- darkText
+                    btn.FlatStyle <- FlatStyle.Flat
+                    btn.FlatAppearance.BorderColor <- darkBorder
             | :? CheckBox as cb ->
                 cb.BackColor <- darkSurface
                 cb.ForeColor <- darkText
@@ -188,7 +197,11 @@ module DarkMode =
                 // events on each NodeControl.
                 tva.BackColor <- darkPanel
                 tva.ForeColor <- darkText
-                tva.LineColor <- darkBorder
+                // The default LineColor (SystemColors.ControlDark, light
+                // gray) is invisible against the dark background. Use a
+                // mid-tone so the tree branch lines are at least faintly
+                // visible.
+                tva.LineColor <- Color.FromArgb(120, 120, 120)
             | :? Label as lbl ->
                 lbl.BackColor <- darkSurface
                 lbl.ForeColor <- darkText
@@ -515,52 +528,74 @@ module DarkMode =
         for child in control.Controls do
             invalidateTreeViewAdvs(child)
 
-    // Overpaint the column header band of a TreeViewAdv with dark, then
-    // re-render each column title in light text. The Paint event runs after
-    // the system already drew the light header, so we cover it. Also subscribe
-    // to BaseTextControl.DrawText on each NodeControl so cell text uses light
-    // colors when not selected.
+    // TreeViewAdv.OnPaint doesn't call base.OnPaint(e), so the Paint event
+    // never fires — Aga's prebuilt control owns the entire paint cycle. To
+    // overlay the column header we have to subclass via NativeWindow and
+    // overdraw after WM_PAINT lets the base do its system-themed render.
+    type private DarkTreeViewAdvSubclass(tva: TreeViewAdv) as this =
+        inherit NativeWindow()
+        let WM_PAINT = 0x000F
+        let attach() =
+            try if tva.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(tva.Handle)
+            with _ -> ()
+        do
+            attach()
+            tva.HandleCreated.Add(fun _ -> attach())
+            tva.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+        override this.WndProc(m: byref<Message>) =
+            base.WndProc(&m)
+            if m.Msg = WM_PAINT && tva.UseColumns then
+                try
+                    // Default _columnHeaderHeight in Aga is 20; widen to a
+                    // safety value that comfortably covers any reasonable font
+                    // so the entire system-drawn header is hidden.
+                    let columnHeaderHeight = max 24 (tva.Font.Height + 8)
+                    use g = Graphics.FromHwnd(tva.Handle)
+                    use bg = new SolidBrush(darkPanel)
+                    let headerRect = Rectangle(0, 0, tva.ClientRectangle.Width, columnHeaderHeight)
+                    g.FillRectangle(bg, headerRect)
+                    // Draw a subtle bottom rule for the header
+                    use border = new Pen(Color.FromArgb(80, 80, 80))
+                    g.DrawLine(border, 0, columnHeaderHeight - 1, tva.ClientRectangle.Width, columnHeaderHeight - 1)
+                    // Column titles + per-column divider lines on the right
+                    // edge of each column header.
+                    let mutable x = -tva.OffsetX
+                    use textBrush = new SolidBrush(darkText)
+                    use dividerPen = new Pen(Color.FromArgb(80, 80, 80))
+                    use format = new StringFormat()
+                    format.LineAlignment <- StringAlignment.Center
+                    format.Trimming <- StringTrimming.EllipsisCharacter
+                    format.FormatFlags <- StringFormatFlags.NoWrap
+                    for col in tva.Columns do
+                        if col.IsVisible then
+                            let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
+                            format.Alignment <-
+                                match col.TextAlign with
+                                | HorizontalAlignment.Right -> StringAlignment.Far
+                                | HorizontalAlignment.Center -> StringAlignment.Center
+                                | _ -> StringAlignment.Near
+                            if not (String.IsNullOrEmpty(col.Header)) then
+                                g.DrawString(col.Header, tva.Font, textBrush, r, format)
+                            // Right divider — drawn in a slightly lighter
+                            // tone so it's visible against darkPanel.
+                            g.DrawLine(dividerPen, x + col.Width - 1, 2, x + col.Width - 1, columnHeaderHeight - 3)
+                            x <- x + col.Width
+                with _ -> ()
+
     let attachDarkTreeViewAdvOverlay (tva: TreeViewAdv) =
-        // Header overpaint
-        tva.Paint.Add(fun e ->
-            // ColumnHeaderHeight is internal in Aga.Controls so we approximate
-            // it from the font (matches the default _columnHeaderHeight which
-            // is set to Font.Height + ~4).
-            let columnHeaderHeight = tva.Font.Height + 4
-            if tva.UseColumns && columnHeaderHeight > 0 then
-                let g = e.Graphics
-                use bg = new SolidBrush(darkPanel)
-                let headerRect = Rectangle(0, 0, tva.ClientRectangle.Width, columnHeaderHeight)
-                g.FillRectangle(bg, headerRect)
-                use border = new Pen(darkBorder)
-                g.DrawLine(border, 0, columnHeaderHeight - 1, tva.ClientRectangle.Width, columnHeaderHeight - 1)
-                // Re-draw column titles
-                let mutable x = -tva.OffsetX
-                use textBrush = new SolidBrush(darkText)
-                use format = new StringFormat()
-                format.LineAlignment <- StringAlignment.Center
-                format.Trimming <- StringTrimming.EllipsisCharacter
-                format.FormatFlags <- StringFormatFlags.NoWrap
-                for col in tva.Columns do
-                    if col.IsVisible then
-                        let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
-                        format.Alignment <-
-                            match col.TextAlign with
-                            | HorizontalAlignment.Right -> StringAlignment.Far
-                            | HorizontalAlignment.Center -> StringAlignment.Center
-                            | _ -> StringAlignment.Near
-                        if not (String.IsNullOrEmpty(col.Header)) then
-                            g.DrawString(col.Header, tva.Font, textBrush, r, format)
-                        x <- x + col.Width)
-        // Hook DrawText on each NodeControl that's a BaseTextControl
+        // Header overpaint via NativeWindow subclass (Paint event doesn't
+        // fire because TreeViewAdv.OnPaint omits the base call).
+        DarkTreeViewAdvSubclass(tva) |> ignore
+        // Hook DrawText on each NodeControl that's a BaseTextControl. Active
+        // selection keeps system highlight colors so the focus row stays
+        // distinguishable; everything else goes light.
         for nc in tva.NodeControls do
             match nc with
             | :? Aga.Controls.Tree.NodeControls.BaseTextControl as btc ->
                 btc.DrawText.Add(fun args ->
-                    if args.Context.DrawSelection = DrawSelectionMode.None then
-                        args.TextColor <- darkText
-                    elif args.Context.DrawSelection = DrawSelectionMode.Inactive then
-                        args.TextColor <- darkText)
+                    match args.Context.DrawSelection with
+                    | DrawSelectionMode.Active -> ()
+                    | _ -> args.TextColor <- darkText)
             | _ -> ()
 
     let rec attachDarkTreeViewAdvOverlayRecursive (control: Control) =

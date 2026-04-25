@@ -79,6 +79,26 @@ namespace Bemo.Win32
             if (UseManaged)
             {
                 int vk = e.KeyValue;
+                // Esc / Backspace / Delete clear the hotkey, matching the
+                // behavior of the comctl32 hot key control (which clears on
+                // Esc + similar keys).
+                bool isClearKey =
+                    vk == (int)Keys.Escape ||
+                    vk == (int)Keys.Back ||
+                    vk == (int)Keys.Delete;
+                if (isClearKey && !e.Shift && !e.Control && !e.Alt)
+                {
+                    if (_managedHotKey != 0)
+                    {
+                        _managedHotKey = 0;
+                        this.Text = FormatHotKey(0);
+                        if (HotKeyChanged != null)
+                            HotKeyChanged(this, EventArgs.Empty);
+                    }
+                    e.SuppressKeyPress = true;
+                    e.Handled = true;
+                    return;
+                }
                 // Modifier-only presses don't store a hotkey but are still
                 // suppressed so they don't insert into the text box.
                 bool isModifierOnly =
