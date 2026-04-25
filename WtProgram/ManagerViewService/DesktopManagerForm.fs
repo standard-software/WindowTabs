@@ -53,13 +53,13 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 4 (dark-mode-4): the most aggressive treatment. Title bar +
-        // recursive WinForms colors + SetWindowTheme native pass + owner-draw
-        // handlers for the TabControl headers and every GroupBox. This is
-        // what's needed to make the tab strip and group frames render in
-        // dark instead of falling back to the system theme.
+        // Branch 6 (dark-mode-6): kitchen-sink combination — branch 4's full
+        // owner-draw pass plus a SetPreferredAppMode(ForceDark) call so the
+        // entire process is treated as a dark-mode app. Covers WinForms-side
+        // recoloring, per-control SetWindowTheme, TabControl + GroupBox
+        // owner-draw, and OS-wide dark-mode hint in one go.
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeFullToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeKitchenSinkToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed

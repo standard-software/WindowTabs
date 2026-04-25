@@ -73,6 +73,20 @@ module DarkMode =
         with
         | ex -> ()
 
+    // Stronger hint than AllowDark: tells uxtheme to treat the entire process
+    // as a dark-mode app. Combined with SetWindowTheme(DarkMode_*) per control
+    // this lets dark-aware native pieces switch over even when WinForms colors
+    // alone wouldn't reach them.
+    let setPreferredAppModeForceDark() =
+        try
+            match setPreferredAppMode with
+            | Some(func) -> func.Invoke(2) |> ignore
+            | None -> ()
+            match flushMenuThemes with
+            | Some(func) -> func.Invoke()
+            | None -> ()
+        with _ -> ()
+
     let useImmersiveDarkMode (handle: IntPtr) (enabled: bool) =
         try
             // Always try to apply dark mode on Windows (don't check version)
@@ -257,6 +271,29 @@ module DarkMode =
     // of more painting code.
     let applyDarkThemeFullToForm (form: Form) (enabled: bool) =
         if enabled then
+            useImmersiveDarkMode form.Handle true |> ignore
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            form.Invalidate(true)
+
+    // Branch-6 entry point: everything in applyDarkThemeFullToForm plus a
+    // process-wide SetPreferredAppMode(ForceDark) call. The kitchen-sink
+    // approach — combines WinForms-side recoloring (dark surface for static
+    // areas), per-control SetWindowTheme (dark-aware native parts), owner
+    // draw (TabControl headers, GroupBox frames) and OS-wide dark-mode hint
+    // (covers any remaining dark-aware system controls). When this still
+    // shows light remnants those controls are simply not dark-aware on this
+    // OS build.
+    let applyDarkThemeKitchenSinkToForm (form: Form) (enabled: bool) =
+        if enabled then
+            // Process-wide hint first so subsequent SetWindowTheme calls land
+            // on a uxtheme that is already in dark-mode resolution mode.
+            setPreferredAppModeForceDark()
             useImmersiveDarkMode form.Handle true |> ignore
             form.BackColor <- darkSurface
             form.ForeColor <- darkText
