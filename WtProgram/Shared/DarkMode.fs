@@ -7,8 +7,17 @@ open Aga.Controls.Tree
 
 module DarkMode =
     // Dark theme palette inspired by Win11 / VS Dark.
+    //   darkSurface : form bg + most static surfaces (mid-dark)
+    //   darkPanel   : page area, active tab, input controls (slightly lighter)
+    //   darkTabStrip: tab strip background + inactive tabs (darker than
+    //                 darkSurface so the strip is visually distinct from the
+    //                 system title bar above it)
+    //   darkBorder  : separator strokes
+    //   darkText    : foreground
+    //   darkAccent  : selection / pressed / focus ring
     let darkSurface = Color.FromArgb(32, 32, 32)
     let darkPanel = Color.FromArgb(45, 45, 45)
+    let darkTabStrip = Color.FromArgb(20, 20, 20)
     let darkBorder = Color.FromArgb(64, 64, 64)
     let darkText = Color.FromArgb(240, 240, 240)
     let darkAccent = Color.FromArgb(0, 120, 212)
@@ -173,20 +182,23 @@ module DarkMode =
                 cb.ForeColor <- darkText
                 // FlatStyle.Flat lets FlatAppearance colors take effect on the
                 // check glyph so the inside of the box reads as dark with a
-                // grey border instead of a stark system-white square.
+                // grey border. Checked state stays near-black (darkSurface)
+                // rather than the accent blue — user wants the checked box
+                // to look like a "filled black box with a check", not a
+                // colored highlight.
                 cb.FlatStyle <- FlatStyle.Flat
-                cb.FlatAppearance.CheckedBackColor <- darkAccent
+                cb.FlatAppearance.CheckedBackColor <- darkSurface
                 cb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 cb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
-                cb.FlatAppearance.MouseDownBackColor <- darkAccent
+                cb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
             | :? RadioButton as rb ->
                 rb.BackColor <- darkSurface
                 rb.ForeColor <- darkText
                 rb.FlatStyle <- FlatStyle.Flat
-                rb.FlatAppearance.CheckedBackColor <- darkAccent
+                rb.FlatAppearance.CheckedBackColor <- darkSurface
                 rb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 rb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
-                rb.FlatAppearance.MouseDownBackColor <- darkAccent
+                rb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
             | :? ComboBox as cmb ->
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText
@@ -233,10 +245,11 @@ module DarkMode =
                 gb.BackColor <- darkSurface
                 gb.ForeColor <- darkText
             | :? TabControl as tc ->
-                tc.BackColor <- darkSurface
+                tc.BackColor <- darkTabStrip
                 tc.ForeColor <- darkText
             | :? TabPage as tp ->
-                tp.BackColor <- darkSurface
+                // Page area uses darkPanel so it matches the active tab's fill
+                tp.BackColor <- darkPanel
                 tp.ForeColor <- darkText
             | :? ListView as lv ->
                 lv.BackColor <- darkPanel
@@ -285,23 +298,21 @@ module DarkMode =
         for child in control.Controls do
             applyDarkNativeThemeToControl(child)
 
-    // Owner-draw the tab headers of a TabControl so the strip behind the tab
-    // pages and the tab labels themselves render in dark colors. Without this
-    // the headers stay system-themed (light) even after BackColor is set.
-    // The drawn rectangle is expanded 2px above and below the system tab
-    // bounds so the strip top edge and the gap between the strip and the
-    // page area are also covered (avoids the "thick white line at the top
-    // of the tab strip" symptom).
+    // Owner-draw the tab headers of a TabControl. Active tab uses darkPanel
+    // (matching the page area for visual unity) and inactive tabs use
+    // darkTabStrip (noticeably darker so they're readily distinguishable
+    // from the active tab). The fill extends 2 px BELOW the tab bounds to
+    // hide the system divider line between the strip and the page; we do
+    // NOT extend above any more — that caused inactive-tab text to overlap
+    // the strip top edge.
     let attachDarkTabControlOwnerDraw (tabControl: TabControl) =
         tabControl.DrawMode <- TabDrawMode.OwnerDrawFixed
         tabControl.DrawItem.Add(fun e ->
             let g = e.Graphics
             let isSelected = (e.Index = tabControl.SelectedIndex)
-            let bgColor = if isSelected then darkPanel else darkSurface
+            let bgColor = if isSelected then darkPanel else darkTabStrip
             use bgBrush = new SolidBrush(bgColor)
-            // Expand bounds vertically so the strip top edge / bottom divider
-            // line rendered by the system can't show through.
-            let extended = Rectangle(e.Bounds.X, max 0 (e.Bounds.Y - 2), e.Bounds.Width, e.Bounds.Height + 4)
+            let extended = Rectangle(e.Bounds.X, e.Bounds.Y, e.Bounds.Width, e.Bounds.Height + 2)
             g.FillRectangle(bgBrush, extended)
             if e.Index >= 0 && e.Index < tabControl.TabPages.Count then
                 let txt = tabControl.TabPages.[e.Index].Text
@@ -521,6 +532,13 @@ module DarkMode =
     type private DarkBackgroundSubclass(target: Control) as this =
         inherit NativeWindow()
         let WM_ERASEBKGND = 0x0014
+        // TabControl uses the dedicated darkTabStrip color so the strip is
+        // visibly distinct from the system title bar; everything else uses
+        // darkSurface.
+        let bgColor =
+            match target with
+            | :? TabControl -> darkTabStrip
+            | _ -> darkSurface
         do
             let attach() = if target.IsHandleCreated then this.AssignHandle(target.Handle)
             attach()
@@ -530,7 +548,7 @@ module DarkMode =
             if m.Msg = WM_ERASEBKGND then
                 try
                     use g = Graphics.FromHdc(m.WParam)
-                    use brush = new SolidBrush(darkSurface)
+                    use brush = new SolidBrush(bgColor)
                     g.FillRectangle(brush, target.ClientRectangle)
                     m.Result <- IntPtr(1)
                 with _ ->
@@ -560,7 +578,11 @@ module DarkMode =
                 try
                     if tc.SelectedIndex >= 0 && tc.SelectedIndex < tc.TabPages.Count && tc.TabPages.Count > 0 then
                         use g = Graphics.FromHwnd(tc.Handle)
-                        use brush = new SolidBrush(darkSurface)
+                        // Page area frame uses darkPanel (same as active tab
+                        // and page bg) so the active tab visually merges with
+                        // the page surface beneath it. Tab strip area still
+                        // shows darkTabStrip from the WM_ERASEBKGND fill.
+                        use brush = new SolidBrush(darkPanel)
                         let stripBottom =
                             try (tc.GetTabRect(0)).Bottom
                             with _ -> 24
@@ -1003,9 +1025,12 @@ type DarkNodeCheckBox() =
         let g = context.Graphics
         let imgSize = Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
         let rect = System.Drawing.Rectangle(bounds.X, bounds.Y, imgSize, imgSize)
-        // Box background — accent color when checked, dark surface otherwise.
+        // Box background — slightly lighter grey when checked, near-black
+        // otherwise. Matches the user's preferred "grey box with a check"
+        // look for NodeCheckBox in the Programs tab columns rather than the
+        // accent-blue checked state used by colored selection highlights.
         let bgColor =
-            if state = System.Windows.Forms.CheckState.Checked then DarkMode.darkAccent
+            if state = System.Windows.Forms.CheckState.Checked then DarkMode.darkPanel
             else System.Drawing.Color.FromArgb(50, 50, 50)
         use bg = new System.Drawing.SolidBrush(bgColor)
         g.FillRectangle(bg, rect)
