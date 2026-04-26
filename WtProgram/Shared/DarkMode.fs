@@ -13,6 +13,12 @@ module DarkMode =
     let darkText = Color.FromArgb(240, 240, 240)
     let darkAccent = Color.FromArgb(0, 120, 212)
 
+    // Module-wide flag set by DesktopManagerForm before view construction.
+    // Used by code paths that need to know dark mode is on but live in
+    // modules below DesktopManagerForm in compile order (e.g.
+    // DarkNodeCheckBox factory, etc.).
+    let mutable darkModeEnabled = false
+
     // The shipped Aga.Controls.dll is a prebuilt binary so we can't add a
     // dark-mode flag to its source. Instead we paint over the column headers
     // ourselves via the public Paint event and tint cell text via the public
@@ -215,6 +221,11 @@ module DarkMode =
                 // mid-tone so the tree branch lines are at least faintly
                 // visible.
                 tva.LineColor <- Color.FromArgb(120, 120, 120)
+                // HideSelection makes the inactive (focus-elsewhere)
+                // selection invisible. Without this, the workspace tab's
+                // initial appearance shows light selection background under
+                // light text — a "row is selected but invisible" symptom.
+                tva.HideSelection <- true
             | :? Label as lbl ->
                 lbl.BackColor <- darkSurface
                 lbl.ForeColor <- darkText
@@ -277,6 +288,10 @@ module DarkMode =
     // Owner-draw the tab headers of a TabControl so the strip behind the tab
     // pages and the tab labels themselves render in dark colors. Without this
     // the headers stay system-themed (light) even after BackColor is set.
+    // The drawn rectangle is expanded 2px above and below the system tab
+    // bounds so the strip top edge and the gap between the strip and the
+    // page area are also covered (avoids the "thick white line at the top
+    // of the tab strip" symptom).
     let attachDarkTabControlOwnerDraw (tabControl: TabControl) =
         tabControl.DrawMode <- TabDrawMode.OwnerDrawFixed
         tabControl.DrawItem.Add(fun e ->
@@ -284,7 +299,10 @@ module DarkMode =
             let isSelected = (e.Index = tabControl.SelectedIndex)
             let bgColor = if isSelected then darkPanel else darkSurface
             use bgBrush = new SolidBrush(bgColor)
-            g.FillRectangle(bgBrush, e.Bounds)
+            // Expand bounds vertically so the strip top edge / bottom divider
+            // line rendered by the system can't show through.
+            let extended = Rectangle(e.Bounds.X, max 0 (e.Bounds.Y - 2), e.Bounds.Width, e.Bounds.Height + 4)
+            g.FillRectangle(bgBrush, extended)
             if e.Index >= 0 && e.Index < tabControl.TabPages.Count then
                 let txt = tabControl.TabPages.[e.Index].Text
                 use textBrush = new SolidBrush(darkText)
@@ -548,6 +566,14 @@ module DarkMode =
                             with _ -> 24
                         let pageRect = tc.TabPages.[tc.SelectedIndex].Bounds
                         let cr = tc.ClientRectangle
+                        // ALWAYS paint a 3-px dark strip immediately above the
+                        // page area so the system-drawn divider line between
+                        // the tab strip and the page is hidden, even when
+                        // pageRect.Top == stripBottom (no logical gap).
+                        let dividerTop = max 0 (pageRect.Top - 3)
+                        let dividerHeight = pageRect.Top - dividerTop + 1
+                        if dividerHeight > 0 then
+                            g.FillRectangle(brush, Rectangle(0, dividerTop, cr.Width, dividerHeight))
                         // Top frame strip (between tab strip and page top)
                         if pageRect.Top > stripBottom then
                             g.FillRectangle(brush, Rectangle(0, stripBottom, cr.Width, pageRect.Top - stripBottom))
@@ -866,6 +892,50 @@ module DarkMode =
                 invalidateTreeViewAdvs(child)
             form.Invalidate(true)
 
+    // Phase-1 entry point: only sets BackColor / ForeColor on the form and
+    // recursively on every child control. No handle-dependent operations
+    // (SetWindowTheme, NativeWindow subclass attachments, etc.) so this can
+    // be safely invoked BEFORE form.Show(), eliminating the brief light->
+    // dark flicker the user otherwise sees on dialog open.
+    let applyDarkColorsBeforeShow (form: Form) =
+        form.BackColor <- darkSurface
+        form.ForeColor <- darkText
+        for child in form.Controls do
+            applyDarkColorsToControl(child)
+
+    // Branch-15 entry point: identical pipeline to branch 13 but expects
+    // applyDarkColorsBeforeShow to have already run during DesktopManagerForm
+    // construction so the form is born dark and there's no light->dark
+    // flicker visible to the user.
+    let applyDarkThemeBranch15ToForm (form: Form) (enabled: bool) =
+        if enabled then
+            setPreferredAppModeForceDark()
+            useImmersiveDarkMode form.Handle true |> ignore
+            // Re-apply colors here (in addition to the pre-show pass) in case
+            // any control was created lazily after the early call.
+            form.BackColor <- darkSurface
+            form.ForeColor <- darkText
+            for child in form.Controls do
+                applyDarkColorsToControl(child)
+                attachDarkOwnerDrawHandlers(child)
+            for child in form.Controls do
+                applyDarkNativeThemeToControl(child)
+            for child in form.Controls do
+                applyDarkExtraTreatments(child)
+            for child in form.Controls do
+                attachDarkBackgroundSubclassRecursive(child)
+            for child in form.Controls do
+                attachDarkTreeViewAdvOverlayRecursive(child)
+            for child in form.Controls do
+                attachDarkSpinnerAndArrowSubclassesRecursive(child)
+            for child in form.Controls do
+                attachDarkContextMenuStripsRecursive(child)
+            for child in form.Controls do
+                attachDarkStatusBarOwnerDrawRecursive(child)
+            for child in form.Controls do
+                invalidateTreeViewAdvs(child)
+            form.Invalidate(true)
+
     // Branch-13 entry point: branch 12 plus the TabControl frame killer
     // (DarkTabControlFrameSubclass attached in attachDarkBackgroundSubclassRecursive)
     // and the StatusBar owner-draw pass.
@@ -921,3 +991,48 @@ module DarkMode =
             for child in form.Controls do
                 invalidateTreeViewAdvs(child)
             form.Invalidate(true)
+
+// A NodeCheckBox subclass that paints itself in our dark palette so the
+// Programs-tab Tabs / AutoGrouping / Category columns match the standard
+// CheckBox dark style instead of the system-themed white square.
+type DarkNodeCheckBox() =
+    inherit Aga.Controls.Tree.NodeControls.NodeCheckBox()
+    override this.Draw(node: Aga.Controls.Tree.TreeNodeAdv, context: Aga.Controls.Tree.DrawContext) =
+        let bounds = this.GetBounds(node, context)
+        let state = this.GetCheckState(node)
+        let g = context.Graphics
+        let imgSize = Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
+        let rect = System.Drawing.Rectangle(bounds.X, bounds.Y, imgSize, imgSize)
+        // Box background — accent color when checked, dark surface otherwise.
+        let bgColor =
+            if state = System.Windows.Forms.CheckState.Checked then DarkMode.darkAccent
+            else System.Drawing.Color.FromArgb(50, 50, 50)
+        use bg = new System.Drawing.SolidBrush(bgColor)
+        g.FillRectangle(bg, rect)
+        // Grey border — same tone as the standard CheckBox chrome.
+        use border = new System.Drawing.Pen(System.Drawing.Color.FromArgb(120, 120, 120))
+        g.DrawRectangle(border, rect)
+        // Check / indeterminate glyph in light text color.
+        match state with
+        | System.Windows.Forms.CheckState.Checked ->
+            use checkPen = new System.Drawing.Pen(DarkMode.darkText, 2.0f)
+            checkPen.StartCap <- System.Drawing.Drawing2D.LineCap.Round
+            checkPen.EndCap <- System.Drawing.Drawing2D.LineCap.Round
+            g.DrawLines(checkPen, [|
+                System.Drawing.Point(rect.X + 3, rect.Y + 6)
+                System.Drawing.Point(rect.X + 5, rect.Y + 9)
+                System.Drawing.Point(rect.X + 10, rect.Y + 3)
+            |])
+        | System.Windows.Forms.CheckState.Indeterminate ->
+            use fillBrush = new System.Drawing.SolidBrush(DarkMode.darkText)
+            g.FillRectangle(fillBrush, System.Drawing.Rectangle(rect.X + 3, rect.Y + 5, rect.Width - 6, 3))
+        | _ -> ()
+
+module DarkModeFactory =
+    /// Create a NodeCheckBox — DarkNodeCheckBox if dark mode is on,
+    /// the stock NodeCheckBox otherwise.
+    let makeNodeCheckBox () : Aga.Controls.Tree.NodeControls.NodeCheckBox =
+        if DarkMode.darkModeEnabled then
+            DarkNodeCheckBox() :> Aga.Controls.Tree.NodeControls.NodeCheckBox
+        else
+            Aga.Controls.Tree.NodeControls.NodeCheckBox()
