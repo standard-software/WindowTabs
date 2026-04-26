@@ -101,15 +101,19 @@ type DesktopManagerForm() =
                 ()
             else
                 DesktopManagerFormState.currentForm <- Some(form)
-                // Anti-flicker: force handle creation and apply the full dark
-                // theme (subclasses, SetWindowTheme, owner-draw handlers)
-                // BEFORE form.Show() so the dialog never paints in system
-                // colors. CreateControl() realizes all child handles without
-                // making them visible, which is what SetWindowTheme requires.
+                // Anti-flicker: hide via Opacity=0 while we Show + apply the
+                // dark theme, then bump Opacity back to 1. This lets the form
+                // paint its initial system frame off-screen (invisible) so
+                // the user only ever sees the fully-themed dark dialog.
                 if isDarkModeEnabled() then
+                    form.Opacity <- 0.0
+                    form.Show()
                     form.CreateControl()
                     DarkMode.applyDarkThemeBranch15ToForm form true
-                form.Show()
+                    form.Refresh()
+                    form.Opacity <- 1.0
+                else
+                    form.Show()
                 form.Activate()
         with
         | _ -> 
@@ -130,15 +134,19 @@ type DesktopManagerForm() =
                 let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
                 tabControl.SelectedIndex <- tabIndex
                 DesktopManagerFormState.currentForm <- Some(form)
-                // Anti-flicker: force handle creation and apply the full dark
-                // theme (subclasses, SetWindowTheme, owner-draw handlers)
-                // BEFORE form.Show() so the dialog never paints in system
-                // colors. CreateControl() realizes all child handles without
-                // making them visible, which is what SetWindowTheme requires.
+                // Anti-flicker: hide via Opacity=0 while we Show + apply the
+                // dark theme, then bump Opacity back to 1. This lets the form
+                // paint its initial system frame off-screen (invisible) so
+                // the user only ever sees the fully-themed dark dialog.
                 if isDarkModeEnabled() then
+                    form.Opacity <- 0.0
+                    form.Show()
                     form.CreateControl()
                     DarkMode.applyDarkThemeBranch15ToForm form true
-                form.Show()
+                    form.Refresh()
+                    form.Opacity <- 1.0
+                else
+                    form.Show()
                 form.Activate()
         with
         | _ -> 
