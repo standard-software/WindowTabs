@@ -71,15 +71,12 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 15 (dark-mode-15): two-phase application — colors are
-        // applied during construction below so the form is born dark and
-        // there's no visible light->dark flicker when Show() runs. The
-        // handle-dependent passes (SetWindowTheme, NativeWindow subclasses,
-        // owner-draw handlers) still run in form.Shown.
+        // Branch 16 (dark-mode-16): apply colors during construction so the
+        // form is born dark. The full theme (handle-dependent subclasses
+        // etc.) is applied just before form.Show() in member this.show()
+        // — see below — so the dialog never paints in system colors.
         if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
-        form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeBranch15ToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
@@ -104,6 +101,14 @@ type DesktopManagerForm() =
                 ()
             else
                 DesktopManagerFormState.currentForm <- Some(form)
+                // Anti-flicker: force handle creation and apply the full dark
+                // theme (subclasses, SetWindowTheme, owner-draw handlers)
+                // BEFORE form.Show() so the dialog never paints in system
+                // colors. CreateControl() realizes all child handles without
+                // making them visible, which is what SetWindowTheme requires.
+                if isDarkModeEnabled() then
+                    form.CreateControl()
+                    DarkMode.applyDarkThemeBranch15ToForm form true
                 form.Show()
                 form.Activate()
         with
@@ -125,6 +130,14 @@ type DesktopManagerForm() =
                 let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
                 tabControl.SelectedIndex <- tabIndex
                 DesktopManagerFormState.currentForm <- Some(form)
+                // Anti-flicker: force handle creation and apply the full dark
+                // theme (subclasses, SetWindowTheme, owner-draw handlers)
+                // BEFORE form.Show() so the dialog never paints in system
+                // colors. CreateControl() realizes all child handles without
+                // making them visible, which is what SetWindowTheme requires.
+                if isDarkModeEnabled() then
+                    form.CreateControl()
+                    DarkMode.applyDarkThemeBranch15ToForm form true
                 form.Show()
                 form.Activate()
         with
