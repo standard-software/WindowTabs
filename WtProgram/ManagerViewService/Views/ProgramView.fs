@@ -207,7 +207,9 @@ type ProgramView() as this=
                 col.TextAlign <- HorizontalAlignment.Center
                 col
             tree.Columns.Add(parentColumn)
-            let control = NodeControls.NodeCheckBox()
+            // Use the dark variant when dark mode is on so the box matches
+            // the CheckBox dark style elsewhere in the dialog.
+            let control = DarkModeFactory.makeNodeCheckBox()
             control.ParentColumn <- parentColumn
             control.IsVisibleValueNeeded.Add <| fun e ->
                 let path = tree.GetPath(e.Node)

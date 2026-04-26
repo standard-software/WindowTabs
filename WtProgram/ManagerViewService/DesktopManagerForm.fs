@@ -11,11 +11,13 @@ module DesktopManagerFormState =
     let mutable mutex : Mutex option = None
 
 type DesktopManagerForm() =
-    // Branch 10/12: flip code-path flags BEFORE the views are constructed
-    // so child controls are born in their dark-aware variants:
+    // Flip code-path flags BEFORE the views are constructed so child
+    // controls are born in their dark-aware variants:
     //  - HotKeyControl: managed (TextBox-based) path instead of comctl32
     //    "msctls_hotkey32" common control.
     //  - DropdownButton: ContextMenuStrip auto-themed with the dark renderer.
+    //  - DarkMode.darkModeEnabled: read by DarkModeFactory.makeNodeCheckBox so
+    //    NodeCheckBox columns in the Programs tab use the dark variant.
     do
         try
             let darkOn =
@@ -24,6 +26,7 @@ type DesktopManagerForm() =
                 | None -> false
             Bemo.Win32.HotKeyControl.UseManaged <- darkOn
             Bemo.DropdownButton.UseDarkMode <- darkOn
+            Bemo.DarkMode.darkModeEnabled <- darkOn
         with _ -> ()
 
     let title = sprintf "WindowTabs Settings (version %s)"  (Services.program.version)
@@ -68,12 +71,15 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
-        // Branch 13 (dark-mode-13): branch 12 + TabControl frame killer
-        // (DarkTabControlFrameSubclass overpaints the system frame around
-        // the selected tab page after WM_PAINT) + StatusBar owner-draw so
-        // each panel is rendered dark.
+        // Branch 15 (dark-mode-15): two-phase application — colors are
+        // applied during construction below so the form is born dark and
+        // there's no visible light->dark flicker when Show() runs. The
+        // handle-dependent passes (SetWindowTheme, NativeWindow subclasses,
+        // owner-draw handlers) still run in form.Shown.
+        if isDarkModeEnabled() then
+            DarkMode.applyDarkColorsBeforeShow form
         form.Shown.Add(fun _ ->
-            DarkMode.applyDarkThemeBranch13ToForm form (isDarkModeEnabled()))
+            DarkMode.applyDarkThemeBranch15ToForm form (isDarkModeEnabled()))
         form.FormClosed.Add(fun _ ->
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
