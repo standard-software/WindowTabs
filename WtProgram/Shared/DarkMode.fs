@@ -180,17 +180,37 @@ module DarkMode =
             | :? CheckBox as cb ->
                 cb.BackColor <- darkSurface
                 cb.ForeColor <- darkText
-                // FlatStyle.Flat lets FlatAppearance colors take effect on the
-                // check glyph so the inside of the box reads as dark with a
-                // grey border. Checked state stays near-black (darkSurface)
-                // rather than the accent blue — user wants the checked box
-                // to look like a "filled black box with a check", not a
-                // colored highlight.
+                // FlatStyle.Flat lets FlatAppearance colors take effect, but
+                // the underlying glyph rendering can still leak system grey
+                // through. Attach a Paint handler that overpaints the 13x13
+                // box area with pure black + grey border + light check glyph
+                // AFTER the system paint, guaranteeing the desired look.
                 cb.FlatStyle <- FlatStyle.Flat
                 cb.FlatAppearance.CheckedBackColor <- darkSurface
                 cb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 cb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
                 cb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
+                cb.Paint.Add(fun e ->
+                    let g = e.Graphics
+                    let boxSize = 13
+                    let boxY = (cb.Height - boxSize) / 2
+                    let boxRect = Rectangle(0, boxY, boxSize, boxSize)
+                    use bg = new SolidBrush(Color.Black)
+                    g.FillRectangle(bg, boxRect)
+                    use border = new Pen(Color.FromArgb(120, 120, 120))
+                    g.DrawRectangle(border, boxRect)
+                    if cb.Checked then
+                        use checkPen = new Pen(darkText, 2.0f)
+                        checkPen.StartCap <- System.Drawing.Drawing2D.LineCap.Round
+                        checkPen.EndCap <- System.Drawing.Drawing2D.LineCap.Round
+                        g.DrawLines(checkPen, [|
+                            Point(boxRect.X + 3, boxRect.Y + 6)
+                            Point(boxRect.X + 5, boxRect.Y + 9)
+                            Point(boxRect.X + 10, boxRect.Y + 3)
+                        |])
+                    elif cb.CheckState = CheckState.Indeterminate then
+                        use fillBrush = new SolidBrush(darkText)
+                        g.FillRectangle(fillBrush, Rectangle(boxRect.X + 3, boxRect.Y + 5, boxRect.Width - 6, 3)))
             | :? RadioButton as rb ->
                 rb.BackColor <- darkSurface
                 rb.ForeColor <- darkText
@@ -199,6 +219,21 @@ module DarkMode =
                 rb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 rb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
                 rb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
+                rb.Paint.Add(fun e ->
+                    let g = e.Graphics
+                    let circleSize = 13
+                    let circleY = (rb.Height - circleSize) / 2
+                    let circleRect = Rectangle(0, circleY, circleSize, circleSize)
+                    g.SmoothingMode <- System.Drawing.Drawing2D.SmoothingMode.AntiAlias
+                    use bg = new SolidBrush(Color.Black)
+                    g.FillEllipse(bg, circleRect)
+                    use border = new Pen(Color.FromArgb(120, 120, 120))
+                    g.DrawEllipse(border, circleRect)
+                    if rb.Checked then
+                        let dotInset = 4
+                        let dotRect = Rectangle(circleRect.X + dotInset, circleRect.Y + dotInset, circleRect.Width - dotInset * 2, circleRect.Height - dotInset * 2)
+                        use dot = new SolidBrush(darkText)
+                        g.FillEllipse(dot, dotRect))
             | :? ComboBox as cmb ->
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText
@@ -238,6 +273,11 @@ module DarkMode =
                 // initial appearance shows light selection background under
                 // light text — a "row is selected but invisible" symptom.
                 tva.HideSelection <- true
+                // Default BorderStyle.Fixed3D draws a thick light sunken
+                // edge around the tree which looks like a "white frame"
+                // against the dark theme. Drop it so the tree blends with
+                // the surrounding TabPage.
+                tva.BorderStyle <- BorderStyle.None
             | :? Label as lbl ->
                 lbl.BackColor <- darkSurface
                 lbl.ForeColor <- darkText
