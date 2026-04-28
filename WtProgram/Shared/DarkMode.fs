@@ -487,52 +487,13 @@ module DarkMode =
         for child in control.Controls do
             attachDarkOwnerDrawHandlers(child)
 
-    // === Branch-7 specific helpers ====================================
-    // Two long-standing problem cases:
-    //  - TabControl background frame: even after owner-drawing the headers,
-    //    the system still paints a 2-pixel light frame around the tab pages.
-    //  - HotKeyControl (msctls_hotkey32): a Win32 common control whose
-    //    painting ignores SetWindowTheme(DarkMode_*) hints AND doesn't fire
-    //    WM_CTLCOLOREDIT to its parent, so neither the WinMerge approach nor
-    //    the standard WinForms recolor reaches it.
-
-    // Aggressively repaint the TabControl client area on every paint with a
-    // dark fill before the system paints its frame. Combined with owner-drawn
-    // headers in branch 4 this kills the lit frame between the strip and the
-    // page area.
-    let attachDarkTabControlBackgroundFill (tabControl: TabControl) =
-        // Paint event runs after the system has drawn its frame, so we draw a
-        // dark rectangle over the visible non-tab-page area. We compute the
-        // strip area and the gap below it, leaving the tab page itself alone.
-        tabControl.Paint.Add(fun e ->
-            let g = e.Graphics
-            use brush = new SolidBrush(darkSurface)
-            // Determine the strip rectangle (top of control, height = first
-            // tab's bounds height + a couple of pixels).
-            let stripBottom =
-                if tabControl.TabPages.Count > 0 && tabControl.TabPages.[0].IsHandleCreated then
-                    let r = tabControl.GetTabRect(0)
-                    r.Bottom
-                else 24
-            // Fill from the bottom of the strip to the top of the page area
-            // (the thin frame the system would otherwise paint).
-            let frameTop = stripBottom
-            let frameBottom = tabControl.ClientSize.Height
-            let pageRect =
-                if tabControl.SelectedIndex >= 0 && tabControl.SelectedIndex < tabControl.TabPages.Count then
-                    tabControl.TabPages.[tabControl.SelectedIndex].Bounds
-                else Rectangle.Empty
-            // Top frame strip
-            if pageRect.Top > frameTop then
-                g.FillRectangle(brush, Rectangle(0, frameTop, tabControl.ClientSize.Width, pageRect.Top - frameTop))
-            // Bottom frame strip
-            if pageRect.Bottom < frameBottom then
-                g.FillRectangle(brush, Rectangle(0, pageRect.Bottom, tabControl.ClientSize.Width, frameBottom - pageRect.Bottom))
-            // Left and right frame strips
-            if pageRect.Left > 0 then
-                g.FillRectangle(brush, Rectangle(0, frameTop, pageRect.Left, frameBottom - frameTop))
-            if pageRect.Right < tabControl.ClientSize.Width then
-                g.FillRectangle(brush, Rectangle(pageRect.Right, frameTop, tabControl.ClientSize.Width - pageRect.Right, frameBottom - frameTop)))
+    // === Branch-7 era helper, retained ===================================
+    // The TabControl background fill helper (paint-event based) was retired
+    // when branch 21 took over WM_PAINT entirely (base.WndProc skipped, so
+    // the Paint event no longer fires) — see DarkTabControlFrameSubclass
+    // below. The HotKey common control fallback below remains as a safety
+    // net for the rare case where dark mode is on but UseManaged is somehow
+    // false.
 
     // Throw multiple theme names at the HotKey common control to find one it
     // accepts, plus force its WinForms-side properties. If none stick, the
@@ -565,10 +526,6 @@ module DarkMode =
 
     let rec applyDarkExtraTreatments (control: Control) =
         try
-            // TabControl: extra background fill on top of owner-drawn headers
-            match control with
-            | :? TabControl as tc -> attachDarkTabControlBackgroundFill tc
-            | _ -> ()
             // HotKey common control: identified by class name
             if control.IsHandleCreated then
                 let cls = classNameOf control.Handle
@@ -577,70 +534,6 @@ module DarkMode =
         with _ -> ()
         for child in control.Controls do
             applyDarkExtraTreatments(child)
-
-    let applyDarkThemeToForm (form: Form) (enabled: bool) =
-        if enabled then
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-
-    // Branch-4 entry point: title bar + recursive WinForms colors + native
-    // SetWindowTheme pass + owner-draw handlers for TabControl headers and
-    // GroupBox borders. Covers more of the surface than branch 3 at the cost
-    // of more painting code.
-    let applyDarkThemeFullToForm (form: Form) (enabled: bool) =
-        if enabled then
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            form.Invalidate(true)
-
-    // Branch-6 entry point: everything in applyDarkThemeFullToForm plus a
-    // process-wide SetPreferredAppMode(ForceDark) call. The kitchen-sink
-    // approach — combines WinForms-side recoloring (dark surface for static
-    // areas), per-control SetWindowTheme (dark-aware native parts), owner
-    // draw (TabControl headers, GroupBox frames) and OS-wide dark-mode hint
-    // (covers any remaining dark-aware system controls). When this still
-    // shows light remnants those controls are simply not dark-aware on this
-    // OS build.
-    let applyDarkThemeKitchenSinkToForm (form: Form) (enabled: bool) =
-        if enabled then
-            // Process-wide hint first so subsequent SetWindowTheme calls land
-            // on a uxtheme that is already in dark-mode resolution mode.
-            setPreferredAppModeForceDark()
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            form.Invalidate(true)
-
-    // Branch-7 entry point: branch 6 plus extra treatments for the long-standing
-    // problem cases (TabControl background frame and the HotKey common control).
-    let applyDarkThemeWithExtrasToForm (form: Form) (enabled: bool) =
-        if enabled then
-            setPreferredAppModeForceDark()
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            for child in form.Controls do
-                applyDarkExtraTreatments(child)
-            form.Invalidate(true)
 
     // === Branch-9 specific helpers =====================================
     // Branch 9 attacks the residual problem cases reported in branch 7
@@ -1129,34 +1022,6 @@ module DarkMode =
         for child in control.Controls do
             attachDarkStatusBarOwnerDrawRecursive(child)
 
-    // Branch-12 entry point: branch-9 + the spinner / arrow subclasses + the
-    // ContextMenuStrip dark renderer + the inactive-selection brush update
-    // that ships in attachDarkTreeViewAdvOverlay above.
-    let applyDarkThemeBranch12ToForm (form: Form) (enabled: bool) =
-        if enabled then
-            setPreferredAppModeForceDark()
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            for child in form.Controls do
-                applyDarkExtraTreatments(child)
-            for child in form.Controls do
-                attachDarkBackgroundSubclassRecursive(child)
-            for child in form.Controls do
-                attachDarkTreeViewAdvOverlayRecursive(child)
-            for child in form.Controls do
-                attachDarkSpinnerAndArrowSubclassesRecursive(child)
-            for child in form.Controls do
-                attachDarkContextMenuStripsRecursive(child)
-            for child in form.Controls do
-                invalidateTreeViewAdvs(child)
-            form.Invalidate(true)
-
     // Phase-1 entry point: only sets BackColor / ForeColor on the form and
     // recursively on every child control. No handle-dependent operations
     // (SetWindowTheme, NativeWindow subclass attachments, etc.) so this can
@@ -1197,62 +1062,6 @@ module DarkMode =
                 attachDarkContextMenuStripsRecursive(child)
             for child in form.Controls do
                 attachDarkStatusBarOwnerDrawRecursive(child)
-            for child in form.Controls do
-                invalidateTreeViewAdvs(child)
-            form.Invalidate(true)
-
-    // Branch-13 entry point: branch 12 plus the TabControl frame killer
-    // (DarkTabControlFrameSubclass attached in attachDarkBackgroundSubclassRecursive)
-    // and the StatusBar owner-draw pass.
-    let applyDarkThemeBranch13ToForm (form: Form) (enabled: bool) =
-        if enabled then
-            setPreferredAppModeForceDark()
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            for child in form.Controls do
-                applyDarkExtraTreatments(child)
-            for child in form.Controls do
-                attachDarkBackgroundSubclassRecursive(child)
-            for child in form.Controls do
-                attachDarkTreeViewAdvOverlayRecursive(child)
-            for child in form.Controls do
-                attachDarkSpinnerAndArrowSubclassesRecursive(child)
-            for child in form.Controls do
-                attachDarkContextMenuStripsRecursive(child)
-            for child in form.Controls do
-                attachDarkStatusBarOwnerDrawRecursive(child)
-            for child in form.Controls do
-                invalidateTreeViewAdvs(child)
-            form.Invalidate(true)
-
-    // Branch-9 entry point: branch 7 plus the TreeViewAdv overlay (column
-    // header overpaint + DrawText-event cell text tinting), the dark
-    // WM_ERASEBKGND subclass for TabControls, StatusBar handling (added in
-    // applyDarkColorsToControl), and ComboBox dropdown theming via the
-    // DropDown event hook.
-    let applyDarkThemeAggressivelyToForm (form: Form) (enabled: bool) =
-        if enabled then
-            setPreferredAppModeForceDark()
-            useImmersiveDarkMode form.Handle true |> ignore
-            form.BackColor <- darkSurface
-            form.ForeColor <- darkText
-            for child in form.Controls do
-                applyDarkColorsToControl(child)
-                attachDarkOwnerDrawHandlers(child)
-            for child in form.Controls do
-                applyDarkNativeThemeToControl(child)
-            for child in form.Controls do
-                applyDarkExtraTreatments(child)
-            for child in form.Controls do
-                attachDarkBackgroundSubclassRecursive(child)
-            for child in form.Controls do
-                attachDarkTreeViewAdvOverlayRecursive(child)
             for child in form.Controls do
                 invalidateTreeViewAdvs(child)
             form.Invalidate(true)
