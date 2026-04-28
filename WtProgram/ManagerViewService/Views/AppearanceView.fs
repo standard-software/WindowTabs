@@ -112,7 +112,7 @@ type AppearanceView() as this =
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 2  // int props + pinned width row + dark mode
+    let upperRowCount = intProperties.length + 3  // int props + pinned width row + menu dark mode + settings dialog dark mode
     let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
@@ -139,7 +139,9 @@ type AppearanceView() as this =
         p.ColumnCount <- 3
         List2([0..upperRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 150.0f)).ignore  // Label
+        // Match BehaviorView's UIHelper.form column width (250 px) so long
+        // labels like "設定ダイアログをダークモードにする" stay on a single line.
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
         p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
         p
@@ -154,8 +156,8 @@ type AppearanceView() as this =
         p.ColumnCount <- 4
         List2([0..colorGridRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
-        // Match upperPanel's first column width (150px)
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 150.0f)).ignore  // State label
+        // Match upperPanel's first column width (250px)
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // State label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Tab color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Text color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.34f)).ignore   // Border color
@@ -223,8 +225,9 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
-    // Upper panel: int properties -> dark mode
+    // Upper panel: int properties -> menu dark mode -> settings dialog dark mode
     let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
+    let settingsDialogDarkModeRow = darkModeRow + 1
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -396,11 +399,16 @@ type AppearanceView() as this =
             colorPanel.SetColumn(stateLabel, 0)
 
             // Color editors (columns 1, 2, 3)
+            let lastColIndex = colorCols.Length - 1
             colorCols |> List.iteri (fun colIndex (key, _) ->
                 let editor = ColorEditor() :> IPropEditor
-                editor.control.Dock <- DockStyle.None
-                editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
-                editor.control.Margin <- Padding(0, 5, 20, 5)  // right=20 for column spacing
+                // Dock.Fill so the textbox stretches across the whole cell
+                // and the rightmost editor's right edge sits at the panel's
+                // right edge (no large empty gap on the right side).
+                editor.control.Dock <- DockStyle.Fill
+                let isLastCol = colIndex = lastColIndex
+                let rightMargin = if isLastCol then 0 else 20
+                editor.control.Margin <- Padding(0, 5, rightMargin, 5)
                 colorPanel.Controls.Add(editor.control)
                 colorPanel.SetRow(editor.control, row)
                 colorPanel.SetColumn(editor.control, colIndex + 1)  // columns 1, 2, 3
@@ -430,6 +438,29 @@ type AppearanceView() as this =
         checkbox.Margin <- Padding(0,5,0,5)
         upperPanel.Controls.Add(checkbox)
         upperPanel.SetRow(checkbox, darkModeRow)
+        upperPanel.SetColumn(checkbox, 1)
+        checkbox
+
+    // Settings dialog dark mode row — placed directly under the menu dark
+    // mode row. Read at dialog open time (DesktopManagerForm constructor),
+    // so changing this value takes effect on the NEXT open of the settings
+    // dialog rather than live-toggling the running dialog.
+    let settingsDialogDarkModeLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("SettingsDialogDarkMode")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Margin <- Padding(0,8,0,5)
+        upperPanel.Controls.Add(label)
+        upperPanel.SetRow(label, settingsDialogDarkModeRow)
+        upperPanel.SetColumn(label, 0)
+        label
+
+    let settingsDialogDarkModeCheckbox =
+        let checkbox = settingsCheckboxBool "EnableSettingsDialogDarkMode" false
+        checkbox.Margin <- Padding(0,5,0,5)
+        upperPanel.Controls.Add(checkbox)
+        upperPanel.SetRow(checkbox, settingsDialogDarkModeRow)
         upperPanel.SetColumn(checkbox, 1)
         checkbox
 
@@ -1403,8 +1434,10 @@ type AppearanceView() as this =
         colorPanel.SetRow(themePanel, themeRow)
         colorPanel.SetColumn(themePanel, 1)
         colorPanel.SetColumnSpan(themePanel, 2)  // Span Tab Color and Text Color columns
-        // clipboardDropdownBtn in column 3 (Border Color column)
-        clipboardDropdownBtn.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
+        // clipboardDropdownBtn in column 3 (Border Color column).
+        // Anchor.Right so it sits at the right edge of the cell — visually
+        // pinned to the rightmost column boundary instead of floating mid-row.
+        clipboardDropdownBtn.Anchor <- AnchorStyles.Right ||| AnchorStyles.Top
         clipboardDropdownBtn.Margin <- Padding(0, 5, 0, 5)
         colorPanel.Controls.Add(clipboardDropdownBtn)
         colorPanel.SetRow(clipboardDropdownBtn, themeRow)

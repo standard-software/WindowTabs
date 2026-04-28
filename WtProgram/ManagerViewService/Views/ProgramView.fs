@@ -172,12 +172,34 @@ type ProgramView() as this=
     let toolBar =
         let ts = ToolStrip()
         ts.GripStyle <- ToolStripGripStyle.Hidden
+        // Use a soft-grey separator and balanced spacing in both light and
+        // dark mode. The default Professional renderer paints the vertical
+        // separator with a near-white inner line (SeparatorLight) which the
+        // user found too bright; this custom renderer paints a single thin
+        // grey line instead and the separator's Margin gives the trailing
+        // checkbox visible breathing room.
+        let renderer =
+            { new ToolStripProfessionalRenderer() with
+                override _.OnRenderSeparator(e: ToolStripSeparatorRenderEventArgs) =
+                    let g = e.Graphics
+                    let item = e.Item
+                    use pen = new Pen(Color.FromArgb(120, 120, 120))
+                    let h = item.Height
+                    let cx = item.Width / 2
+                    let topPad = 6
+                    let botPad = 6
+                    g.DrawLine(pen, cx, topPad, cx, h - botPad - 1) }
+        ts.Renderer <- renderer
         let refreshBtn =
             let btn = ToolStripButton(Localization.getString("Refresh"))
             btn.Click.Add <| fun _ -> this.populateNodes()
             btn
         ts.Items.Add(refreshBtn).ignore
-        ts.Items.Add(new ToolStripSeparator()) |> ignore
+        let separator = new ToolStripSeparator()
+        // Extra right-margin so the trailing checkbox doesn't crowd the
+        // separator. Default Margin = (0,0,0,0) on a ToolStripSeparator.
+        separator.Margin <- Padding(2, 0, 12, 0)
+        ts.Items.Add(separator) |> ignore
         let checkBoxCtrl = new CheckBox()
         checkBoxCtrl.Text <- Localization.getString("ShowAllSettings")
         checkBoxCtrl.AutoSize <- true
