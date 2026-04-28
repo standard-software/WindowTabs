@@ -39,6 +39,15 @@ module DarkMode =
     [<DllImport("uxtheme.dll", CharSet = CharSet.Unicode, EntryPoint = "SetWindowTheme")>]
     extern int private SetWindowTheme(IntPtr hwnd, string pszSubAppName, string pszSubIdList)
 
+    [<DllImport("user32.dll")>]
+    extern IntPtr private GetWindowDC(IntPtr hWnd)
+
+    [<DllImport("user32.dll")>]
+    extern int private ReleaseDC(IntPtr hWnd, IntPtr hDC)
+
+    [<DllImport("user32.dll")>]
+    extern bool private ValidateRect(IntPtr hWnd, IntPtr lpRect)
+
     [<DllImport("kernel32.dll", CharSet = CharSet.Unicode)>]
     extern IntPtr private LoadLibraryW(string lpLibFileName)
 
@@ -158,10 +167,26 @@ module DarkMode =
             | :? TextBox as tb ->
                 tb.BackColor <- darkPanel
                 tb.ForeColor <- darkText
-                tb.BorderStyle <- BorderStyle.FixedSingle
+                // NumericUpDown's inner UpDownEdit is also a TextBox, and
+                // walking children of NumericUpDown brings us here. The outer
+                // NumericUpDown already wears FixedSingle (recoloured in
+                // NCPAINT) so a second FixedSingle on the inner edit produces
+                // the visible double border the user reported. Inner edit
+                // gets None.
+                tb.BorderStyle <-
+                    match tb.Parent with
+                    | :? NumericUpDown -> BorderStyle.None
+                    | _ -> BorderStyle.FixedSingle
             | :? NumericUpDown as nud ->
                 nud.BackColor <- darkPanel
                 nud.ForeColor <- darkText
+                // FixedSingle keeps a 1-px border in the NON-CLIENT area —
+                // OUTSIDE the inner TextBox's client rect — so focus state
+                // changes on the inner edit can never erase the top edge.
+                // The inner TextBox has its DarkMode_CFD theme stripped (in
+                // applyDarkNativeThemeToControl) so we don't get a second
+                // "double" border, and DarkNumericUpDownFrameSubclass
+                // recolors this NC border in dark grey via WM_NCPAINT.
                 nud.BorderStyle <- BorderStyle.FixedSingle
             | :? Button as btn ->
                 // Skip buttons whose BackColor IS the content (e.g. the
@@ -172,11 +197,44 @@ module DarkMode =
                     match btn.Tag with
                     | :? string as s when s = "DarkModePreserveColor" -> true
                     | _ -> false
+                if preserve then
+                    // Preserve content color but switch to Flat with a 1-px
+                    // dark border so the system "raised" chrome doesn't add
+                    // a thick white frame around the swatch.
+                    btn.FlatStyle <- FlatStyle.Flat
+                    btn.FlatAppearance.BorderColor <- darkBorder
+                    btn.FlatAppearance.BorderSize <- 1
                 if not preserve then
                     btn.BackColor <- darkPanel
                     btn.ForeColor <- darkText
                     btn.FlatStyle <- FlatStyle.Flat
                     btn.FlatAppearance.BorderColor <- darkBorder
+                    // FlatStyle still uses the system "disabled" foreground
+                    // color when btn.Enabled = false, which renders as nearly
+                    // black on our dark panel. For text-only buttons, re-draw
+                    // the text on top in a readable tone (lighter when
+                    // enabled, mid-grey when disabled). Skip image-bearing
+                    // buttons so we don't overlap their glyph.
+                    if isNull btn.Image then
+                        btn.Paint.Add(fun e ->
+                            if not (System.String.IsNullOrEmpty(btn.Text)) then
+                                let g = e.Graphics
+                                let textColor =
+                                    if btn.Enabled then darkText
+                                    else Color.FromArgb(160, 160, 160)
+                                use bgBrush = new SolidBrush(darkPanel)
+                                g.FillRectangle(bgBrush, btn.ClientRectangle)
+                                use borderPen = new Pen(darkBorder)
+                                let r = btn.ClientRectangle
+                                g.DrawRectangle(borderPen, Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1))
+                                let alignFlags =
+                                    match btn.TextAlign with
+                                    | ContentAlignment.MiddleLeft -> TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter
+                                    | ContentAlignment.MiddleRight -> TextFormatFlags.Right ||| TextFormatFlags.VerticalCenter
+                                    | ContentAlignment.TopCenter -> TextFormatFlags.HorizontalCenter ||| TextFormatFlags.Top
+                                    | ContentAlignment.BottomCenter -> TextFormatFlags.HorizontalCenter ||| TextFormatFlags.Bottom
+                                    | _ -> TextFormatFlags.HorizontalCenter ||| TextFormatFlags.VerticalCenter
+                                TextRenderer.DrawText(g, btn.Text, btn.Font, btn.ClientRectangle, textColor, alignFlags ||| TextFormatFlags.EndEllipsis))
             | :? CheckBox as cb ->
                 cb.BackColor <- darkSurface
                 cb.ForeColor <- darkText
@@ -195,7 +253,11 @@ module DarkMode =
                     let boxSize = 13
                     let boxY = (cb.Height - boxSize) / 2
                     let boxRect = Rectangle(0, boxY, boxSize, boxSize)
-                    use bg = new SolidBrush(Color.Black)
+                    // Fill the box with the parent surface tone so the box
+                    // visually melts into the background (only the grey
+                    // border outlines it). Matches the "transparent / match
+                    // bg" preference from branch-18 review.
+                    use bg = new SolidBrush(cb.BackColor)
                     g.FillRectangle(bg, boxRect)
                     use border = new Pen(Color.FromArgb(120, 120, 120))
                     g.DrawRectangle(border, boxRect)
@@ -225,7 +287,9 @@ module DarkMode =
                     let circleY = (rb.Height - circleSize) / 2
                     let circleRect = Rectangle(0, circleY, circleSize, circleSize)
                     g.SmoothingMode <- System.Drawing.Drawing2D.SmoothingMode.AntiAlias
-                    use bg = new SolidBrush(Color.Black)
+                    // Match the parent surface so the circle outline sits on
+                    // an invisible disc rather than a stark black puck.
+                    use bg = new SolidBrush(rb.BackColor)
                     g.FillEllipse(bg, circleRect)
                     use border = new Pen(Color.FromArgb(120, 120, 120))
                     g.DrawEllipse(border, circleRect)
@@ -238,6 +302,24 @@ module DarkMode =
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText
                 cmb.FlatStyle <- FlatStyle.Flat
+                // OwnerDrawFixed lets us own the popup item highlight and
+                // text colors, replacing the system blue with our accent.
+                if cmb.DrawMode = DrawMode.Normal then
+                    cmb.DrawMode <- DrawMode.OwnerDrawFixed
+                cmb.DrawItem.Add(fun e ->
+                    let g = e.Graphics
+                    let isSelected = (e.State &&& DrawItemState.Selected) <> DrawItemState.None
+                    let bgColor = if isSelected then darkAccent else darkPanel
+                    use bg = new SolidBrush(bgColor)
+                    g.FillRectangle(bg, e.Bounds)
+                    if e.Index >= 0 && e.Index < cmb.Items.Count then
+                        let txt =
+                            match cmb.Items.[e.Index] with
+                            | null -> ""
+                            | o -> o.ToString()
+                        TextRenderer.DrawText(
+                            g, txt, cmb.Font, e.Bounds, darkText,
+                            TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis))
                 // Theme the dropdown LIST (popup) separately when it's about
                 // to open. The popup is a different HWND from the combo proper
                 // so SetWindowTheme on the combo doesn't reach it.
@@ -324,16 +406,33 @@ module DarkMode =
     let rec applyDarkNativeThemeToControl (control: Control) =
         try
             if control.IsHandleCreated then
-                let appName =
-                    match control with
-                    | :? ComboBox -> "DarkMode_CFD"
-                    | :? TextBox -> "DarkMode_CFD"
-                    | :? NumericUpDown -> "DarkMode_CFD"
-                    | :? ListView -> "DarkMode_Explorer"
-                    | :? ListBox -> "DarkMode_Explorer"
-                    | :? DataGridView -> "DarkMode_Explorer"
-                    | _ -> "DarkMode_Explorer"
-                setControlTheme control.Handle appName
+                match control with
+                | :? ComboBox ->
+                    // Disable visual styles entirely on the combo proper so
+                    // the system stops drawing hover/focus border flashes
+                    // (white-blink on MouseEnter). Our FlatStyle.Flat +
+                    // DarkComboBoxSubclass owns the appearance instead. The
+                    // dropdown LIST popup is themed separately via
+                    // DarkMode_Explorer in the cmb.DropDown handler.
+                    SetWindowTheme(control.Handle, "", "") |> ignore
+                | :? TextBox when (control.Parent :? NumericUpDown) ->
+                    // Inner edit of NumericUpDown: kill its DarkMode_CFD
+                    // border so the only visible frame is the outer
+                    // FixedSingle (recoloured by DarkNumericUpDownFrameSubclass
+                    // via WM_NCPAINT). Without this we'd see the inner CFD
+                    // 1-px line plus the outer FixedSingle 1-px line as a
+                    // visible double border.
+                    SetWindowTheme(control.Handle, "", "") |> ignore
+                | _ ->
+                    let appName =
+                        match control with
+                        | :? TextBox -> "DarkMode_CFD"
+                        | :? NumericUpDown -> "DarkMode_CFD"
+                        | :? ListView -> "DarkMode_Explorer"
+                        | :? ListBox -> "DarkMode_Explorer"
+                        | :? DataGridView -> "DarkMode_Explorer"
+                        | _ -> "DarkMode_Explorer"
+                    setControlTheme control.Handle appName
         with _ -> ()
         for child in control.Controls do
             applyDarkNativeThemeToControl(child)
@@ -346,26 +445,13 @@ module DarkMode =
     // NOT extend above any more — that caused inactive-tab text to overlap
     // the strip top edge.
     let attachDarkTabControlOwnerDraw (tabControl: TabControl) =
-        tabControl.DrawMode <- TabDrawMode.OwnerDrawFixed
-        tabControl.DrawItem.Add(fun e ->
-            let g = e.Graphics
-            let isSelected = (e.Index = tabControl.SelectedIndex)
-            let bgColor = if isSelected then darkPanel else darkTabStrip
-            use bgBrush = new SolidBrush(bgColor)
-            let extended = Rectangle(e.Bounds.X, e.Bounds.Y, e.Bounds.Width, e.Bounds.Height + 2)
-            g.FillRectangle(bgBrush, extended)
-            if e.Index >= 0 && e.Index < tabControl.TabPages.Count then
-                let txt = tabControl.TabPages.[e.Index].Text
-                use textBrush = new SolidBrush(darkText)
-                use format = new StringFormat()
-                format.Alignment <- StringAlignment.Center
-                format.LineAlignment <- StringAlignment.Center
-                let rect = RectangleF(float32 e.Bounds.X, float32 e.Bounds.Y, float32 e.Bounds.Width, float32 e.Bounds.Height)
-                g.DrawString(txt, tabControl.Font, textBrush, rect, format)
-            // Subtle bottom rule for the selected tab so it stands out
-            if isSelected then
-                use accentPen = new Pen(darkAccent, 2.0f)
-                g.DrawLine(accentPen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1))
+        // Tab geometry only — actual painting is done by
+        // DarkTabControlFrameSubclass which fully owns WM_PAINT and paints
+        // each tab + the page-frame area itself. DrawMode stays Normal
+        // because no DrawItem dispatch is needed (base.WndProc never runs
+        // for WM_PAINT once the subclass is attached).
+        tabControl.ItemSize <- Size(0, 26)
+        tabControl.SizeMode <- TabSizeMode.Normal
 
     // Owner-draw a GroupBox: the system always paints the title text + frame
     // in window colors, so we paint a dark frame + dark title text on top.
@@ -602,53 +688,87 @@ module DarkMode =
     // intercepts WM_PAINT, lets the system paint normally (so the
     // owner-drawn tabs appear), then immediately overpaints the four frame
     // strips around the selected tab page with darkSurface.
+    // Full-owner-paint TabControl subclass. Earlier branches let the OS
+    // paint the tab control via base.WndProc and then over-painted darker
+    // colours on top, but the OS-drawn 1-px frame around the tab pages
+    // kept showing through near the strip/page boundary (the "white line
+    // under the tabs" the user reported through B17-B20). This subclass
+    // takes over WM_PAINT entirely: skips base.WndProc, paints background
+    // / each tab / frame area from scratch, and ValidateRect's the whole
+    // window so the OS does not re-issue a paint. WM_ERASEBKGND is also
+    // suppressed so the system never gets to flash a light background
+    // first.
     type private DarkTabControlFrameSubclass(tc: TabControl) as this =
         inherit NativeWindow()
         let WM_PAINT = 0x000F
+        let WM_ERASEBKGND = 0x0014
         let attach() =
             try if tc.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(tc.Handle)
+            with _ -> ()
+        let paintAll() =
+            try
+                use g = Graphics.FromHwnd(tc.Handle)
+                let cr = tc.ClientRectangle
+                // Background: darkTabStrip everywhere first; will be
+                // overpainted with darkPanel for the page-frame area below.
+                use stripBrush = new SolidBrush(darkTabStrip)
+                g.FillRectangle(stripBrush, cr)
+                // stripBottom = bottom edge of the tab strip
+                let stripBottom =
+                    if tc.TabPages.Count > 0 then
+                        try (tc.GetTabRect(0)).Bottom
+                        with _ -> 26
+                    else 26
+                // Page-frame area: from stripBottom down, paint with
+                // darkPanel so the area around (and under) the active tab
+                // matches the tab page surface. This intentionally extends
+                // up to stripBottom (does NOT enter the tab strip), so
+                // inactive tabs keep their darker fill all the way to
+                // their bottom edge — no "light band under tabs".
+                use pageBrush = new SolidBrush(darkPanel)
+                if cr.Height > stripBottom then
+                    g.FillRectangle(pageBrush, Rectangle(0, stripBottom, cr.Width, cr.Height - stripBottom))
+                // Each tab: paint background + text. Replicates the per-
+                // tab DrawItem dispatch so we don't depend on base.WndProc
+                // running.
+                use textBrush = new SolidBrush(darkText)
+                use format = new StringFormat()
+                format.Alignment <- StringAlignment.Center
+                format.LineAlignment <- StringAlignment.Center
+                let selectedIndex = tc.SelectedIndex
+                for i in 0 .. tc.TabPages.Count - 1 do
+                    try
+                        let r = tc.GetTabRect(i)
+                        let isSelected = i = selectedIndex
+                        let bg = if isSelected then darkPanel else darkTabStrip
+                        use bgBrush = new SolidBrush(bg)
+                        // Slightly extend each tab fill so the system's old
+                        // 1-px outline (now never drawn anyway) cannot
+                        // reappear at the edges.
+                        let extended = Rectangle(r.X - 1, r.Y - 2, r.Width + 2, r.Height + 4)
+                        g.FillRectangle(bgBrush, extended)
+                        let txt = tc.TabPages.[i].Text
+                        let textRectF = RectangleF(float32 r.X, float32 r.Y, float32 r.Width, float32 r.Height)
+                        g.DrawString(txt, tc.Font, textBrush, textRectF, format)
+                    with _ -> ()
             with _ -> ()
         do
             attach()
             tc.HandleCreated.Add(fun _ -> attach())
             tc.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+            // Repaint on selection change so the active-tab fill follows
+            // the user's click immediately.
+            tc.SelectedIndexChanged.Add(fun _ -> try tc.Invalidate() with _ -> ())
         override this.WndProc(m: byref<Message>) =
-            base.WndProc(&m)
-            if m.Msg = WM_PAINT then
-                try
-                    if tc.SelectedIndex >= 0 && tc.SelectedIndex < tc.TabPages.Count && tc.TabPages.Count > 0 then
-                        use g = Graphics.FromHwnd(tc.Handle)
-                        // Page area frame uses darkPanel (same as active tab
-                        // and page bg) so the active tab visually merges with
-                        // the page surface beneath it. Tab strip area still
-                        // shows darkTabStrip from the WM_ERASEBKGND fill.
-                        use brush = new SolidBrush(darkPanel)
-                        let stripBottom =
-                            try (tc.GetTabRect(0)).Bottom
-                            with _ -> 24
-                        let pageRect = tc.TabPages.[tc.SelectedIndex].Bounds
-                        let cr = tc.ClientRectangle
-                        // ALWAYS paint a 3-px dark strip immediately above the
-                        // page area so the system-drawn divider line between
-                        // the tab strip and the page is hidden, even when
-                        // pageRect.Top == stripBottom (no logical gap).
-                        let dividerTop = max 0 (pageRect.Top - 3)
-                        let dividerHeight = pageRect.Top - dividerTop + 1
-                        if dividerHeight > 0 then
-                            g.FillRectangle(brush, Rectangle(0, dividerTop, cr.Width, dividerHeight))
-                        // Top frame strip (between tab strip and page top)
-                        if pageRect.Top > stripBottom then
-                            g.FillRectangle(brush, Rectangle(0, stripBottom, cr.Width, pageRect.Top - stripBottom))
-                        // Left frame strip
-                        if pageRect.Left > 0 then
-                            g.FillRectangle(brush, Rectangle(0, stripBottom, pageRect.Left, cr.Height - stripBottom))
-                        // Right frame strip
-                        if pageRect.Right < cr.Width then
-                            g.FillRectangle(brush, Rectangle(pageRect.Right, stripBottom, cr.Width - pageRect.Right, cr.Height - stripBottom))
-                        // Bottom frame strip
-                        if pageRect.Bottom < cr.Height then
-                            g.FillRectangle(brush, Rectangle(0, pageRect.Bottom, cr.Width, cr.Height - pageRect.Bottom))
-                with _ -> ()
+            match m.Msg with
+            | msg when msg = WM_ERASEBKGND ->
+                m.Result <- IntPtr(1)
+            | msg when msg = WM_PAINT ->
+                paintAll()
+                ValidateRect(tc.Handle, IntPtr.Zero) |> ignore
+                m.Result <- IntPtr.Zero
+            | _ ->
+                base.WndProc(&m)
 
     // Walk the control tree and attach the dark-erase subclass to TabControls
     // and to any other control where the system paints a light background that
@@ -780,30 +900,110 @@ module DarkMode =
     // After a ComboBox paints itself, overdraw the right-edge dropdown arrow
     // area in dark and re-render the chevron in light text. The arrow rect
     // is the rightmost ~17 px of the client rectangle.
+    // Full-owner-paint ComboBox subclass. Earlier versions painted darkBorder
+    // AFTER base.WndProc on top of the system render, but the system's
+    // hover/focus paint (a brief white frame) was visible for the frame
+    // before our overpaint landed. This version skips base.WndProc for
+    // WM_PAINT entirely, paints the background / border / arrow / selected
+    // text from scratch, and ValidateRect's the window so the OS doesn't
+    // re-issue WM_PAINT. WM_ERASEBKGND is also suppressed so the system
+    // never has a chance to flash a light background.
     type private DarkComboBoxSubclass(cmb: ComboBox) as this =
         inherit NativeWindow()
         let WM_PAINT = 0x000F
+        let WM_ERASEBKGND = 0x0014
         let attach() =
             try if cmb.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(cmb.Handle)
+            with _ -> ()
+        let paintAll() =
+            try
+                use g = Graphics.FromHwnd(cmb.Handle)
+                let r = cmb.ClientRectangle
+                // Background
+                use bg = new SolidBrush(darkPanel)
+                g.FillRectangle(bg, r)
+                // Right-edge arrow area
+                let arrowWidth = SystemInformation.HorizontalScrollBarArrowWidth
+                let arrowRect = Rectangle(r.Right - arrowWidth, r.Top, arrowWidth, r.Height)
+                use sep = new Pen(darkBorder)
+                g.DrawLine(sep, arrowRect.Left, arrowRect.Top + 2, arrowRect.Left, arrowRect.Bottom - 2)
+                drawDarkArrow g arrowRect true
+                // Selected item text. For DropDownList style there is no
+                // separate edit child, so we render the text ourselves to
+                // ensure a fully-themed appearance with no system paint
+                // leaking through.
+                if cmb.SelectedIndex >= 0 then
+                    let txt =
+                        match cmb.Items.[cmb.SelectedIndex] with
+                        | null -> ""
+                        | o -> o.ToString()
+                    let textRect = Rectangle(r.Left + 4, r.Top, r.Width - arrowWidth - 8, r.Height)
+                    TextRenderer.DrawText(
+                        g, txt, cmb.Font, textRect, darkText,
+                        TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
+                elif not (System.String.IsNullOrEmpty(cmb.Text)) then
+                    let textRect = Rectangle(r.Left + 4, r.Top, r.Width - arrowWidth - 8, r.Height)
+                    TextRenderer.DrawText(
+                        g, cmb.Text, cmb.Font, textRect, darkText,
+                        TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
+                // Border last so it sits on top of any earlier fill.
+                use border = new Pen(darkBorder)
+                g.DrawRectangle(border, Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1))
             with _ -> ()
         do
             attach()
             cmb.HandleCreated.Add(fun _ -> attach())
             cmb.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
         override this.WndProc(m: byref<Message>) =
+            match m.Msg with
+            | msg when msg = WM_ERASEBKGND ->
+                m.Result <- IntPtr(1)
+            | msg when msg = WM_PAINT ->
+                // Take over the paint cycle: render everything ourselves and
+                // tell the OS the area is clean so no system paint runs.
+                paintAll()
+                ValidateRect(cmb.Handle, IntPtr.Zero) |> ignore
+                m.Result <- IntPtr.Zero
+            | _ ->
+                base.WndProc(&m)
+
+    // NumericUpDown outer-frame subclass: recolors the FixedSingle border
+    // via WM_NCPAINT. The border lives in the NON-CLIENT area of the
+    // NumericUpDown — outside the inner TextBox's client rectangle — so
+    // even when the TextBox's WM_PAINT redraws on focus state change, it
+    // can never erase any pixel of our border (the previous attempt
+    // painted in the client area at Y=0 which the inner TextBox happily
+    // overpainted on focus, leaving the user with a missing top edge).
+    type private DarkNumericUpDownFrameSubclass(nud: NumericUpDown) as this =
+        inherit NativeWindow()
+        let WM_NCPAINT = 0x0085
+        let WM_NCCALCSIZE = 0x0083
+        let attach() =
+            try if nud.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(nud.Handle)
+            with _ -> ()
+        let paintBorder() =
+            try
+                let hdc = GetWindowDC(nud.Handle)
+                if hdc <> IntPtr.Zero then
+                    try
+                        use g = Graphics.FromHdc(hdc)
+                        use pen = new Pen(darkBorder)
+                        // Window rect, in window coordinates: (0,0) -
+                        // (Width-1, Height-1). The 1-px FixedSingle border
+                        // occupies the outermost ring; we draw exactly on
+                        // top of it.
+                        g.DrawRectangle(pen, Rectangle(0, 0, nud.Width - 1, nud.Height - 1))
+                    finally
+                        ReleaseDC(nud.Handle, hdc) |> ignore
+            with _ -> ()
+        do
+            attach()
+            nud.HandleCreated.Add(fun _ -> attach())
+            nud.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
+        override this.WndProc(m: byref<Message>) =
             base.WndProc(&m)
-            if m.Msg = WM_PAINT then
-                try
-                    use g = Graphics.FromHwnd(cmb.Handle)
-                    let arrowWidth = SystemInformation.HorizontalScrollBarArrowWidth
-                    let r = cmb.ClientRectangle
-                    let arrowRect = Rectangle(r.Right - arrowWidth, r.Top, arrowWidth, r.Height)
-                    use bg = new SolidBrush(darkPanel)
-                    g.FillRectangle(bg, arrowRect)
-                    use sep = new Pen(darkBorder)
-                    g.DrawLine(sep, arrowRect.Left, arrowRect.Top + 2, arrowRect.Left, arrowRect.Bottom - 2)
-                    drawDarkArrow g arrowRect true
-                with _ -> ()
+            if m.Msg = WM_NCPAINT then
+                paintBorder()
 
     // NumericUpDown: the spin button child window paints its own up/down
     // arrows via the system theme. We subclass that child to overpaint in
@@ -843,6 +1043,9 @@ module DarkMode =
             match control with
             | :? ComboBox as cmb -> DarkComboBoxSubclass(cmb) |> ignore
             | :? NumericUpDown as nud ->
+                // Outer-frame subclass: stable 1-px grey border that doesn't
+                // disappear on focus state transitions.
+                DarkNumericUpDownFrameSubclass(nud) |> ignore
                 // NumericUpDown's child controls include the editing TextBox
                 // and a spin-buttons control. Subclass anything that isn't
                 // the textbox.
