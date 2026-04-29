@@ -558,12 +558,12 @@ module UIHelper =
         form.Padding <- Padding(12)
         
         let okButton = Button()
-        okButton.Text <- "OK"
+        okButton.Text <- Localization.getString("OK")
         okButton.Click.Add <| fun _ ->
             form.DialogResult <- DialogResult.OK
 
         let cancelButton = Button()
-        cancelButton.Text <- "Cancel"
+        cancelButton.Text <- Localization.getString("Cancel")
         
         cancelButton.Click.Add <| fun _ ->
             form.DialogResult <- DialogResult.Cancel

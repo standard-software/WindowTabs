@@ -23,6 +23,8 @@ module Localization_English =
         ("MenuDarkMode", "Menu Dark Mode")
         ("SettingsDialogDarkMode", "Settings Dialog Dark Mode")
         ("HotKeyNone", "None")
+        ("OK", "OK")
+        ("Cancel", "Cancel")
 
         ("ColorTheme", "Color Theme")
         ("SaveAs", "Save As")

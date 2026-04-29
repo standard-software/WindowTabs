@@ -1158,14 +1158,14 @@ type AppearanceView() as this =
         textBox.Size <- Size(370, 26)
 
         let okBtn = new Button()
-        okBtn.Text <- "OK"
+        okBtn.Text <- Localization.getString("OK")
         okBtn.DialogResult <- DialogResult.OK
         okBtn.Location <- Point(235, 141)
         okBtn.Size <- Size(80, 30)
         okBtn.Enabled <- false  // Disabled until text changes
 
         let cancelBtn = new Button()
-        cancelBtn.Text <- "Cancel"
+        cancelBtn.Text <- Localization.getString("Cancel")
         cancelBtn.DialogResult <- DialogResult.Cancel
         cancelBtn.Location <- Point(320, 141)
         cancelBtn.Size <- Size(80, 30)
@@ -1226,14 +1226,14 @@ type AppearanceView() as this =
         customThemes |> List.iter (fun t -> comboBox.Items.Add(t.name) |> ignore)
 
         let okBtn = new Button()
-        okBtn.Text <- "OK"
+        okBtn.Text <- Localization.getString("OK")
         okBtn.DialogResult <- DialogResult.OK
         okBtn.Location <- Point(235, 111)
         okBtn.Size <- Size(80, 30)
         okBtn.Enabled <- false  // Initially disabled
 
         let cancelBtn = new Button()
-        cancelBtn.Text <- "Cancel"
+        cancelBtn.Text <- Localization.getString("Cancel")
         cancelBtn.DialogResult <- DialogResult.Cancel
         cancelBtn.Location <- Point(320, 111)
         cancelBtn.Size <- Size(80, 30)

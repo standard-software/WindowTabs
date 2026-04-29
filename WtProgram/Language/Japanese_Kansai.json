@@ -19,6 +19,8 @@
   "MenuDarkMode": "メニューをダークモードにするで",
   "SettingsDialogDarkMode": "設定ダイアログをダークモードにするで",
   "HotKeyNone": "あらへん",
+  "OK": "ええで",
+  "Cancel": "やめとくわ",
 
   "ColorTheme": "カラーテーマ",
   "SaveAs": "名前を付けて保存するで",

@@ -9,6 +9,7 @@
 - Save Theme / Edit Theme dialogs: more comfortable padding.
 - Hot Key field: "None" placeholder is now localized.
 - Language change confirmation dialog: now follows the dark mode toggle (still kept in English so an accidental language switch can be reverted).
+- OK / Cancel buttons in Save Theme / Edit Theme / Workspace edit dialogs: now localized.
 
 ## version ss_jp_2026.04.22
 - Bug fix
