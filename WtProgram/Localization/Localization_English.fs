@@ -22,6 +22,7 @@ module Localization_English =
         ("Indent Flipped", "Distance from edge when tabs down")
         ("MenuDarkMode", "Menu Dark Mode")
         ("SettingsDialogDarkMode", "Settings Dialog Dark Mode")
+        ("HotKeyNone", "None")
 
         ("ColorTheme", "Color Theme")
         ("SaveAs", "Save As")

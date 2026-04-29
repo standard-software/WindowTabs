@@ -266,7 +266,53 @@ type NotifyIconPlugin() as this =
                         Services.settings.root <- json
                         Localization.setLanguage(fileName)
                         closeSettingsDialog()
-                        MessageBox.Show(sprintf "Language has been changed to %s." displayName, "Language Change", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                        // Theme-aware confirmation dialog (replaces the
+                        // system MessageBox so it follows the dark-mode
+                        // toggle). Title / message / OK button are
+                        // intentionally kept in English even when the app is
+                        // localized — if the user accidentally switches to
+                        // a language they can't read, this dialog still
+                        // tells them in English what just happened so they
+                        // can navigate back and revert the language.
+                        use form = new Form()
+                        form.Text <- "Language Change"
+                        form.FormBorderStyle <- FormBorderStyle.FixedDialog
+                        form.MaximizeBox <- false
+                        form.MinimizeBox <- false
+                        form.StartPosition <- FormStartPosition.CenterScreen
+                        form.TopMost <- true
+                        form.ShowInTaskbar <- false
+                        let label = new Label()
+                        label.Text <- sprintf "Language has been changed to %s." displayName
+                        label.Location <- System.Drawing.Point(30, 30)
+                        label.AutoSize <- true
+                        let okBtn = new Button()
+                        okBtn.Text <- "OK"
+                        okBtn.DialogResult <- DialogResult.OK
+                        okBtn.Size <- System.Drawing.Size(80, 30)
+                        form.Controls.Add(label)
+                        form.Controls.Add(okBtn)
+                        form.AcceptButton <- okBtn
+                        form.CancelButton <- okBtn
+                        form.Load.Add(fun _ ->
+                            // Size the form around the label so multi-byte
+                            // strings (Japanese / Chinese) fit comfortably.
+                            let cw = max (label.Right + 30) 360
+                            let ch = label.Bottom + 30 + okBtn.Height + 30
+                            form.ClientSize <- System.Drawing.Size(cw, ch)
+                            okBtn.Location <- System.Drawing.Point((cw - okBtn.Width) / 2, label.Bottom + 30))
+                        let darkOn =
+                            try
+                                match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+                                | Some(v) -> v
+                                | None -> false
+                            with _ -> false
+                        if darkOn then
+                            DarkMode.applyDarkColorsBeforeShow form
+                            form.HandleCreated.Add(fun _ ->
+                                try DarkMode.applyDarkThemeBranch15ToForm form true
+                                with _ -> ())
+                        form.ShowDialog() |> ignore
                     with
                     | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
                 languageMenu.MenuItems.Add(langItem) |> ignore

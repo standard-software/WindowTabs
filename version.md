@@ -6,6 +6,9 @@
 - Settings dialog: fixed a bug where invoking Settings from the tray while the dialog was already open would leave it un-openable after the next close.
 - Save Theme / Edit Theme / Workspace edit dialogs: added dark mode support.
 - Workspace edit dialog: layout fix (narrower label column, no horizontal scroll).
+- Save Theme / Edit Theme dialogs: more comfortable padding.
+- Hot Key field: "None" placeholder is now localized.
+- Language change confirmation dialog: now follows the dark mode toggle (still kept in English so an accidental language switch can be reverted).
 
 ## version ss_jp_2026.04.22
 - Bug fix
