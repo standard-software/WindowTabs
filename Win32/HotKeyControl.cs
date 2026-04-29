@@ -19,6 +19,12 @@ namespace Bemo.Win32
         // control is constructed.
         public static bool UseManaged = false;
 
+        // Localized "no hotkey set" label. Defaults to "None" but the F# side
+        // overwrites this with the localized string (e.g. "なし" in Japanese)
+        // before the dialog is constructed so newly-created HotKeyControls
+        // pick up the user's chosen language.
+        public static string NoneLabel = "None";
+
         // Storage for the managed code path (the comctl32 path keeps the value
         // inside the native control and accesses it via HKM_GETHOTKEY).
         private int _managedHotKey;
@@ -28,10 +34,10 @@ namespace Bemo.Win32
             if (UseManaged)
             {
                 // ReadOnly so the user can't type literal text but can still
-                // give focus and receive key events. Display "None" until a
-                // hotkey is set.
+                // give focus and receive key events. Display the localized
+                // "no hotkey" label until a hotkey is set.
                 this.ReadOnly = true;
-                this.Text = "None";
+                this.Text = NoneLabel;
             }
         }
 
@@ -132,7 +138,7 @@ namespace Bemo.Win32
             int vk = packed & 0xFF;
             int mods = (packed >> 8) & 0xFF;
             if (vk == 0)
-                return "None";
+                return NoneLabel;
             var sb = new System.Text.StringBuilder();
             if ((mods & 2) != 0) sb.Append("Ctrl+");
             if ((mods & 4) != 0) sb.Append("Alt+");

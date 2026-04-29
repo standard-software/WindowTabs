@@ -302,30 +302,30 @@ module DarkMode =
                 cmb.BackColor <- darkPanel
                 cmb.ForeColor <- darkText
                 cmb.FlatStyle <- FlatStyle.Flat
-                // OwnerDrawFixed lets us own the popup item highlight and
-                // text colors, replacing the system blue with our accent.
-                if cmb.DrawMode = DrawMode.Normal then
+                // Only own the popup rendering for combos that don't already
+                // have a custom DrawItem (the colorThemeComboBox uses
+                // OwnerDrawVariable + its own DrawItem with category-aware
+                // separators — overdrawing on top of it would put a divider
+                // line on EVERY item, which is what the user reported in
+                // dark mode). For other combos, promote DrawMode to
+                // OwnerDrawFixed and render items in dark palette.
+                let weOwnDrawing = cmb.DrawMode = DrawMode.Normal
+                if weOwnDrawing then
                     cmb.DrawMode <- DrawMode.OwnerDrawFixed
-                cmb.DrawItem.Add(fun e ->
-                    let g = e.Graphics
-                    let isSelected = (e.State &&& DrawItemState.Selected) <> DrawItemState.None
-                    let bgColor = if isSelected then darkAccent else darkPanel
-                    use bg = new SolidBrush(bgColor)
-                    g.FillRectangle(bg, e.Bounds)
-                    if e.Index >= 0 && e.Index < cmb.Items.Count then
-                        let txt =
-                            match cmb.Items.[e.Index] with
-                            | null -> ""
-                            | o -> o.ToString()
-                        TextRenderer.DrawText(
-                            g, txt, cmb.Font, e.Bounds, darkText,
-                            TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
-                    // Bottom 1-px separator: makes adjacent items in the
-                    // dropdown distinguishable in dark mode where the
-                    // default near-black-on-near-black "divider" is
-                    // invisible.
-                    use sep = new Pen(Color.FromArgb(80, 80, 80))
-                    g.DrawLine(sep, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1))
+                    cmb.DrawItem.Add(fun e ->
+                        let g = e.Graphics
+                        let isSelected = (e.State &&& DrawItemState.Selected) <> DrawItemState.None
+                        let bgColor = if isSelected then darkAccent else darkPanel
+                        use bg = new SolidBrush(bgColor)
+                        g.FillRectangle(bg, e.Bounds)
+                        if e.Index >= 0 && e.Index < cmb.Items.Count then
+                            let txt =
+                                match cmb.Items.[e.Index] with
+                                | null -> ""
+                                | o -> o.ToString()
+                            TextRenderer.DrawText(
+                                g, txt, cmb.Font, e.Bounds, darkText,
+                                TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis))
                 // Theme the dropdown LIST (popup) separately when it's about
                 // to open. The popup is a different HWND from the combo proper
                 // so SetWindowTheme on the combo doesn't reach it.

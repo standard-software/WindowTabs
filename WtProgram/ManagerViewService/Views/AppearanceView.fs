@@ -861,21 +861,39 @@ type AppearanceView() as this =
     // Set up ComboBox draw event for separator lines
     do
         colorThemeComboBox.DrawItem.Add <| fun e ->
-            e.DrawBackground()
+            let darkOn = isSettingsDialogDarkMode()
+            // Background: in dark mode use darkAccent for selected and
+            // darkPanel for unselected, replacing the system blue / window
+            // colors which would otherwise stay bright. In light mode the
+            // system DrawBackground rendering is correct.
+            if darkOn then
+                let isSelected = (e.State &&& DrawItemState.Selected) <> DrawItemState.None
+                let bgColor = if isSelected then DarkMode.darkAccent else DarkMode.darkPanel
+                use bg = new SolidBrush(bgColor)
+                e.Graphics.FillRectangle(bg, e.Bounds)
+            else
+                e.DrawBackground()
             if e.Index >= 0 && e.Index < themeItems.Length then
                 let text =
                     match themeItems.[e.Index] with
                     | Preset name | CustomTheme name -> name
                     | UnsavedCustom -> "Custom"
-                use brush = new SolidBrush(e.ForeColor)
+                let textColor =
+                    if darkOn then DarkMode.darkText
+                    else e.ForeColor
+                use brush = new SolidBrush(textColor)
                 // Calculate vertical center position for text
                 let textSize = e.Graphics.MeasureString(text, e.Font)
                 let y = float32 e.Bounds.Top + (float32 e.Bounds.Height - textSize.Height) / 2.0f
                 e.Graphics.DrawString(text, e.Font, brush, float32 e.Bounds.Left + 2.0f, y)
-                // Draw separator line below if needed
+                // Draw separator line below if needed (only at category
+                // boundaries — see shouldDrawSeparatorBelow).
                 if shouldDrawSeparatorBelow e.Index then
                     let lineY = e.Bounds.Bottom - 1
-                    use pen = new Pen(Color.Gray, 1.0f)
+                    let penColor =
+                        if darkOn then Color.FromArgb(120, 120, 120)
+                        else Color.Gray
+                    use pen = new Pen(penColor, 1.0f)
                     e.Graphics.DrawLine(pen, e.Bounds.Left + 2, lineY, e.Bounds.Right - 2, lineY)
             e.DrawFocusRectangle()
 
@@ -1116,7 +1134,7 @@ type AppearanceView() as this =
     let showEditThemeDialog (currentName: string) =
         use form = new Form()
         form.Text <- Localization.getString("EditThemeTitle")
-        form.Size <- Size(350, 170)
+        form.Size <- Size(440, 240)
         form.StartPosition <- FormStartPosition.CenterParent
         form.FormBorderStyle <- FormBorderStyle.FixedDialog
         form.MaximizeBox <- false
@@ -1125,32 +1143,32 @@ type AppearanceView() as this =
 
         let label = new Label()
         label.Text <- Localization.getString("EditThemePrompt")
-        label.Location <- Point(10, 20)
+        label.Location <- Point(30, 30)
         label.AutoSize <- true
 
         let hintLabel = new Label()
         hintLabel.Text <- Localization.getString("DeleteThemeHint")
-        hintLabel.Location <- Point(10, 40)
+        hintLabel.Location <- Point(30, 55)
         hintLabel.AutoSize <- true
         hintLabel.ForeColor <- Color.Gray
 
         let textBox = new TextBox()
         textBox.Text <- currentName
-        textBox.Location <- Point(10, 65)
-        textBox.Size <- Size(310, 25)
+        textBox.Location <- Point(30, 90)
+        textBox.Size <- Size(370, 26)
 
         let okBtn = new Button()
         okBtn.Text <- "OK"
         okBtn.DialogResult <- DialogResult.OK
-        okBtn.Location <- Point(160, 100)
-        okBtn.Size <- Size(75, 25)
+        okBtn.Location <- Point(235, 141)
+        okBtn.Size <- Size(80, 30)
         okBtn.Enabled <- false  // Disabled until text changes
 
         let cancelBtn = new Button()
         cancelBtn.Text <- "Cancel"
         cancelBtn.DialogResult <- DialogResult.Cancel
-        cancelBtn.Location <- Point(245, 100)
-        cancelBtn.Size <- Size(75, 25)
+        cancelBtn.Location <- Point(320, 141)
+        cancelBtn.Size <- Size(80, 30)
 
         // Enable OK button when text changes from current value
         textBox.TextChanged.Add <| fun _ ->
@@ -1188,7 +1206,7 @@ type AppearanceView() as this =
     let showSaveAsDialog (title: string) =
         use form = new Form()
         form.Text <- title
-        form.Size <- Size(350, 150)
+        form.Size <- Size(440, 210)
         form.StartPosition <- FormStartPosition.CenterParent
         form.FormBorderStyle <- FormBorderStyle.FixedDialog
         form.MaximizeBox <- false
@@ -1197,12 +1215,12 @@ type AppearanceView() as this =
 
         let label = new Label()
         label.Text <- Localization.getString("EnterThemeName")
-        label.Location <- Point(10, 20)
+        label.Location <- Point(30, 30)
         label.AutoSize <- true
 
         let comboBox = new ComboBox()
-        comboBox.Location <- Point(10, 45)
-        comboBox.Size <- Size(310, 25)
+        comboBox.Location <- Point(30, 60)
+        comboBox.Size <- Size(370, 26)
         comboBox.DropDownStyle <- ComboBoxStyle.DropDown  // Allow text input
         // Add existing custom theme names to ComboBox
         customThemes |> List.iter (fun t -> comboBox.Items.Add(t.name) |> ignore)
@@ -1210,15 +1228,15 @@ type AppearanceView() as this =
         let okBtn = new Button()
         okBtn.Text <- "OK"
         okBtn.DialogResult <- DialogResult.OK
-        okBtn.Location <- Point(160, 80)
-        okBtn.Size <- Size(75, 25)
+        okBtn.Location <- Point(235, 111)
+        okBtn.Size <- Size(80, 30)
         okBtn.Enabled <- false  // Initially disabled
 
         let cancelBtn = new Button()
         cancelBtn.Text <- "Cancel"
         cancelBtn.DialogResult <- DialogResult.Cancel
-        cancelBtn.Location <- Point(245, 80)
-        cancelBtn.Size <- Size(75, 25)
+        cancelBtn.Location <- Point(320, 111)
+        cancelBtn.Size <- Size(80, 30)
 
         // Validate input and update OK button state
         let validateInput() =
