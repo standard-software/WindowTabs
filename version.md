@@ -1,7 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.04.22_next2
-- Tab context menu: position-move items grouped under a "Position Move" submenu (Detach / Split menus use the same layout).
+- Restructured the Position Move submenu (used by tab group / detach / split menus).
 - Settings dialog: added dark mode support, toggled via the new "Settings Dialog Dark Mode" option on the View tab.
 - Settings dialog: fixed bugs that could leave the dialog un-openable after certain tray-menu operations.
 - Color editor: invalid hex input (empty / non-hex / too long) now silently falls back to 000000 instead of showing an error dialog.
