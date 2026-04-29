@@ -19,6 +19,8 @@
   "MenuDarkMode": "選單使用深色模式",
   "SettingsDialogDarkMode": "設定對話框使用深色模式",
   "HotKeyNone": "無",
+  "OK": "確定",
+  "Cancel": "取消",
 
   "ColorTheme": "顏色主題",
   "SaveAs": "另存新檔",
