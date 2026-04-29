@@ -361,16 +361,32 @@ type WorkspaceModel() as this =
         let selected = this.selected
         if selected <> null then
             let editInfo = selected?beginEdit()
-            let table = UIHelper.form(editInfo?fields)
+            let table = UIHelper.formCompact(editInfo?fields)
             let form = UIHelper.okCancelForm table
             let icon = Services.openIcon("edit.ico")
             form.Icon <- icon
-            form.Width <- 300
+            // 380px gives the input column ~250px after the 100px label
+            // column + form padding — enough for a comfortable Match Type
+            // dropdown without horizontal scrollbar.
+            form.Width <- 380
             form.Height <- editInfo?height
             form.StartPosition <- FormStartPosition.CenterParent
             form.Text <- editInfo?title
+            // Apply dark mode if the user enabled "Settings Dialog Dark Mode"
+            // on the View tab. Same pattern as the Save / Edit theme dialogs.
+            let darkOn =
+                try
+                    match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+                    | Some(v) -> v
+                    | None -> false
+                with _ -> false
+            if darkOn then
+                Bemo.DarkMode.applyDarkColorsBeforeShow form
+                form.HandleCreated.Add(fun _ ->
+                    try Bemo.DarkMode.applyDarkThemeBranch15ToForm form true
+                    with _ -> ())
             let ok = form.ShowDialog(parent) = DialogResult.OK
-            if ok then    
+            if ok then
                 editInfo?ok()
                 this.saveSettings()
             ok

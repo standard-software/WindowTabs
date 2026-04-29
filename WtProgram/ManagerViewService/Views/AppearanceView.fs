@@ -73,6 +73,16 @@ type AppearanceView() as this =
         
     let mutable suppressEvents = false
 
+    // Read the user's "Settings Dialog Dark Mode" toggle. Used by child
+    // dialogs (Save Theme / Edit Theme) so they inherit the parent dialog's
+    // theme on open.
+    let isSettingsDialogDarkMode () =
+        try
+            match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+            | Some(v) -> v
+            | None -> false
+        with _ -> false
+
     let checkBox (prop:IProperty<bool>) =
         let checkbox = BoolEditor() :> IPropEditor
         checkbox.value <- box(prop.value)
@@ -1154,6 +1164,14 @@ type AppearanceView() as this =
         form.AcceptButton <- okBtn
         form.CancelButton <- cancelBtn
 
+        // Inherit dark mode from the parent settings dialog when the user
+        // has the "Settings Dialog Dark Mode" toggle on.
+        if isSettingsDialogDarkMode() then
+            DarkMode.applyDarkColorsBeforeShow form
+            form.HandleCreated.Add(fun _ ->
+                try DarkMode.applyDarkThemeBranch15ToForm form true
+                with _ -> ())
+
         let parentForm = panel.FindForm()
         let result =
             if parentForm <> null then
@@ -1218,6 +1236,13 @@ type AppearanceView() as this =
         form.Controls.Add(cancelBtn)
         form.AcceptButton <- okBtn
         form.CancelButton <- cancelBtn
+
+        // Inherit dark mode from the parent settings dialog.
+        if isSettingsDialogDarkMode() then
+            DarkMode.applyDarkColorsBeforeShow form
+            form.HandleCreated.Add(fun _ ->
+                try DarkMode.applyDarkThemeBranch15ToForm form true
+                with _ -> ())
 
         let parentForm = panel.FindForm()
         let result =

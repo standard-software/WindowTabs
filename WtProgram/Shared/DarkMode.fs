@@ -319,7 +319,13 @@ module DarkMode =
                             | o -> o.ToString()
                         TextRenderer.DrawText(
                             g, txt, cmb.Font, e.Bounds, darkText,
-                            TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis))
+                            TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
+                    // Bottom 1-px separator: makes adjacent items in the
+                    // dropdown distinguishable in dark mode where the
+                    // default near-black-on-near-black "divider" is
+                    // invisible.
+                    use sep = new Pen(Color.FromArgb(80, 80, 80))
+                    g.DrawLine(sep, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1))
                 // Theme the dropdown LIST (popup) separately when it's about
                 // to open. The popup is a different HWND from the combo proper
                 // so SetWindowTheme on the combo doesn't reach it.
