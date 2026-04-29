@@ -483,19 +483,16 @@ module UIHelper =
         
     
 
-    let form (fields:List2<_>) =
-        let panel = 
+    let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) =
+        let panel =
             let t = TableLayoutPanel()
-            t.AutoScroll <- true
+            t.AutoScroll <- autoScroll
             t.AutoSize <- true
             t.Dock <- DockStyle.Fill
-            //t.Padding <- Padding(10)
             t.RowCount <- fields.length
             t.ColumnCount <- 2
-            // Add column width settings to match AppearanceView
-            t.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore
+            t.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, labelWidthPx)).ignore
             t.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
-            // Add row height settings to match AppearanceView
             List2([0..fields.length-1]).iter <| fun row ->
                 t.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
             t
@@ -512,6 +509,19 @@ module UIHelper =
             panel.SetRow(control, i)
             panel.SetColumn(control, 1)
         panel
+
+    // Default form layout: 250-px label column (matches AppearanceView /
+    // BehaviorView where labels are long).
+    let form (fields:List2<_>) =
+        buildForm fields 250.0f true
+
+    // Compact form layout: 100-px label column for short captions
+    // (Workspace edit dialog "Name" / "Title" / "Match Type"). AutoScroll
+    // disabled because the form is sized just for its content — leaving
+    // AutoScroll on would cause spurious horizontal scrollbars when input
+    // controls' preferred size momentarily exceeded the squeezed cell.
+    let formCompact (fields:List2<_>) =
+        buildForm fields 100.0f false
               
     let vbox (controls:List2<Control>) =
         let t = 
