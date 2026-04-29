@@ -1,15 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.04.22_next2
-- Tab context menu: position-move items that used to sit at the top level are now nested under a single "Position Move" submenu; the Detach / Split tab menus use the same layout.
-- Settings dialog: added dark mode support, toggled on the View tab via the new "Settings Dialog Dark Mode" option (applied on next open).
-- Settings dialog: fixed mutex-handling bugs that could leave the dialog un-openable after certain tray-menu operations (invoking Settings while already open, or switching the language while it was open).
-- Save Theme / Edit Theme / Workspace edit dialogs: added dark mode support.
-- Workspace edit dialog: layout fix (narrower label column, no horizontal scroll).
-- Save Theme / Edit Theme dialogs: more comfortable padding.
-- Hot Key field: "None" placeholder is now localized.
-- Language change confirmation dialog: now follows the dark mode toggle (still kept in English so an accidental language switch can be reverted).
-- OK / Cancel buttons in Save Theme / Edit Theme / Workspace edit dialogs: now localized.
+- Tab context menu: position-move items grouped under a "Position Move" submenu (Detach / Split menus use the same layout).
+- Settings dialog: added dark mode support, toggled via the new "Settings Dialog Dark Mode" option on the View tab.
+- Settings dialog: fixed bugs that could leave the dialog un-openable after certain tray-menu operations.
 
 ## version ss_jp_2026.04.22
 - Bug fix
