@@ -376,7 +376,7 @@ type WorkspaceModel() as this =
             // on the View tab. Same pattern as the Save / Edit theme dialogs.
             let darkOn =
                 try
-                    match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+                    match Services.settings.root.getBool("EnableDarkMode") with
                     | Some(v) -> v
                     | None -> false
                 with _ -> false

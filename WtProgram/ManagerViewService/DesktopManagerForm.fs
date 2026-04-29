@@ -21,7 +21,7 @@ type DesktopManagerForm() =
     do
         try
             let darkOn =
-                match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+                match Services.settings.root.getBool("EnableDarkMode") with
                 | Some(value) -> value
                 | None -> false
             Bemo.Win32.HotKeyControl.UseManaged <- darkOn
@@ -54,7 +54,7 @@ type DesktopManagerForm() =
 
     let isDarkModeEnabled() =
         try
-            match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+            match Services.settings.root.getBool("EnableDarkMode") with
             | Some(value) -> value
             | None -> false
         with _ -> false

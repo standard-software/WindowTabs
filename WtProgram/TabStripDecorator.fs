@@ -181,7 +181,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let darkModeEnabled =
                     try
                         let json = Services.settings.root
-                        match json.getBool("enableMenuDarkMode") with
+                        match json.getBool("EnableDarkMode") with
                         | Some(value) -> value
                         | None -> false
                     with | _ -> false

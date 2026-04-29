@@ -79,6 +79,27 @@ type Program() as this =
 
     let settingsManager = Settings(isStandAlone)
 
+    // One-time migration: legacy dark-mode keys have been replaced by a
+    // single "EnableDarkMode" key. Carry the old "EnableMenuDarkMode" value
+    // forward (so users who had menu dark mode on keep dark mode after the
+    // upgrade) and discard the old "EnableSettingsDialogDarkMode" key
+    // entirely. Old keys are removed from settings.json so they don't sit
+    // around as orphan data.
+    do
+        try
+            let json = settingsManager.settingsJson
+            match json.getBool("EnableDarkMode") with
+            | Some _ -> ()  // already on the new key — no migration needed
+            | None ->
+                match json.getBool("EnableMenuDarkMode") with
+                | Some(v) -> json.setBool("EnableDarkMode", v)
+                | None -> ()
+            // Always purge legacy keys regardless of migration outcome.
+            json.update("EnableMenuDarkMode", None)
+            json.update("EnableSettingsDialogDarkMode", None)
+            settingsManager.settingsJson <- json
+        with _ -> ()
+
     // Load disabled state from settings
     do
         let savedDisabledState =
