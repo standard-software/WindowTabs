@@ -73,12 +73,12 @@ type AppearanceView() as this =
         
     let mutable suppressEvents = false
 
-    // Read the user's "Settings Dialog Dark Mode" toggle. Used by child
-    // dialogs (Save Theme / Edit Theme) so they inherit the parent dialog's
-    // theme on open.
-    let isSettingsDialogDarkMode () =
+    // Read the unified "Dark Mode" toggle. Used by child dialogs (Save
+    // Theme / Edit Theme) so they inherit the parent dialog's theme on
+    // open.
+    let isDarkModeEnabled () =
         try
-            match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+            match Services.settings.root.getBool("EnableDarkMode") with
             | Some(v) -> v
             | None -> false
         with _ -> false
@@ -122,7 +122,7 @@ type AppearanceView() as this =
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 3  // int props + pinned width row + menu dark mode + settings dialog dark mode
+    let upperRowCount = intProperties.length + 2  // int props + pinned width row + dark mode
     let colorGridRowCount = 6  // theme row + header + 4 state rows
 
     // Main container panel (vertical stack)
@@ -237,7 +237,6 @@ type AppearanceView() as this =
     // Row indices for each section
     // Upper panel: int properties -> menu dark mode -> settings dialog dark mode
     let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
-    let settingsDialogDarkModeRow = darkModeRow + 1
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -431,11 +430,14 @@ type AppearanceView() as this =
         (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthNumericEditor); ("tabPinnedTabWidthIcon", pinnedWidthIconEditor)] @ colorEditorsList)
         |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
 
-    // Create dark mode checkbox at its designated row in upperPanel
+    // Unified dark mode checkbox: drives both menu (system tray / tab
+    // context menu) and settings dialog appearance. The settings dialog
+    // reads the value at open time, so toggling it takes effect on the
+    // NEXT open rather than live-updating the running dialog.
     let darkModeLabel =
         let label = Label()
         label.AutoSize <- true
-        label.Text <- Localization.getString("MenuDarkMode")
+        label.Text <- Localization.getString("DarkMode")
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Margin <- Padding(0,8,0,5)
         upperPanel.Controls.Add(label)
@@ -444,33 +446,10 @@ type AppearanceView() as this =
         label
 
     let darkModeCheckbox =
-        let checkbox = settingsCheckboxBool "EnableMenuDarkMode" false
+        let checkbox = settingsCheckboxBool "EnableDarkMode" false
         checkbox.Margin <- Padding(0,5,0,5)
         upperPanel.Controls.Add(checkbox)
         upperPanel.SetRow(checkbox, darkModeRow)
-        upperPanel.SetColumn(checkbox, 1)
-        checkbox
-
-    // Settings dialog dark mode row — placed directly under the menu dark
-    // mode row. Read at dialog open time (DesktopManagerForm constructor),
-    // so changing this value takes effect on the NEXT open of the settings
-    // dialog rather than live-toggling the running dialog.
-    let settingsDialogDarkModeLabel =
-        let label = Label()
-        label.AutoSize <- true
-        label.Text <- Localization.getString("SettingsDialogDarkMode")
-        label.TextAlign <- ContentAlignment.MiddleLeft
-        label.Margin <- Padding(0,8,0,5)
-        upperPanel.Controls.Add(label)
-        upperPanel.SetRow(label, settingsDialogDarkModeRow)
-        upperPanel.SetColumn(label, 0)
-        label
-
-    let settingsDialogDarkModeCheckbox =
-        let checkbox = settingsCheckboxBool "EnableSettingsDialogDarkMode" false
-        checkbox.Margin <- Padding(0,5,0,5)
-        upperPanel.Controls.Add(checkbox)
-        upperPanel.SetRow(checkbox, settingsDialogDarkModeRow)
         upperPanel.SetColumn(checkbox, 1)
         checkbox
 
@@ -861,7 +840,7 @@ type AppearanceView() as this =
     // Set up ComboBox draw event for separator lines
     do
         colorThemeComboBox.DrawItem.Add <| fun e ->
-            let darkOn = isSettingsDialogDarkMode()
+            let darkOn = isDarkModeEnabled()
             // Background: in dark mode use darkAccent for selected and
             // darkPanel for unselected, replacing the system blue / window
             // colors which would otherwise stay bright. In light mode the
@@ -1184,7 +1163,7 @@ type AppearanceView() as this =
 
         // Inherit dark mode from the parent settings dialog when the user
         // has the "Settings Dialog Dark Mode" toggle on.
-        if isSettingsDialogDarkMode() then
+        if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
             form.HandleCreated.Add(fun _ ->
                 try DarkMode.applyDarkThemeBranch15ToForm form true
@@ -1256,7 +1235,7 @@ type AppearanceView() as this =
         form.CancelButton <- cancelBtn
 
         // Inherit dark mode from the parent settings dialog.
-        if isSettingsDialogDarkMode() then
+        if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
             form.HandleCreated.Add(fun _ ->
                 try DarkMode.applyDarkThemeBranch15ToForm form true

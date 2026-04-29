@@ -448,7 +448,7 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
     /// Static flag — when true the menu is rendered with the dark
     /// ProfessionalRenderer from DarkMode. Set this *before* constructing the
     /// DropdownButton (e.g. in DesktopManagerForm's `do` block when the
-    /// EnableMenuDarkMode setting is on).
+    /// EnableDarkMode setting is on).
     static member val UseDarkMode = false with get, set
 
     /// Add a menu item with click handler

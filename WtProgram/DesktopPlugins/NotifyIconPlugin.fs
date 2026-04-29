@@ -141,7 +141,7 @@ type NotifyIconPlugin() as this =
             let darkModeEnabled =
                 try
                     let json = Services.settings.root
-                    match json.getBool("EnableMenuDarkMode") with
+                    match json.getBool("EnableDarkMode") with
                     | Some(value) -> value
                     | None -> false
                 with | _ -> false
@@ -301,7 +301,7 @@ type NotifyIconPlugin() as this =
                             okBtn.Location <- System.Drawing.Point((cw - okBtn.Width) / 2, label.Bottom + 30))
                         let darkOn =
                             try
-                                match Services.settings.root.getBool("EnableSettingsDialogDarkMode") with
+                                match Services.settings.root.getBool("EnableDarkMode") with
                                 | Some(v) -> v
                                 | None -> false
                             with _ -> false
