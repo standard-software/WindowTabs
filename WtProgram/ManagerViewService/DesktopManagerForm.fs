@@ -96,82 +96,54 @@ type DesktopManagerForm() =
         )
         form
 
-    member this.show() =
-        // Try to create mutex for single instance
+    // Acquire the single-instance mutex. If the named mutex already exists
+    // (mutexCreated=false), DISPOSE the just-created non-owning handle
+    // immediately and leave State.mutex untouched — overwriting it would
+    // orphan any existing M1 ownership and re-introduce the already-fixed
+    // "dialog won't reopen" class of bugs. Returns true when ownership is
+    // successfully acquired and stored.
+    let tryAcquireSingleInstanceMutex () =
         let mutexCreated = ref false
         try
-            DesktopManagerFormState.mutex <- Some(new Mutex(true, "WindowTabsSettingsDialog", mutexCreated))
-            if not !mutexCreated then
-                // Another instance exists, don't show
-                ()
+            let m = new Mutex(true, "WindowTabsSettingsDialog", mutexCreated)
+            if !mutexCreated then
+                DesktopManagerFormState.mutex <- Some(m)
+                true
             else
-                DesktopManagerFormState.currentForm <- Some(form)
-                // Anti-flicker: hide via Opacity=0 while we Show + apply the
-                // dark theme, then bump Opacity back to 1. This lets the form
-                // paint its initial system frame off-screen (invisible) so
-                // the user only ever sees the fully-themed dark dialog.
-                if isDarkModeEnabled() then
-                    form.Opacity <- 0.0
-                    form.Show()
-                    form.CreateControl()
-                    DarkMode.applyDarkThemeBranch15ToForm form true
-                    form.Refresh()
-                    form.Opacity <- 1.0
-                else
-                    form.Show()
-                form.Activate()
-        with
-        | _ -> 
-            // If mutex creation fails, just show the form
-            DesktopManagerFormState.currentForm <- Some(form)
+                // Another holder exists: don't leak the handle, don't clobber
+                // State.mutex.
+                try m.Dispose() with _ -> ()
+                false
+        with _ ->
+            // Mutex construction itself failed — fall through to "show
+            // anyway" rather than leaving the user with no dialog.
+            true
+
+    let showFormCommon () =
+        // Anti-flicker: hide via Opacity=0 while we Show + apply the dark
+        // theme, then bump Opacity back to 1. This lets the form paint its
+        // initial system frame off-screen (invisible) so the user only ever
+        // sees the fully-themed dark dialog.
+        if isDarkModeEnabled() then
+            form.Opacity <- 0.0
             form.Show()
-            form.Activate()
+            form.CreateControl()
+            DarkMode.applyDarkThemeBranch15ToForm form true
+            form.Refresh()
+            form.Opacity <- 1.0
+        else
+            form.Show()
+        form.Activate()
+
+    member this.show() =
+        if tryAcquireSingleInstanceMutex() then
+            DesktopManagerFormState.currentForm <- Some(form)
+            showFormCommon()
 
     member this.showView(view) =
-        // Try to create mutex for single instance
-        let mutexCreated = ref false
-        try
-            DesktopManagerFormState.mutex <- Some(new Mutex(true, "WindowTabsSettingsDialog", mutexCreated))
-            if not !mutexCreated then
-                // Another instance exists, don't show
-                ()
-            else
-                let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
-                tabControl.SelectedIndex <- tabIndex
-                DesktopManagerFormState.currentForm <- Some(form)
-                // Anti-flicker: hide via Opacity=0 while we Show + apply the
-                // dark theme, then bump Opacity back to 1. This lets the form
-                // paint its initial system frame off-screen (invisible) so
-                // the user only ever sees the fully-themed dark dialog.
-                if isDarkModeEnabled() then
-                    form.Opacity <- 0.0
-                    form.Show()
-                    form.CreateControl()
-                    DarkMode.applyDarkThemeBranch15ToForm form true
-                    form.Refresh()
-                    form.Opacity <- 1.0
-                else
-                    form.Show()
-                form.Activate()
-        with
-        | _ -> 
-            // If mutex creation fails, just show the form
+        if tryAcquireSingleInstanceMutex() then
             let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
             tabControl.SelectedIndex <- tabIndex
             DesktopManagerFormState.currentForm <- Some(form)
-            form.Show()
-            form.Activate()
-        
-    member this.close() =
-        form.Close()
-        DesktopManagerFormState.currentForm <- None
-        // Release mutex
-        match DesktopManagerFormState.mutex with
-        | Some m -> 
-            try
-                m.ReleaseMutex()
-                m.Dispose()
-            with _ -> ()
-            DesktopManagerFormState.mutex <- None
-        | None -> ()
-        
+            showFormCommon()
+
