@@ -110,22 +110,20 @@ type NotifyIconPlugin() as this =
     let Cell = CellScope()
 
     let closeSettingsDialog() =
-        // Try to close any existing settings dialog using mutex check
-        let mutable tempMutex : Mutex option = None
-        let mutexCreated = ref false
-        try
-            tempMutex <- Some(new Mutex(true, "WindowTabsSettingsDialog", mutexCreated))
-            if not !mutexCreated then
-                // Dialog exists in another process, we can't close it directly
-                // but we'll clear our local reference
-                ()
-            // Always release the mutex immediately
-            match tempMutex with
-            | Some m ->
-                try m.ReleaseMutex(); m.Dispose() with _ -> ()
-            | None -> ()
-        with _ -> ()
-        // Close local form reference if exists
+        // Close the settings dialog if one is open. The form's FormClosed
+        // handler (registered in DesktopManagerForm) is responsible for
+        // releasing the named "WindowTabsSettingsDialog" mutex and clearing
+        // DesktopManagerFormState.currentForm — so we don't touch either
+        // directly here.
+        //
+        // (An earlier version opened a second handle to the named mutex with
+        //  initialOwner=true and immediately ReleaseMutex'd / Dispose'd it
+        //  before calling form.Close(). That extra release on the UI thread
+        //  decremented the lock count of the dialog's M1 ownership before
+        //  FormClosed could run, leaving the named-mutex object in a state
+        //  where the dialog could not be reopened after a language change.
+        //  Removing the dance keeps ownership tracking simple: M1 is acquired
+        //  in show(), released in FormClosed, period.)
         match DesktopManagerFormState.currentForm with
         | Some form ->
             try form.Close() with _ -> ()

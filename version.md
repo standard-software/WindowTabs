@@ -3,7 +3,7 @@
 ## version ss_jp_2026.04.22_next2
 - Tab context menu: position-move items that used to sit at the top level are now nested under a single "Position Move" submenu; the Detach / Split tab menus use the same layout.
 - Settings dialog: added dark mode support, toggled on the View tab via the new "Settings Dialog Dark Mode" option (applied on next open).
-- Settings dialog: fixed a bug where invoking Settings from the tray while the dialog was already open would leave it un-openable after the next close.
+- Settings dialog: fixed mutex-handling bugs that could leave the dialog un-openable after certain tray-menu operations (invoking Settings while already open, or switching the language while it was open).
 - Save Theme / Edit Theme / Workspace edit dialogs: added dark mode support.
 - Workspace edit dialog: layout fix (narrower label column, no horizontal scroll).
 - Save Theme / Edit Theme dialogs: more comfortable padding.
