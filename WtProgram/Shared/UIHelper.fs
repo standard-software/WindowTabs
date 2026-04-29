@@ -118,13 +118,19 @@ type ColorEditor() as this =
             with ex -> 
                 e.Handled <- true            
         tb.Validating.Add <| fun e ->
-            try
-                if tb.Text.Length > maxLen then raise (Exception())
-                this.colorFromTb.ignore
-            with ex -> 
-                e.Cancel <- true
-                tb.SelectAll()
-                MessageBox.Show("Invalid color value, must be a six digit hexadecimal number.").ignore
+            // Coerce empty / over-long / non-hex input to black ("000000")
+            // so the user is never bothered with a parse-error dialog.
+            // Triggers when the user clears the box, types fewer/more
+            // characters than 6, or pastes something like "XYZ123".
+            let isValid =
+                if tb.Text.Length = 0 || tb.Text.Length > maxLen then false
+                else
+                    try
+                        Int32.Parse(tb.Text, Globalization.NumberStyles.HexNumber) |> ignore
+                        true
+                    with _ -> false
+            if not isValid then
+                tb.Text <- "000000"
 
         tb.Validated.Add <| fun e -> save()
         tb

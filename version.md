@@ -4,6 +4,7 @@
 - Tab context menu: position-move items grouped under a "Position Move" submenu (Detach / Split menus use the same layout).
 - Settings dialog: added dark mode support, toggled via the new "Settings Dialog Dark Mode" option on the View tab.
 - Settings dialog: fixed bugs that could leave the dialog un-openable after certain tray-menu operations.
+- Color editor: invalid hex input (empty / non-hex / too long) now silently falls back to 000000 instead of showing an error dialog.
 
 ## version ss_jp_2026.04.22
 - Bug fix
