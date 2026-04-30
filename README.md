@@ -15,9 +15,15 @@ The author has now open-sourced the utility.
 
 Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
 
-- https://github.com/redgis/WindowTabs (404 Not Found)
+- https://github.com/redgis/WindowTabs
 
-Mr./Ms. payaneco forked the source code.
+Mr./Ms. medlir hosts the source code.
+- https://github.com/medlir/WindowTabs
+
+Looking at the commit log, Mossy Flanagan made the early commits.
+- https://github.com/mossy-xyz
+
+Mr./Ms. payaneco forked medlir/WindowTabs's source code.
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
@@ -44,7 +50,7 @@ Can be compiled with Visual Studio 2026 Community Edition.
 
 ## Version
 
-Latest version: **ss_jp_2026.04.22_next3**
+Latest version: **ss_jp_2026.04.30**
 
 For detailed version history and changelog, see [version.md](version.md).
 
