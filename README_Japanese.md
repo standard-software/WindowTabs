@@ -15,9 +15,15 @@ WindowTabs はインターフェースを持たない Windows アプリケーシ
 
 redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
 
-- https://github.com/redgis/WindowTabs (404 Not Found)
+- https://github.com/redgis/WindowTabs
 
-payaneco 氏がソースコードをフォークしました。
+medlir 氏がコードを配置しています。
+- https://github.com/medlir/WindowTabs
+
+コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
+- https://github.com/mossy-xyz
+
+payaneco 氏がmedlir/WindowTabsのコードをフォークしました。
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
@@ -26,7 +32,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - https://github.com/leafOfTree/WindowTabs
 - https://github.com/leafOfTree/WindowTabs/network/members
 
-このバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
+私の作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
 
 Visual Studio 2026 Community Edition でコンパイルできます。
 - https://github.com/standard-software/WindowTabs
@@ -44,7 +50,7 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 
 ## バージョン
 
-最新のバージョン: **ss_jp_2026.04.22_next3**
+最新のバージョン: **ss_jp_2026.04.30**
 
 詳細な更新履歴と変更ログについては、[version.md](version.md) を参照してください。
 
