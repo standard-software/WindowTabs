@@ -45,8 +45,6 @@ Two download options are available:
 - **WtSetup.msi** - Windows Installer package with automatic installation and uninstallation support
 - **WindowTabs.zip** - Portable version that can be extracted and run from any location
 
-You can also build the installer and portable version yourself using the provided build scripts.
-
 ## Installation
 
 ### Using the MSI Installer (WtSetup.msi)
@@ -64,135 +62,93 @@ You can also build the installer and portable version yourself using the provide
 3. Run `WindowTabs.exe`
 4. WindowTabs will run in the background and add a tray icon
 
-To run WindowTabs at startup:
-- Enable "Run at startup" option in the Settings > Behavior tab
 
 ## Usage
 
-1. Run `WindowTabs.exe`
-2. Windows will automatically get tabs when grouped together
-3. Right-click the tray icon to access settings
-4. Right-click on tabs to access tab-specific options
-5. Drag and drop tabs to organize your windows
+- Run `WindowTabs.exe`
+- Right-click the tray icon to access settings
+- In the [Programs] tab of settings, choose programs you want tabs for
+- Tabs will appear on those programs' windows
+- Right-click on tabs to access tab-specific options
+- Drag and drop tabs to organize your windows
 
 ## Features
 
 ### Tab Drag and Drop
-
-This feature remains unchanged from the original WindowTabs functionality.
-
 - Drag tabs to reorder within the same group
-- Drag tabs to separate into new windows with preview
-- Drop windows to create new tab groups
+- Drag tabs to split into a new window or link to another group
 
 ### Tab Management
 
-- **Tab Context Menu**: Right-click on tabs to access various options
-  - New launch : (exe name) (submenu: new tab in the same group, new window with position, new window linked to another group)
+- **Tab Context Menu**
+  - New launch : (exe name)
+    - new tab in the same group
+    - new window with position
+    - link to another group
   ---
-  - Snap Left / Snap Right
-  - Position Other (submenu: Move and Snap to edges/corners with percentage options)
-  ---
-  - Display Left / Display Main / Display Right
+  - Position Move
+    - Snap Left / Snap Right
+    - Snap Other
+      - Snap Top / Snap Bottom
+      - Snap 90% / 70% / 50% / 30%
+      - Display / Desktop
+    - Move
+      - Corners, top/bottom/left/right
+    - Move to another display
   ---
   - Link to another group
   ---
-  - Tab Detach and Split (submenu: Snap Left/Right at top, rest under "Position Other")
+  - Tab Detach and Split
+    - Detach and reposition
+    - Detach and link to another group
   ---
-  - Close Tab (submenu: this tab, tabs to the left/right, other tabs, all tabs)
-  ---
-  - Tab Pin (submenu: pin/unpin this tab, paired pin/unpin left/right tabs, with a separator between the left-tab and right-tab groups)
-  - Tab Color Change (per-scope submenus — this tab, left tabs, right tabs — with fill / underline / border types, each paired with a "Clear color" item)
+  - Close Tab
+    - this tab, tabs to the left/right, other tabs, all tabs
   ---
   - Tab Margin When Snapping (per-tab-group toggle)
-  - Tab Align (Align all tabs to Left/Right at top level, individual tab alignment in submenu showing only the opposite side)
-  - Tab Name (rename / reset)
+  - Tab Align
+      - Align all tabs to Right / Left
+      - Per-tab alignment
+  - Tab Pin
+      - Pin / unpin this tab, paired pin / unpin for left and right tabs
+  - Tab Color Change
+    - Apply color for this tab / left tabs / right tabs
+      (Fill / Underline / Border types)
+  - Tab Name (Rename / Reset)
   ---
-  - System (submenu: copy exe path, copy window title, open exe folder, force kill process)
+  - System
+    - Copy exe path, copy window title, open exe folder, force kill process
   ---
   - Settings
 
+
+### New Launch
+
 ![Popup Menu](README_Image/PopupMenu.png)
 
-
-#### New Launch
-
-Launch a new instance of the tab's executable directly from the tab context menu, with three variants:
-
-- **New tab in the same group**: the new window joins the current tab group
-- **New window with position**: a standalone window that does not auto-group; choose Snap Left/Right or a position from the Position Other submenu
-- **New window linked to another group**: a standalone window that joins a selected existing group
-- The two "new window" variants bypass auto-grouping so the launched window does not get merged into an unrelated group
-
-
-#### Reposition
-
-Top level menu options:
-- Snap Left / Snap Right - Snap to the left or right side of the screen (full height)
-
-"Position Other" submenu:
-- "Move" submenu: Left, Right, Top, Bottom edges and Top-Left, Top-Right, Bottom-Left, Bottom-Right corners
-- Snap Top / Snap Bottom
-
-"Snap x%" submenu:
-- Left / Right / Top / Bottom
-- Top-Left, Top-Right, Bottom-Left, Bottom-Right - Corner snap with percentage options
-- Center, Center Horizontally, Center Vertically
-- Snap Display / Snap Desktop - Resize to fill current display or entire desktop (without using Windows maximize)
-- DPI-aware percentage-based positioning for correct placement across different DPI displays
+### Position Move
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
-#### Link to another group
+### Link to another group
 
-Link a tab or tabs to another existing group:
-- Shows other groups with tab names and counts
-- Displays the application icon of the first tab in each group
+![](README_Image/MoveTabGroupToGroup.png)
 
-![Link to another group](README_Image/MoveTabGroupToGroup.png)
-
-#### Detach this tab / Split right/left side
-
-Detach a single tab from a tab group,
-or split tabs to the right or left from the selected tab,
-and reposition or link to another group.
+### Detach this tab / Split right/left side
 
 ![Tab Split Move Position](README_Image/SplitTabs.png)
 
-#### Close Tab
+### Close Tab
 
 ![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
 
 ### Pinned Tabs
 
-Pin tabs to keep them in a fixed position on the left side of the tab strip, similar to browser pinned tabs.
-
-- Pin or unpin individual tabs
-- Pin/unpin left or right tabs within the same alignment group (left-tab and right-tab groups separated by a divider)
-- Pinned tab width can be set to icon-only size or a specified fixed width
-- When using specified width, a pushpin icon allows unpinning
-- Dragging a tab into the pinned zone automatically pins it
-
-![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)  
+![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
 ![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
 ![Pinned Tabs Menu](README_Image/PinnedTabMenu.png)
 
 ### Tab Color
-
-Set a color on individual tabs for visual identification. Three color types are available:
-
-- **Fill**: Semi-transparent color overlay on the tab background
-- **Underline**: Colored line at the bottom of the tab with a left-to-right gradient
-- **Border**: Colored outline around the tab (1px curves + gradient bottom edge)
-
-**7 colors**: Red, Blue, Green, Yellow, Purple, Orange, Pink
-
-- Right-click a tab and use the "Tab Color Change" submenu
-- Color selection is organized into per-scope submenus: this tab, left tabs, right tabs
-- Each scope submenu is paired with a "Clear color" item at the top level for quick removal
-- Fill, underline, and border are mutually exclusive (setting one clears the others)
-- Checkmark overlay (in the "this tab" submenu) on the color icon when the tab's current color matches
-- Colors are persisted across restarts
 
 ![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
@@ -200,32 +156,23 @@ Set a color on individual tabs for visual identification. Three color types are 
 
 Each tab can be individually set to left or right alignment within a tab group:
 
-- **Align Left**: Tab is positioned from the left edge of the tab strip
-- **Align Right**: Tab is positioned from the right edge of the tab strip
-- Drag & drop alignment detection: dragging past the center of the empty space changes tab alignment
-- "Align all tabs to Left/Right" to change all tabs at once
-- "Align X left/right tab(s) in [group] to [target]" to change multiple tabs within the same alignment group
-- Per-tab alignment is persisted across group transfers and application restarts
-- Close, color, and split operations use visual order; pin and align operations work within the same alignment group
-
-### Menu Dark Mode / Light Mode
+### Dark Mode / Light Mode
 
 While light mode is the default, dark mode is also supported for context menus (popup menus) as shown in the screenshots.
 
-- Toggle via "Menu Dark Mode" checkbox in Appearance settings
-- Applies to tab context menu and drag-and-drop menus
+- Toggle via the "Menu Dark Mode" checkbox in Appearance settings
+- Applies to the tab and tray context menus
+- Applies to the settings dialog
 
 ### Multi-Display and DPI Support
 
 - Multi-display support with proper window positioning
 - DPI-aware window placement
 - Automatic window resizing when dropped to prevent exceeding monitor dimensions
-- Fixed tab rename floating textbox positioning on high-DPI displays
-
 
 ### Virtual Desktop Support
 
-WindowTabs fully supports Windows virtual desktops (Win+Tab):
+WindowTabs supports Windows virtual desktops (Win+Tab):
 
 - Tab groups are preserved when switching between virtual desktops
 - UWP apps (Settings, Calculator, etc.) are properly hidden when on other virtual desktops
@@ -237,12 +184,6 @@ WindowTabs fully supports Windows virtual desktops (Win+Tab):
 - Automatically handles UWP window Z-order for proper tab visibility
 - Maintains tab visibility when working with UWP apps
 - Properly detects cloaked state when apps are on other virtual desktops
-
-### TopMost Window Support
-
-- TopMost (always-on-top) windows are also managed as tabs
-- Previously excluded from tab management, now included like normal windows
-
 
 ### Multi-Language Support
 
@@ -257,24 +198,10 @@ WindowTabs fully supports Windows virtual desktops (Win+Tab):
 ### Disable Feature
 
 Temporarily disable WindowTabs functionality via tray menu:
-- **Disable** checkbox in tray icon context menu
-- When enabled:
-  - Immediately hides all existing tab groups
-  - Stops automatic tab grouping for new windows
-  - Disables Settings menu to prevent configuration changes
-- When re-enabled:
-  - Restores your previous tab group configuration
 
 ### Tab Group Persistence
 
-WindowTabs preserves your tab group configuration across restarts and disabling:
-
-- **Restart Persistence**: Tab groups are automatically saved when WindowTabs exits and restored on next startup
-  - Tab order, grouping, and renamed tab names are preserved
-  - Windows are matched by window handle for reliable restoration
-  - **All virtual desktops** are restored, not just the current one
-- **Disable/Enable Persistence**: Tab groups are preserved when temporarily disabling WindowTabs
-  - Re-enabling restores your previous tab configuration
+WindowTabs preserves your tab group configuration across restarts and when disabled:
 
 ### Watchdog Auto-Restart
 
@@ -298,9 +225,7 @@ Configure which programs should use tabs and auto-grouping behavior.
 - **Category 1-10**: Assign programs to a category for cross-application auto-grouping
   - Programs in the same category are automatically grouped together regardless of the executable
   - For example, assign Word, Excel, PowerPoint, etc. to the same category to auto-group Office apps together
-  - For example, assign Chrome, Edge, Firefox, etc. to the same category to auto-group browsers together
   - Category columns are only visible when Auto Grouping is enabled for a program
-  - Programs are sorted by category number for better visibility
 - **Show all settings**: Checkbox to display settings for programs not currently running
 - **Delete button [x]**: Remove settings for non-running processes
 
@@ -309,21 +234,12 @@ Configure which programs should use tabs and auto-grouping behavior.
 ### Appearance Tab
 
 Customize the visual appearance of tabs:
-- Tab height, tab width (max), pinned tab width, and tab overlap settings (with separate reset buttons per control)
-- Pinned tab width: "Icon Only" or specify a custom width
-- Distance from edge settings
-- Menu Dark Mode toggle
-- Color settings for each tab state (Inactive, Mouse Over, Active, Flash)
-  - Tab color, text color, and border color
-- Color theme with preset themes (Light, Light Mono, Dark, Dark Blue, Dark Mono, Dark Red Frame)
 - Custom color theme features
-  - Save/edit/delete custom themes
-  - Import/export themes via clipboard
-  - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme. We'd love for others to enjoy your cool color themes!
+  - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
 
-![Settings Appearance](README_Image/SettingsAppearance.png)  
-![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)  
-![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)  
+![Settings Appearance](README_Image/SettingsAppearance.png)
+![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
+![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
 ### Behavior Tab
 
