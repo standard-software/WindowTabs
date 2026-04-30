@@ -81,45 +81,93 @@ Two download options are available:
 ### Tab Management
 
 - **Tab Context Menu**
-  - New launch : (exe name)
-    - new tab in the same group
-    - new window with position
-    - link to another group
+  - New launch : execute (exe name)
+    - New tab : right of this tab ((exe name))
+    - New window (position) (same submenu as "Position Move", with a leading "Same position" item)
+    - New window (link to group)
   ---
   - Position Move
-    - Snap Left / Snap Right
+    - Snap Left
+    - Snap Right
     - Snap Other
-      - Snap Top / Snap Bottom
-      - Snap 90% / 70% / 50% / 30%
-      - Display / Desktop
+      - Snap Top
+      - Snap Bottom
+      ---
+      - Snap 90%
+        - Left / Right / Top / Bottom
+        - Top Left / Top Right / Bottom Left / Bottom Right
+        - Center / Center Horizontally / Center Vertically
+      - Snap 70% / 50% / 30% (same items as Snap 90%)
+      ---
+      - Snap Display
+      - Snap Desktop
+    ---
     - Move
-      - Corners, top/bottom/left/right
-    - Move to another display
-  ---
+      - Left Edge / Right Edge / Top Edge / Bottom Edge
+      ---
+      - Top Left / Top Right / Bottom Left / Bottom Right
+    ---
+    - (per-display submenus, with "Same position on this display" prefix when not the current display)
   - Link to another group
   ---
   - Tab Detach and Split
-    - Detach and reposition
-    - Detach and link to another group
+    - Detach this tab and reposition (same submenu as "New window (position)")
+    - Link to another group
+    ---
+    - Split left {N} tabs and reposition (same submenu)
+    - Split left {N} tabs and link to group
+    ---
+    - Split right {N} tabs and reposition (same submenu)
+    - Split right {N} tabs and link to group
   ---
   - Close Tab
-    - this tab, tabs to the left/right, other tabs, all tabs
+    - Close tab : (tab name)
+    ---
+    - Close {N} tabs to the left
+    - Close {N} tabs to the right
+    ---
+    - Close other tabs
+    - Close all tabs
   ---
-  - Tab Margin When Snapping (per-tab-group toggle)
-  - Tab Align
-      - Align all tabs to Right / Left
-      - Per-tab alignment
+  - Tab Margin When Snapping
+    - Add margin at top
+  - Tab Position
+    - Align all tabs to Left
+    - Align all tabs to Right
+    - Individual Tab Alignment
+      - Align this tab to Left|Right : (tab name)
+      ---
+      - Align {N} left tab(s) to Left|Right
+      - Align {N} right tab(s) to Left|Right
   - Tab Pin
-      - Pin / unpin this tab, paired pin / unpin for left and right tabs
-  - Tab Color Change
-    - Apply color for this tab / left tabs / right tabs
-      (Fill / Underline / Border types)
-  - Tab Name (Rename / Reset)
+    - Pin this tab : (tab name) | Unpin this tab : (tab name)
+    ---
+    - Pin {N} left tab(s) | Unpin {N} left tab(s)
+    ---
+    - Pin {N} right tab(s) | Unpin {N} right tab(s)
+  - Tab Color Settings
+    - This tab color : (tab name)
+      - Red / Blue / Green / Yellow / Purple / Orange / Pink
+      - (same 7 colors, Underline variants)
+      - (same 7 colors, Border variants)
+    - Clear this tab color
+    ---
+    - Left {N} tab(s) color (same color choices)
+    - Clear left {N} tab(s) color
+    ---
+    - Right {N} tab(s) color (same color choices)
+    - Clear right {N} tab(s) color
+  - Tab Name
+    - Rename tab
+    - Reset tab name
   ---
   - System
-    - Copy exe path, copy window title, open exe folder, force kill process
+    - Copy (exe name) path
+    - Copy window title : (window title)
+    - Open folder of (exe name)
+    - Force kill this process
   ---
-  - Settings
+  - Settings...
 
 
 ### New Launch
