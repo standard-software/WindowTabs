@@ -410,36 +410,45 @@ module DarkMode =
 
     // SetWindowTheme pass — see branch 3 commit message for rationale.
     let rec applyDarkNativeThemeToControl (control: Control) =
-        try
-            if control.IsHandleCreated then
-                match control with
-                | :? ComboBox ->
-                    // Disable visual styles entirely on the combo proper so
-                    // the system stops drawing hover/focus border flashes
-                    // (white-blink on MouseEnter). Our FlatStyle.Flat +
-                    // DarkComboBoxSubclass owns the appearance instead. The
-                    // dropdown LIST popup is themed separately via
-                    // DarkMode_Explorer in the cmb.DropDown handler.
-                    SetWindowTheme(control.Handle, "", "") |> ignore
-                | :? TextBox when (control.Parent :? NumericUpDown) ->
-                    // Inner edit of NumericUpDown: kill its DarkMode_CFD
-                    // border so the only visible frame is the outer
-                    // FixedSingle (recoloured by DarkNumericUpDownFrameSubclass
-                    // via WM_NCPAINT). Without this we'd see the inner CFD
-                    // 1-px line plus the outer FixedSingle 1-px line as a
-                    // visible double border.
-                    SetWindowTheme(control.Handle, "", "") |> ignore
-                | _ ->
-                    let appName =
-                        match control with
-                        | :? TextBox -> "DarkMode_CFD"
-                        | :? NumericUpDown -> "DarkMode_CFD"
-                        | :? ListView -> "DarkMode_Explorer"
-                        | :? ListBox -> "DarkMode_Explorer"
-                        | :? DataGridView -> "DarkMode_Explorer"
-                        | _ -> "DarkMode_Explorer"
-                    setControlTheme control.Handle appName
-        with _ -> ()
+        let applyTheme () =
+            try
+                if control.IsHandleCreated then
+                    match control with
+                    | :? ComboBox ->
+                        // Disable visual styles entirely on the combo proper so
+                        // the system stops drawing hover/focus border flashes
+                        // (white-blink on MouseEnter). Our FlatStyle.Flat +
+                        // DarkComboBoxSubclass owns the appearance instead. The
+                        // dropdown LIST popup is themed separately via
+                        // DarkMode_Explorer in the cmb.DropDown handler.
+                        SetWindowTheme(control.Handle, "", "") |> ignore
+                    | :? TextBox when (control.Parent :? NumericUpDown) ->
+                        // Inner edit of NumericUpDown: kill its DarkMode_CFD
+                        // border so the only visible frame is the outer
+                        // FixedSingle (recoloured by DarkNumericUpDownFrameSubclass
+                        // via WM_NCPAINT). Without this we'd see the inner CFD
+                        // 1-px line plus the outer FixedSingle 1-px line as a
+                        // visible double border.
+                        SetWindowTheme(control.Handle, "", "") |> ignore
+                    | _ ->
+                        let appName =
+                            match control with
+                            | :? TextBox -> "DarkMode_CFD"
+                            | :? NumericUpDown -> "DarkMode_CFD"
+                            | :? ListView -> "DarkMode_Explorer"
+                            | :? ListBox -> "DarkMode_Explorer"
+                            | :? DataGridView -> "DarkMode_Explorer"
+                            | _ -> "DarkMode_Explorer"
+                        setControlTheme control.Handle appName
+            with _ -> ()
+        // Apply now if the handle is already created. Otherwise defer to
+        // HandleCreated — TabPages and their nested controls (e.g.
+        // BehaviorView's AutoScroll TableLayoutPanel) are realized lazily
+        // when the user first selects the tab, so applying the theme only
+        // during the initial form-load pass would leave their NC scrollbars
+        // unthemed.
+        if control.IsHandleCreated then applyTheme()
+        else control.HandleCreated.Add(fun _ -> applyTheme())
         for child in control.Controls do
             applyDarkNativeThemeToControl(child)
 
@@ -709,42 +718,56 @@ module DarkMode =
             tva.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
         override this.WndProc(m: byref<Message>) =
             base.WndProc(&m)
-            if m.Msg = WM_PAINT && tva.UseColumns then
+            if m.Msg = WM_PAINT then
                 try
-                    // Default _columnHeaderHeight in Aga is 20; widen to a
-                    // safety value that comfortably covers any reasonable font
-                    // so the entire system-drawn header is hidden.
-                    let columnHeaderHeight = max 24 (tva.Font.Height + 8)
                     use g = Graphics.FromHwnd(tva.Handle)
                     use bg = new SolidBrush(darkPanel)
-                    let headerRect = Rectangle(0, 0, tva.ClientRectangle.Width, columnHeaderHeight)
-                    g.FillRectangle(bg, headerRect)
-                    // Draw a subtle bottom rule for the header
-                    use border = new Pen(Color.FromArgb(80, 80, 80))
-                    g.DrawLine(border, 0, columnHeaderHeight - 1, tva.ClientRectangle.Width, columnHeaderHeight - 1)
-                    // Column titles + per-column divider lines on the right
-                    // edge of each column header.
-                    let mutable x = -tva.OffsetX
-                    use textBrush = new SolidBrush(darkText)
-                    use dividerPen = new Pen(Color.FromArgb(80, 80, 80))
-                    use format = new StringFormat()
-                    format.LineAlignment <- StringAlignment.Center
-                    format.Trimming <- StringTrimming.EllipsisCharacter
-                    format.FormatFlags <- StringFormatFlags.NoWrap
-                    for col in tva.Columns do
-                        if col.IsVisible then
-                            let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
-                            format.Alignment <-
-                                match col.TextAlign with
-                                | HorizontalAlignment.Right -> StringAlignment.Far
-                                | HorizontalAlignment.Center -> StringAlignment.Center
-                                | _ -> StringAlignment.Near
-                            if not (String.IsNullOrEmpty(col.Header)) then
-                                g.DrawString(col.Header, tva.Font, textBrush, r, format)
-                            // Right divider — drawn in a slightly lighter
-                            // tone so it's visible against darkPanel.
-                            g.DrawLine(dividerPen, x + col.Width - 1, 2, x + col.Width - 1, columnHeaderHeight - 3)
-                            x <- x + col.Width
+                    // Overpaint the scrollbar corner box (the small square
+                    // between vertical + horizontal scrollbars when both are
+                    // visible). Aga's TreeViewAdv.DrawScrollBarsBox fills it
+                    // with SystemBrushes.Control which renders light against
+                    // dark mode. Mirror Aga's geometry: the rect from the
+                    // bottom-right of DisplayRectangle to the bottom-right of
+                    // ClientRectangle.
+                    let cr = tva.ClientRectangle
+                    let dr = tva.DisplayRectangle
+                    if cr.Width > dr.Width && cr.Height > dr.Height then
+                        let cornerRect = Rectangle(dr.Right, dr.Bottom, cr.Width - dr.Width, cr.Height - dr.Height)
+                        g.FillRectangle(bg, cornerRect)
+                    // Column header overpaint.
+                    if tva.UseColumns then
+                        // Default _columnHeaderHeight in Aga is 20; widen to a
+                        // safety value that comfortably covers any reasonable
+                        // font so the entire system-drawn header is hidden.
+                        let columnHeaderHeight = max 24 (tva.Font.Height + 8)
+                        let headerRect = Rectangle(0, 0, cr.Width, columnHeaderHeight)
+                        g.FillRectangle(bg, headerRect)
+                        // Draw a subtle bottom rule for the header
+                        use border = new Pen(Color.FromArgb(80, 80, 80))
+                        g.DrawLine(border, 0, columnHeaderHeight - 1, cr.Width, columnHeaderHeight - 1)
+                        // Column titles + per-column divider lines on the right
+                        // edge of each column header.
+                        let mutable x = -tva.OffsetX
+                        use textBrush = new SolidBrush(darkText)
+                        use dividerPen = new Pen(Color.FromArgb(80, 80, 80))
+                        use format = new StringFormat()
+                        format.LineAlignment <- StringAlignment.Center
+                        format.Trimming <- StringTrimming.EllipsisCharacter
+                        format.FormatFlags <- StringFormatFlags.NoWrap
+                        for col in tva.Columns do
+                            if col.IsVisible then
+                                let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
+                                format.Alignment <-
+                                    match col.TextAlign with
+                                    | HorizontalAlignment.Right -> StringAlignment.Far
+                                    | HorizontalAlignment.Center -> StringAlignment.Center
+                                    | _ -> StringAlignment.Near
+                                if not (String.IsNullOrEmpty(col.Header)) then
+                                    g.DrawString(col.Header, tva.Font, textBrush, r, format)
+                                // Right divider — drawn in a slightly lighter
+                                // tone so it's visible against darkPanel.
+                                g.DrawLine(dividerPen, x + col.Width - 1, 2, x + col.Width - 1, columnHeaderHeight - 3)
+                                x <- x + col.Width
                 with _ -> ()
 
     // Long-lived brush for the inactive-selection background so we don't
@@ -755,6 +778,30 @@ module DarkMode =
         // Header overpaint via NativeWindow subclass (Paint event doesn't
         // fire because TreeViewAdv.OnPaint omits the base call).
         DarkTreeViewAdvSubclass(tva) |> ignore
+        // TreeViewAdv hosts _vScrollBar / _hScrollBar (managed VScrollBar /
+        // HScrollBar) as child controls. Their handles may not exist when the
+        // form-wide DarkMode_Explorer theming pass runs (the scrollbars are
+        // hidden until content overflows on that axis), so apply the theme
+        // both eagerly (if already created) and on every later HandleCreated.
+        // This addresses the "vertical scrollbar still light" report on the
+        // Programs / Workspace tabs after the tree gains enough rows to
+        // require scrolling.
+        for child in tva.Controls do
+            match child with
+            | :? ScrollBar as sb ->
+                let applyTheme () =
+                    try
+                        sb.BackColor <- darkPanel
+                        if sb.IsHandleCreated then
+                            setControlTheme sb.Handle "DarkMode_Explorer"
+                    with _ -> ()
+                applyTheme()
+                sb.HandleCreated.Add(fun _ -> applyTheme())
+                // Resize / VisibleChanged don't recreate the handle but a
+                // theme re-apply is cheap and keeps things stable across
+                // show / hide transitions.
+                sb.VisibleChanged.Add(fun _ -> applyTheme())
+            | _ -> ()
         // Hook DrawText on each NodeControl that's a BaseTextControl. Active
         // selection keeps system highlight colors so the focus row stays
         // distinguishable; everything else goes light. Inactive selection
