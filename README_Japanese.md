@@ -8,31 +8,7 @@ WindowTabs はインターフェースを持たない Windows アプリケーシ
 
 ![Tabs](README_Image/Tabs.png)
 
-元々は Maurice Flanagan 氏によって2009年に開発され、当時は無料版と有料版が提供されていました。
-開発者は現在、このユーティリティをオープンソース化しています。
-
-- https://github.com/mauricef/WindowTabs (404 Not Found)
-
-redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
-
-- https://github.com/redgis/WindowTabs
-
-medlir 氏がコードを配置しています。
-- https://github.com/medlir/WindowTabs
-
-コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
-- https://github.com/mossy-xyz
-
-payaneco 氏がmedlir/WindowTabsのコードをフォークしました。
-- https://github.com/payaneco/WindowTabs
-- https://github.com/payaneco/WindowTabs/network/members
-- https://ja.stackoverflow.com/a/53822
-
-leafOfTree 氏も様々な改良を加えたフォークを作成しています:
-- https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
-
-私の作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
+私の作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。フォーク元の系譜は [プロジェクトの経緯](#プロジェクトの経緯) を参照してください。
 
 Visual Studio 2026 Community Edition でコンパイルできます。
 - https://github.com/standard-software/WindowTabs
@@ -45,12 +21,13 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 - [機能](#機能)
 - [設定](#設定)
 - [リンク](#リンク)
+- [プロジェクトの経緯](#プロジェクトの経緯)
 - [ライセンス](#ライセンス)
 - [コメント](#コメント)
 
 ## バージョン
 
-最新のバージョン: **ss_jp_2026.04.30**
+最新のバージョン: **ss_jp_2026.05.01**
 
 詳細な更新履歴と変更ログについては、[version.md](version.md) を参照してください。
 
@@ -397,6 +374,31 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 - 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita
   https://qiita.com/standard-software/items/dd25270fa3895365fced
+
+## プロジェクトの経緯
+
+元々は Maurice Flanagan 氏によって2009年に開発され、当時は無料版と有料版が提供されていました。開発者は現在、このユーティリティをオープンソース化しています。
+
+- https://github.com/mauricef/WindowTabs (404 Not Found)
+
+redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
+
+- https://github.com/redgis/WindowTabs
+
+medlir 氏がコードを配置しています。
+- https://github.com/medlir/WindowTabs
+
+コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
+- https://github.com/mossy-xyz
+
+payaneco 氏がmedlir/WindowTabsのコードをフォークしました。
+- https://github.com/payaneco/WindowTabs
+- https://github.com/payaneco/WindowTabs/network/members
+- https://ja.stackoverflow.com/a/53822
+
+leafOfTree 氏も様々な改良を加えたフォークを作成しています:
+- https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
 
 ## ライセンス
 

@@ -8,31 +8,7 @@ WindowTabs is a utility that enables tabbed UI for Windows applications that don
 
 ![Tabs](README_Image/Tabs.png)
 
-It was originally developed by Maurice Flanagan in 2009 and was provided back then as both free and paid versions.
-The author has now open-sourced the utility.
-
-- https://github.com/mauricef/WindowTabs (404 Not Found)
-
-Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
-
-- https://github.com/redgis/WindowTabs
-
-Mr./Ms. medlir hosts the source code.
-- https://github.com/medlir/WindowTabs
-
-Looking at the commit log, Mossy Flanagan made the early commits.
-- https://github.com/mossy-xyz
-
-Mr./Ms. payaneco forked medlir/WindowTabs's source code.
-- https://github.com/payaneco/WindowTabs
-- https://github.com/payaneco/WindowTabs/network/members
-- https://ja.stackoverflow.com/a/53822
-
-Mr./Ms. leafOfTree also created a fork with various improvements:
-- https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
-
-This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
+This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software). See [Project History](#Project-History) for the full lineage.
 
 Can be compiled with Visual Studio 2026 Community Edition.
 - https://github.com/standard-software/WindowTabs
@@ -45,12 +21,13 @@ Can be compiled with Visual Studio 2026 Community Edition.
 - [Features](#Features)
 - [Settings](#Settings)
 - [Links](#Links)
+- [Project History](#Project-History)
 - [License](#License)
 - [Comments](#Comments)
 
 ## Version
 
-Latest version: **ss_jp_2026.04.30**
+Latest version: **ss_jp_2026.05.01**
 
 For detailed version history and changelog, see [version.md](version.md).
 
@@ -397,6 +374,31 @@ Simply run the batch file to create the distribution packages.
 
 - 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
   https://qiita.com/standard-software/items/dd25270fa3895365fced
+
+## Project History
+
+It was originally developed by Maurice Flanagan in 2009 and was provided back then as both free and paid versions. The author has now open-sourced the utility.
+
+- https://github.com/mauricef/WindowTabs (404 Not Found)
+
+Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
+
+- https://github.com/redgis/WindowTabs
+
+Mr./Ms. medlir hosts the source code.
+- https://github.com/medlir/WindowTabs
+
+Looking at the commit log, Mossy Flanagan made the early commits.
+- https://github.com/mossy-xyz
+
+Mr./Ms. payaneco forked medlir/WindowTabs's source code.
+- https://github.com/payaneco/WindowTabs
+- https://github.com/payaneco/WindowTabs/network/members
+- https://ja.stackoverflow.com/a/53822
+
+Mr./Ms. leafOfTree also created a fork with various improvements:
+- https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
 
 ## License
 
