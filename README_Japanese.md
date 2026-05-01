@@ -319,27 +319,27 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
 
 ### 英語のリソース
 
-- WindowTabs - Download
+- WindowTabs - Download  
   https://www.softpedia.com/get/Desktop-Enhancements/ssWindowTabs.shtml
 
 ### 日本語のリソース
 
-- WindowTabs のダウンロード・使い方 - フリーソフト100
+- WindowTabs のダウンロード・使い方 - フリーソフト100  
   https://freesoft-100.com/review/windowtabs.html
 
-- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生（窓の杜） - Yahoo!ニュース
+- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生（窓の杜） - Yahoo!ニュース  
   https://news.yahoo.co.jp/articles/523e4c5b9db424bb1edfc582d647c1624a9b7502 (404 Not Found)
 
-- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜
+- どんなウィンドウもタブにまとめられる「WindowTabs」に日本語派生プロジェクトが誕生 - 窓の杜  
   https://forest.watch.impress.co.jp/docs/news/2067165.html
 
-- WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト
+- WindowTabs のダウンロードと使い方 - ｋ本的に無料ソフト・フリーソフト  
   https://www.gigafree.net/utility/window/WindowTabs.html
 
-- C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー
+- C# - WindowTabs というオープンソースを改良してみたいのですがビルドができません。何か必要なものがありますか？ - スタック・オーバーフロー  
   https://ja.stackoverflow.com/questions/53770/windowtabs-というオープンソースを改良してみたいのですがビルドができません-何か必要なものがありますか
 
-- 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita
+- 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
   https://qiita.com/standard-software/items/dd25270fa3895365fced
 
 ## プロジェクトの経緯
