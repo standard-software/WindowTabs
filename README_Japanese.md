@@ -4,14 +4,11 @@
 
 **Language:** [English](README.md)
 
-WindowTabs はインターフェースを持たない Windows アプリケーションや、異なる実行ファイル間でタブ UI を有効にするユーティリティです。Chrome と Edge をタブで管理、複数の Excel や Word のウィンドウをタブで管理が可能になります。
+WindowTabs はタブインターフェースを持たない Windows アプリケーションや、異なる実行ファイル間でタブインターフェースを有効にするユーティリティです。例えば Chrome と Edge をまとめてタブで管理したり、複数の Excel や Word のウィンドウをまとめてタブで管理することが可能です。
 
 ![Tabs](README_Image/Tabs.png)
 
-私の作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォーク、leafOfTree 氏が行ったコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。フォーク元の系譜は [プロジェクトの経緯](#プロジェクトの経緯) を参照してください。
-
-Visual Studio 2026 Community Edition でコンパイルできます。
-- https://github.com/standard-software/WindowTabs
+私が作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォークし、leafOfTree 氏のコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。フォーク元の系譜は [プロジェクトの経緯](#プロジェクトの経緯) を参照してください。
 
 ## 目次
 - [バージョン](#バージョン)
@@ -20,6 +17,7 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 - [使用方法](#使用方法)
 - [機能](#機能)
 - [設定](#設定)
+- [ソースからビルド](#ソースからビルド)
 - [リンク](#リンク)
 - [プロジェクトの経緯](#プロジェクトの経緯)
 - [ライセンス](#ライセンス)
@@ -29,18 +27,16 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 
 最新のバージョン: **ss_jp_2026.05.01**
 
-詳細な更新履歴と変更ログについては、[version.md](version.md) を参照してください。
+詳細は [version.md](version.md) を参照してください。
 
 
 ## ダウンロード
 
-**対応している OS:** Windows 10、 Windows 11
+**対応している OS:** Windows 10、Windows 11
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/standard-software/windowtabs/total)</a>
 
-[releases](https://github.com/standard-software/WindowTabs/releases) ページからビルド済みのファイルをダウンロードできます。
-
-2 つのダウンロードオプションがあります:
+[releases](https://github.com/standard-software/WindowTabs/releases) ページからインストーラーか exe を含む zip ファイルをダウンロードできます。
 
 - **WtSetup.msi** - 自動インストールとアンインストールをサポートしている Windows インストーラーパッケージ版
 - **WindowTabs.zip** - 任意の場所で展開して実行可能なポータブル版
@@ -50,27 +46,31 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 ### MSI インストーラー版の使用方法 (WtSetup.msi)
 
 1. [Releases](https://github.com/standard-software/WindowTabs/releases) ページから `WtSetup.msi` をダウンロード
-2. インストーラーを実行してインストールウィザードに従って操作します
+2. インストーラーを実行し、インストールウィザードに従って操作します
 3. インストール先のディレクトリを選択 (既定: Program Files\WindowTabs)
 4. デスクトップとスタートメニューにショートカットが自動で作成されます
-5. オプションでインストール後に WindowTabs を起動
+5. オプションでインストール後に WindowTabs を起動できます
 
 ### ポータブル版の使用方法 (WindowTabs.zip)
 
 1. [Releases](https://github.com/standard-software/WindowTabs/releases) ページから `WindowTabs.zip` をダウンロード
 2. アーカイブを任意の場所に展開します
 3. `WindowTabs.exe` を実行
-4. WindowTabs がバックグラウンドで実行され、トレイアイコンが表示されます
 
 
 ## 使用方法
 
-- `WindowTabs.exe` を実行
-- トレイアイコンを右クリックで設定にアクセスできます
-- 設定の[プログラム]のタブからタブ化したいプログラムを選びます
-- 指定のプログラムのWindowにタブがつきます。
-- タブを右クリックでタブ固有のオプションにアクセスできます
-- タブをドラッグ&ドロップでウィンドウを整理できます
+- `WindowTabs.exe` を起動します。
+- トレイアイコンを右クリックで設定にアクセスできます。
+- 設定の「プログラム」タブからタブ化したい対象を選びます。
+- 指定のプログラムのウィンドウにタブがつきます。
+- タブを右クリックでタブ固有のオプションにアクセスできます。
+- タブをドラッグ&ドロップでタブグループとしてまとめることができます。
+
+
+![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+
+![Settings Programs](README_Image/SettingsPrograms.png)
 
 ## 機能
 
@@ -154,45 +154,66 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 
 ### 新規起動
 
+- 指定タブの exe と同じプロセスを起動することができます。
+- 指定タブの右や、新しいウィンドウや、他のタブグループを指定して起動することができます。
+
 ![Popup Menu](README_Image/PopupMenu.png)
 
 ### 位置移動
 
+- タブグループの位置を移動することができます。
+- スナップは現在の幅や高さを維持しながら、ディスプレイの端に移動します。左スナップや右スナップがよく使われるので呼び出しやすいメニューの配置にしています。
+- スナップで%指定をした場合、ディスプレイのサイズにあわせた幅や高さでディスプレイの端に移動します。
+- ディスプレイの端やコーナーに移動する機能や、ディスプレイやデスクトップに最大化する機能もあります。
+
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
-### 他のグループへ連結
+### 他のタブグループへ連結
+
+- 現在のタブグループのタブを全て、他のタブグループに連結する機能です。
+- 他のタブグループは、先頭タブアイコン、タブ名、タブ数で見分けることができます。
 
 ![](README_Image/MoveTabGroupToGroup.png)
 
 ### このタブを分離 / 右側/左側を分割
 
-![Tab Split Move Position](README_Image/SplitTabs.png)
+- 指定したタブや、そのタブから左側や右側のタブを分割して他の位置に移動することができます。
+- 同様に他のタブグループに連結することもできます。
+
+![Tab Split Move Position](README_Image/SplitTabsReposition.png)
+![Tab Split To Group](README_Image/SplitTabsToGroup.png)
 
 ### タブを閉じる
 
+- 指定したタブや、そのタブより左側や右側のタブ、あるいは、タブグループ内の他のタブや、全てのタブを閉じることができます。
+
 ![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
-
-### ピン止めタブ
-
-![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
-![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
-![Pinned Tabs Menu](README_Image/PinnedTabMenu.png)
-
-### タブのカラー
-
-![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
 ### タブごとの寄せ設定
 
-タブグループ内で、タブごとに個別に左寄せ・右寄せを設定できます:
+- タブグループ内で、タブごとに個別に左寄せ・右寄せを設定できます。
+- 全てのタブを一括で左寄せ・右寄せにするメニューを優先的に配置しています。
+
+### ピン止めタブ
+
+- ピン止めしたタブはアイコンだけの表示にできます。
+- また、設定によって、幅を指定してピン止めボタンを表示することもできます。
+- ピン止めしたタブは、左寄せや右寄せタブの中でも左側に配置されます。
+- 指定タブや、左側や右側のタブをピン止めすることができます。
+
+![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
+![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
+
+### タブのカラー
+
+- 指定したタブや、左側や右側のタブ全てに色を指定することができます。
+- 背景色の指定や、タブの下線、あるいは、枠線の色を指定することができます。
+
+![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
 ### ダークモード / ライトモード
 
-ライトモードが既定ですが、スクリーンショットのようにコンテキストメニュー (ポップアップメニュー) でのダークモードをサポートしています。
-
-- 外観設定の「ダークモードメニュー」のチェックボックスで切り替え
-- タブやタスクトレイのコンテキストメニューへの対応
-- 設定ダイアログへの対応
+- タブとタスクトレイアイコンのコンテキストメニュー (ポップアップメニュー) と設定ダイアログをダークモードにすることができます。
 
 ### マルチディスプレイと高 DPI をサポート
 
@@ -202,45 +223,41 @@ Visual Studio 2026 Community Edition でコンパイルできます。
 
 ### 仮想デスクトップをサポート
 
-WindowTabs は Windows の仮想デスクトップ (Win+Tab) をサポートしています:
-
-- 仮想デスクトップを切り替えてもタブグループを保持
-- UWP アプリ（設定、電卓など）が他の仮想デスクトップにある場合は適切に非表示
+- 仮想デスクトップ (Win+Tab) を切り替えてもタブグループを保持
 - WindowTabs の再起動時に全ての仮想デスクトップのタブグループ状態を復帰
 
 ### UWP アプリをサポート
 
 - UWP (Universal Windows Platform) をサポート
-- UWP ウィンドウの Z オーダーを自動で処理し、タブの表示を適切に維持
-- UWP アプリで作業する際もタブの表示を維持
-- 他の仮想デスクトップにあるアプリのクローク状態を適切に検出
+- UWP アプリは全体を 1 つの exe として扱い、タブ化や自動グループ化に対応
+- 他の仮想デスクトップにあるアプリの状態を適切に検出
 
 ### 多言語をサポート
 
 - 英語と日本語、簡体と繁体の中国語をサポート
 - 日本語の関西弁、東北弁版を同梱
-- 言語ファイルでのあらゆる言語をサポート **(WtProgram/Language)**
+- 言語ファイルを追加することで、あらゆる言語をサポート可能
 - 再起動なしで言語を変更可能
-- トレイメニューから言語を変更可能
+- トレイメニューから言語を変更
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
 ### 無効にする機能
 
-トレイメニューから WindowTabs の起動を一時的に無効にできます:
+- WindowTabs を終了せずに、全てのタブ機能を一時的に無効にできます。
+- 全画面でアプリを使うときなどに便利です。
 
 ### タブグループの永続化
 
-WindowTabs は再起動時や無効化時にタブグループの設定を保持します:
+- WindowTabs は再起動時や無効化時にタブグループの設定を保持します。
 
 ### Watchdog による自動再起動
 
-- 以下の状況で WindowTabs がフリーズする場合があります:
+- 以下の状況で WindowTabs がフリーズする場合があります。その際に Watchdog 機構が無応答を検出し、自動的に再起動します。
   - モニターの切り替え
   - スリープや休止状態からの復帰
   - Windows のディスプレイ設定の変更
-- Watchdog 機構が無応答を検出し、自動的に再起動します
-- 再起動後もタブグループの設定は保持・復元されます
+- 再起動時にタブグループの設定は保持・復元されます。
 
 ## 設定
 
@@ -248,7 +265,7 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 ### プログラムタブ
 
-タブと自動グループ化の動作を使用するプログラムを構成できます。
+タブ化や自動グループ化を行うプログラムを構成できます。
 
 - **タブ**: プログラムごとにタブ機能の有効/無効を設定
 - **自動グループ化**: 有効にすると、同じプログラムのウィンドウが自動で同じタブグループにまとめられます
@@ -263,9 +280,9 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 ### タブの外観
 
-タブの視覚的な外観をカスタマイズできます:
+- タブの視覚的な外観をカスタマイズできます。
 - カスタムカラーテーマ機能
-  - よいカラーテーマを作られた方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。
+  - よいカラーテーマを作成された方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
@@ -273,13 +290,13 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
 
 ### タブの動作
 
-タブの動作を構成することができます:
+- タブの動作を構成することができます。
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
 ### ワークスペースタブ
 
-これは元の WindowTabs の機能から変更されていません。
+- 表示されているタブグループの配置を新規保存し、復元することができます。
 
 ## ソースからビルド
 
@@ -296,10 +313,14 @@ WindowTabs は再起動時や無効化時にタブグループの設定を保持
   - 出力: `exe\installer\WtSetup.msi`
   - 出力: `exe\zip\WindowTabs.zip`
 
-バッチファイルを実行で配布パッケージを作成することができます。
-
+バッチファイルを実行して配布パッケージを作成することができます。
 
 ## リンク
+
+### 英語のリソース
+
+- WindowTabs - Download
+  https://www.softpedia.com/get/Desktop-Enhancements/ssWindowTabs.shtml
 
 ### 日本語のリソース
 
@@ -337,7 +358,7 @@ medlir 氏がコードを配置しています。
 コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
 - https://github.com/mossy-xyz
 
-payaneco 氏がmedlir/WindowTabsのコードをフォークしました。
+payaneco 氏が medlir/WindowTabs のコードをフォークしました。
 - https://github.com/payaneco/WindowTabs
 - https://github.com/payaneco/WindowTabs/network/members
 - https://ja.stackoverflow.com/a/53822
@@ -349,12 +370,6 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 ## ライセンス
 
 このプロジェクトはオープンソースであり、MIT ライセンスに基づいています。
-
-## クレジット
-
-- オリジナルの開発者: Maurice Flanagan
-- フォークの貢献者: redgis、payaneco、leafOfTree
-- 現在のメンテナー: Satoshi Yamamoto (standard-software)
 
 ## コメント
 

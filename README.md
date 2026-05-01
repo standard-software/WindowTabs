@@ -4,14 +4,11 @@
 
 **Language:** [Japanese/日本語](README_Japanese.md)
 
-WindowTabs is a utility that enables tabbed UI for Windows applications that don't have a tab interface, as well as between different executables. You can manage Chrome and Edge with tabs, or manage multiple Excel windows or Excel and Word with tabs.
+WindowTabs is a utility that enables a tabbed interface for Windows applications that don't have one, and across different executables as well. For example, you can manage Chrome and Edge together with tabs, or manage multiple Excel or Word windows together with tabs.
 
 ![Tabs](README_Image/Tabs.png)
 
 This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software). See [Project History](#Project-History) for the full lineage.
-
-Can be compiled with Visual Studio 2026 Community Edition.
-- https://github.com/standard-software/WindowTabs
 
 ## Index
 - [Version](#Version)
@@ -20,6 +17,7 @@ Can be compiled with Visual Studio 2026 Community Edition.
 - [Usage](#Usage)
 - [Features](#Features)
 - [Settings](#Settings)
+- [Building from Source](#Building-from-Source)
 - [Links](#Links)
 - [Project History](#Project-History)
 - [License](#License)
@@ -29,7 +27,7 @@ Can be compiled with Visual Studio 2026 Community Edition.
 
 Latest version: **ss_jp_2026.05.01**
 
-For detailed version history and changelog, see [version.md](version.md).
+See [version.md](version.md) for details.
 
 
 ## Download
@@ -38,9 +36,7 @@ For detailed version history and changelog, see [version.md](version.md).
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/standard-software/windowtabs/total)</a>
 
-You can download prebuilt files from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
-
-Two download options are available:
+Download the installer or the zip containing the exe from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
 
 - **WtSetup.msi** - Windows Installer package with automatic installation and uninstallation support
 - **WindowTabs.zip** - Portable version that can be extracted and run from any location
@@ -60,17 +56,21 @@ Two download options are available:
 1. Download `WindowTabs.zip` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
 2. Extract the archive to your preferred location
 3. Run `WindowTabs.exe`
-4. WindowTabs will run in the background and add a tray icon
 
 
 ## Usage
 
-- Run `WindowTabs.exe`
-- Right-click the tray icon to access settings
-- In the [Programs] tab of settings, choose programs you want tabs for
-- Tabs will appear on those programs' windows
-- Right-click on tabs to access tab-specific options
-- Drag and drop tabs to organize your windows
+- Launch `WindowTabs.exe`.
+- Right-click the tray icon to access settings.
+- In the [Programs] tab of settings, choose programs you want tabs for.
+- Tabs will appear on those programs' windows.
+- Right-click on tabs to access tab-specific options.
+- Drag and drop tabs to combine them into tab groups.
+
+
+![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+
+![Settings Programs](README_Image/SettingsPrograms.png)
 
 ## Features
 
@@ -154,45 +154,66 @@ Two download options are available:
 
 ### New Launch
 
+- Launch a new instance of the same exe as the target tab.
+- You can launch as a new tab to the right of the target, as a new standalone window, or linked to another tab group.
+
 ![Popup Menu](README_Image/PopupMenu.png)
 
 ### Position Move
 
+- Move a tab group's position.
+- Snap keeps the current width / height and snaps to a screen edge. Snap Left and Snap Right are commonly used so they sit at the top of the menu for quick access.
+- Snap with a percentage resizes the width / height to the specified portion of the display and snaps to an edge.
+- Move to a display edge or corner, and snap-to-display / snap-to-desktop maximize-style options are also available.
+
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
-### Link to another group
+### Link to another tab group
+
+- Move all tabs of the current tab group into another existing tab group.
+- Other tab groups can be distinguished by their leading tab icon, tab name, and tab count.
 
 ![](README_Image/MoveTabGroupToGroup.png)
 
 ### Detach this tab / Split right/left side
 
-![Tab Split Move Position](README_Image/SplitTabs.png)
+- Detach the selected tab, or split tabs to the right or left from the selected tab, and reposition them.
+- They can also be linked to another tab group.
+
+![Tab Split Move Position](README_Image/SplitTabsReposition.png)
+![Tab Split To Group](README_Image/SplitTabsToGroup.png)
 
 ### Close Tab
 
+- Close the selected tab, the tabs to its left or right, the other tabs in the group, or all tabs.
+
 ![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
-
-### Pinned Tabs
-
-![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
-![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
-![Pinned Tabs Menu](README_Image/PinnedTabMenu.png)
-
-### Tab Color
-
-![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
 ### Per-Tab Alignment
 
-Each tab can be individually set to left or right alignment within a tab group:
+- Each tab can be individually set to left- or right-aligned within a tab group.
+- The "align all tabs to left / right" menu items are placed first for quick batch alignment.
+
+### Pinned Tabs
+
+- A pinned tab can be displayed as an icon-only tab.
+- It can also be configured with a specified width and show a pin button.
+- Pinned tabs are placed leftmost within their (left- or right-aligned) group.
+- The selected tab, or the left-side / right-side tabs, can be pinned together.
+
+![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
+![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
+
+### Tab Color
+
+- Apply a color to the selected tab, or to all left-side / right-side tabs.
+- Choose between background fill, underline, or border color types.
+
+![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
 ### Dark Mode / Light Mode
 
-While light mode is the default, dark mode is also supported for context menus (popup menus) as shown in the screenshots.
-
-- Toggle via the "Menu Dark Mode" checkbox in Appearance settings
-- Applies to the tab and tray context menus
-- Applies to the settings dialog
+- The tab / tray-icon context menus (popup menus) and the settings dialog can be switched to dark mode.
 
 ### Multi-Display and DPI Support
 
@@ -202,24 +223,20 @@ While light mode is the default, dark mode is also supported for context menus (
 
 ### Virtual Desktop Support
 
-WindowTabs supports Windows virtual desktops (Win+Tab):
-
-- Tab groups are preserved when switching between virtual desktops
-- UWP apps (Settings, Calculator, etc.) are properly hidden when on other virtual desktops
-- Tab group state is preserved across all virtual desktops during WindowTabs restart
+- Tab groups are preserved when switching virtual desktops (Win+Tab)
+- Tab group state is restored across all virtual desktops on WindowTabs restart
 
 ### UWP Application Support
 
 - Supports UWP (Universal Windows Platform) applications
-- Automatically handles UWP window Z-order for proper tab visibility
-- Maintains tab visibility when working with UWP apps
-- Properly detects cloaked state when apps are on other virtual desktops
+- All UWP apps are collectively treated as a single exe, supporting tabbing and auto-grouping
+- Properly detects the state of apps on other virtual desktops
 
 ### Multi-Language Support
 
 - English, Japanese, Chinese Simplified, and Chinese Traditional language support
 - Japanese Kansai and Tohoku dialect files included
-- Language files can be customized to support any language **(WtProgram/Language)**
+- Any language can be supported by adding a language file
 - Runtime language switching without restart
 - Switch languages via tray menu
 
@@ -227,20 +244,20 @@ WindowTabs supports Windows virtual desktops (Win+Tab):
 
 ### Disable Feature
 
-Temporarily disable WindowTabs functionality via tray menu:
+- All tab functionality can be temporarily disabled without quitting WindowTabs.
+- Useful when using an app in full-screen mode.
 
 ### Tab Group Persistence
 
-WindowTabs preserves your tab group configuration across restarts and when disabled:
+- WindowTabs preserves your tab group configuration across restarts and when disabled.
 
 ### Watchdog Auto-Restart
 
-- WindowTabs may occasionally freeze in certain situations:
+- WindowTabs may occasionally freeze in the following situations; in those cases the watchdog mechanism detects the unresponsive state and automatically restarts the application.
   - Switching monitors
   - Waking from sleep or hibernate
   - Changing Windows display settings
-- A watchdog mechanism automatically detects unresponsive states and restarts the application
-- Tab group configuration is preserved and restored after restart
+- Tab group configuration is preserved and restored on restart.
 
 ## Settings
 
@@ -248,7 +265,7 @@ Access settings by right-clicking the tray icon and selecting "Settings" or by r
 
 ### Programs Tab
 
-Configure which programs should use tabs and auto-grouping behavior.
+Configure programs to use tabs and auto-grouping.
 
 - **Tabs**: Enable/disable tabbing for each program
 - **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
@@ -263,7 +280,7 @@ Configure which programs should use tabs and auto-grouping behavior.
 
 ### Appearance Tab
 
-Customize the visual appearance of tabs:
+- Customize the visual appearance of tabs.
 - Custom color theme features
   - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
 
@@ -273,13 +290,13 @@ Customize the visual appearance of tabs:
 
 ### Behavior Tab
 
-Configure tab behavior:
+- Configure tab behavior.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
 ### Workspace Tab
 
-This feature remains unchanged from the original WindowTabs functionality.
+- Save the layout of currently displayed tab groups and restore it later.
 
 ## Building from Source
 
@@ -298,8 +315,12 @@ A build script is provided in the project root:
 
 Simply run the batch file to create the distribution packages.
 
-
 ## Links
+
+### English Resources
+
+- WindowTabs - Download
+  https://www.softpedia.com/get/Desktop-Enhancements/ssWindowTabs.shtml
 
 ### Japanese Resources
 
@@ -349,12 +370,6 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 ## License
 
 This project is open source and licensed under the MIT License.
-
-## Credits
-
-- Original author: Maurice Flanagan
-- Fork contributors: redgis, payaneco, leafOfTree
-- Current maintainer: Satoshi Yamamoto (standard-software)
 
 ## Comments
 
