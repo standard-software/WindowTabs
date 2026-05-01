@@ -319,7 +319,7 @@ Simply run the batch file to create the distribution packages.
 
 ### English Resources
 
-- WindowTabs - Download
+- WindowTabs - Download  
   https://www.softpedia.com/get/Desktop-Enhancements/ssWindowTabs.shtml
 
 ### Japanese Resources
