@@ -165,18 +165,17 @@ Download the installer or the zip containing the exe from the [releases](https:/
     - Snap Other
       - Snap Top
       - Snap Bottom
-      - Snap 90%
+      - Snap 90% / 70% / 50% / 30% (each)
         - Left / Right / Top / Bottom
         - Top Left / Top Right / Bottom Left / Bottom Right
         - Center / Center Horizontally / Center Vertically
-      - Snap 70% / 50% / 30% (same items as Snap 90%)
       - Snap Display
       - Snap Desktop
     - Move
       - Left Edge / Right Edge / Top Edge / Bottom Edge
       - Top Left / Top Right / Bottom Left / Bottom Right
     - (per-display submenus, with leading "Same position on this display")
-  - Link to another group
+  - Link to another tab group (submenu lists other tab groups; choose the destination)
   - Tab Detach and Split
     - Detach this tab and reposition (same submenu as "Position Move")
     - Link to another group
@@ -247,7 +246,7 @@ Download the installer or the zip containing the exe from the [releases](https:/
 - Move all tabs of the current tab group into another existing tab group.
 - Other tab groups can be distinguished by their leading tab icon, tab name, and tab count.
 
-![](README_Image/MoveTabGroupToGroup.png)
+![Link to another tab group](README_Image/MoveTabGroupToGroup.png)
 
 ### Detach this tab / Split right/left side
 
