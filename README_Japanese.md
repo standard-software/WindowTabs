@@ -246,7 +246,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - 現在のタブグループのタブを全て、他のタブグループに連結する機能です。
 - 他のタブグループは、先頭タブアイコン、タブ名、タブ数で見分けることができます。
 
-![](README_Image/MoveTabGroupToGroup.png)
+![他のタブグループへ連結](README_Image/MoveTabGroupToGroup.png)
 
 ### このタブを分離 / 右側/左側を分割
 
