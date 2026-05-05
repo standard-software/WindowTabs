@@ -15,17 +15,17 @@ WindowTabs is a tool that extends Windows productivity by letting you manage any
 
 This tool is for those of you doing creative work on a PC. For example: accounting, customer support, slide deck preparation, business management, legal paperwork, electronic medical records, video editing, illustration, or — like me — software development. Doing this kind of work on a PC is itself a creative activity.
 
-In an era where smartphones and tablets cover most web browsing and entertainment, the fact that you go out of your way to use a Windows PC probably means you are engaged in some form of creative work.
+In an era where smartphones and tablets cover most web browsing and entertainment, the fact that you go out of your way to use a Windows PC probably means you are engaged in some form of creative work or creative profession.
 
-If you would like to improve how you operate Windows, WindowTabs will answer that desire. I have built its features and shipped versions specifically to meet that need.
+If you would like to improve how you operate Windows, I think WindowTabs can serve you as a good tool. I have built its features and shipped versions specifically to meet that need.
 
 ---
 
-I have been a paid user of WindowTabs since before it was open-sourced, using its tab UI very comfortably for years.
+I have been a paid user of WindowTabs since before it was open-sourced, and have always been very fond of its tab UI.
 
 Do you remember the early design of web browsers? Back then they had no tab UI. As browsers evolved, however, the value of the tab UI became universally recognized. Today every major browser ships with tabs, and their entire feature design is built on the assumption of tabs.
 
-In the same vein — just like in browsers — managing all your Windows windows through a tab UI is enormously convenient and important. Windows usability rises in one step: you no longer lose your sense of "where you are" mentally, and the cost of switching attention drops dramatically.
+Just like in browsers, managing all your Windows windows through a tab UI is genuinely convenient. It is an important kind of usability for getting work done crisply. Windows usability rises in one step, and the cost of switching attention to the task you actually want to do drops dramatically.
 
 I have long wished that this kind of operation would spread to more people, so over the years I have been using WindowTabs and trying out various similar tools.
 
