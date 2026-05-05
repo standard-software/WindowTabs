@@ -4,11 +4,87 @@
 
 **Language:** [English](README.md)
 
-WindowTabs はタブインターフェースを持たない Windows アプリケーションや、異なる実行ファイル間でタブインターフェースを有効にするユーティリティです。例えば Chrome と Edge をまとめてタブで管理したり、複数の Excel や Word のウィンドウをまとめてタブで管理することが可能です。
 
 ![Tabs](README_Image/Tabs.png)
 
-私が作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォークし、leafOfTree 氏のコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。フォーク元の系譜は [プロジェクトの経緯](#プロジェクトの経緯) を参照してください。
+
+WindowTabs は、あらゆるウィンドウをタブユーザーインターフェース(UI)で管理することができる Windows の操作性を拡張するツールです。
+
+<details>
+<summary>WindowTabs の説明をもっと見る</summary>
+
+スマートフォンやタブレット端末を使ってブラウザ閲覧でエンターテイメントを楽しめたりコミュニケーションをとれる時代ですので WindowsPC を使っていらっしゃるみなさんは、おそらく何か創造的な作業をしていると思います。
+
+例えば、経理系の仕事だったり、お客様対応だったり、プレゼン作成作業だったり、経営の管理運営だったり、法的な事務手続きだったり、医療業務の電子カルテ操作だったり、動画編集だったりイラスト作成だったり、あるいは私のようにソフトウェア開発だったり、そういう仕事を PC を使って行うという事が創造的です。
+
+そういう中 Windowsの操作性を向上させたいということに興味があるのでしたら WindowTabs はそれに応えてくれるでしょう。そのようなニーズに対して応えられるような機能を作りこんでバージョンをアップしてきました。
+
+---
+
+私は WindowTabs がオープンソースになる前からWindowTabsの有料ユーザーでタブUIをとても便利に使ってきました。
+
+ブラウザの初期のころのデザインをご存じですか？そのころは、タブUIではなかったのです。ですが、ブラウザが進化していくうちに、タブUIの便利さを誰もが認めるようになり、重要な機能として主要なブラウザは全てタブUIになり、ブラウザの全ての機能はタブを大前提にして構築されています。
+
+それと似たような事なのですが、ブラウザの操作性と同様に Windows で管理されているウィンドウの全てをタブUIによって管理するということは、非常に便利で重要な操作性です。一気に Windows の操作性が向上し、楽になり、様々なタスクが効率よく管理されて進んでいきます。
+
+昔から、この操作性が多くの人に広がってくれたらうれしいなと思って WindowTabs を使っていましたし、さまざまな同種のソフトウェアも試してきました。
+
+今は「何が多くの人のために効率よい操作性になるのだろうか、どうすればより仕事を素早く完了させるようにできるだろうか」ということを考えて、WindowTabs を少しずつ改善していっています。
+WindowTabs を使ってくださっている人には Windows をより効率よく使えるようになっていただけていると思います。
+
+Microsoft は、以前に Windows の OS の機能拡張の試作として Sets と名付けた機能でウィンドウの全てタブ管理することを目指していたことがありました。ですが、中止になったようです。理由は不明ですが、OSの内部に組み込むには過去の互換性などで難しすぎたのではないでしょうか。ですが、操作性のアイデアは素晴らしいと思うのです。WindowTabs は Sets の前から、OSの内部には組み込まれない形で、タブUIを実現しています。
+このやり方が、Windows 全体に、タブUIをもたらすより正解に近いやり方なのではないでしょうか。
+
+----
+
+私はソフトウェア開発者で、普段はWebアプリケーションを作っています。ブラウザで絵をかいたりするツールや、ブラウザで動くカーナビや、ビジネスチャットツールを作ってきました。
+
+自分は、VSCodeを7,8個起動し、VisualStudioを起動し、WindowTerminalをいくつも起動し、WinMergeも複数起動して、ファイラーも画像ビューワーも、Excelも起動して、全てWindowTabsで管理しています。それらはほとんどがタブUIのあるソフトウェアですが、それをウィンドウごとにタブで管理するために WindowTabs を活用しています。関連するプロジェクトのVSCodeのタブを色分けして、WindowTerminal や WimMerge のタブも同じ色にしたりして目立たせて使っていて、とても便利です。
+
+多くの人に役にたちそうな使い方としては Chrome と Edge と Firefox そしてそれぞれのシークレットモードプライベートモードでのウィンドウを、全て1つのウィンドウとして捜査することや、また別の使い方としては、複数のExcel、複数のWordやPowerPointを1つのウィンドウとして管理する、などの操作性があります。このように使うことは非常に使い勝手がよいように思います。
+
+この私のバージョンの WindowTabs では、ディスプレイの左右や上下へのスナップ配置、またディスプレイを飛び越えてのウィンドウの位置変更を1アクションで実現することもできます。Window 標準のスナップ機能をより使いやすくなるように洗練させています。マルチディスプレイ環境で、ウィンドウをDrag&Dropせずにウィンドウの配置を切り替えらえるのは、とても(とてつもなく)便利なので、きっとお役にも立つでしょう。
+
+---
+
+すでにユーザーの方には、他の方にも「もっと使いやすい Windows にするために、ウィンドウをタブ化する WindowTabs 使ってみたら？」などと。お誘いいただけますと、うれしいです。
+
+自分が使いたいから作っているだけではあるのですが、それでも他の人の役に立てていれて、少しでも、いい影響を届けることができれば、
+ソフトウェア開発者として、非常にうれしいです。
+
+</details>
+
+<br />
+
+私が作成しているこのバージョン (ss_jp_yyyy.mm.dd) は payaneco 氏のリポジトリからフォークし、leafOfTree 氏のコード実装の一部が組み込まれています。メンテナンスは、[Satoshi Yamamoto (@standard-software)](https://github.com/standard-software) が行っています。
+
+<details>
+<summary>フォーク元の系譜、プロジェクトの経緯について、もっと見る</summary>
+
+元々は Maurice Flanagan 氏によって2009年に開発され、当時は無料版と有料版が提供されていました。開発者は現在、このユーティリティをオープンソース化しています。
+
+- https://github.com/mauricef/WindowTabs (404 Not Found)
+
+redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
+
+- https://github.com/redgis/WindowTabs
+
+medlir 氏がコードを配置しています。
+- https://github.com/medlir/WindowTabs
+
+コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
+- https://github.com/mossy-xyz
+
+payaneco 氏が medlir/WindowTabs のコードをフォークしました。
+- https://github.com/payaneco/WindowTabs
+- https://github.com/payaneco/WindowTabs/network/members
+- https://ja.stackoverflow.com/a/53822
+
+leafOfTree 氏も様々な改良を加えたフォークを作成しています:
+- https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
+
+</details>
 
 ## 目次
 - [バージョン](#バージョン)
@@ -19,7 +95,6 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
 - [設定](#設定)
 - [ソースからビルド](#ソースからビルド)
 - [リンク](#リンク)
-- [プロジェクトの経緯](#プロジェクトの経緯)
 - [ライセンス](#ライセンス)
 - [コメント](#コメント)
 
@@ -55,18 +130,16 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
 
 1. [Releases](https://github.com/standard-software/WindowTabs/releases) ページから `WindowTabs.zip` をダウンロード
 2. アーカイブを任意の場所に展開します
-3. `WindowTabs.exe` を実行
+3. `WindowTabs.exe` を実行することで、起動できます。
 
 
 ## 使用方法
 
-- `WindowTabs.exe` を起動します。
-- トレイアイコンを右クリックで設定にアクセスできます。
+- WindowTabs のトレイアイコンを右クリックしてメニューを表示して設定画面を開くことができます。
 - 設定の「プログラム」タブからタブ化したい対象を選びます。
 - 指定のプログラムのウィンドウにタブがつきます。
-- タブを右クリックでタブ固有のオプションにアクセスできます。
+- タブを右クリックでタブ固有のメニューにアクセスできます。
 - タブをドラッグ&ドロップでタブグループとしてまとめることができます。
-
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
@@ -82,7 +155,7 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
 
 - **タブのコンテキストメニュー**
   - 新規起動 : (exe名)起動
-    - 新しいタブ : このタブ((exe名))の右
+    - 新しいタブ : このタブ(タブ名)の右
     - 新しいウィンドウ 位置指定 (「位置移動」と同じサブメニュー、先頭に「同じ位置」項目あり)
     - 新しいウィンドウ 他のグループへ連結
   - 位置移動
@@ -91,18 +164,17 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
     - スナップ その他
       - 上スナップ
       - 下スナップ
-      - スナップ 90%
+      - スナップ 90% / 70% / 50% / 30% それぞれ
         - 左 / 右 / 上 / 下
         - 左上 / 右上 / 左下 / 右下
         - 中央 / 水平方向に中央 / 垂直方向に中央
-      - スナップ 70% / 50% / 30% (スナップ 90% と同じ項目)
       - スナップ ディスプレイ全体
       - スナップ デスクトップ全体
     - 移動
       - 左端 / 右端 / 上端 / 下端
       - 左上 / 右上 / 左下 / 右下
     - (各ディスプレイのサブメニュー。先頭に「このディスプレイと同じ位置」)
-  - 他のグループへ連結
+  - 他のグループへ連結 (サブメニューで他のタブグループを列挙。連結先を選択)
   - タブの分離と分割
     - このタブを分離して位置移動 (「位置移動」と同じサブメニュー)
     - 他のグループへ連結
@@ -341,31 +413,6 @@ WindowTabs はタブインターフェースを持たない Windows アプリケ
 
 - 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
   https://qiita.com/standard-software/items/dd25270fa3895365fced
-
-## プロジェクトの経緯
-
-元々は Maurice Flanagan 氏によって2009年に開発され、当時は無料版と有料版が提供されていました。開発者は現在、このユーティリティをオープンソース化しています。
-
-- https://github.com/mauricef/WindowTabs (404 Not Found)
-
-redgis 氏がフォークし、VS2017 / .NET 4.0 に移行しました。
-
-- https://github.com/redgis/WindowTabs
-
-medlir 氏がコードを配置しています。
-- https://github.com/medlir/WindowTabs
-
-コミットログをみると、Mossy Flanagan 氏が初期のコミットを行っています。
-- https://github.com/mossy-xyz
-
-payaneco 氏が medlir/WindowTabs のコードをフォークしました。
-- https://github.com/payaneco/WindowTabs
-- https://github.com/payaneco/WindowTabs/network/members
-- https://ja.stackoverflow.com/a/53822
-
-leafOfTree 氏も様々な改良を加えたフォークを作成しています:
-- https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
 
 ## ライセンス
 
