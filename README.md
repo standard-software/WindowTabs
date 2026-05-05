@@ -4,11 +4,88 @@
 
 **Language:** [Japanese/日本語](README_Japanese.md)
 
-WindowTabs is a utility that enables a tabbed interface for Windows applications that don't have one, and across different executables as well. For example, you can manage Chrome and Edge together with tabs, or manage multiple Excel or Word windows together with tabs.
 
 ![Tabs](README_Image/Tabs.png)
 
-This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software). See [Project History](#Project-History) for the full lineage.
+
+WindowTabs is a tool that extends Windows productivity by letting you manage any window through a tabbed user interface (UI).
+
+<details>
+<summary>Read more about WindowTabs</summary>
+
+This tool is for those of you doing creative work on a PC. For example: accounting, customer support, slide deck preparation, business management, legal paperwork, electronic medical records, video editing, illustration, or — like me — software development. Doing this kind of work on a PC is itself a creative activity.
+
+In an era where smartphones and tablets cover most web browsing and entertainment, the fact that you go out of your way to use a Windows PC probably means you are engaged in some form of creative work.
+
+If you would like to improve how you operate Windows, WindowTabs will answer that desire. I have built its features and shipped versions specifically to meet that need.
+
+---
+
+I have been a paid user of WindowTabs since before it was open-sourced, using its tab UI very comfortably for years.
+
+Do you remember the early design of web browsers? Back then they had no tab UI. As browsers evolved, however, the value of the tab UI became universally recognized. Today every major browser ships with tabs, and their entire feature design is built on the assumption of tabs.
+
+In the same vein — just like in browsers — managing all your Windows windows through a tab UI is enormously convenient and important. Windows usability rises in one step: you no longer lose your sense of "where you are" mentally, and the cost of switching attention drops dramatically.
+
+I have long wished that this kind of operation would spread to more people, so over the years I have been using WindowTabs and trying out various similar tools.
+
+These days I keep asking myself: "What kind of operation is most efficient for the most people? How can I help work get done faster?" — and I'm gradually improving WindowTabs along those lines.
+
+I believe the people who use WindowTabs are operating Windows more efficiently because of it.
+
+Microsoft once prototyped a feature called **Sets** as an OS-level extension intended to manage every Windows window with tabs. The project was, however, discontinued. The exact reason isn't public, but I suspect integrating it into the OS internals was simply too difficult given backward-compatibility constraints. The idea behind the experience, though, is excellent. WindowTabs has — since well before Sets — delivered that tab UI without touching the OS internals.
+
+I believe this approach — sitting on top of the OS rather than inside it — is closer to the right answer for bringing a tab UI to Windows as a whole.
+
+---
+
+I am a software developer, and I normally build web applications. I've built things like a browser-based drawing tool, an in-browser car navigation app, and business chat tools.
+
+Personally I run 7 or 8 instances of VSCode, plus Visual Studio, multiple Windows Terminals, multiple WinMerges, a file explorer, an image viewer, and Excel — all managed under WindowTabs. Most of those apps already have their own tab UI, but I use WindowTabs to bundle them together at the window level. I color-code the VSCode tabs of related projects and apply the same color to the matching Windows Terminal and WinMerge tabs so the relationships are visible at a glance — extremely convenient.
+
+A use case that would probably benefit many people: bring all your Chrome, Edge, and Firefox windows — and their incognito/private windows — together into one tabbed window. Or as another use, group all your Excel, Word, and PowerPoint windows into a single window. I find this kind of organization extremely workable.
+
+This fork of WindowTabs also lets you snap windows to the left/right/top/bottom of a display, and even jump a window across displays in a single action. The Windows-native snap feature has been refined to be much easier to use. In a multi-display environment, switching window placement without resorting to drag-and-drop is very (overwhelmingly) convenient — I'm sure it will be useful for you too.
+
+---
+
+The real convenience of WindowTabs is something you can only fully feel once you've tried it. So if you are already a user, I would be very glad if you nudged others toward it — something along the lines of: "Hey, if you want a more comfortable Windows, try WindowTabs — it puts your windows into tabs."
+
+I'm building this primarily because I want it for myself. But if it can be useful to others and bring even a small positive impact to their work, that would make me very happy as a software developer.
+
+</details>
+
+<br />
+
+This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
+
+<details>
+<summary>Read more about the project history and the lineage of forks</summary>
+
+WindowTabs was originally developed by Maurice Flanagan in 2009 and was offered as both free and paid editions at the time. The original author has since open-sourced it.
+
+- https://github.com/mauricef/WindowTabs (404 Not Found)
+
+Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
+
+- https://github.com/redgis/WindowTabs
+
+Mr./Ms. medlir hosts the source code.
+- https://github.com/medlir/WindowTabs
+
+Looking at the commit log, Mossy Flanagan made the early commits.
+- https://github.com/mossy-xyz
+
+Mr./Ms. payaneco forked medlir/WindowTabs's source code.
+- https://github.com/payaneco/WindowTabs
+- https://github.com/payaneco/WindowTabs/network/members
+- https://ja.stackoverflow.com/a/53822
+
+Mr./Ms. leafOfTree also created a fork with various improvements:
+- https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
+
+</details>
 
 ## Index
 - [Version](#Version)
@@ -19,7 +96,6 @@ This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorpo
 - [Settings](#Settings)
 - [Building from Source](#Building-from-Source)
 - [Links](#Links)
-- [Project History](#Project-History)
 - [License](#License)
 - [Comments](#Comments)
 
@@ -55,18 +131,16 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 1. Download `WindowTabs.zip` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
 2. Extract the archive to your preferred location
-3. Run `WindowTabs.exe`
+3. Run `WindowTabs.exe` to launch it.
 
 
 ## Usage
 
-- Launch `WindowTabs.exe`.
-- Right-click the tray icon to access settings.
+- Right-click the WindowTabs tray icon to open the menu and access the settings dialog.
 - In the [Programs] tab of settings, choose programs you want tabs for.
 - Tabs will appear on those programs' windows.
-- Right-click on tabs to access tab-specific options.
+- Right-click on tabs to access the tab-specific menu.
 - Drag and drop tabs to combine them into tab groups.
-
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
@@ -341,31 +415,6 @@ Simply run the batch file to create the distribution packages.
 
 - 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
   https://qiita.com/standard-software/items/dd25270fa3895365fced
-
-## Project History
-
-It was originally developed by Maurice Flanagan in 2009 and was provided back then as both free and paid versions. The author has now open-sourced the utility.
-
-- https://github.com/mauricef/WindowTabs (404 Not Found)
-
-Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
-
-- https://github.com/redgis/WindowTabs
-
-Mr./Ms. medlir hosts the source code.
-- https://github.com/medlir/WindowTabs
-
-Looking at the commit log, Mossy Flanagan made the early commits.
-- https://github.com/mossy-xyz
-
-Mr./Ms. payaneco forked medlir/WindowTabs's source code.
-- https://github.com/payaneco/WindowTabs
-- https://github.com/payaneco/WindowTabs/network/members
-- https://ja.stackoverflow.com/a/53822
-
-Mr./Ms. leafOfTree also created a fork with various improvements:
-- https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
 
 ## License
 
