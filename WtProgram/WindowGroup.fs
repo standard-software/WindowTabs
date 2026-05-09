@@ -297,9 +297,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         | Some(topHwnd) ->
             let topWindow = this.os.windowFromHwnd(topHwnd)
             let topBounds = topWindow.bounds
+            // When the top window is maximized, its bounds already match the
+            // monitor work rect — skip per-exe margin on both sides.
+            let topMaximized = topWindow.isMaximized
+
             // If the top window has a margin, always expand to get group bounds
             let groupBounds =
-                if this.hasExeMargin(topHwnd) then
+                if this.hasExeMargin(topHwnd) && not topMaximized then
                     this.removeExeMarginForRead(topHwnd, topBounds)
                 else topBounds
 
@@ -308,7 +312,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 let window = this.os.windowFromHwnd(hwnd)
                 if window.isMinimized.not then
                     // Apply per-exe margin for this background window
-                    let targetBounds = this.applyExeMarginForWrite(hwnd, groupBounds)
+                    let targetBounds =
+                        if topMaximized then groupBounds
+                        else this.applyExeMarginForWrite(hwnd, groupBounds)
                     let currentBounds = window.bounds
                     // Keep current position but use correct size
                     let correctBounds = Rect(currentBounds.location, targetBounds.size)
@@ -323,7 +329,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                     if currentBounds.size <> correctBounds.size then
                         window.move(correctBounds)
                     // Track the margin-shrunk size for this window
-                    if this.hasExeMargin(hwnd) then
+                    if this.hasExeMargin(hwnd) && not topMaximized then
                         marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
             )
         | None -> ()
@@ -509,8 +515,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 else window.bounds
             // If the foreground window has a margin, always compensate to get the real group bounds.
             // LINE.exe always has 30px margin, so its bounds are always smaller than the group bounds.
+            // Skip when maximized: bounds already match the work rect.
             let adjustedBounds =
-                if this.hasExeMargin(window.hwnd) then
+                if this.hasExeMargin(window.hwnd) && not window.isMaximized then
                     System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] saveTopPlacement: compensating %s bounds=(%d,%d,%d,%d)"
                         window.pid.exeName bounds.x bounds.y bounds.width bounds.height)
                     this.removeExeMarginForRead(window.hwnd, bounds)
@@ -617,7 +624,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         let window = this.os.windowFromHwnd(hwnd)
         if placement.value.IsSome then
             let bounds,wp = placement.value.Value
-            let adjustedBounds = this.applyExeMarginForWrite(hwnd, bounds)
+            // Skip per-exe margin when target is maximized: bounds already match the work rect.
+            let targetMaximized = wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
+            let adjustedBounds =
+                if targetMaximized then bounds
+                else this.applyExeMarginForWrite(hwnd, bounds)
             System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] adjustWindowPlacement: %s bounds=(%d,%d,%d,%d) adjusted=(%d,%d,%d,%d) showCmd=%A windowShowCmd=%A"
                 window.pid.exeName bounds.x bounds.y bounds.width bounds.height
                 adjustedBounds.x adjustedBounds.y adjustedBounds.width adjustedBounds.height
@@ -632,14 +643,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
             else
                 // Apply DPI-aware handling when target is maximized (regardless of source state)
-                if wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
+                if targetMaximized then
                     //maximized windows won't move from one monitor to another by setting placement alone,
                     //need to first move to the new bounds, then set placement
                     this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
                 window.setPlacement(wp)
 
             // Track the margin-shrunk size for this window
-            if this.hasExeMargin(hwnd) then
+            if this.hasExeMargin(hwnd) && not targetMaximized then
                 marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (adjustedBounds.width, adjustedBounds.height)))
 
             // Note: Cases not covered above (e.g., maximized -> normal) do not require DPI handling

@@ -1,5 +1,8 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.05.01_next1
+- Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
+
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).
 - Settings dialog: added dark mode support, toggled via the new "Dark Mode (Menu and Settings Dialog)" option on the View tab.
