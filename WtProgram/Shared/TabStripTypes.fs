@@ -17,6 +17,11 @@ and TabDragInfo = {
     tabOffset: Pt
     imageOffset: Pt
     tabInfo: TabInfo
+    // Multi-select drag continuation: source group hwnd + selection snapshot
+    // (excluding the dragged tab) so the target group's dragEnter can move
+    // the selected tabs across along with the dragged tab.
+    sourceGroupHwnd: IntPtr
+    selectedHwnds: List<IntPtr>
     }
 
 and TabStripPlacment = {
@@ -54,14 +59,17 @@ and TabAppearanceInfo = {
     tabIndentFlipped : int
     tabIndentNormal : int
     tabInactiveTextColor : Color
+    tabSelectedTextColor : Color
     tabMouseOverTextColor : Color
     tabActiveTextColor : Color
     tabFlashTextColor : Color
     tabInactiveTabColor: Color
+    tabSelectedTabColor: Color
     tabMouseOverTabColor: Color
     tabActiveTabColor: Color
     tabFlashTabColor: Color
     tabInactiveBorderColor: Color
+    tabSelectedBorderColor: Color
     tabMouseOverBorderColor: Color
     tabActiveBorderColor: Color
     tabFlashBorderColor: Color

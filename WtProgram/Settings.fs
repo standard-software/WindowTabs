@@ -6,7 +6,17 @@ open System.IO
 open Microsoft.FSharp.Reflection
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
- 
+
+// Compute the per-channel midpoint of two RGB colors. Used to derive a
+// "Selected" color from the existing Inactive / MouseOver pair when a
+// preset or saved theme does not specify one explicitly.
+module ColorMix =
+    let midpoint (c1: Color) (c2: Color) =
+        Color.FromArgb(
+            (int c1.R + int c2.R) / 2,
+            (int c1.G + int c2.G) / 2,
+            (int c1.B + int c2.B) / 2)
+
 type Settings(isStandAlone) as this =
     let mutable cachedSettingsString = None
     let mutable cachedSettingsRec = None
@@ -72,6 +82,8 @@ type Settings(isStandAlone) as this =
         and set(settingsJson:JObject) = this.settingsString <- Some(settingsJson.ToString())
 
     member this.defaultTabAppearance =
+        let inactiveTab = Color.FromRGB(0x9FC4F0)
+        let mouseOverTab = Color.FromRGB(0xBDD5F4)
         {
             tabHeight = 25
             tabMaxWidth = 200
@@ -82,20 +94,25 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = 150
             tabIndentNormal = 4
             tabInactiveTextColor = Color.FromRGB(0x000000)
+            tabSelectedTextColor = Color.FromRGB(0x000000)
             tabMouseOverTextColor = Color.FromRGB(0x000000)
             tabActiveTextColor = Color.FromRGB(0x000000)
             tabFlashTextColor = Color.FromRGB(0x000000)
-            tabInactiveTabColor = Color.FromRGB(0x9FC4F0)
-            tabMouseOverTabColor = Color.FromRGB(0xBDD5F4)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0xFAFCFE)
             tabFlashTabColor = Color.FromRGB(0xFFBBBB)
             tabInactiveBorderColor = Color.FromRGB(0x3A70B1)
+            tabSelectedBorderColor = Color.FromRGB(0x3A70B1)
             tabMouseOverBorderColor = Color.FromRGB(0x3A70B1)
             tabActiveBorderColor = Color.FromRGB(0x3A70B1)
             tabFlashBorderColor = Color.FromRGB(0x3A70B1)
         }
 
     member this.darkModeTabAppearance =
+        let inactiveTab = Color.FromRGB(0x0D0D0D)
+        let mouseOverTab = Color.FromRGB(0x1E1E1E)
         {
             tabHeight = -1
             tabMaxWidth = -1
@@ -106,20 +123,25 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabSelectedTextColor = Color.FromRGB(0xFFFFFF)
             tabMouseOverTextColor = Color.FromRGB(0xFFFFFF)
             tabActiveTextColor = Color.FromRGB(0xFFFFFF)
             tabFlashTextColor = Color.FromRGB(0xFFFFFF)
-            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
-            tabMouseOverTabColor = Color.FromRGB(0x1E1E1E)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0x2D2D2D)
             tabFlashTabColor = Color.FromRGB(0x772222)
             tabInactiveBorderColor = Color.FromRGB(0x333333)
+            tabSelectedBorderColor = Color.FromRGB(0x333333)
             tabMouseOverBorderColor = Color.FromRGB(0x333333)
             tabActiveBorderColor = Color.FromRGB(0x333333)
             tabFlashBorderColor = Color.FromRGB(0x333333)
         }
 
     member this.darkModeBlueTabAppearance =
+        let inactiveTab = Color.FromRGB(0x111827)
+        let mouseOverTab = Color.FromRGB(0x4B5970)
         {
             tabHeight = -1
             tabMaxWidth = -1
@@ -130,20 +152,25 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0xE0E0E0)
+            tabSelectedTextColor = Color.FromRGB(0xE0E0E0)
             tabMouseOverTextColor = Color.FromRGB(0xE0E0E0)
             tabActiveTextColor = Color.FromRGB(0xE0E0E0)
             tabFlashTextColor = Color.FromRGB(0xE0E0E0)
-            tabInactiveTabColor = Color.FromRGB(0x111827)
-            tabMouseOverTabColor = Color.FromRGB(0x4B5970)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0x273548)
             tabFlashTabColor = Color.FromRGB(0x991B1B)
             tabInactiveBorderColor = Color.FromRGB(0x374151)
+            tabSelectedBorderColor = Color.FromRGB(0x374151)
             tabMouseOverBorderColor = Color.FromRGB(0x374151)
             tabActiveBorderColor = Color.FromRGB(0x374151)
             tabFlashBorderColor = Color.FromRGB(0x374151)
         }
 
     member this.lightMonoTabAppearance =
+        let inactiveTab = Color.FromRGB(0xA0A0A0)
+        let mouseOverTab = Color.FromRGB(0xD0D0D0)
         {
             tabHeight = -1
             tabMaxWidth = -1
@@ -154,20 +181,25 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0x000000)
+            tabSelectedTextColor = Color.FromRGB(0x000000)
             tabMouseOverTextColor = Color.FromRGB(0x000000)
             tabActiveTextColor = Color.FromRGB(0x000000)
             tabFlashTextColor = Color.FromRGB(0x000000)
-            tabInactiveTabColor = Color.FromRGB(0xA0A0A0)
-            tabMouseOverTabColor = Color.FromRGB(0xD0D0D0)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0xFFFFFF)
             tabFlashTabColor = Color.FromRGB(0xD4D4D4)
             tabInactiveBorderColor = Color.FromRGB(0x252525)
+            tabSelectedBorderColor = Color.FromRGB(0x252525)
             tabMouseOverBorderColor = Color.FromRGB(0x252525)
             tabActiveBorderColor = Color.FromRGB(0x252525)
             tabFlashBorderColor = Color.FromRGB(0x252525)
         }
 
     member this.darkMonoTabAppearance =
+        let inactiveTab = Color.FromRGB(0x0D0D0D)
+        let mouseOverTab = Color.FromRGB(0xDDDDDD)
         {
             tabHeight = -1
             tabMaxWidth = -1
@@ -178,20 +210,25 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabSelectedTextColor = Color.FromRGB(0xFFFFFF)
             tabMouseOverTextColor = Color.FromRGB(0x111111)
             tabActiveTextColor = Color.FromRGB(0xFFFFFF)
             tabFlashTextColor = Color.FromRGB(0xFFFFFF)
-            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
-            tabMouseOverTabColor = Color.FromRGB(0xDDDDDD)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0x616161)
             tabFlashTabColor = Color.FromRGB(0x808080)
             tabInactiveBorderColor = Color.FromRGB(0x787878)
+            tabSelectedBorderColor = Color.FromRGB(0x787878)
             tabMouseOverBorderColor = Color.FromRGB(0xF2F2F2)
             tabActiveBorderColor = Color.FromRGB(0x6B6B6B)
             tabFlashBorderColor = Color.FromRGB(0x787878)
         }
 
     member this.darkRedFrameTabAppearance =
+        let inactiveTab = Color.FromRGB(0x0D0D0D)
+        let mouseOverTab = Color.FromRGB(0xB13A3A)
         {
             tabHeight = -1
             tabMaxWidth = -1
@@ -202,14 +239,17 @@ type Settings(isStandAlone) as this =
             tabIndentFlipped = -1
             tabIndentNormal = -1
             tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabSelectedTextColor = Color.FromRGB(0xFFFFFF)
             tabMouseOverTextColor = Color.FromRGB(0x111111)
             tabActiveTextColor = Color.FromRGB(0xB13A3A)
             tabFlashTextColor = Color.FromRGB(0xFFFFFF)
-            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
-            tabMouseOverTabColor = Color.FromRGB(0xB13A3A)
+            tabInactiveTabColor = inactiveTab
+            tabSelectedTabColor = ColorMix.midpoint inactiveTab mouseOverTab
+            tabMouseOverTabColor = mouseOverTab
             tabActiveTabColor = Color.FromRGB(0x250A0B)
             tabFlashTabColor = Color.FromRGB(0x808080)
             tabInactiveBorderColor = Color.FromRGB(0xB13A3A)
+            tabSelectedBorderColor = Color.FromRGB(0xB13A3A)
             tabMouseOverBorderColor = Color.FromRGB(0xFF6666)
             tabActiveBorderColor = Color.FromRGB(0xCC4444)
             tabFlashBorderColor = Color.FromRGB(0xB13A3A)

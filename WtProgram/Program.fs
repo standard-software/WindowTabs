@@ -117,6 +117,12 @@ type Program() as this =
     let inShutdown = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
+    // Case C: hwnds recently placed into a group via the multi-select
+    // drag-detach path. removeUntabableWindows skips these for a short
+    // grace period so the dragExit off-screen parking doesn't cause the
+    // window to be stripped from the new group before it gets repositioned.
+    let recentlyPlacedHwnds = Cell.create(Map2() : Map2<IntPtr, DateTime>)
+    let recentlyPlacedGraceMs = 2000.0
     // Track pending new window launches: process path -> (target group hwnd, invoker tab hwnd, timestamp)
     let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * IntPtr * DateTime>())
     // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
@@ -314,12 +320,33 @@ type Program() as this =
             gi.destroy()
 
     member this.removeUntabableWindows() =
+        // Case C: prune expired entries from the recently-placed grace map
+        // first so it doesn't grow unboundedly.
+        let now = DateTime.Now
+        let expired =
+            recentlyPlacedHwnds.value.items.list
+            |> List.filter (fun (_, ts) -> (now - ts).TotalMilliseconds > recentlyPlacedGraceMs)
+            |> List.map fst
+        if not (List.isEmpty expired) then
+            recentlyPlacedHwnds.map(fun m ->
+                expired |> List.fold (fun acc h -> acc.remove h) m)
+        let isRecentlyPlaced(hwnd) =
+            match recentlyPlacedHwnds.value.tryFind(hwnd) with
+            | Some _ -> true
+            | None -> false
         this.desktop.groups.iter <| fun gi ->
             gi.windows.iter <| fun hwnd ->
                 let window = os.windowFromHwnd(hwnd)
                 // Only remove windows that are on the current virtual desktop and not tabbable
                 // Don't remove windows on other virtual desktops to preserve tab groups during desktop switch
-                if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window).not then
+                // Case C: also skip windows that were just placed into a
+                // group via the multi-select drag-detach path — they may
+                // still be at the dragExit off-screen parking location
+                // while their adjustChildWindows hasn't run yet.
+                if window.isOnCurrentVirtualDesktop &&
+                   this.isTabbableWindow(window).not &&
+                   not (isRecentlyPlaced(hwnd))
+                then
                     gi.removeWindow hwnd
 
     member this.findGroupForWindow(window:Window) =
@@ -916,6 +943,11 @@ type Program() as this =
                 let newPaths = paths.remove procPath
                 settingsJson.setStringArray(categoryKey, newPaths.items)
             settingsManager.settingsJson <- settingsJson
+
+        member x.markRecentlyPlaced(hwnds) =
+            let now = DateTime.Now
+            recentlyPlacedHwnds.map(fun m ->
+                hwnds |> List.fold (fun acc h -> acc.add h now) m)
 
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =

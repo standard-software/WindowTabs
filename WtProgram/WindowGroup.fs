@@ -72,6 +72,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     let isDestroyed = Cell.create(false)
     let zorderCell = Cell.create(List2<IntPtr>())
+    // Set of inactive tabs that the user has "selected" via Shift/Ctrl click.
+    // The active tab (zorder.head) is NEVER part of this set; treat it
+    // implicitly as another action target alongside the selected ones. The
+    // set is cleared by a plain left click on any tab and by adding/removing
+    // windows from the group.
+    let selectedTabsCell = Cell.create(Set2<IntPtr>())
     let prevTop = Cell.create(None)
     let placement = Cell.create(None:Option<Rect * OSWindowPlacement>)
     let windowsCell = Cell.create(Set2())
@@ -420,6 +426,73 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.pinnedCount = this.ts.pinnedTabs.count
     member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
     member this.nonePinned = this.ts.pinnedTabs.count = 0
+
+    // ----- Multi-tab selection -----
+    // The active tab is treated as an implicit action target alongside the
+    // selected ones, so selectedTabsCell explicitly excludes it. Helpers
+    // below maintain that invariant. WindowGroup is the source of truth (in
+    // IntPtr form); it mirrors changes into the underlying TabStrip (in Tab
+    // form) so the sprite layer can read them per-frame without translation.
+    member private this.activeHwnd = zorderCell.value.tryHead
+    member private this.pushSelectedToTabStrip(next: Set2<IntPtr>) =
+        let asTabs = next.items.map(Tab) |> Set2
+        this.ts.setSelectedTabs(asTabs)
+    member private this.applySelected(next: Set2<IntPtr>) =
+        let cur = selectedTabsCell.value
+        if next <> cur then
+            selectedTabsCell.set(next)
+            this.pushSelectedToTabStrip(next)
+    member this.selectedTabs = selectedTabsCell.value
+    member this.isSelected(hwnd: IntPtr) = selectedTabsCell.value.contains(hwnd)
+    member this.clearSelected() = this.applySelected(Set2<IntPtr>())
+    // Set or clear the selected flag for a single tab. Setting it on the
+    // active tab is a no-op (active is always the implicit target).
+    member this.setSelected(hwnd: IntPtr, isSel: bool) =
+        let isActive = this.activeHwnd.exists((=) hwnd)
+        if isActive then ()
+        else
+            let cur = selectedTabsCell.value
+            let next =
+                if isSel then cur.add(hwnd)
+                else cur.remove(hwnd)
+            this.applySelected(next)
+    member this.toggleSelected(hwnd: IntPtr) =
+        this.setSelected(hwnd, this.isSelected(hwnd).not)
+    // Select the inclusive range of tabs from the currently active tab to
+    // `targetHwnd` in visualOrder. The active tab itself is NOT placed into
+    // the selected set (it is the implicit target). Called by Shift+click.
+    member this.selectRange(targetHwnd: IntPtr) =
+        match this.activeHwnd with
+        | None ->
+            this.applySelected(Set2(List2([targetHwnd])))
+        | Some active when active = targetHwnd ->
+            this.clearSelected()
+        | Some active ->
+            let order = this.ts.visualOrder.list |> List.map (fun (Tab h) -> h)
+            let idxActive = order |> List.tryFindIndex ((=) active)
+            let idxTarget = order |> List.tryFindIndex ((=) targetHwnd)
+            match idxActive, idxTarget with
+            | Some a, Some t ->
+                let lo = min a t
+                let hi = max a t
+                let inRange = order |> List.mapi (fun i h -> i, h) |> List.filter (fun (i, _) -> i >= lo && i <= hi) |> List.map snd
+                let filtered = inRange |> List.filter (fun h -> h <> active)
+                let next = Set2(List2(filtered))
+                this.applySelected(next)
+            | _ ->
+                ()
+    // Action targets for commands such as close / color / detach: the active
+    // tab first (so commands that need a "primary" still get one), then the
+    // selected tabs in visualOrder. Excludes the active tab from the
+    // selected portion to avoid duplicates.
+    member this.actionTargetTabs() =
+        let selected = selectedTabsCell.value
+        match this.activeHwnd with
+        | None -> selected.items.list
+        | Some active ->
+            let order = this.ts.visualOrder.list |> List.map (fun (Tab h) -> h)
+            let othersInOrder = order |> List.filter (fun h -> h <> active && selected.contains(h))
+            active :: othersInOrder
     member this.countToLeft(hwnd) = this.ts.countToLeft(Tab(hwnd))
     member this.countToRight(hwnd) = this.ts.countToRight(Tab(hwnd))
     member this.pinLeftTabs(hwnd) =
@@ -942,6 +1015,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
             this.ts.removeTab(Tab(hwnd))
             this.setWindows(this.windows.remove hwnd)
+            // Drop the closed hwnd from the multi-select set so a stale
+            // entry can never linger past the tab's life.
+            if selectedTabsCell.value.contains(hwnd) then
+                this.applySelected(selectedTabsCell.value.remove(hwnd))
             hookCleanup.value.find(hwnd).Dispose()
             hookCleanup.map(fun hooks -> hooks.remove(hwnd))
             removedEvent.Trigger(hwnd)
@@ -996,18 +1073,24 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             if window.isMinimized then
                 window.showWindow(ShowWindowCommands.SW_SHOWNOACTIVATE)
         
-    member this.tabActivate(Tab(hwnd), force) = 
+    member this.tabActivate(Tab(hwnd), force) =
         let window = this.os.windowFromHwnd(hwnd)
         let tsWindow = this.os.windowFromHwnd(this.ts.hwnd)
-        
+
+        // If the tab being activated was previously in the selection set,
+        // remove it — the active tab is always the implicit primary action
+        // target and is never simultaneously "selected".
+        if selectedTabsCell.value.contains(hwnd) then
+            this.applySelected(selectedTabsCell.value.remove(hwnd))
+
         // Check if we need to prevent flashing when tabs are inside
         let isTabInside = this.ts.showInside
         let isUWP = window.className = "ApplicationFrameWindow"
-        
+
         // Temporarily set TOPMOST for non-UWP windows when tabs are inside to prevent flashing
         if isTabInside && not isUWP then
             tsWindow.makeTopMost()
-        
+
         window.setForegroundOrRestore(force)
         window.bringToTop()
         // Update WindowGroup's internal zorder state immediately

@@ -102,6 +102,13 @@ type DragAction(info:DragActionInfo) as this =
         animationWindowCell.value.iter <| fun window -> window.Dispose()
         match dragStateCell.value.Value with
         | :? DragDetectingState ->
+            // Call target.dragEnd on cancel too so the source decorator can
+            // finalize state (e.g. reduce multi-select after a click that
+            // never produced a drag past the 5px threshold). target.dragEnd
+            // is idempotent — it just resets transient drag-state flags.
+            // notifications.dragEnd is NOT called here because it pairs with
+            // notifications.dragBegin (only emitted from dragDetect.onBegin).
+            info.targets.values.iter <| fun target -> target.dragEnd()
             info.onCancel()
         | :? DragCapturedState ->
             info.targets.values.iter <| fun target -> target.dragEnd()
