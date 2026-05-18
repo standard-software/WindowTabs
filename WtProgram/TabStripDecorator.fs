@@ -100,6 +100,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let doubleClickProtectUntil = ref System.DateTime.MinValue
     let firstClickTab = ref None  // Track the tab that was clicked first in potential double-click
 
+    // Explorer-like selection: was the MouseDown'd tab already part of the
+    // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
+    // reduces the selection to just the clicked tab (clears the multi-select).
+    let mouseDownOnSelected : bool ref = ref false
+
     do this.init()
 
     member this.ts = _ts
@@ -349,6 +354,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.onCloseWindow hwnd =
         os.windowFromHwnd(hwnd).close()
+
+    // Compute the set of hwnds an "operate on this tab" command should
+    // target. When no multi-select is active the behaviour is unchanged
+    // (just the right-clicked hwnd). When a multi-select is active the
+    // command propagates to "active tab + selected tabs", and the
+    // right-clicked hwnd is unioned in so the menu's named target is
+    // always included.
+    member private this.actionTargets(hwnd: IntPtr) : List<IntPtr> =
+        let selected = group.selectedTabs
+        if selected.count = 0 then [hwnd]
+        else
+            let targets = group.actionTargetTabs()
+            if targets |> List.contains hwnd then targets
+            else hwnd :: targets
 
     member private this.onCloseOtherWindows hwnd =
         group.windows.items.where((<>)hwnd).iter this.onCloseWindow
@@ -676,6 +695,211 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         finally
             (ThreadHelper.cancelablePostBack 200 <| fun() ->
                 Services.program.resumeTabMonitoring()) |> ignore
+
+    // ----- Multi-tab detach: shared core -----
+    // Generic multi-tab detach. Takes an explicit list of hwnds (in visual
+    // order) and detaches them all into a single new tab group; the seed
+    // window's final placement (position / snap / move) is decided by the
+    // caller via `applyToSeedWindow`. Modeled after the splitRightTabsToXxx
+    // pattern: detach the first tab to seed a new group, then move the
+    // remaining tabs into that group once it has been created.
+    // Caller must guarantee tabsInOrder has at least 2 entries (single-tab
+    // callers go through the original single-tab detach helpers).
+    member private this.detachTabsCommon(
+            tabsInOrder: List<IntPtr>,
+            applyToSeedWindow: System.Windows.Forms.Screen -> Rect -> unit
+        ) =
+        match tabsInOrder with
+        | [] | [_] -> ()
+        | firstHwnd :: remainingHwnds ->
+            let window = os.windowFromHwnd(firstHwnd)
+            let bounds = window.bounds
+            let screen = this.getCurrentScreenForWindow(firstHwnd)
+
+            // Step 1: detach seed tab from this group; place / snap window.
+            Services.program.suspendTabMonitoring()
+            try
+                this.ts.removeTab(Tab(firstHwnd))
+                group.removeWindow(firstHwnd)
+
+                window.hideOffScreen(None)
+
+                if window.isMinimized || window.isMaximized then
+                    window.showWindow(ShowWindowCommands.SW_RESTORE)
+
+                applyToSeedWindow screen bounds
+
+                notifyDetached(firstHwnd)
+            finally
+                Services.program.resumeTabMonitoring()
+
+            // Step 2: wait for the new group to be created.
+            let mutable newGroupFound = None
+            let mutable attempts = 0
+            let maxAttempts = 50
+            while newGroupFound.IsNone && attempts < maxAttempts do
+                System.Threading.Thread.Sleep(20)
+                attempts <- attempts + 1
+                newGroupFound <- lock decorators (fun () ->
+                    decorators.Values
+                    |> Seq.tryFind (fun d ->
+                        d.group.windows.contains firstHwnd && d.group.hwnd <> group.hwnd))
+
+            // Step 3: move the remaining tabs into the freshly created group.
+            match newGroupFound with
+            | Some targetDecorator ->
+                Services.program.suspendTabMonitoring()
+                try
+                    remainingHwnds |> List.iter (fun tabHwnd ->
+                        let tab = Tab(tabHwnd)
+                        let tabWindow = os.windowFromHwnd(tabHwnd)
+
+                        if this.ts.tabs.contains(tab) then
+                            this.ts.removeTab(tab)
+                        if group.windows.contains tabHwnd then
+                            group.removeWindow(tabHwnd)
+
+                        System.Threading.Thread.Sleep(50)
+
+                        tabWindow.hideOffScreen(None)
+
+                        targetDecorator.group.invokeSync(fun() ->
+                            if not (targetDecorator.group.windows.contains tabHwnd) then
+                                targetDecorator.group.addWindow(tabHwnd, false)
+                                tabWindow.showWindow(ShowWindowCommands.SW_SHOW)))
+                finally
+                    Services.program.resumeTabMonitoring()
+            | None -> ()
+
+    // Specific multi-tab detach variants — each just defines the
+    // applyToSeedWindow callback for detachTabsCommon.
+
+    member private this.detachTabsToPosition(tabsInOrder: List<IntPtr>, position: Option<string>) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToPosition(singleHwnd, position)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun screen bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                window.setPositionOnly bounds.location.x bounds.location.y
+                let (newX, newY) = this.calculatePositionInWorkArea(
+                    position, screen.WorkingArea,
+                    bounds.location.x, bounds.location.y,
+                    bounds.size.width, bounds.size.height)
+                if newX <> bounds.location.x || newY <> bounds.location.y then
+                    window.setPositionOnly newX newY)
+
+    member private this.detachTabsToSnap(tabsInOrder: List<IntPtr>, snapDirection: string) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToSnap(singleHwnd, snapDirection)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun screen bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
+                    snapDirection, screen.WorkingArea,
+                    bounds.size.width, bounds.size.height)
+                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+
+    member private this.detachTabsToSnapWithPercent(tabsInOrder: List<IntPtr>, snapDirection: string, percent: int) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToSnapWithPercent(singleHwnd, snapDirection, percent)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun screen _bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
+                    snapDirection, percent, screen.WorkingArea)
+                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+
+    member private this.detachTabsToScreen(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToScreen(singleHwnd, targetScreen, position)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                // Mirror detachTabToScreen: maintain size %, move to target screen.
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+                let targetWorkArea = targetScreen.WorkingArea
+                let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+                // Preserve relative position within the work area before
+                // applying the requested position adjustment.
+                let xOffsetPercent = float(bounds.location.x - sourceWorkArea.X) / float(sourceWorkArea.Width)
+                let yOffsetPercent = float(bounds.location.y - sourceWorkArea.Y) / float(sourceWorkArea.Height)
+                let initialX = targetWorkArea.X + int(float(targetWorkArea.Width) * xOffsetPercent)
+                let initialY = targetWorkArea.Y + int(float(targetWorkArea.Height) * yOffsetPercent)
+                window.move (Rect(Pt(initialX, initialY), Sz(newWidth, newHeight)))
+                let (newX, newY) = this.calculatePositionInWorkArea(
+                    position, targetWorkArea, initialX, initialY, newWidth, newHeight)
+                if newX <> initialX || newY <> initialY then
+                    window.setPositionOnly newX newY)
+
+    member private this.detachTabsToScreenSnap(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToScreenSnap(singleHwnd, targetScreen, snapDirection)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                let sourceWorkArea = sourceScreen.WorkingArea
+                let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
+                let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
+                let targetWorkArea = targetScreen.WorkingArea
+                let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+                let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+                let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
+                    snapDirection, targetWorkArea, newWidth, newHeight)
+                window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))))
+
+    member private this.detachTabsToScreenSnapWithPercent(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
+        match tabsInOrder with
+        | [] -> ()
+        | [singleHwnd] -> this.detachTabToScreenSnapWithPercent(singleHwnd, targetScreen, snapDirection, percent)
+        | _ ->
+            this.detachTabsCommon(tabsInOrder, fun _src _bounds ->
+                let window = os.windowFromHwnd(List.head tabsInOrder)
+                let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
+                    snapDirection, percent, targetScreen.WorkingArea)
+                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+
+    // Resolve the action-target list for the detach menu and order it
+    // by visualOrder so that the resulting tab strip matches the source
+    // ordering. Used when a multi-select is active; otherwise the menu
+    // dispatches to the single-tab detach path.
+    member private this.actionTargetsInVisualOrder(hwnd: IntPtr) : List<IntPtr> =
+        let raw = this.actionTargets(hwnd) |> Set.ofList
+        this.ts.visualOrder.list
+        |> List.choose (fun (Tab(h)) -> if raw.Contains(h) then Some h else None)
+
+    // ----- Detach menu dispatchers (single vs multi-tab) -----
+    member private this.detachOrSplitToPosition(hwnd: IntPtr, position: Option<string>) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToPosition(hwnd, position)
+        else this.detachTabsToPosition(targets, position)
+    member private this.detachOrSplitToSnap(hwnd: IntPtr, snapDirection: string) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToSnap(hwnd, snapDirection)
+        else this.detachTabsToSnap(targets, snapDirection)
+    member private this.detachOrSplitToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToSnapWithPercent(hwnd, snapDirection, percent)
+        else this.detachTabsToSnapWithPercent(targets, snapDirection, percent)
+    member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToScreen(hwnd, targetScreen, position)
+        else this.detachTabsToScreen(targets, targetScreen, position)
+    member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToScreenSnap(hwnd, targetScreen, snapDirection)
+        else this.detachTabsToScreenSnap(targets, targetScreen, snapDirection)
+    member private this.detachOrSplitToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
+        let targets = this.actionTargetsInVisualOrder(hwnd)
+        if List.length targets <= 1 then this.detachTabToScreenSnapWithPercent(hwnd, targetScreen, snapDirection, percent)
+        else this.detachTabsToScreenSnapWithPercent(targets, targetScreen, snapDirection, percent)
 
     member private this.getTabHeightForSnap() =
         try
@@ -2788,15 +3012,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = None
                         items = List2([
                             (let targetAlign = match currentAlignment with TopLeft -> TopRight | TopRight -> TopLeft
-                             let targetAlignLabel = match currentAlignment with
-                                                    | TopLeft -> Localization.getString("AlignThisTabRight")
-                                                    | TopRight -> Localization.getString("AlignThisTabLeft")
+                             let alignTargets = this.actionTargets(hwnd)
+                             let alignText =
+                                if alignTargets.Length > 1 then
+                                    match currentAlignment with
+                                    | TopLeft -> System.String.Format(Localization.getString("AlignSelectedTabsRightFormat"), alignTargets.Length)
+                                    | TopRight -> System.String.Format(Localization.getString("AlignSelectedTabsLeftFormat"), alignTargets.Length)
+                                else
+                                    let label =
+                                        match currentAlignment with
+                                        | TopLeft -> Localization.getString("AlignThisTabRight")
+                                        | TopRight -> Localization.getString("AlignThisTabLeft")
+                                    label + " : " + shortTabName
                              CmiRegular({
-                                text = targetAlignLabel + " : " + shortTabName
+                                text = alignText
                                 image = None
                                 flags = List2()
                                 click = fun() ->
-                                    group.setTabAlign(hwnd, targetAlign)
+                                    alignTargets |> List.iter (fun h -> group.setTabAlign(h, targetAlign))
                             }))
                             CmiSeparator
                             (let leftCount = group.alignCountToLeft(hwnd)
@@ -2841,11 +3074,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let tabPinSubMenu =
             let isPinned = group.isPinned(hwnd)
             let tabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+            let pinTargets = this.actionTargets(hwnd)
             let pinToggleText =
-                if isPinned then
-                    Localization.getString("UnpinThisTab") + " : " + tabName
+                if pinTargets.Length > 1 then
+                    if isPinned then
+                        System.String.Format(Localization.getString("UnpinSelectedTabsFormat"), pinTargets.Length)
+                    else
+                        System.String.Format(Localization.getString("PinSelectedTabsFormat"), pinTargets.Length)
                 else
-                    Localization.getString("PinThisTab") + " : " + tabName
+                    if isPinned then
+                        Localization.getString("UnpinThisTab") + " : " + tabName
+                    else
+                        Localization.getString("PinThisTab") + " : " + tabName
             CmiPopUp({
                 text = Localization.getString("PinTabMenu")
                 image = None
@@ -2855,8 +3095,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = None
                         flags = List2()
                         click = fun() ->
-                            if isPinned then group.unpinTab(hwnd)
-                            else group.pinTab(hwnd)
+                            // Apply pin/unpin to the right-clicked tab plus
+                            // any selected tabs (and the active tab) in
+                            // multi-select mode. The decision (pin vs unpin)
+                            // is taken from the right-clicked tab's current
+                            // state to keep "Pin this tab" and "Unpin this
+                            // tab" predictable.
+                            let targets = this.actionTargets(hwnd)
+                            if isPinned then
+                                targets |> List.iter group.unpinTab
+                            else
+                                targets |> List.iter group.pinTab
                     })
                     CmiSeparator
                     (let count = group.countToLeft(hwnd)
@@ -3009,20 +3258,33 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let leftHwnds = vo.list |> List.take (currentTabIndex + 1) |> List.map (fun (Tab(h)) -> h)
             let rightHwnds = vo.list |> List.skip currentTabIndex |> List.map (fun (Tab(h)) -> h)
 
-            // This tab color submenu
+            // This tab color submenu — operates on the right-clicked tab
+            // plus any multi-selected tabs (and the active tab) when a
+            // selection is active. Otherwise it stays single-tab.
+            let colorTargets = this.actionTargets(hwnd)
+            let thisTabSubMenuText =
+                if colorTargets.Length > 1 then
+                    String.Format(Localization.getString("TabColorSelectedTabsFormat"), colorTargets.Length)
+                else
+                    String.Format(Localization.getString("TabColorThisTab"), shortTabText)
             let thisTabSubMenu =
                 CmiPopUp({
-                    text = String.Format(Localization.getString("TabColorThisTab"), shortTabText)
+                    text = thisTabSubMenuText
                     image = None
-                    items = List2(buildColorItems [hwnd] true)
+                    items = List2(buildColorItems colorTargets true)
                     flags = List2()
                 })
+            let clearThisTabText =
+                if colorTargets.Length > 1 then
+                    String.Format(Localization.getString("TabColorClearSelectedTabsFormat"), colorTargets.Length)
+                else
+                    Localization.getString("TabColorClearThisTab")
             let clearThisTabItem =
                 CmiRegular({
-                    text = Localization.getString("TabColorClearThisTab")
+                    text = clearThisTabText
                     image = None
                     flags = List2()
-                    click = clearColorFor [hwnd]
+                    click = clearColorFor colorTargets
                 })
             // Left tabs color submenu (includes current tab)
             let leftTabsSubMenu =
@@ -3145,11 +3407,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         let closeTabItem =
-            let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+            let closeTargets = this.actionTargets(hwnd)
+            let menuText =
+                if closeTargets.Length > 1 then
+                    String.Format(Localization.getString("CloseSelectedTabsFormat"), closeTargets.Length)
+                else
+                    let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+                    String.Format(Localization.getString("CloseTab"), displayText)
             CmiRegular({
-                text = String.Format(Localization.getString("CloseTab"), displayText)
+                text = menuText
                 image = None
-                click = fun() -> this.onCloseWindow hwnd
+                click = fun() ->
+                    closeTargets |> List.iter this.onCloseWindow
                 flags = List2()
             })
 
@@ -3228,17 +3497,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
+            // When the user has a multi-select active, "Detach this tab"
+            // detaches the active + selected tabs together into ONE new tab
+            // group (similar shape to Split Right/Left). detachOrSplitToPosition
+            // handles both cases (single-tab fallback when no selection).
             let samePositionItem = [
-                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachTabToPosition(hwnd, None)); flags = List2() })
+                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachOrSplitToPosition(hwnd, None)); flags = List2() })
                 CmiSeparator
             ]
 
             let baseMenuItems =
                 samePositionItem @
                 buildPositionMoveInnerItems true
-                    (fun pos -> this.detachTabToPosition(hwnd, pos))
-                    (fun dir -> this.detachTabToSnap(hwnd, dir))
-                    (fun dir pct -> this.detachTabToSnapWithPercent(hwnd, dir, pct))
+                    (fun pos -> this.detachOrSplitToPosition(hwnd, pos))
+                    (fun dir -> this.detachOrSplitToSnap(hwnd, dir))
+                    (fun dir pct -> this.detachOrSplitToSnapWithPercent(hwnd, dir, pct))
 
             let menuItems =
                 if allScreens.Length > 1 then
@@ -3247,9 +3520,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         |> Array.map (fun screen ->
                             let isCurrentScreen = screen.Equals(currentScreen)
                             buildScreenPositionSubMenu screen isCurrentScreen
-                                (fun s pos -> this.detachTabToScreen(hwnd, s, pos))
-                                (fun s dir -> this.detachTabToScreenSnap(hwnd, s, dir))
-                                (fun s dir pct -> this.detachTabToScreenSnapWithPercent(hwnd, s, dir, pct))
+                                (fun s pos -> this.detachOrSplitToScreen(hwnd, s, pos))
+                                (fun s dir -> this.detachOrSplitToScreenSnap(hwnd, s, dir))
+                                (fun s dir pct -> this.detachOrSplitToScreenSnapWithPercent(hwnd, s, dir, pct))
                                 (fun s -> this.getScreenName(s))
                         )
                         |> Array.toList
@@ -3258,8 +3531,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 else
                     baseMenuItems
 
+            let detachMoveTargets = this.actionTargets(hwnd)
+            let detachMoveText =
+                if detachMoveTargets.Length > 1 then
+                    System.String.Format(Localization.getString("DetachSelectedTabsAndMovePosFormat"), detachMoveTargets.Length)
+                else
+                    Localization.getString("DetachAndMovePosTab")
             Some(CmiPopUp({
-                text = Localization.getString("DetachAndMovePosTab")
+                text = detachMoveText
                 image = None
                 items = List2(menuItems)
                 flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
@@ -3652,8 +3931,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                             text = menuText
                                             image = info.firstTabIcon
                                             click = fun() ->
-                                                // Move the tab to the target group
-                                                this.moveTabToGroup(hwnd, decorator.group)
+                                                // Move the right-clicked tab plus any
+                                                // selected tabs (and the active tab) to
+                                                // the target group when multi-select is
+                                                // active. Otherwise just move the
+                                                // right-clicked tab.
+                                                this.actionTargets(hwnd)
+                                                |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group))
                                             flags = List2()
                                         }))
                                     | None ->
@@ -3664,8 +3948,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     None
                             )
 
+                        let detachLinkTargets = this.actionTargets(hwnd)
+                        let detachLinkText =
+                            if detachLinkTargets.Length > 1 then
+                                System.String.Format(Localization.getString("DetachSelectedTabsAndDockingToGroupFormat"), detachLinkTargets.Length)
+                            else
+                                Localization.getString("DetachAndDockingTabToGroup")
                         Some(CmiPopUp({
-                            text = Localization.getString("DetachAndDockingTabToGroup")
+                            text = detachLinkText
                             image = None
                             items = List2(menuItems)
                             flags = if group.zorder.value.length <= 1 then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -3991,30 +4281,105 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | MouseRight ->
                     os.windowFromHwnd(group.topWindow).setForeground(false)
                 | MouseLeft ->
-                    group.tabActivate(tab, false)
-                    if part <> TabClose && part <> TabPin then
-                        let tabInfo = this.ts.tabInfo(tab)
-                        let originalTabLocation = this.ts.tabLocation tab
-                        let clickOffsetInTab = pt.sub(originalTabLocation)
+                    // Read modifier keys at click time for multi-tab selection.
+                    //   plain   : Explorer-like behavior (see below)
+                    //   Shift   : select range from active to clicked
+                    //                    (selection is updated; active does NOT move)
+                    //   Ctrl    : toggle selection on the clicked inactive tab
+                    //                    (active does NOT move; clicking active is a no-op)
+                    let mods = System.Windows.Forms.Control.ModifierKeys
+                    let shiftHeld = (mods &&& System.Windows.Forms.Keys.Shift) = System.Windows.Forms.Keys.Shift
+                    let ctrlHeld = (mods &&& System.Windows.Forms.Keys.Control) = System.Windows.Forms.Keys.Control
+                    if shiftHeld && part <> TabClose && part <> TabPin then
+                        group.selectRange(hwnd)
+                    elif ctrlHeld && part <> TabClose && part <> TabPin then
+                        // Ctrl+click on the active tab is a no-op per spec.
+                        if hwnd <> group.topWindow then
+                            group.toggleSelected(hwnd)
+                    else
+                        // Plain left click — Explorer-like selection model:
+                        //   click on UNSELECTED tab : clear selection, then activate
+                        //                             (MouseUp does nothing extra)
+                        //   click on SELECTED tab   : keep the full selection set
+                        //                             ({active} ∪ selected) unchanged —
+                        //                             active moves to the clicked tab and
+                        //                             the previously-active tab joins the
+                        //                             selected set
+                        //   click on SELECTED tab + drag : keep selection through drag
+                        //                                  (drag-detach carries the selection)
+                        //   MouseUp on a "selected click" without drag : reduce to single
+                        // The active tab itself counts as "selected" since the
+                        // selection set is the implicit set + the active tab.
+                        let wasSelected = group.isSelected(hwnd) || hwnd = group.topWindow
+                        mouseDownOnSelected := wasSelected
+                        if not wasSelected then
+                            group.clearSelected()
+                            group.tabActivate(tab, false)
+                        else
+                            // Activate first so prevActiveHwnd is no longer the
+                            // implicit selection target, THEN add it to the
+                            // selected set (setSelected is a no-op on the active
+                            // tab). This preserves {active ∪ selected} across the
+                            // activation swap.
+                            let prevActiveHwnd = group.topWindow
+                            group.tabActivate(tab, false)
+                            if hwnd <> prevActiveHwnd && part <> TabClose && part <> TabPin then
+                                group.setSelected(prevActiveHwnd, true)
+                        if part <> TabClose && part <> TabPin then
+                            let tabInfo = this.ts.tabInfo(tab)
+                            let originalTabLocation = this.ts.tabLocation tab
+                            let clickOffsetInTab = pt.sub(originalTabLocation)
 
-                        // Calculate scaled offset for preview image (always needed when dragging to different location)
-                        let dragTabLoc = this.ts.dragTabLocation tab
-                        let previewWidth = tabInfo.preview().width
-                        let originalWidth = this.ts.bounds.width
-                        let scaleRatio = float(previewWidth) / float(originalWidth)
-                        let scaledClickOffset = Pt(int(float(clickOffsetInTab.x) * scaleRatio), clickOffsetInTab.y)
-                        let imageOffset = dragTabLoc.add(scaledClickOffset)
+                            // Calculate scaled offset for preview image (always needed when dragging to different location)
+                            let dragTabLoc = this.ts.dragTabLocation tab
+                            let previewWidth = tabInfo.preview().width
+                            let originalWidth = this.ts.bounds.width
+                            let scaleRatio = float(previewWidth) / float(originalWidth)
+                            let scaledClickOffset = Pt(int(float(clickOffsetInTab.x) * scaleRatio), clickOffsetInTab.y)
+                            let imageOffset = dragTabLoc.add(scaledClickOffset)
 
-                        // For tab reordering within same group, use unscaled click offset
-                        let tabOffset = clickOffsetInTab
+                            // For tab reordering within same group, use unscaled click offset
+                            let tabOffset = clickOffsetInTab
 
-                        let dragImage = fun() -> this.ts.dragImage(tab)
-                        let dragInfo = box({ tab = tab; tabOffset = tabOffset; imageOffset = imageOffset; tabInfo = tabInfo})
-                        Services.dragDrop.beginDrag(this.ts.hwnd, dragImage, imageOffset, ptScreen, dragInfo)
+                            let dragImage = fun() -> this.ts.dragImage(tab)
+                            // Multi-select drag continuation: snapshot the
+                            // selection (excluding the dragged tab) and source
+                            // group hwnd so the target group's dragEnter can
+                            // carry the selected tabs across with the dragged
+                            // tab. When the selection covers all of the source
+                            // group's tabs, the source naturally empties and
+                            // is auto-destroyed (= "group-move" with no
+                            // separate detach pass needed).
+                            let selectedSnapshot =
+                                group.selectedTabs.items.list
+                                |> List.filter (fun h -> h <> hwnd)
+                            let dragInfo =
+                                box({ tab = tab
+                                      tabOffset = tabOffset
+                                      imageOffset = imageOffset
+                                      tabInfo = tabInfo
+                                      sourceGroupHwnd = group.hwnd
+                                      selectedHwnds = selectedSnapshot })
+                            Services.dragDrop.beginDrag(this.ts.hwnd, dragImage, imageOffset, ptScreen, dragInfo)
                 | MouseMiddle ->
+                    group.clearSelected()
                     group.tabActivate(tab, false)
+            | MouseUp ->
+                match btn with
+                | MouseLeft ->
+                    // Explorer-like: if MouseDown landed on an already-selected
+                    // tab and no drag occurred, MouseUp reduces the selection
+                    // to just that single tab (clears the multi-select).
+                    let mods = System.Windows.Forms.Control.ModifierKeys
+                    let shiftHeld = (mods &&& System.Windows.Forms.Keys.Shift) = System.Windows.Forms.Keys.Shift
+                    let ctrlHeld = (mods &&& System.Windows.Forms.Keys.Control) = System.Windows.Forms.Keys.Control
+                    if not shiftHeld && not ctrlHeld && not isDraggingCell.value then
+                        if !mouseDownOnSelected then
+                            group.clearSelected()
+                    mouseDownOnSelected := false
+                | _ -> ()
             | _ -> ()
-    
+
         member x.tabActivate((tab)) =
             group.tabActivate(tab, false)
 
@@ -4062,21 +4427,48 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 this.ts.transparent <- false
                 
         member this.dragEnter dragInfo pt =
-            this.invokeSync <| fun() -> 
+            this.invokeSync <| fun() ->
                 let dragInfo = dragInfo :?> TabDragInfo
                 let (Tab(hwnd)) = dragInfo.tab
-                let result = 
+                let result =
                     if this.ts.tabs.contains(dragInfo.tab) &&
                         this.ts.tabs.count = 1 then
                         dragPtCell.set(pt)
                         dragInfoCell.set(Some(dragInfo))
                         false
-                    else 
+                    else
                         dragPtCell.set(pt)
                         dragInfoCell.set(Some(dragInfo))
                         this.ts.addTabSlide dragInfo.tab this.tabSlide
                         this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
                         group.addWindow(hwnd, false)
+
+                        // Multi-select continuation: the source's dragExit
+                        // already removed the selected tabs and hid them
+                        // off-screen, so we just need to add + show them in
+                        // this group. This single branch handles both
+                        // drag-link (target group is different from source)
+                        // and drag-cancel (target group IS the source).
+                        if not (List.isEmpty dragInfo.selectedHwnds) then
+                            // Drop the target's pre-existing multi-select —
+                            // the dragged set wins.
+                            group.clearSelected()
+                            Services.program.suspendTabMonitoring()
+                            try
+                                for selHwnd in dragInfo.selectedHwnds do
+                                    if not (group.windows.contains selHwnd) then
+                                        group.addWindow(selHwnd, false)
+                                    let selWindow = os.windowFromHwnd(selHwnd)
+                                    selWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                            finally
+                                Services.program.resumeTabMonitoring()
+                            // Re-establish the active + selected state at the
+                            // destination: dragged is the active, prior
+                            // selection becomes the new selected set.
+                            group.tabActivate(dragInfo.tab, false)
+                            for selHwnd in dragInfo.selectedHwnds do
+                                group.setSelected(selHwnd, true)
+
                         true
                 this.updateTsSlide()
                 result
@@ -4093,11 +4485,26 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     let tab = dragInfo.tab
                     if this.ts.tabs.contains(tab) then
                         this.ts.removeTab(tab)
-                        dragInfoCell.set(None)       
+                        dragInfoCell.set(None)
                         let (Tab(hwnd)) = tab
                         let window = os.windowFromHwnd(hwnd)
                         group.removeWindow(hwnd)
                         window.hideOffScreen(None)
+
+                        // Multi-select: also detach the selected tabs from
+                        // this group so the source visibly reflects the loss
+                        // (= [A,B,C] when dragging E with D selected from
+                        // [A,B,C,D,E]). The dragEnter on the destination
+                        // (drag-link or drag-cancel) or Desktop.dragDrop
+                        // (drag-detach) will add them back.
+                        for selHwnd in dragInfo.selectedHwnds do
+                            let selTab = Tab(selHwnd)
+                            if this.ts.tabs.contains(selTab) then
+                                this.ts.removeTab(selTab)
+                            if group.windows.contains selHwnd then
+                                group.removeWindow(selHwnd)
+                            let selWindow = os.windowFromHwnd(selHwnd)
+                            selWindow.hideOffScreen(None)
                 | None -> ()
                 this.updateTsSlide()
 
@@ -4112,6 +4519,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     let (Tab hwnd) = tab
                     Services.program.setWindowAlignment(hwnd, Some(newAlignment))
                 | None -> ()
+
+                // Explorer-like: if MouseDown landed on an already-selected
+                // tab, reduce the multi-select to single now. This fires on
+                // both the drag-cancel path (DragDetectingState onCancel —
+                // see DragDropController) and the drag-completed path so the
+                // reduction is reliable regardless of OS mouse capture.
+                if !mouseDownOnSelected then
+                    group.clearSelected()
+                mouseDownOnSelected := false
+
                 dragInfoCell.set(None)
                 this.updateTsSlide()
 

@@ -131,6 +131,11 @@ type IProgram =
     abstract member launchStandaloneWindow : string -> (IntPtr -> unit) -> unit
     abstract member getAllConfiguredProcessPaths : unit -> List2<string>
     abstract member removeProcessSettings : string -> unit
+    // Mark hwnds as just-placed-into-a-group so the next
+    // removeUntabableWindows pass spares them even if their bounds are
+    // momentarily off-screen (the dragExit hideOffScreen parking). Cleared
+    // automatically by the implementation after a short window.
+    abstract member markRecentlyPlaced : List<IntPtr> -> unit
 
 type IGroup =
     abstract member hwnd : IntPtr

@@ -39,6 +39,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Thread-safe snapshot of pinned tabs for cross-thread reads (e.g., save from main thread)
     [<VolatileField>]
     let mutable pinnedTabsSnapshot = Set2<Tab>()
+    // Selected tabs (multi-select via Shift/Ctrl click). The active tab is
+    // never part of this set — it is the implicit primary action target.
+    let selectedTabsCell = Cell.create(Set2<Tab>())
     let tabAlignmentCell = Cell.create(Map2<Tab, TabAlign>())
     [<VolatileField>]
     let mutable tabAlignmentSnapshot = Map2<Tab, TabAlign>()
@@ -193,6 +196,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             direction = direction
             tabAlignments = tabAlignmentCell.value
             pinnedTabs = pinnedTabsCell.value
+            selectedTabs = selectedTabsCell.value
             transparent = this.transparent
             appearance = this.appearance
         }
@@ -480,6 +484,18 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.pinnedTabs = pinnedTabsCell.value
 
     member this.isPinned(tab) = pinnedTabsCell.value.contains(tab)
+
+    // ----- Multi-tab selection passthrough -----
+    // WindowGroup owns the canonical selection set (per-hwnd). TabStrip
+    // mirrors it in Tab form so the per-tab sprite construction can read it
+    // without an extra hwnd→Tab translation per draw. WindowGroup pushes
+    // updates here whenever its selectedTabsCell changes.
+    member this.selectedTabs = selectedTabsCell.value
+    member this.setSelectedTabs(newSet: Set2<Tab>) =
+        if selectedTabsCell.value <> newSet then
+            selectedTabsCell.set(newSet)
+            this.update()
+    member this.isTabSelected(tab) = selectedTabsCell.value.contains(tab)
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isPinnedThreadSafe(tab) = pinnedTabsSnapshot.contains(tab)

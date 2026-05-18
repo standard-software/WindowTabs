@@ -155,6 +155,7 @@ type TabDisplayInfo = {
 type TabSprite<'id> = {
     id: 'id
     isTop: bool
+    isSelected: bool
     appearance: TabAppearanceInfo
     displayInfo: TabDisplayInfo
     size: Sz
@@ -213,6 +214,9 @@ type TabSprite<'id> = {
             bezPoints.[4],
             bezPoints.[5])
 
+    // Color resolution priority for non-active, non-flashing tabs:
+    //   MouseOver (hover/capture)  >  Selected  >  Inactive
+    // The active tab and the flash state win unconditionally over the rest.
     member private this.tabBgColor =
         match this.displayInfo.bgColor with
         | Some(color) -> color
@@ -220,8 +224,10 @@ type TabSprite<'id> = {
             let active = this.appearance.tabActiveTabColor
             let inactive = this.appearance.tabInactiveTabColor
             let highlight = this.appearance.tabMouseOverTabColor
+            let selected = this.appearance.tabSelectedTabColor
             if this.isTop then active
             elif this.hover.IsSome || this.captured.IsSome then highlight
+            elif this.isSelected then selected
             else inactive
 
     member private this.bgBrush = SolidBrush(this.tabBgColor)
@@ -234,8 +240,10 @@ type TabSprite<'id> = {
                 let active = this.appearance.tabActiveBorderColor
                 let inactive = this.appearance.tabInactiveBorderColor
                 let highlight = this.appearance.tabMouseOverBorderColor
+                let selected = this.appearance.tabSelectedBorderColor
                 if this.isTop then active
                 elif this.hover.IsSome || this.captured.IsSome then highlight
+                elif this.isSelected then selected
                 else inactive
         new Pen(new SolidBrush(color), 1.0f)
 
@@ -301,8 +309,10 @@ type TabSprite<'id> = {
                 let active = this.appearance.tabActiveTextColor
                 let inactive = this.appearance.tabInactiveTextColor
                 let highlight = this.appearance.tabMouseOverTextColor
+                let selected = this.appearance.tabSelectedTextColor
                 if this.isTop then active
                 elif this.hover.IsSome || this.captured.IsSome then highlight
+                elif this.isSelected then selected
                 else inactive
         new SolidBrush(color)
 
@@ -448,6 +458,7 @@ type TabStripSprite<'id> when 'id : equality = {
     direction: TabDirection
     transparent: bool
     pinnedTabs: Set2<'id>
+    selectedTabs: Set2<'id>
     } with
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
@@ -549,6 +560,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 match this.zorder.tryHead with
                 | Some(top) -> top = tab
                 | None -> false
+            isSelected = this.selectedTabs.contains(tab)
             displayInfo = this.tabs.find(tab)
             appearance =
                 if isPinned then

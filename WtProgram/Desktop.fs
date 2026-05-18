@@ -204,9 +204,39 @@ type Desktop(notify:IDesktopNotification) as this =
             else
                 // Move window position only
                 window.setPositionOnly adjustedX adjustedY
-                
-            notify.dragDrop(hwnd)
-            
+
+            // Multi-select drag-detach continuation. Case C:
+            //   selected tabs were hideOffScreen'd by dragExit; we tell
+            //   Program to spare them from removeUntabableWindows for a
+            //   brief grace window (markRecentlyPlaced) so the auto-prune
+            //   pass triggered from Program.dragEnd doesn't strip them
+            //   from the new group before adjustChildWindows puts them
+            //   back on-screen. Then we addWindow + showWindow them and
+            //   re-establish active+selected on the new group's thread.
+            if not (List.isEmpty dragInfo.selectedHwnds) then
+                Services.program.markRecentlyPlaced(hwnd :: dragInfo.selectedHwnds)
+                Services.program.suspendTabMonitoring()
+                try
+                    let newGroup = this.createGroup(false)
+                    newGroup.addWindow(hwnd, false)
+                    for selHwnd in dragInfo.selectedHwnds do
+                        if not (newGroup.windows.contains((=) selHwnd)) then
+                            newGroup.addWindow(selHwnd, false)
+                        let selWindow = os.windowFromHwnd(selHwnd)
+                        selWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                    match newGroup with
+                    | :? GroupInfo as gi ->
+                        gi.invokeGroup <| fun() ->
+                            let wg = gi.group
+                            wg.tabActivate(Tab(hwnd), false)
+                            for selHwnd in dragInfo.selectedHwnds do
+                                wg.setSelected(selHwnd, true)
+                    | _ -> ()
+                finally
+                    Services.program.resumeTabMonitoring()
+            else
+                notify.dragDrop(hwnd)
+
         member x.dragEnd() = invoker.asyncInvoke <| fun() ->
             isDraggingCell.set(false)
             notify.dragEnd()

@@ -25,14 +25,17 @@ and AppearancePropertyType =
 type ColorThemeData = {
     name: string
     inactiveTextColor: int
+    selectedTextColor: int
     mouseOverTextColor: int
     activeTextColor: int
     flashTextColor: int
     inactiveTabColor: int
+    selectedTabColor: int
     mouseOverTabColor: int
     activeTabColor: int
     flashTabColor: int
     inactiveBorderColor: int
+    selectedBorderColor: int
     mouseOverBorderColor: int
     activeBorderColor: int
     flashBorderColor: int
@@ -104,6 +107,7 @@ type AppearanceView() as this =
     // Each state has: TabColor, TextColor, BorderColor (in that order for columns)
     let colorStateRows = [
         ("Inactive", [("tabInactiveTabColor", "TabColor"); ("tabInactiveTextColor", "TextColor"); ("tabInactiveBorderColor", "BorderColor")])
+        ("Selected", [("tabSelectedTabColor", "TabColor"); ("tabSelectedTextColor", "TextColor"); ("tabSelectedBorderColor", "BorderColor")])
         ("MouseOver", [("tabMouseOverTabColor", "TabColor"); ("tabMouseOverTextColor", "TextColor"); ("tabMouseOverBorderColor", "BorderColor")])
         ("Active", [("tabActiveTabColor", "TabColor"); ("tabActiveTextColor", "TextColor"); ("tabActiveBorderColor", "BorderColor")])
         ("Flash", [("tabFlashTabColor", "TabColor"); ("tabFlashTextColor", "TextColor"); ("tabFlashBorderColor", "BorderColor")])
@@ -123,7 +127,7 @@ type AppearanceView() as this =
     // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
     let upperRowCount = intProperties.length + 2  // int props + pinned width row + dark mode
-    let colorGridRowCount = 6  // theme row + header + 4 state rows
+    let colorGridRowCount = 7  // theme row + header + 5 state rows (Inactive / Selected / MouseOver / Active / Flash)
 
     // Main container panel (vertical stack)
     let panel =
@@ -467,14 +471,17 @@ type AppearanceView() as this =
     // Color key mapping for clipboard operations
     let colorKeyMap = [
         ("tabInactiveTextColor", "InactiveTextColor")
+        ("tabSelectedTextColor", "SelectedTextColor")
         ("tabMouseOverTextColor", "MouseOverTextColor")
         ("tabActiveTextColor", "ActiveTextColor")
         ("tabFlashTextColor", "FlashTextColor")
         ("tabInactiveTabColor", "InactiveTabColor")
+        ("tabSelectedTabColor", "SelectedTabColor")
         ("tabMouseOverTabColor", "MouseOverTabColor")
         ("tabActiveTabColor", "ActiveTabColor")
         ("tabFlashTabColor", "FlashTabColor")
         ("tabInactiveBorderColor", "InactiveBorderColor")
+        ("tabSelectedBorderColor", "SelectedBorderColor")
         ("tabMouseOverBorderColor", "MouseOverBorderColor")
         ("tabActiveBorderColor", "ActiveBorderColor")
         ("tabFlashBorderColor", "FlashBorderColor")
@@ -488,17 +495,33 @@ type AppearanceView() as this =
             | Some(arr) ->
                 arr.list |> List.choose (fun item ->
                     try
+                        // Selected colors were added later. For older saved themes
+                        // missing the field, derive a sensible default: tab color
+                        // is the midpoint of Inactive ↔ MouseOver, text and border
+                        // colors fall back to Inactive's values.
+                        let inactiveTab = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
+                        let mouseOverTab = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                        let inactiveText = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                        let inactiveBorder = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                        let midpointInt (a: int) (b: int) =
+                            let r = (((a >>> 16) &&& 0xFF) + ((b >>> 16) &&& 0xFF)) / 2
+                            let g = (((a >>> 8) &&& 0xFF) + ((b >>> 8) &&& 0xFF)) / 2
+                            let bl = ((a &&& 0xFF) + (b &&& 0xFF)) / 2
+                            (r <<< 16) ||| (g <<< 8) ||| bl
                         Some {
                             name = item.getString("name") |> Option.defaultValue ""
-                            inactiveTextColor = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                            inactiveTextColor = inactiveText
+                            selectedTextColor = item.getInt32("selectedTextColor") |> Option.defaultValue inactiveText
                             mouseOverTextColor = item.getInt32("mouseOverTextColor") |> Option.defaultValue 0
                             activeTextColor = item.getInt32("activeTextColor") |> Option.defaultValue 0
                             flashTextColor = item.getInt32("flashTextColor") |> Option.defaultValue 0
-                            inactiveTabColor = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
-                            mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                            inactiveTabColor = inactiveTab
+                            selectedTabColor = item.getInt32("selectedTabColor") |> Option.defaultValue (midpointInt inactiveTab mouseOverTab)
+                            mouseOverTabColor = mouseOverTab
                             activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
                             flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
-                            inactiveBorderColor = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                            inactiveBorderColor = inactiveBorder
+                            selectedBorderColor = item.getInt32("selectedBorderColor") |> Option.defaultValue inactiveBorder
                             mouseOverBorderColor = item.getInt32("mouseOverBorderColor") |> Option.defaultValue 0
                             activeBorderColor = item.getInt32("activeBorderColor") |> Option.defaultValue 0
                             flashBorderColor = item.getInt32("flashBorderColor") |> Option.defaultValue 0
@@ -515,14 +538,17 @@ type AppearanceView() as this =
             let item = JObject()
             item.setString("name", t.name)
             item.setInt32("inactiveTextColor", t.inactiveTextColor)
+            item.setInt32("selectedTextColor", t.selectedTextColor)
             item.setInt32("mouseOverTextColor", t.mouseOverTextColor)
             item.setInt32("activeTextColor", t.activeTextColor)
             item.setInt32("flashTextColor", t.flashTextColor)
             item.setInt32("inactiveTabColor", t.inactiveTabColor)
+            item.setInt32("selectedTabColor", t.selectedTabColor)
             item.setInt32("mouseOverTabColor", t.mouseOverTabColor)
             item.setInt32("activeTabColor", t.activeTabColor)
             item.setInt32("flashTabColor", t.flashTabColor)
             item.setInt32("inactiveBorderColor", t.inactiveBorderColor)
+            item.setInt32("selectedBorderColor", t.selectedBorderColor)
             item.setInt32("mouseOverBorderColor", t.mouseOverBorderColor)
             item.setInt32("activeBorderColor", t.activeBorderColor)
             item.setInt32("flashBorderColor", t.flashBorderColor)
@@ -546,17 +572,29 @@ type AppearanceView() as this =
                 // Check if item has required fields
                 match item.getInt32("inactiveTextColor") with
                 | Some _ ->
+                    let inactiveTab = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
+                    let mouseOverTab = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                    let inactiveText = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                    let inactiveBorder = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                    let midpointInt (a: int) (b: int) =
+                        let r = (((a >>> 16) &&& 0xFF) + ((b >>> 16) &&& 0xFF)) / 2
+                        let g = (((a >>> 8) &&& 0xFF) + ((b >>> 8) &&& 0xFF)) / 2
+                        let bl = ((a &&& 0xFF) + (b &&& 0xFF)) / 2
+                        (r <<< 16) ||| (g <<< 8) ||| bl
                     Some {
                         name = "Custom"
-                        inactiveTextColor = item.getInt32("inactiveTextColor") |> Option.defaultValue 0
+                        inactiveTextColor = inactiveText
+                        selectedTextColor = item.getInt32("selectedTextColor") |> Option.defaultValue inactiveText
                         mouseOverTextColor = item.getInt32("mouseOverTextColor") |> Option.defaultValue 0
                         activeTextColor = item.getInt32("activeTextColor") |> Option.defaultValue 0
                         flashTextColor = item.getInt32("flashTextColor") |> Option.defaultValue 0
-                        inactiveTabColor = item.getInt32("inactiveTabColor") |> Option.defaultValue 0
-                        mouseOverTabColor = item.getInt32("mouseOverTabColor") |> Option.defaultValue 0
+                        inactiveTabColor = inactiveTab
+                        selectedTabColor = item.getInt32("selectedTabColor") |> Option.defaultValue (midpointInt inactiveTab mouseOverTab)
+                        mouseOverTabColor = mouseOverTab
                         activeTabColor = item.getInt32("activeTabColor") |> Option.defaultValue 0
                         flashTabColor = item.getInt32("flashTabColor") |> Option.defaultValue 0
-                        inactiveBorderColor = item.getInt32("inactiveBorderColor") |> Option.defaultValue 0
+                        inactiveBorderColor = inactiveBorder
+                        selectedBorderColor = item.getInt32("selectedBorderColor") |> Option.defaultValue inactiveBorder
                         mouseOverBorderColor = item.getInt32("mouseOverBorderColor") |> Option.defaultValue 0
                         activeBorderColor = item.getInt32("activeBorderColor") |> Option.defaultValue 0
                         flashBorderColor = item.getInt32("flashBorderColor") |> Option.defaultValue 0
@@ -572,14 +610,17 @@ type AppearanceView() as this =
         | Some c ->
             let item = JObject()
             item.setInt32("inactiveTextColor", c.inactiveTextColor)
+            item.setInt32("selectedTextColor", c.selectedTextColor)
             item.setInt32("mouseOverTextColor", c.mouseOverTextColor)
             item.setInt32("activeTextColor", c.activeTextColor)
             item.setInt32("flashTextColor", c.flashTextColor)
             item.setInt32("inactiveTabColor", c.inactiveTabColor)
+            item.setInt32("selectedTabColor", c.selectedTabColor)
             item.setInt32("mouseOverTabColor", c.mouseOverTabColor)
             item.setInt32("activeTabColor", c.activeTabColor)
             item.setInt32("flashTabColor", c.flashTabColor)
             item.setInt32("inactiveBorderColor", c.inactiveBorderColor)
+            item.setInt32("selectedBorderColor", c.selectedBorderColor)
             item.setInt32("mouseOverBorderColor", c.mouseOverBorderColor)
             item.setInt32("activeBorderColor", c.activeBorderColor)
             item.setInt32("flashBorderColor", c.flashBorderColor)
@@ -647,14 +688,17 @@ type AppearanceView() as this =
         {
             name = ""
             inactiveTextColor = getColor "tabInactiveTextColor"
+            selectedTextColor = getColor "tabSelectedTextColor"
             mouseOverTextColor = getColor "tabMouseOverTextColor"
             activeTextColor = getColor "tabActiveTextColor"
             flashTextColor = getColor "tabFlashTextColor"
             inactiveTabColor = getColor "tabInactiveTabColor"
+            selectedTabColor = getColor "tabSelectedTabColor"
             mouseOverTabColor = getColor "tabMouseOverTabColor"
             activeTabColor = getColor "tabActiveTabColor"
             flashTabColor = getColor "tabFlashTabColor"
             inactiveBorderColor = getColor "tabInactiveBorderColor"
+            selectedBorderColor = getColor "tabSelectedBorderColor"
             mouseOverBorderColor = getColor "tabMouseOverBorderColor"
             activeBorderColor = getColor "tabActiveBorderColor"
             flashBorderColor = getColor "tabFlashBorderColor"
@@ -663,14 +707,17 @@ type AppearanceView() as this =
     // Check if colors match a theme
     let colorsMatch (theme: ColorThemeData) (current: ColorThemeData) =
         theme.inactiveTextColor = current.inactiveTextColor &&
+        theme.selectedTextColor = current.selectedTextColor &&
         theme.mouseOverTextColor = current.mouseOverTextColor &&
         theme.activeTextColor = current.activeTextColor &&
         theme.flashTextColor = current.flashTextColor &&
         theme.inactiveTabColor = current.inactiveTabColor &&
+        theme.selectedTabColor = current.selectedTabColor &&
         theme.mouseOverTabColor = current.mouseOverTabColor &&
         theme.activeTabColor = current.activeTabColor &&
         theme.flashTabColor = current.flashTabColor &&
         theme.inactiveBorderColor = current.inactiveBorderColor &&
+        theme.selectedBorderColor = current.selectedBorderColor &&
         theme.mouseOverBorderColor = current.mouseOverBorderColor &&
         theme.activeBorderColor = current.activeBorderColor &&
         theme.flashBorderColor = current.flashBorderColor
@@ -689,14 +736,17 @@ type AppearanceView() as this =
         {
             name = name
             inactiveTextColor = appearance.tabInactiveTextColor.ToArgb() &&& 0xFFFFFF
+            selectedTextColor = appearance.tabSelectedTextColor.ToArgb() &&& 0xFFFFFF
             mouseOverTextColor = appearance.tabMouseOverTextColor.ToArgb() &&& 0xFFFFFF
             activeTextColor = appearance.tabActiveTextColor.ToArgb() &&& 0xFFFFFF
             flashTextColor = appearance.tabFlashTextColor.ToArgb() &&& 0xFFFFFF
             inactiveTabColor = appearance.tabInactiveTabColor.ToArgb() &&& 0xFFFFFF
+            selectedTabColor = appearance.tabSelectedTabColor.ToArgb() &&& 0xFFFFFF
             mouseOverTabColor = appearance.tabMouseOverTabColor.ToArgb() &&& 0xFFFFFF
             activeTabColor = appearance.tabActiveTabColor.ToArgb() &&& 0xFFFFFF
             flashTabColor = appearance.tabFlashTabColor.ToArgb() &&& 0xFFFFFF
             inactiveBorderColor = appearance.tabInactiveBorderColor.ToArgb() &&& 0xFFFFFF
+            selectedBorderColor = appearance.tabSelectedBorderColor.ToArgb() &&& 0xFFFFFF
             mouseOverBorderColor = appearance.tabMouseOverBorderColor.ToArgb() &&& 0xFFFFFF
             activeBorderColor = appearance.tabActiveBorderColor.ToArgb() &&& 0xFFFFFF
             flashBorderColor = appearance.tabFlashBorderColor.ToArgb() &&& 0xFFFFFF
@@ -770,14 +820,17 @@ type AppearanceView() as this =
             tabIndentFlipped = currentAppearance.tabIndentFlipped
             tabIndentNormal = currentAppearance.tabIndentNormal
             tabInactiveTextColor = presetAppearance.tabInactiveTextColor
+            tabSelectedTextColor = presetAppearance.tabSelectedTextColor
             tabMouseOverTextColor = presetAppearance.tabMouseOverTextColor
             tabActiveTextColor = presetAppearance.tabActiveTextColor
             tabFlashTextColor = presetAppearance.tabFlashTextColor
             tabInactiveTabColor = presetAppearance.tabInactiveTabColor
+            tabSelectedTabColor = presetAppearance.tabSelectedTabColor
             tabMouseOverTabColor = presetAppearance.tabMouseOverTabColor
             tabActiveTabColor = presetAppearance.tabActiveTabColor
             tabFlashTabColor = presetAppearance.tabFlashTabColor
             tabInactiveBorderColor = presetAppearance.tabInactiveBorderColor
+            tabSelectedBorderColor = presetAppearance.tabSelectedBorderColor
             tabMouseOverBorderColor = presetAppearance.tabMouseOverBorderColor
             tabActiveBorderColor = presetAppearance.tabActiveBorderColor
             tabFlashBorderColor = presetAppearance.tabFlashBorderColor
@@ -801,14 +854,17 @@ type AppearanceView() as this =
             tabIndentFlipped = currentAppearance.tabIndentFlipped
             tabIndentNormal = currentAppearance.tabIndentNormal
             tabInactiveTextColor = toColor theme.inactiveTextColor
+            tabSelectedTextColor = toColor theme.selectedTextColor
             tabMouseOverTextColor = toColor theme.mouseOverTextColor
             tabActiveTextColor = toColor theme.activeTextColor
             tabFlashTextColor = toColor theme.flashTextColor
             tabInactiveTabColor = toColor theme.inactiveTabColor
+            tabSelectedTabColor = toColor theme.selectedTabColor
             tabMouseOverTabColor = toColor theme.mouseOverTabColor
             tabActiveTabColor = toColor theme.activeTabColor
             tabFlashTabColor = toColor theme.flashTabColor
             tabInactiveBorderColor = toColor theme.inactiveBorderColor
+            tabSelectedBorderColor = toColor theme.selectedBorderColor
             tabMouseOverBorderColor = toColor theme.mouseOverBorderColor
             tabActiveBorderColor = toColor theme.activeBorderColor
             tabFlashBorderColor = toColor theme.flashBorderColor
@@ -933,7 +989,7 @@ type AppearanceView() as this =
 
     // Helper function to convert theme to JSON object string
     let themeToJsonObject (theme: ColorThemeData) =
-        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"InactiveTextColor\": \"#%06X\",\n    \"MouseOverTextColor\": \"#%06X\",\n    \"ActiveTextColor\": \"#%06X\",\n    \"FlashTextColor\": \"#%06X\",\n    \"InactiveTabColor\": \"#%06X\",\n    \"MouseOverTabColor\": \"#%06X\",\n    \"ActiveTabColor\": \"#%06X\",\n    \"FlashTabColor\": \"#%06X\",\n    \"InactiveBorderColor\": \"#%06X\",\n    \"MouseOverBorderColor\": \"#%06X\",\n    \"ActiveBorderColor\": \"#%06X\",\n    \"FlashBorderColor\": \"#%06X\"\n  }" theme.name theme.inactiveTextColor theme.mouseOverTextColor theme.activeTextColor theme.flashTextColor theme.inactiveTabColor theme.mouseOverTabColor theme.activeTabColor theme.flashTabColor theme.inactiveBorderColor theme.mouseOverBorderColor theme.activeBorderColor theme.flashBorderColor
+        sprintf "  {\n    \"ThemeName\": \"%s\",\n    \"InactiveTextColor\": \"#%06X\",\n    \"SelectedTextColor\": \"#%06X\",\n    \"MouseOverTextColor\": \"#%06X\",\n    \"ActiveTextColor\": \"#%06X\",\n    \"FlashTextColor\": \"#%06X\",\n    \"InactiveTabColor\": \"#%06X\",\n    \"SelectedTabColor\": \"#%06X\",\n    \"MouseOverTabColor\": \"#%06X\",\n    \"ActiveTabColor\": \"#%06X\",\n    \"FlashTabColor\": \"#%06X\",\n    \"InactiveBorderColor\": \"#%06X\",\n    \"SelectedBorderColor\": \"#%06X\",\n    \"MouseOverBorderColor\": \"#%06X\",\n    \"ActiveBorderColor\": \"#%06X\",\n    \"FlashBorderColor\": \"#%06X\"\n  }" theme.name theme.inactiveTextColor theme.selectedTextColor theme.mouseOverTextColor theme.activeTextColor theme.flashTextColor theme.inactiveTabColor theme.selectedTabColor theme.mouseOverTabColor theme.activeTabColor theme.flashTabColor theme.inactiveBorderColor theme.selectedBorderColor theme.mouseOverBorderColor theme.activeBorderColor theme.flashBorderColor
 
     // Helper function to convert themes list to JSON array string
     let themesToJson (themes: ColorThemeData list) =
@@ -1029,14 +1085,17 @@ type AppearanceView() as this =
                         let baseColors = savedCustomColors |> Option.defaultValue {
                             name = ""
                             inactiveTextColor = 0
+                            selectedTextColor = 0
                             mouseOverTextColor = 0
                             activeTextColor = 0
                             flashTextColor = 0
                             inactiveTabColor = 0
+                            selectedTabColor = 0
                             mouseOverTabColor = 0
                             activeTabColor = 0
                             flashTabColor = 0
                             inactiveBorderColor = 0
+                            selectedBorderColor = 0
                             mouseOverBorderColor = 0
                             activeBorderColor = 0
                             flashBorderColor = 0
@@ -1045,14 +1104,17 @@ type AppearanceView() as this =
                         let newTheme = {
                             name = themeName
                             inactiveTextColor = parseColor "InactiveTextColor" baseColors.inactiveTextColor
+                            selectedTextColor = parseColor "SelectedTextColor" baseColors.selectedTextColor
                             mouseOverTextColor = parseColor "MouseOverTextColor" baseColors.mouseOverTextColor
                             activeTextColor = parseColor "ActiveTextColor" baseColors.activeTextColor
                             flashTextColor = parseColor "FlashTextColor" baseColors.flashTextColor
                             inactiveTabColor = parseColor "InactiveTabColor" baseColors.inactiveTabColor
+                            selectedTabColor = parseColor "SelectedTabColor" baseColors.selectedTabColor
                             mouseOverTabColor = parseColor "MouseOverTabColor" baseColors.mouseOverTabColor
                             activeTabColor = parseColor "ActiveTabColor" baseColors.activeTabColor
                             flashTabColor = parseColor "FlashTabColor" baseColors.flashTabColor
                             inactiveBorderColor = parseColor "InactiveBorderColor" baseColors.inactiveBorderColor
+                            selectedBorderColor = parseColor "SelectedBorderColor" baseColors.selectedBorderColor
                             mouseOverBorderColor = parseColor "MouseOverBorderColor" baseColors.mouseOverBorderColor
                             activeBorderColor = parseColor "ActiveBorderColor" baseColors.activeBorderColor
                             flashBorderColor = parseColor "FlashBorderColor" baseColors.flashBorderColor
@@ -1505,14 +1567,17 @@ type AppearanceView() as this =
             tabIndentFlipped = unbox(getValue "tabIndentFlipped")
             tabIndentNormal = unbox(getValue "tabIndentNormal")
             tabInactiveTextColor = unbox(getValue "tabInactiveTextColor")
+            tabSelectedTextColor = unbox(getValue "tabSelectedTextColor")
             tabMouseOverTextColor = unbox(getValue "tabMouseOverTextColor")
             tabActiveTextColor = unbox(getValue "tabActiveTextColor")
             tabFlashTextColor = unbox(getValue "tabFlashTextColor")
             tabInactiveTabColor = unbox(getValue "tabInactiveTabColor")
+            tabSelectedTabColor = unbox(getValue "tabSelectedTabColor")
             tabMouseOverTabColor = unbox(getValue "tabMouseOverTabColor")
             tabActiveTabColor = unbox(getValue "tabActiveTabColor")
             tabFlashTabColor = unbox(getValue "tabFlashTabColor")
             tabInactiveBorderColor = unbox(getValue "tabInactiveBorderColor")
+            tabSelectedBorderColor = unbox(getValue "tabSelectedBorderColor")
             tabMouseOverBorderColor = unbox(getValue "tabMouseOverBorderColor")
             tabActiveBorderColor = unbox(getValue "tabActiveBorderColor")
             tabFlashBorderColor = unbox(getValue "tabFlashBorderColor")
