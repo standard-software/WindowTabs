@@ -136,6 +136,7 @@ module Localization_English =
         ("TabSingular", "Tab")
         ("TabPlural", "Tabs")
         ("CloseOtherTabs", "Close other tabs")
+        ("CloseUnselectedTabsFormat", "Close {0} unselected tabs")
         ("CloseAllTabs", "Close all tabs")
 
         ("SnapTabMarginMenu", "Tab Margin When Snapping")
