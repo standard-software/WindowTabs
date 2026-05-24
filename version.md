@@ -4,6 +4,7 @@
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
 - Color theme settings: added missing "Selected" row label localization across all languages (was showing the raw key name)
 - Multi-select tab: per-tab context menu items now show selection-aware text and operate on the active tab plus selected tabs when a selection is active (Close / Pin / Unpin / Tab Color apply / Tab Color clear / Individual Tab Align / Detach and reposition / Detach and link to another group). Rename, Reset name, System submenu and New launch remain single-tab.
+- Tab Color Settings menu: restructured for multi-select (removed Left/Right submenus, added "Clear all tabs").
 
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).
