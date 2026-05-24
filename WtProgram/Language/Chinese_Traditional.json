@@ -155,10 +155,8 @@
   "UnpinThisTab": "取消固定此分頁",
   "PinSelectedTabsFormat": "固定已選{0}個分頁",
   "UnpinSelectedTabsFormat": "取消固定已選{0}個分頁",
-  "PinLeftTabsFormat": "釘選左側{0}個分頁",
-  "UnpinLeftTabsFormat": "取消釘選左側{0}個分頁",
-  "PinRightTabsFormat": "釘選右側{0}個分頁",
-  "UnpinRightTabsFormat": "取消釘選右側{0}個分頁",
+  "PinAllTabs": "釘選全部分頁",
+  "UnpinAllTabs": "取消釘選全部分頁",
 
   "TabColorMenu": "分頁顏色設定",
   "TabColorThisTab": "此分頁顏色 : {0}",
