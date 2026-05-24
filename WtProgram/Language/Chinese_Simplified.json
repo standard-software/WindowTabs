@@ -140,13 +140,10 @@
   "TabAlignMenu": "标签页位置",
   "AlignAllTopLeft": "将所有标签页靠左对齐",
   "AlignAllTopRight": "将所有标签页靠右对齐",
-  "AlignTabSubMenu": "单个标签页对齐",
   "AlignThisTabLeft": "将此标签页靠左对齐",
   "AlignThisTabRight": "将此标签页靠右对齐",
   "AlignSelectedTabsLeftFormat": "将已选{0}个标签页靠左对齐",
   "AlignSelectedTabsRightFormat": "将已选{0}个标签页靠右对齐",
-  "AlignLeftTabsChange": "将左侧{0}个标签页设为{1}",
-  "AlignRightTabsChange": "将右侧{0}个标签页设为{1}",
   "AlignTopLeft": "靠左",
   "AlignTopRight": "靠右",
 

@@ -140,13 +140,10 @@
   "TabAlignMenu": "分頁位置",
   "AlignAllTopLeft": "將所有分頁靠左對齊",
   "AlignAllTopRight": "將所有分頁靠右對齊",
-  "AlignTabSubMenu": "單一分頁對齊",
   "AlignThisTabLeft": "將此分頁靠左對齊",
   "AlignThisTabRight": "將此分頁靠右對齊",
   "AlignSelectedTabsLeftFormat": "將已選{0}個分頁靠左對齊",
   "AlignSelectedTabsRightFormat": "將已選{0}個分頁靠右對齊",
-  "AlignLeftTabsChange": "將左側{0}個分頁設為{1}",
-  "AlignRightTabsChange": "將右側{0}個分頁設為{1}",
   "AlignTopLeft": "靠左",
   "AlignTopRight": "靠右",
 

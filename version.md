@@ -6,6 +6,7 @@
 - Multi-select tab: per-tab context menu items now show selection-aware text and operate on the active tab plus selected tabs when a selection is active (Close / Pin / Unpin / Tab Color apply / Tab Color clear / Individual Tab Align / Detach and reposition / Detach and link to another group). Rename, Reset name, System submenu and New launch remain single-tab.
 - Tab Color Settings menu: restructured for multi-select (removed Left/Right submenus, added "Clear all tabs").
 - Tab Pin menu: restructured for multi-select (split Pin/Unpin into separate items with enable/disable, removed Left/Right items, added "Pin all tabs" / "Unpin all tabs").
+- Tab Position menu: restructured for multi-select (removed the Individual Tab Alignment submenu and Left/Right items; per-tab Left/Right are split into separate items with enable/disable).
 
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).
