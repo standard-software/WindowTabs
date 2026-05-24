@@ -3197,13 +3197,39 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 g.DrawRectangle(borderPen, 1, 1, size - 3, size - 3)
                 if isChecked then drawCheckmark g
                 img
+            // Targets for the "this tab" submenu and its clear item.
+            // Single-select: just the right-clicked hwnd.
+            // Multi-select: active + selected (unioned with right-clicked).
+            let colorTargets = this.actionTargets(hwnd)
+            let isMultiSelect = colorTargets.Length > 1
+
+            // For multi-select, checkmark is shown only when ALL targets
+            // share the same color for that channel. The reference color
+            // for the comparison is the right-clicked tab's color.
+            let allSameFill =
+                let xs = colorTargets |> List.map group.getTabFillColor
+                match xs with
+                | [] -> false
+                | head :: rest -> rest |> List.forall (fun v -> v = head)
+            let allSameUnderline =
+                let xs = colorTargets |> List.map group.getTabUnderlineColor
+                match xs with
+                | [] -> false
+                | head :: rest -> rest |> List.forall (fun v -> v = head)
+            let allSameBorder =
+                let xs = colorTargets |> List.map group.getTabBorderColor
+                match xs with
+                | [] -> false
+                | head :: rest -> rest |> List.forall (fun v -> v = head)
+
             // Build color selection submenu items for a set of target hwnds.
-            // showChecked=true enables the checkmark display and the toggle-off behavior,
-            // and is only used for the "this tab" submenu.
-            let buildColorItems (targetHwnds: IntPtr list) (showChecked: bool) =
+            // In multi-select the checkmark is gated by allSame* so it only
+            // appears when every target shares that exact color.
+            let buildColorItems (targetHwnds: IntPtr list) =
                 let fillItems =
                     TabColorDefs.fillDefs |> List.map (fun def ->
-                        let isChecked = showChecked && isColorMatch currentFill def.color
+                        let baseMatch = isColorMatch currentFill def.color
+                        let isChecked = if isMultiSelect then allSameFill && baseMatch else baseMatch
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createFillIcon def.color isChecked)
@@ -3215,7 +3241,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let underlineItems =
                     TabColorDefs.underlineDefs |> List.map (fun def ->
-                        let isChecked = showChecked && isColorMatch currentUnderline def.color
+                        let baseMatch = isColorMatch currentUnderline def.color
+                        let isChecked = if isMultiSelect then allSameUnderline && baseMatch else baseMatch
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createUnderlineIcon def.color isChecked)
@@ -3227,7 +3254,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let borderItems =
                     TabColorDefs.borderDefs |> List.map (fun def ->
-                        let isChecked = showChecked && isColorMatch currentBorder def.color
+                        let baseMatch = isColorMatch currentBorder def.color
+                        let isChecked = if isMultiSelect then allSameBorder && baseMatch else baseMatch
                         CmiRegular({
                             text = Localization.getString(def.labelKey)
                             image = Some(createBorderIcon def.color isChecked)
@@ -3247,23 +3275,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     group.setTabBorderColor(h, None)
                 )
 
-            let vo = this.ts.visualOrder
-            let currentTabIndex =
-                vo.list |> List.tryFindIndex (fun (Tab(h)) -> h = hwnd)
-                |> Option.defaultValue 0
-            // Counts include the current tab itself
-            let leftCount = currentTabIndex + 1
-            let rightCount = vo.list.Length - currentTabIndex
+            let hasAnyColor (hwnds: IntPtr list) =
+                hwnds |> List.exists (fun h ->
+                    (group.getTabFillColor h).IsSome
+                    || (group.getTabUnderlineColor h).IsSome
+                    || (group.getTabBorderColor h).IsSome)
 
-            let leftHwnds = vo.list |> List.take (currentTabIndex + 1) |> List.map (fun (Tab(h)) -> h)
-            let rightHwnds = vo.list |> List.skip currentTabIndex |> List.map (fun (Tab(h)) -> h)
-
-            // This tab color submenu — operates on the right-clicked tab
-            // plus any multi-selected tabs (and the active tab) when a
-            // selection is active. Otherwise it stays single-tab.
-            let colorTargets = this.actionTargets(hwnd)
             let thisTabSubMenuText =
-                if colorTargets.Length > 1 then
+                if isMultiSelect then
                     String.Format(Localization.getString("TabColorSelectedTabsFormat"), colorTargets.Length)
                 else
                     String.Format(Localization.getString("TabColorThisTab"), shortTabText)
@@ -3271,50 +3290,38 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = thisTabSubMenuText
                     image = None
-                    items = List2(buildColorItems colorTargets true)
+                    items = List2(buildColorItems colorTargets)
                     flags = List2()
                 })
             let clearThisTabText =
-                if colorTargets.Length > 1 then
+                if isMultiSelect then
                     String.Format(Localization.getString("TabColorClearSelectedTabsFormat"), colorTargets.Length)
                 else
                     Localization.getString("TabColorClearThisTab")
+            // Multi-select: gray out when none of the selected targets has any color set.
+            // Single-select: keep enabled regardless (existing behavior).
+            let clearThisTabFlags =
+                if isMultiSelect && not (hasAnyColor colorTargets) then List2([MenuFlags.MF_GRAYED])
+                else List2()
             let clearThisTabItem =
                 CmiRegular({
                     text = clearThisTabText
                     image = None
-                    flags = List2()
+                    flags = clearThisTabFlags
                     click = clearColorFor colorTargets
                 })
-            // Left tabs color submenu (includes current tab)
-            let leftTabsSubMenu =
-                CmiPopUp({
-                    text = String.Format(Localization.getString("TabColorApplyLeft"), leftCount)
-                    image = None
-                    items = List2(buildColorItems leftHwnds false)
-                    flags = List2()
-                })
-            let clearLeftTabsItem =
+
+            // "Clear all tabs" — operates on every tab in the group; gray
+            // out when no tab in the group has any color set.
+            let allHwnds = group.windows.items.list
+            let clearAllTabsFlags =
+                if hasAnyColor allHwnds then List2() else List2([MenuFlags.MF_GRAYED])
+            let clearAllTabsItem =
                 CmiRegular({
-                    text = String.Format(Localization.getString("TabColorClearLeft"), leftCount)
+                    text = Localization.getString("TabColorClearAllTabs")
                     image = None
-                    flags = List2()
-                    click = clearColorFor leftHwnds
-                })
-            // Right tabs color submenu (includes current tab)
-            let rightTabsSubMenu =
-                CmiPopUp({
-                    text = String.Format(Localization.getString("TabColorApplyRight"), rightCount)
-                    image = None
-                    items = List2(buildColorItems rightHwnds false)
-                    flags = List2()
-                })
-            let clearRightTabsItem =
-                CmiRegular({
-                    text = String.Format(Localization.getString("TabColorClearRight"), rightCount)
-                    image = None
-                    flags = List2()
-                    click = clearColorFor rightHwnds
+                    flags = clearAllTabsFlags
+                    click = clearColorFor allHwnds
                 })
 
             CmiPopUp({
@@ -3324,11 +3331,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     thisTabSubMenu
                     clearThisTabItem
                     CmiSeparator
-                    leftTabsSubMenu
-                    clearLeftTabsItem
-                    CmiSeparator
-                    rightTabsSubMenu
-                    clearRightTabsItem
+                    clearAllTabsItem
                 ])
                 flags = List2()
             })
