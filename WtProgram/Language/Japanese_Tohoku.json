@@ -132,6 +132,7 @@
   "TabSingular": "タブ",
   "TabPlural": "タブ",
   "CloseOtherTabs": "他のタブ閉じっぺ",
+  "CloseUnselectedTabsFormat": "選んでね{0}タブ閉じっぺ",
   "CloseAllTabs": "全部のタブ閉じっぺ",
 
   "SnapTabMarginMenu": "スナップん時のタブの余白だべ",

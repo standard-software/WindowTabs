@@ -132,6 +132,7 @@
   "TabSingular": "标签页",
   "TabPlural": "标签页",
   "CloseOtherTabs": "关闭其他标签页",
+  "CloseUnselectedTabsFormat": "关闭未选中的{0}个标签页",
   "CloseAllTabs": "关闭所有标签页",
 
   "SnapTabMarginMenu": "吸附时的标签页边距",

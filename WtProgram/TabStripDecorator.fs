@@ -3410,6 +3410,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
+        // Left/Right close items reference the right-clicked tab's position
+        // in visual order, which is ambiguous under multi-select (no single
+        // "pivot"). They are grayed out in that case.
+        let isCloseMultiSelect = (this.actionTargets(hwnd)).Length > 1
+
         let closeRightTabsItem =
             let currentTab = Tab(hwnd)
             let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
@@ -3430,7 +3435,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 text = displayText
                 image = None
                 click = fun() -> this.onCloseRightTabWindows hwnd
-                flags = grayed(rightTabCount = 0)
+                flags = grayed(isCloseMultiSelect || rightTabCount = 0)
             })
 
         let closeLeftTabsItem =
@@ -3453,16 +3458,30 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 text = displayText
                 image = None
                 click = fun() -> this.onCloseLeftTabWindows hwnd
-                flags = grayed(leftTabCount = 0)
+                flags = grayed(isCloseMultiSelect || leftTabCount = 0)
             })
 
+        // "Close other tabs" in single-select becomes "Close N unselected
+        // tabs" in multi-select, closing every tab not in (active + selected).
         let closeOtherTabsItem =
-            CmiRegular({
-                text = Localization.getString("CloseOtherTabs")
-                image = None
-                click = fun() -> this.onCloseOtherWindows hwnd
-                flags = List2()
-            })
+            let targets = this.actionTargets(hwnd)
+            if targets.Length > 1 then
+                let targetSet = Set.ofList targets
+                let unselected =
+                    group.windows.items.list |> List.filter (fun h -> not (targetSet.Contains h))
+                CmiRegular({
+                    text = String.Format(Localization.getString("CloseUnselectedTabsFormat"), unselected.Length)
+                    image = None
+                    click = fun() -> unselected |> List.iter this.onCloseWindow
+                    flags = grayed(unselected.Length = 0)
+                })
+            else
+                CmiRegular({
+                    text = Localization.getString("CloseOtherTabs")
+                    image = None
+                    click = fun() -> this.onCloseOtherWindows hwnd
+                    flags = List2()
+                })
 
         let closeAllTabsItem =
             CmiRegular({

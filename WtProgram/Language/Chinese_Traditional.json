@@ -132,6 +132,7 @@
   "TabSingular": "分頁",
   "TabPlural": "分頁",
   "CloseOtherTabs": "關閉其他分頁",
+  "CloseUnselectedTabsFormat": "關閉未選取的{0}個分頁",
   "CloseAllTabs": "關閉所有分頁",
 
   "SnapTabMarginMenu": "吸附時的分頁邊距",
