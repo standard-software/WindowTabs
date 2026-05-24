@@ -188,7 +188,7 @@
   "RenameTab": "重命名标签页",
   "ResetTabName": "重置标签页名称",
 
-  "TabDetachAndSplit": "分离和拆分标签页",
+  "TabDetachAndSplit": "分离标签页",
   "DetachAndMovePosTab": "分离此标签页并移动",
   "DetachSelectedTabsAndMovePosFormat": "分离已选{0}个标签页并移动",
   "DetachTabSamePosition": "在原位置分离",

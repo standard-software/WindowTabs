@@ -188,7 +188,7 @@
   "RenameTab": "重新命名分頁",
   "ResetTabName": "重設分頁名稱",
 
-  "TabDetachAndSplit": "分離和拆分分頁",
+  "TabDetachAndSplit": "分離分頁",
   "DetachAndMovePosTab": "分離此分頁並移動",
   "DetachSelectedTabsAndMovePosFormat": "分離已選{0}個分頁並移動",
   "DetachTabSamePosition": "在原位置分離",
