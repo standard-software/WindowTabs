@@ -3072,71 +3072,75 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         let tabPinSubMenu =
-            let isPinned = group.isPinned(hwnd)
             let tabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             let pinTargets = this.actionTargets(hwnd)
-            let pinToggleText =
-                if pinTargets.Length > 1 then
-                    if isPinned then
-                        System.String.Format(Localization.getString("UnpinSelectedTabsFormat"), pinTargets.Length)
-                    else
-                        System.String.Format(Localization.getString("PinSelectedTabsFormat"), pinTargets.Length)
+            let isMultiSelect = pinTargets.Length > 1
+            let isPinned = group.isPinned(hwnd)
+
+            // Multi-select: gating against the union of the targets.
+            // Single-select: gating against just the right-clicked tab.
+            let allTargetsPinned = pinTargets |> List.forall group.isPinned
+            let noneTargetsPinned = pinTargets |> List.forall (fun h -> not (group.isPinned h))
+
+            let pinItemText =
+                if isMultiSelect then
+                    System.String.Format(Localization.getString("PinSelectedTabsFormat"), pinTargets.Length)
                 else
-                    if isPinned then
-                        Localization.getString("UnpinThisTab") + " : " + tabName
-                    else
-                        Localization.getString("PinThisTab") + " : " + tabName
+                    Localization.getString("PinThisTab") + " : " + tabName
+            let pinItemFlags =
+                let disable = if isMultiSelect then allTargetsPinned else isPinned
+                if disable then List2([MenuFlags.MF_GRAYED]) else List2()
+            let pinItem =
+                CmiRegular({
+                    text = pinItemText
+                    image = None
+                    flags = pinItemFlags
+                    click = fun() -> pinTargets |> List.iter group.pinTab
+                })
+
+            let unpinItemText =
+                if isMultiSelect then
+                    System.String.Format(Localization.getString("UnpinSelectedTabsFormat"), pinTargets.Length)
+                else
+                    Localization.getString("UnpinThisTab") + " : " + tabName
+            let unpinItemFlags =
+                let disable = if isMultiSelect then noneTargetsPinned else not isPinned
+                if disable then List2([MenuFlags.MF_GRAYED]) else List2()
+            let unpinItem =
+                CmiRegular({
+                    text = unpinItemText
+                    image = None
+                    flags = unpinItemFlags
+                    click = fun() -> pinTargets |> List.iter group.unpinTab
+                })
+
+            // "Pin all tabs" / "Unpin all tabs" — gated against the whole group.
+            let pinAllFlags = if group.allPinned then List2([MenuFlags.MF_GRAYED]) else List2()
+            let pinAllItem =
+                CmiRegular({
+                    text = Localization.getString("PinAllTabs")
+                    image = None
+                    flags = pinAllFlags
+                    click = fun() -> group.pinAll()
+                })
+            let unpinAllFlags = if group.nonePinned then List2([MenuFlags.MF_GRAYED]) else List2()
+            let unpinAllItem =
+                CmiRegular({
+                    text = Localization.getString("UnpinAllTabs")
+                    image = None
+                    flags = unpinAllFlags
+                    click = fun() -> group.unpinAll()
+                })
+
             CmiPopUp({
                 text = Localization.getString("PinTabMenu")
                 image = None
                 items = List2([
-                    CmiRegular({
-                        text = pinToggleText
-                        image = None
-                        flags = List2()
-                        click = fun() ->
-                            // Apply pin/unpin to the right-clicked tab plus
-                            // any selected tabs (and the active tab) in
-                            // multi-select mode. The decision (pin vs unpin)
-                            // is taken from the right-clicked tab's current
-                            // state to keep "Pin this tab" and "Unpin this
-                            // tab" predictable.
-                            let targets = this.actionTargets(hwnd)
-                            if isPinned then
-                                targets |> List.iter group.unpinTab
-                            else
-                                targets |> List.iter group.pinTab
-                    })
+                    pinItem
+                    unpinItem
                     CmiSeparator
-                    (let count = group.countToLeft(hwnd)
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("PinLeftTabsFormat"), count)
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.pinLeftTabs(hwnd)
-                    }))
-                    (let count = group.countToLeft(hwnd)
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("UnpinLeftTabsFormat"), count)
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.unpinLeftTabs(hwnd)
-                    }))
-                    CmiSeparator
-                    (let count = group.countToRight(hwnd)
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("PinRightTabsFormat"), count)
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.pinRightTabs(hwnd)
-                    }))
-                    (let count = group.countToRight(hwnd)
-                     CmiRegular({
-                        text = System.String.Format(Localization.getString("UnpinRightTabsFormat"), count)
-                        image = None
-                        flags = List2()
-                        click = fun() -> group.unpinRightTabs(hwnd)
-                    }))
+                    pinAllItem
+                    unpinAllItem
                 ])
                 flags = List2()
             })

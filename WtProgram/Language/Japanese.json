@@ -155,10 +155,8 @@
   "UnpinThisTab": "このタブのピン止めを外す",
   "PinSelectedTabsFormat": "選択した{0}タブをピン止め",
   "UnpinSelectedTabsFormat": "選択した{0}タブのピン止めを外す",
-  "PinLeftTabsFormat": "左側{0}タブをピン止め",
-  "UnpinLeftTabsFormat": "左側{0}タブのピン止めを外す",
-  "PinRightTabsFormat": "右側{0}タブをピン止め",
-  "UnpinRightTabsFormat": "右側{0}タブのピン止めを外す",
+  "PinAllTabs": "全てのタブをピン止め",
+  "UnpinAllTabs": "全てのタブのピン止めを外す",
 
   "TabColorMenu": "タブの色設定",
   "TabColorThisTab": "このタブの色を設定 : {0}",
