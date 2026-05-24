@@ -8,6 +8,7 @@
 - Tab Pin menu: restructured for multi-select (split Pin/Unpin into separate items with enable/disable, removed Left/Right items, added "Pin all tabs" / "Unpin all tabs").
 - Tab Position menu: restructured for multi-select (removed the Individual Tab Alignment submenu and Left/Right items; per-tab Left/Right are split into separate items with enable/disable).
 - Close Tab menu: in multi-select, "Close other tabs" becomes "Close N unselected tabs"; Left/Right close items are grayed out because their pivot is ambiguous under multi-select.
+- Tab Detach menu: renamed from "Tab Detach and Split"; in multi-select, all Left/Right split items (both reposition and link-to-group variants) are grayed out because their pivot is ambiguous.
 
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).

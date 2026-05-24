@@ -3562,10 +3562,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | Some index -> totalTabs - index
                 | None -> 0
 
+            // In multi-select, the right-clicked tab is no longer an
+            // unambiguous pivot, so Left/Right split items are disabled.
+            let isMultiSelect = (this.actionTargets(hwnd)).Length > 1
             let isEnabled =
-                match tabIndex with
-                | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
-                | None -> false
+                if isMultiSelect then false
+                else
+                    match tabIndex with
+                    | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                    | None -> false
 
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
@@ -3622,10 +3627,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | None -> 0
 
             // Enabled when: more than 1 tab total, not at leftmost position, and not at rightmost position (index < totalTabs - 1)
+            // In multi-select, the right-clicked tab is no longer an
+            // unambiguous pivot, so Left/Right split items are disabled.
+            let isMultiSelect = (this.actionTargets(hwnd)).Length > 1
             let isEnabled =
-                match tabIndex with
-                | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
-                | None -> false
+                if isMultiSelect then false
+                else
+                    match tabIndex with
+                    | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                    | None -> false
 
             let allScreens = this.getAllScreensSorted()
             let currentScreen = this.getCurrentScreenForWindow(hwnd)
@@ -3982,10 +3992,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | Some index -> totalTabs - index
                         | None -> 0
 
+                    // Disabled in multi-select — see splitRightTabsToPositionSubMenu.
+                    let isMultiSelect = (this.actionTargets(hwnd)).Length > 1
                     let isEnabled =
-                        match tabIndex with
-                        | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
-                        | None -> false
+                        if isMultiSelect then false
+                        else
+                            match tabIndex with
+                            | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                            | None -> false
 
                     let menuText = String.Format(Localization.getString("SplitRightTabsToGroupFormat"), rightTabCount)
 
@@ -4059,10 +4073,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | Some index -> index + 1
                         | None -> 0
 
+                    // Disabled in multi-select — see splitRightTabsToPositionSubMenu.
+                    let isMultiSelect = (this.actionTargets(hwnd)).Length > 1
                     let isEnabled =
-                        match tabIndex with
-                        | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
-                        | None -> false
+                        if isMultiSelect then false
+                        else
+                            match tabIndex with
+                            | Some index -> totalTabs > 1 && index > 0 && index < totalTabs - 1
+                            | None -> false
 
                     let menuText = String.Format(Localization.getString("SplitLeftTabsToGroupFormat"), leftTabCount)
 

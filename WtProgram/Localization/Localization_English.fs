@@ -192,7 +192,7 @@ module Localization_English =
         ("RenameTab", "Rename tab")
         ("ResetTabName", "Reset tab name")
 
-        ("TabDetachAndSplit", "Tab Detach and Split")
+        ("TabDetachAndSplit", "Tab Detach")
         ("DetachAndMovePosTab", "Detach this tab and reposition")
         ("DetachSelectedTabsAndMovePosFormat", "Detach {0} selected tabs and reposition")
         ("DetachTabSamePosition", "Same position")

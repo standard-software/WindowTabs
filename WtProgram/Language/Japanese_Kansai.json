@@ -188,7 +188,7 @@
   "RenameTab": "タブの名前変えるで",
   "ResetTabName": "タブの名前リセットするで",
 
-  "TabDetachAndSplit": "タブの分離と分割やで",
+  "TabDetachAndSplit": "タブの分離やで",
   "DetachAndMovePosTab": "このタブ分離して移動",
   "DetachSelectedTabsAndMovePosFormat": "選んだ{0}タブ分離して移動",
   "DetachTabSamePosition": "同じ位置",
