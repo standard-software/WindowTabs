@@ -194,10 +194,6 @@
   "DetachTabSamePosition": "在原位置分離",
   "DetachAndDockingTabToGroup": "分離此分頁並連結到其他群組",
   "DetachSelectedTabsAndDockingToGroupFormat": "分離已選{0}個分頁並連結到其他群組",
-  "SplitRightTabsToPositionFormat": "右側{0}個分頁分割並移動",
-  "SplitRightTabsToGroupFormat": "右側{0}個分頁分割並連結到其他群組",
-  "SplitLeftTabsToPositionFormat": "左側{0}個分頁分割並移動",
-  "SplitLeftTabsToGroupFormat": "左側{0}個分頁分割並連結到其他群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
   "SystemMenu": "系統",

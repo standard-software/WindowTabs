@@ -198,10 +198,6 @@ module Localization_English =
         ("DetachTabSamePosition", "Same position")
         ("DetachAndDockingTabToGroup", "Detach this tab and link to another group")
         ("DetachSelectedTabsAndDockingToGroupFormat", "Detach {0} selected tabs and link to another group")
-        ("SplitRightTabsToPositionFormat", "Split right {0} tabs and reposition")
-        ("SplitRightTabsToGroupFormat", "Split right {0} tabs and link to group")
-        ("SplitLeftTabsToPositionFormat", "Split left {0} tabs and reposition")
-        ("SplitLeftTabsToGroupFormat", "Split left {0} tabs and link to group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
 
         ("SystemMenu", "System")
