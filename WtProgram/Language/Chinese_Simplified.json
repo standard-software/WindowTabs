@@ -199,6 +199,8 @@
   "SystemMenu": "系统",
   "SystemCopyExePath": "复制{0}路径",
   "SystemCopyWindowTitle": "复制窗口标题 : {0}",
+  "SystemCopySelectedTabsExePathFormat": "复制已选{0}个标签页的进程路径",
+  "SystemCopySelectedTabsWindowTitleFormat": "复制已选{0}个标签页的窗口标题",
   "SystemOpenExeFolder": "打开{0}的文件夹",
   "SystemKillProcess": "强制结束此进程",
 

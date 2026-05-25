@@ -9,6 +9,7 @@
 - Tab Position menu: restructured for multi-select (removed the Individual Tab Alignment submenu and Left/Right items; per-tab Left/Right are split into separate items with enable/disable).
 - Close Tab menu: in multi-select, "Close other tabs" becomes "Close N unselected tabs"; Left/Right close items are grayed out because their pivot is ambiguous under multi-select.
 - Tab Detach menu: renamed from "Tab Detach and Split". Left/Right split items removed entirely — multi-selecting tabs and using "Detach selected N tabs" covers the same use cases. About 1180 lines of now-redundant split implementation removed.
+- System submenu: in multi-select, "Copy path" and "Copy window title" operate on every selected tab (CR-LF joined to the clipboard); "Open folder" and "Force kill this process" are disabled since they target a single process.
 
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).

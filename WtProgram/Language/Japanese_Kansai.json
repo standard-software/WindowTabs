@@ -199,6 +199,8 @@
   "SystemMenu": "システムやで",
   "SystemCopyExePath": "{0}のパスコピーするで",
   "SystemCopyWindowTitle": "ウィンドウタイトルコピーするで : {0}",
+  "SystemCopySelectedTabsExePathFormat": "選んだ{0}タブのプロセスパスコピーするで",
+  "SystemCopySelectedTabsWindowTitleFormat": "選んだ{0}タブのウィンドウタイトルコピーするで",
   "SystemOpenExeFolder": "{0}のフォルダ開くで",
   "SystemKillProcess": "このプロセス強制終了するで",
 

@@ -2167,10 +2167,31 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let exePath = try window.pid.processPath with _ -> ""
             let windowTitle = try window.text with _ -> ""
             let shortWindowTitle = TabNameHelper.truncate windowTitle
-            CmiPopUp({
-                text = Localization.getString("SystemMenu")
-                image = None
-                items = List2([
+            // Use visual order (left-to-right) so multi-select clipboard
+            // output matches the tab strip ordering. actionTargets alone
+            // returns active-first, which is non-obvious for "Copy paths".
+            let sysTargets = this.actionTargetsInVisualOrder(hwnd)
+            let isMultiSelect = sysTargets.Length > 1
+
+            // Copy items: in multi-select, join each target's path / title
+            // with CR-LF for the clipboard. In single-select, behaves like before.
+            let copyPathItem =
+                if isMultiSelect then
+                    CmiRegular({
+                        text = String.Format(Localization.getString("SystemCopySelectedTabsExePathFormat"), sysTargets.Length)
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            try
+                                let paths =
+                                    sysTargets
+                                    |> List.map (fun h ->
+                                        try (os.windowFromHwnd h).pid.processPath with _ -> "")
+                                    |> List.filter (fun s -> s <> "")
+                                System.Windows.Forms.Clipboard.SetText(String.concat "\r\n" paths)
+                            with _ -> ()
+                    })
+                else
                     CmiRegular({
                         text = String.Format(Localization.getString("SystemCopyExePath"), exeName)
                         image = None
@@ -2178,6 +2199,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         click = fun() ->
                             try System.Windows.Forms.Clipboard.SetText(exePath) with _ -> ()
                     })
+
+            let copyTitleItem =
+                if isMultiSelect then
+                    CmiRegular({
+                        text = String.Format(Localization.getString("SystemCopySelectedTabsWindowTitleFormat"), sysTargets.Length)
+                        image = None
+                        flags = List2()
+                        click = fun() ->
+                            try
+                                let titles =
+                                    sysTargets
+                                    |> List.map (fun h ->
+                                        try (os.windowFromHwnd h).text with _ -> "")
+                                    |> List.filter (fun s -> s <> "")
+                                System.Windows.Forms.Clipboard.SetText(String.concat "\r\n" titles)
+                            with _ -> ()
+                    })
+                else
                     CmiRegular({
                         text = String.Format(Localization.getString("SystemCopyWindowTitle"), shortWindowTitle)
                         image = None
@@ -2185,29 +2224,48 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         click = fun() ->
                             try System.Windows.Forms.Clipboard.SetText(windowTitle) with _ -> ()
                     })
+
+            // Open folder / Kill process target a single process, so they are
+            // disabled in multi-select regardless of the targets' state.
+            let openFolderFlags =
+                if isMultiSelect then List2([MenuFlags.MF_GRAYED])
+                elif exePath <> "" then List2()
+                else List2([MenuFlags.MF_GRAYED])
+            let openFolderItem =
+                CmiRegular({
+                    text = String.Format(Localization.getString("SystemOpenExeFolder"), exeName)
+                    image = None
+                    flags = openFolderFlags
+                    click = fun() ->
+                        try
+                            let folder = System.IO.Path.GetDirectoryName(exePath)
+                            let psi = System.Diagnostics.ProcessStartInfo(folder)
+                            psi.UseShellExecute <- true
+                            System.Diagnostics.Process.Start(psi) |> ignore
+                        with _ -> ()
+                })
+
+            let killProcessItem =
+                CmiRegular({
+                    text = Localization.getString("SystemKillProcess")
+                    image = None
+                    flags = if isMultiSelect then List2([MenuFlags.MF_GRAYED]) else List2()
+                    click = fun() ->
+                        try
+                            let proc = System.Diagnostics.Process.GetProcessById(window.pid.pid)
+                            proc.Kill()
+                        with _ -> ()
+                })
+
+            CmiPopUp({
+                text = Localization.getString("SystemMenu")
+                image = None
+                items = List2([
+                    copyPathItem
+                    copyTitleItem
                     CmiSeparator
-                    CmiRegular({
-                        text = String.Format(Localization.getString("SystemOpenExeFolder"), exeName)
-                        image = None
-                        flags = if exePath <> "" then List2() else List2([MenuFlags.MF_GRAYED])
-                        click = fun() ->
-                            try
-                                let folder = System.IO.Path.GetDirectoryName(exePath)
-                                let psi = System.Diagnostics.ProcessStartInfo(folder)
-                                psi.UseShellExecute <- true
-                                System.Diagnostics.Process.Start(psi) |> ignore
-                            with _ -> ()
-                    })
-                    CmiRegular({
-                        text = Localization.getString("SystemKillProcess")
-                        image = None
-                        flags = List2()
-                        click = fun() ->
-                            try
-                                let proc = System.Diagnostics.Process.GetProcessById(window.pid.pid)
-                                proc.Kill()
-                            with _ -> ()
-                    })
+                    openFolderItem
+                    killProcessItem
                 ])
                 flags = List2()
             })
