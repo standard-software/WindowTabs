@@ -194,10 +194,6 @@
   "DetachTabSamePosition": "同じ位置",
   "DetachAndDockingTabToGroup": "このタブ分離して他のグループにくっつける",
   "DetachSelectedTabsAndDockingToGroupFormat": "選んだ{0}タブ分離して他のグループにくっつける",
-  "SplitRightTabsToPositionFormat": "右側{0}タブを分割して位置移動するで",
-  "SplitRightTabsToGroupFormat": "右側{0}タブを分割して他のグループにくっつけるで",
-  "SplitLeftTabsToPositionFormat": "左側{0}タブを分割して位置移動するで",
-  "SplitLeftTabsToGroupFormat": "左側{0}タブを分割して他のグループにくっつけるで",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
   "SystemMenu": "システムやで",
