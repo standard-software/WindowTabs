@@ -184,13 +184,9 @@ Download the installer or the zip containing the exe from the [releases](https:/
       - Top Left / Top Right / Bottom Left / Bottom Right
     - (per-display submenus, with leading "Same position on this display")
   - Link to another tab group (submenu lists other tab groups; choose the destination)
-  - Tab Detach and Split
+  - Tab Detach
     - Detach this tab and reposition (same submenu as "Position Move")
-    - Link to another group
-    - Split left {N} tabs and reposition
-    - Split left {N} tabs and link to group
-    - Split right {N} tabs and reposition
-    - Split right {N} tabs and link to group
+    - Detach this tab and link to another group
   - Close Tab
     - Close tab : (tab name)
     - Close {N} tabs to the left
@@ -202,27 +198,20 @@ Download the installer or the zip containing the exe from the [releases](https:/
   - Tab Position
     - Align all tabs to Left
     - Align all tabs to Right
-    - Individual Tab Alignment
-      - Align this tab to Left|Right : (tab name)
-      - Align {N} left tab(s) to Left|Right
-      - Align {N} right tab(s) to Left|Right
+    - Align this tab to Left : (tab name)
+    - Align this tab to Right : (tab name)
   - Tab Pin
     - Pin this tab : (tab name)
     - Unpin this tab : (tab name)
-    - Pin {N} left tab(s)
-    - Unpin {N} left tab(s)
-    - Pin {N} right tab(s)
-    - Unpin {N} right tab(s)
+    - Pin all tabs
+    - Unpin all tabs
   - Tab Color Settings
     - This tab color : (tab name)
       - Red / Blue / Green / Yellow / Purple / Orange / Pink
       - (same 7 colors, Underline variants)
       - (same 7 colors, Border variants)
     - Clear this tab color
-    - Left {N} tab(s) color (same color choices)
-    - Clear left {N} tab(s) color
-    - Right {N} tab(s) color (same color choices)
-    - Clear right {N} tab(s) color
+    - Clear color settings on all tabs
   - Tab Name
     - Rename tab
     - Reset tab name
@@ -232,6 +221,8 @@ Download the installer or the zip containing the exe from the [releases](https:/
     - Open folder of (exe name)
     - Force kill this process
   - Settings...
+
+In multi-select (see [Multi-Select Tabs](#multi-select-tabs)), per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
 
 ### New Launch
 
@@ -256,13 +247,18 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 ![Link to another tab group](README_Image/MoveTabGroupToGroup.png)
 
-### Detach this tab / Split right/left side
+### Detach Tab
 
-- Detach the selected tab, or split tabs to the right or left from the selected tab, and reposition them.
-- They can also be linked to another tab group.
+- Detach the selected tab and reposition it, or link it to another tab group.
+- To detach multiple tabs together, use Multi-Select first (see below) and then run "Detach selected N tabs and reposition" / "Detach selected N tabs and link to another group".
 
-![Tab Split Move Position](README_Image/SplitTabsReposition.png)
-![Tab Split To Group](README_Image/SplitTabsToGroup.png)
+### Multi-Select Tabs
+
+- Hold Ctrl and click tabs to add them to / remove them from the selection.
+- Hold Shift and click a tab to select the range from the active tab.
+- Right-click any selected tab to see context menu items labeled "Selected N tabs..." that operate on the active tab plus the selected tabs together (Close, Pin / Unpin, Tab Color, Per-tab Alignment, Detach / Link to group, System submenu's Copy items).
+- Items that need a single pivot tab (Left/Right close) or that target a single process (Open folder, Force kill) are grayed out under multi-select.
+- Drag a selected tab to carry every selected tab into another tab group, or to detach them together into a new group.
 
 ### Close Tab
 
