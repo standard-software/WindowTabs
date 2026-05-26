@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.05.01_next2
+## version ss_jp_2026.05.27
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
 - Color theme settings: added missing "Selected" row label localization across all languages (was showing the raw key name)
 - Color theme: added "Dark Mono 2" preset (placed between "Dark Mono" and "Dark Red Frame" in the Appearance tab combo box)
