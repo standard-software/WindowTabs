@@ -561,7 +561,7 @@ type AppearanceView() as this =
     let mutable customThemes = loadCustomThemes()
 
     // Preset themes (built-in)
-    let presetThemes = ["Light"; "Light Mono"; "Dark"; "Dark Blue"; "Dark Mono"; "Dark Red Frame"]
+    let presetThemes = ["Light"; "Light Mono"; "Dark"; "Dark Blue"; "Dark Mono"; "Dark Mono 2"; "Dark Red Frame"]
 
     // Load saved Custom theme colors from settings
     let loadSavedCustomColors() : ColorThemeData option =
@@ -731,6 +731,7 @@ type AppearanceView() as this =
             | "Dark" -> Services.program.darkModeTabAppearanceInfo
             | "Dark Blue" -> Services.program.darkModeBlueTabAppearanceInfo
             | "Dark Mono" -> Services.program.darkMonoTabAppearanceInfo
+            | "Dark Mono 2" -> Services.program.darkMono2TabAppearanceInfo
             | "Dark Red Frame" -> Services.program.darkRedFrameTabAppearanceInfo
             | _ -> Services.program.defaultTabAppearanceInfo
         {
@@ -949,6 +950,8 @@ type AppearanceView() as this =
                         applyColorPreset(Services.program.darkModeBlueTabAppearanceInfo)
                     | Preset "Dark Mono" ->
                         applyColorPreset(Services.program.darkMonoTabAppearanceInfo)
+                    | Preset "Dark Mono 2" ->
+                        applyColorPreset(Services.program.darkMono2TabAppearanceInfo)
                     | Preset "Dark Red Frame" ->
                         applyColorPreset(Services.program.darkRedFrameTabAppearanceInfo)
                     | Preset _ -> ()
