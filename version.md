@@ -3,6 +3,7 @@
 ## version ss_jp_2026.05.01_next2
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
 - Color theme settings: added missing "Selected" row label localization across all languages (was showing the raw key name)
+- Color theme: added "Dark Mono 2" preset (placed between "Dark Mono" and "Dark Red Frame" in the Appearance tab combo box)
 - Multi-select tab: added the feature; per-tab context menu items become selection-aware and operate on the active tab plus selected tabs when a selection is active
   - Tab Pin / Tab Position: split into separate items with enable/disable; Left/Right items removed
   - Tab Color Settings: Left/Right submenus removed; added "Clear all tabs"
