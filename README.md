@@ -109,7 +109,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_jp_2026.05.01_next2**
+Latest version: **ss_jp_2026.05.27**
 
 See [version.md](version.md) for details.
 
