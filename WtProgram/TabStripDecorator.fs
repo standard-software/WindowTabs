@@ -104,6 +104,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
     // reduces the selection to just the clicked tab (clears the multi-select).
     let mouseDownOnSelected : bool ref = ref false
+    // Drag origin tab — set on MouseDown so dragBegin can compute the
+    // contiguous selected range and set ts.dragGroup before slide rendering
+    // starts. Cleared in dragEnd.
+    let mouseDownTab : Tab option ref = ref None
 
     do this.init()
 
@@ -368,6 +372,35 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let targets = group.actionTargetTabs()
             if targets |> List.contains hwnd then targets
             else hwnd :: targets
+
+    // Multi-select drag-reorder: from the drag-origin tab, expand left and
+    // right through visualOrder as long as the next tab is selected or
+    // active, AND shares the same pin state AND same alignment. Used by
+    // dragBegin to set the visual drag group and by dragEnd to splice-move
+    // the whole range.
+    // Variant A (-4): pin + alignment boundary, with synchronized visual
+    // slide of all group members.
+    member private this.contiguousSelectedFromTab(origin: Tab) : Tab list =
+        let activeHwnd = group.topWindow
+        let inSelection (Tab h) =
+            h = activeHwnd || group.selectedTabs.contains h
+        if not (inSelection origin) then [origin]
+        else
+            let samePinAlign (a: Tab) (b: Tab) =
+                this.ts.isPinned a = this.ts.isPinned b &&
+                this.ts.getTabAlign a = this.ts.getTabAlign b
+            let vo = this.ts.visualOrder.list
+            let n = vo.Length
+            match vo |> List.tryFindIndex ((=) origin) with
+            | None -> [origin]
+            | Some originIdx ->
+                let mutable s = originIdx
+                while s > 0 && inSelection vo.[s-1] && samePinAlign vo.[s-1] origin do
+                    s <- s - 1
+                let mutable e = originIdx
+                while e < n - 1 && inSelection vo.[e+1] && samePinAlign vo.[e+1] origin do
+                    e <- e + 1
+                vo |> List.skip s |> List.take (e - s + 1)
 
     member private this.onCloseOtherWindows hwnd =
         group.windows.items.where((<>)hwnd).iter this.onCloseWindow
@@ -2917,6 +2950,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         // selection set is the implicit set + the active tab.
                         let wasSelected = group.isSelected(hwnd) || hwnd = group.topWindow
                         mouseDownOnSelected := wasSelected
+                        mouseDownTab := Some tab
                         if not wasSelected then
                             group.clearSelected()
                             group.tabActivate(tab, false)
@@ -3027,9 +3061,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             
     interface IDragDropTarget with
         member this.dragBegin() =
-            this.invokeAsync <| fun() -> 
+            this.invokeAsync <| fun() ->
                 isDraggingCell.value <- true
                 this.ts.transparent <- false
+                // Multi-select drag-reorder: if the drag origin tab is part
+                // of the multi-select set, compute the contiguous range and
+                // hand it to the strip so the slide rendering carries all
+                // members along with the pivot.
+                match !mouseDownTab with
+                | Some originTab ->
+                    let grp = this.contiguousSelectedFromTab(originTab)
+                    if grp.Length > 1 then
+                        this.ts.dragGroup <- grp
+                    else
+                        this.ts.dragGroup <- []
+                | None ->
+                    this.ts.dragGroup <- []
                 
         member this.dragEnter dragInfo pt =
             this.invokeSync <| fun() ->
@@ -3119,11 +3166,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 this.ts.transparent <- true
                 match this.ts.movedTab with
                 | Some(tab, index, newAlignment) ->
-                    this.ts.moveTab(tab, index, newAlignment)
-                    // Persist per-tab alignment to global
-                    let (Tab hwnd) = tab
-                    Services.program.setWindowAlignment(hwnd, Some(newAlignment))
+                    // Multi-select drag-reorder: ts.dragGroup holds the
+                    // contiguous range; splice-move the whole group.
+                    let grp = this.ts.dragGroup
+                    if grp.Length > 1 then
+                        this.ts.moveTabs(grp, index, newAlignment)
+                        for movedTab in grp do
+                            let (Tab h) = movedTab
+                            Services.program.setWindowAlignment(h, Some(newAlignment))
+                    else
+                        this.ts.moveTab(tab, index, newAlignment)
+                        let (Tab hwnd) = tab
+                        Services.program.setWindowAlignment(hwnd, Some(newAlignment))
                 | None -> ()
+                this.ts.dragGroup <- []
+                mouseDownTab := None
 
                 // Explorer-like: if MouseDown landed on an already-selected
                 // tab, reduce the multi-select to single now. This fires on
