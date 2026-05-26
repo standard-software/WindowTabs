@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.05.27_next1
+
 ## version ss_jp_2026.05.27
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
 - Color theme settings: added missing "Selected" row label localization across all languages (was showing the raw key name)
