@@ -3,13 +3,13 @@
 ## version ss_jp_2026.05.01_next2
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
 - Color theme settings: added missing "Selected" row label localization across all languages (was showing the raw key name)
-- Multi-select tab: per-tab context menu items now show selection-aware text and operate on the active tab plus selected tabs when a selection is active (Close / Pin / Unpin / Tab Color apply / Tab Color clear / Individual Tab Align / Detach and reposition / Detach and link to another group). Rename, Reset name, System submenu and New launch remain single-tab.
-- Tab Color Settings menu: restructured for multi-select (removed Left/Right submenus, added "Clear all tabs").
-- Tab Pin menu: restructured for multi-select (split Pin/Unpin into separate items with enable/disable, removed Left/Right items, added "Pin all tabs" / "Unpin all tabs").
-- Tab Position menu: restructured for multi-select (removed the Individual Tab Alignment submenu and Left/Right items; per-tab Left/Right are split into separate items with enable/disable).
-- Close Tab menu: in multi-select, "Close other tabs" becomes "Close N unselected tabs"; Left/Right close items are grayed out because their pivot is ambiguous under multi-select.
-- Tab Detach menu: renamed from "Tab Detach and Split". Left/Right split items removed entirely — multi-selecting tabs and using "Detach selected N tabs" covers the same use cases. About 1180 lines of now-redundant split implementation removed.
-- System submenu: in multi-select, "Copy path" and "Copy window title" operate on every selected tab (CR-LF joined to the clipboard); "Open folder" and "Force kill this process" are disabled since they target a single process.
+- Multi-select tab: added the feature; per-tab context menu items become selection-aware and operate on the active tab plus selected tabs when a selection is active
+  - Tab Pin / Tab Position: split into separate items with enable/disable; Left/Right items removed
+  - Tab Color Settings: Left/Right submenus removed; added "Clear all tabs"
+  - Close Tab: "Close other tabs" becomes "Close N unselected tabs"; Left/Right items disabled
+  - Tab Detach: renamed from "Tab Detach and Split"; Left/Right split items removed (covered by multi-select detach; ~1180 lines of impl removed)
+  - System: Copy path / Copy window title operate on all selected tabs (CR-LF joined); Open folder / Force kill disabled
+  - Single-tab only: Rename, Reset name, New launch
 
 ## version ss_jp_2026.05.01
 - Restructured the Position Move submenu (used by tab group / detach / split menus).
