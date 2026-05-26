@@ -50,6 +50,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
     let slideCell = Cell.create(None)
+    // Multi-tab drag group: set by the decorator on drag begin to the
+    // contiguous selected range (in visualOrder). The first element is the
+    // pivot (= slide.tab). Cleared on drag end.
+    let dragGroupCell = Cell.create<Tab list>([])
     let ptCell = Cell.create(None)
     let tabInfoCell = Cell.create(Map2():Map2<Tab,TabInfo>)
     let layeredWindowCell = Cell.create(None)
@@ -199,6 +203,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             selectedTabs = selectedTabsCell.value
             transparent = this.transparent
             appearance = this.appearance
+            dragGroup = dragGroupCell.value
         }
     member private this.ts = this.tsBase this.direction
         
@@ -467,6 +472,49 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         Cell.endUpdate()
         monitor.tabMoved(tab, index)
         tabMovedEvent.Trigger(tab, index)
+
+    // Multi-tab move: splice `tabs` (in the given order) into visualOrder at
+    // `targetIndex`. Pin/unpin is decided by the pivot tab's new position
+    // (first element of `tabs`), then applied uniformly to every tab in the
+    // group so the group keeps the same pin state.
+    member this.moveTabs(tabs: Tab list, targetIndex: int, ?newAlignment: TabAlign) =
+        if List.isEmpty tabs then () else
+        Cell.beginUpdate()
+        match newAlignment with
+        | Some(a) ->
+            for t in tabs do
+                tabAlignmentCell.map(fun m -> m.add t a)
+        | None -> ()
+        let tabSet = Set.ofList tabs
+        let cur = visualOrderCell.value.list
+        let withoutTabs = cur |> List.filter (fun t -> not (Set.contains t tabSet))
+        let safeIndex = max 0 (min withoutTabs.Length targetIndex)
+        let newOrder =
+            (withoutTabs |> List.truncate safeIndex)
+            @ tabs
+            @ (withoutTabs |> List.skip safeIndex)
+        visualOrderCell.set(List2(newOrder))
+        let pivot = List.head tabs
+        let pivotAlign = this.getTabAlign pivot
+        let sameGroupTabs = visualOrderCell.value.where(fun t -> this.getTabAlign(t) = pivotAlign)
+        match sameGroupTabs.tryFindIndex((=) pivot) with
+        | Some idx ->
+            let pinnedCountInGroup =
+                sameGroupTabs.where(fun t -> pinnedTabsCell.value.contains(t)).length
+            let shouldBePinned = idx < pinnedCountInGroup
+            for t in tabs do
+                if shouldBePinned && not (pinnedTabsCell.value.contains(t)) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+                elif not shouldBePinned && pinnedTabsCell.value.contains(t) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
+        | None -> ()
+        this.normalizeVisualOrder()
+        Cell.endUpdate()
+        for t in tabs do
+            let finalIdx =
+                visualOrderCell.value.tryFindIndex((=) t) |> Option.defaultValue 0
+            monitor.tabMoved(t, finalIdx)
+            tabMovedEvent.Trigger(t, finalIdx)
 
     member this.tabMoved = tabMovedEvent.Publish
 
@@ -808,9 +856,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         with get() = transparentCell.value
         and set(value) = transparentCell.set(value)
 
-    member this.slide 
+    member this.slide
         with get() : (Tab * int) option = slideCell.value
         and set(value) = slideCell.set(value)
+
+    member this.dragGroup
+        with get() : Tab list = dragGroupCell.value
+        and set(value: Tab list) = dragGroupCell.set(value)
 
     member this.renderTs(top) =
         let ts = this.ts

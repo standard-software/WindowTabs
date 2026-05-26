@@ -459,6 +459,11 @@ type TabStripSprite<'id> when 'id : equality = {
     transparent: bool
     pinnedTabs: Set2<'id>
     selectedTabs: Set2<'id>
+    // Multi-tab drag group (variant A boundary): the pivot tab is
+    // dragGroup.[0] and matches slide.tab. Other elements are dragged
+    // along with the pivot, drawn at pivot.x + their relative offset.
+    // Empty list = no group drag (= single-tab slide, existing behavior).
+    dragGroup: 'id list
     } with
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
@@ -488,7 +493,42 @@ type TabStripSprite<'id> when 'id : equality = {
     member private this.getAdjustedAlignment (tab: 'id) =
         match this.movedTab with
         | Some(t, _, alignment) when t = tab -> alignment
+        // Group members follow the pivot's adjusted alignment.
+        | Some(pivot, _, alignment) when this.isDragGroupMember tab && this.dragGroupPivot = Some pivot ->
+            alignment
         | _ -> this.getTabAlign(tab)
+
+    // --- Multi-tab drag group helpers ---
+    member private this.dragGroupPivot : 'id option =
+        match this.dragGroup with
+        | h :: _ -> Some h
+        | [] -> None
+
+    member private this.isDragGroupMember (tab: 'id) =
+        this.dragGroup |> List.contains tab
+
+    // Relative offset of a group member from the pivot (= dragGroup.[0]).
+    // 0 for pivot; sum of preceding tab widths (minus overlap) for later members.
+    member private this.dragGroupOffsetOf (tab: 'id) : float =
+        let rec acc (offset: float) (lst: 'id list) =
+            match lst with
+            | [] -> offset
+            | h :: rest ->
+                if h = tab then offset
+                else
+                    let tLen = if this.isPinned(h) then this.pinnedTabLength else this.unpinnedTabLength
+                    acc (offset + tLen - this.tabOverlap) rest
+        acc 0.0 this.dragGroup
+
+    // Total width of the drag group (sum of tab lengths minus overlaps).
+    member private this.dragGroupTotalWidth : float =
+        match this.dragGroup with
+        | [] -> 0.0
+        | tabs ->
+            let total =
+                tabs |> List.sumBy (fun t ->
+                    if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
+            total - float(tabs.Length - 1) * this.tabOverlap
 
     member private this.calcGroupWidth (tabs: List2<'id>) =
         if tabs.isEmpty then 0.0
@@ -609,9 +649,21 @@ type TabStripSprite<'id> when 'id : equality = {
     member this.tabLocation tab =
         match this.slide with
         | Some(slideTab, x) when tab = slideTab ->
-            let tabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
-            let bounds = (0, this.size.width - int(tabLen))
+            // Pivot tab: render at drag x, clamped so the whole group stays
+            // inside the strip (use group width when dragging a group).
+            let groupWidth =
+                if List.isEmpty this.dragGroup then
+                    if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+                else this.dragGroupTotalWidth
+            let bounds = (0, this.size.width - int(groupWidth))
             Pt(between bounds x, this.tabYOffset)
+        | Some(pivotTab, pivotX) when this.isDragGroupMember tab && this.dragGroupPivot = Some pivotTab ->
+            // Group member: pivot.x + cumulative offset within the group.
+            let pivotClampedX =
+                let bounds = (0, this.size.width - int(this.dragGroupTotalWidth))
+                between bounds pivotX
+            let offset = this.dragGroupOffsetOf tab
+            Pt(pivotClampedX + int(offset), this.tabYOffset)
         | _ ->
             let adjusted = this.adjustedVisualOrder
             let tabAlignment = this.getAdjustedAlignment(tab)
@@ -632,12 +684,22 @@ type TabStripSprite<'id> when 'id : equality = {
         | Some(tab, x) ->
             if this.count = 0 then Some(tab, 0, TopLeft)
             else
-                let dragTabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+                // For group drag, treat the group as a single "dragged blob"
+                // whose width is the sum of member widths (minus overlaps).
+                // For single-tab drag, fall back to the single tab's width.
+                let groupTabs =
+                    if List.isEmpty this.dragGroup then [tab] else this.dragGroup
+                let inGroup t = List.contains t groupTabs
+                let dragTabLen =
+                    if List.isEmpty this.dragGroup then
+                        if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+                    else this.dragGroupTotalWidth
                 let centerX = float(x) + dragTabLen / 2.0
 
-                // Calculate group tabs and widths
-                let leftWithout = this.visualOrder.where(fun t -> t <> tab && this.getTabAlign(t) = TopLeft).list
-                let rightWithout = this.visualOrder.where(fun t -> t <> tab && this.getTabAlign(t) = TopRight).list
+                // Calculate group tabs and widths (exclude every tab in the
+                // drag group, not just the pivot).
+                let leftWithout = this.visualOrder.where(fun t -> not (inGroup t) && this.getTabAlign(t) = TopLeft).list
+                let rightWithout = this.visualOrder.where(fun t -> not (inGroup t) && this.getTabAlign(t) = TopRight).list
                 let calcWidth (tabs: 'id list) =
                     if tabs.IsEmpty then 0.0
                     else
@@ -647,15 +709,15 @@ type TabStripSprite<'id> when 'id : equality = {
                 let leftWidthWithout = calcWidth leftWithout
                 let rightWidthWithout = calcWidth rightWithout
 
-                // For alignment detection, use widths without the dragged tab
+                // For alignment detection, use widths without the dragged tab(s)
                 let rightStartXWithout = float(this.size.width) - rightWidthWithout
                 let emptyCenterWithout = (leftWidthWithout + rightStartXWithout) / 2.0
 
                 // Determine target alignment
                 let targetAlignment = if centerX >= emptyCenterWithout then TopRight else TopLeft
 
-                // For position calculation within the group, include the dragged tab
-                // in the target alignment group to match how tabLocation renders
+                // For position calculation within the group, include the dragged blob's
+                // width in the target alignment group to match how tabLocation renders
                 let leftWidthFull =
                     if targetAlignment = TopLeft then
                         let overlap = if leftWithout.IsEmpty then 0.0 else this.tabOverlap
@@ -668,7 +730,6 @@ type TabStripSprite<'id> when 'id : equality = {
                     else rightWidthWithout
 
                 // Calculate target index within the alignment group
-                // Use full width (including dragged tab) for groupStartX to match rendering
                 let (groupList, groupStartX) =
                     match targetAlignment with
                     | TopLeft -> (leftWithout, 0.0)
@@ -687,17 +748,15 @@ type TabStripSprite<'id> when 'id : equality = {
                                 let t = groupList.[i]
                                 let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
                                 let step = tLen - this.tabOverlap
-                                // Use step boundary (next tab's left edge) instead of tab center
-                                // This matches the original behavior where tab position only changes
-                                // when the dragged tab's center passes the next tab's start position
                                 if centerX < groupStartX + offset + step then
                                     idx <- i
                                     found <- true
                                 offset <- offset + step
                         max 0 (min idx groupList.Length)
 
-                // Convert group index to visual order index (for List2.move)
-                let visualWithout = this.visualOrder.where((<>) tab).list
+                // Convert group index to visual order index for splicing.
+                // visualWithout = visualOrder - the whole drag group.
+                let visualWithout = this.visualOrder.where(fun t -> not (inGroup t)).list
                 let mutable groupCount = 0
                 let mutable visualIdx = visualWithout.Length
                 let mutable found2 = false
@@ -717,7 +776,20 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member this.adjustedVisualOrder : List2<'id> =
         match this.movedTab with
-        | Some(tab, index, _) -> this.visualOrder.move((=)tab, index)
+        | Some(tab, index, _) ->
+            if List.isEmpty this.dragGroup then
+                this.visualOrder.move((=)tab, index)
+            else
+                // Splice the entire drag group at `index` of visualOrder-without-group
+                let grp = this.dragGroup
+                let cur = this.visualOrder.list
+                let withoutGroup = cur |> List.filter (fun t -> not (List.contains t grp))
+                let safeIndex = max 0 (min withoutGroup.Length index)
+                let newOrder =
+                    (withoutGroup |> List.truncate safeIndex)
+                    @ grp
+                    @ (withoutGroup |> List.skip safeIndex)
+                List2(newOrder)
         | None -> this.visualOrder
 
 
