@@ -797,8 +797,24 @@ type TabStripSprite<'id> when 'id : equality = {
         {
             new ISprite with
             member x.image = this.bgImage
-            member x.children = this.zorder.map <| fun (tab:'id) ->
-                (this.tabLocation tab, this.tabSprite(tab))
+            member x.children =
+                // Z-order: when a multi-tab drag group is active, bring its
+                // members to the front (end of children = topmost),
+                // ordered by visualOrder so left→right Chrome-style overlap
+                // is preserved within the group. Without this, a group
+                // member that sits behind the pivot in z-order would get
+                // covered by the pivot's overlap notch, producing the
+                // "[---A---]-B---]" artifact.
+                let order =
+                    if List.isEmpty this.dragGroup then
+                        this.zorder
+                    else
+                        let grp = this.dragGroup
+                        let nonGroup = this.zorder.where(fun t -> not (List.contains t grp))
+                        let groupOrdered = this.visualOrder.where(fun t -> List.contains t grp)
+                        nonGroup.appendList(groupOrdered)
+                order.map <| fun (tab:'id) ->
+                    (this.tabLocation tab, this.tabSprite(tab))
         }
 
     member this.renderTab tab = this.tabSprite(tab).render
