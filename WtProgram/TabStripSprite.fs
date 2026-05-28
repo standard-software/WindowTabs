@@ -499,36 +499,47 @@ type TabStripSprite<'id> when 'id : equality = {
         | _ -> this.getTabAlign(tab)
 
     // --- Multi-tab drag group helpers ---
+    // The pivot tab is whichever tab is being dragged (= slide.tab). It may
+    // sit anywhere within dragGroup (e.g. dragGroup = [A; B; C] with B as
+    // pivot). All offsets are computed relative to the pivot's position so
+    // group members render at pivot.x + signed offset.
     member private this.dragGroupPivot : 'id option =
-        match this.dragGroup with
-        | h :: _ -> Some h
-        | [] -> None
+        match this.slide with
+        | Some(t, _) -> Some t
+        | None -> None
 
     member private this.isDragGroupMember (tab: 'id) =
         this.dragGroup |> List.contains tab
 
-    // Relative offset of a group member from the pivot (= dragGroup.[0]).
-    // 0 for pivot; sum of preceding tab widths (minus overlap) for later members.
+    // Signed offset of a group member from the pivot.
+    // - Pivot itself: 0
+    // - Members to the right of pivot in dragGroup: positive (Σ tabLen - overlap)
+    // - Members to the left of pivot in dragGroup: negative (-Σ tabLen - overlap)
+    // Uses Chrome-style tab overlap so the rendered group matches the
+    // visual spacing of normal (non-dragged) tabs.
     member private this.dragGroupOffsetOf (tab: 'id) : float =
-        let rec acc (offset: float) (lst: 'id list) =
-            match lst with
-            | [] -> offset
-            | h :: rest ->
-                if h = tab then offset
-                else
-                    let tLen = if this.isPinned(h) then this.pinnedTabLength else this.unpinnedTabLength
-                    acc (offset + tLen - this.tabOverlap) rest
-        acc 0.0 this.dragGroup
-
-    // Total width of the drag group (sum of tab lengths minus overlaps).
-    member private this.dragGroupTotalWidth : float =
-        match this.dragGroup with
-        | [] -> 0.0
-        | tabs ->
-            let total =
-                tabs |> List.sumBy (fun t ->
-                    if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
-            total - float(tabs.Length - 1) * this.tabOverlap
+        match this.dragGroupPivot with
+        | None -> 0.0
+        | Some pivot ->
+            let pIdx = this.dragGroup |> List.tryFindIndex ((=) pivot) |> Option.defaultValue 0
+            let tIdx = this.dragGroup |> List.tryFindIndex ((=) tab) |> Option.defaultValue 0
+            if tIdx = pIdx then 0.0
+            elif tIdx > pIdx then
+                // Right of pivot: accumulate positive step widths
+                let mutable offset = 0.0
+                for i in pIdx .. tIdx - 1 do
+                    let t = this.dragGroup.[i]
+                    let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+                    offset <- offset + tLen - this.tabOverlap
+                offset
+            else
+                // Left of pivot: accumulate negative step widths
+                let mutable offset = 0.0
+                for i in tIdx .. pIdx - 1 do
+                    let t = this.dragGroup.[i]
+                    let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
+                    offset <- offset - (tLen - this.tabOverlap)
+                offset
 
     member private this.calcGroupWidth (tabs: List2<'id>) =
         if tabs.isEmpty then 0.0
@@ -649,21 +660,22 @@ type TabStripSprite<'id> when 'id : equality = {
     member this.tabLocation tab =
         match this.slide with
         | Some(slideTab, x) when tab = slideTab ->
-            // Pivot tab: render at drag x, clamped so the whole group stays
-            // inside the strip (use group width when dragging a group).
-            let groupWidth =
-                if List.isEmpty this.dragGroup then
-                    if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
-                else this.dragGroupTotalWidth
-            let bounds = (0, this.size.width - int(groupWidth))
+            // Pivot tab: render at drag x, clamped to its own single-tab
+            // width. Group members may extend beyond the strip edge — that
+            // is the natural consequence of dragging a group near an edge
+            // and the user can drag back.
+            let tabLen = if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
+            let bounds = (0, this.size.width - int(tabLen))
             Pt(between bounds x, this.tabYOffset)
-        | Some(pivotTab, pivotX) when this.isDragGroupMember tab && this.dragGroupPivot = Some pivotTab ->
-            // Group member: pivot.x + cumulative offset within the group.
-            let pivotClampedX =
-                let bounds = (0, this.size.width - int(this.dragGroupTotalWidth))
-                between bounds pivotX
+        | Some(pivotTab, pivotX) when tab <> pivotTab && this.isDragGroupMember tab ->
+            // Group member: pivot.x + signed offset (left = negative,
+            // right = positive). Use the same single-tab clamp as the
+            // pivot so the group members track the visible pivot.
+            let pivotLen = if this.isPinned(pivotTab) then this.pinnedTabLength else this.unpinnedTabLength
+            let pivotBounds = (0, this.size.width - int(pivotLen))
+            let clampedPivot = between pivotBounds pivotX
             let offset = this.dragGroupOffsetOf tab
-            Pt(pivotClampedX + int(offset), this.tabYOffset)
+            Pt(clampedPivot + int(offset), this.tabYOffset)
         | _ ->
             let adjusted = this.adjustedVisualOrder
             let tabAlignment = this.getAdjustedAlignment(tab)
@@ -684,16 +696,15 @@ type TabStripSprite<'id> when 'id : equality = {
         | Some(tab, x) ->
             if this.count = 0 then Some(tab, 0, TopLeft)
             else
-                // For group drag, treat the group as a single "dragged blob"
-                // whose width is the sum of member widths (minus overlaps).
-                // For single-tab drag, fall back to the single tab's width.
+                // Group-drag detection uses the pivot tab's single width
+                // (the user judges drop position by the visible pivot, not
+                // by the whole group blob). visualWithout still excludes
+                // every group member so target-index math is consistent.
                 let groupTabs =
                     if List.isEmpty this.dragGroup then [tab] else this.dragGroup
                 let inGroup t = List.contains t groupTabs
                 let dragTabLen =
-                    if List.isEmpty this.dragGroup then
-                        if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
-                    else this.dragGroupTotalWidth
+                    if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
                 let centerX = float(x) + dragTabLen / 2.0
 
                 // Calculate group tabs and widths (exclude every tab in the
@@ -771,7 +782,15 @@ type TabStripSprite<'id> when 'id : equality = {
                                 groupCount <- groupCount + 1
                                 visualIdx <- i + 1
 
-                Some(tab, visualIdx, targetAlignment)
+                // Pivot lands at visualIdx, but the splice operation places
+                // the group's first element at the splice index. Shift back
+                // so the pivot — not the group head — ends up at visualIdx.
+                let pivotIdxInGroup =
+                    if List.isEmpty this.dragGroup then 0
+                    else this.dragGroup |> List.tryFindIndex ((=) tab) |> Option.defaultValue 0
+                let spliceIdx = max 0 (min visualWithout.Length (visualIdx - pivotIdxInGroup))
+
+                Some(tab, spliceIdx, targetAlignment)
         | None -> None
 
     member this.adjustedVisualOrder : List2<'id> =
