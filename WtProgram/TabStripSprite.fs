@@ -782,13 +782,19 @@ type TabStripSprite<'id> when 'id : equality = {
                                 groupCount <- groupCount + 1
                                 visualIdx <- i + 1
 
-                // Pivot lands at visualIdx, but the splice operation places
-                // the group's first element at the splice index. Shift back
-                // so the pivot — not the group head — ends up at visualIdx.
-                let pivotIdxInGroup =
-                    if List.isEmpty this.dragGroup then 0
-                    else this.dragGroup |> List.tryFindIndex ((=) tab) |> Option.defaultValue 0
-                let spliceIdx = max 0 (min visualWithout.Length (visualIdx - pivotIdxInGroup))
+                // visualIdx is where the pivot's center landed in
+                // visualWithout. Use it directly as the splice index for
+                // the whole group: the group's first member lands there
+                // and the pivot ends up at spliceIdx + pivotIdxInGroup.
+                //
+                // The previous "spliceIdx = visualIdx - pivotIdxInGroup"
+                // shift made it impossible to splice the group at the very
+                // end of visualWithout (the pivot's max visualIdx equals
+                // visualWithout.Length, and subtracting pivotIdxInGroup
+                // pulled the group back from the tail). Without the shift,
+                // the group correctly reaches the tail when the user drags
+                // the pivot past the last non-group tab.
+                let spliceIdx = max 0 (min visualWithout.Length visualIdx)
 
                 Some(tab, spliceIdx, targetAlignment)
         | None -> None
