@@ -474,9 +474,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tabMovedEvent.Trigger(tab, index)
 
     // Multi-tab move: splice `tabs` (in the given order) into visualOrder at
-    // `targetIndex`. Pin/unpin is decided by the pivot tab's new position
-    // (first element of `tabs`), then applied uniformly to every tab in the
-    // group so the group keeps the same pin state.
+    // `targetIndex`. Smart-pin: the whole group adopts the pin state of
+    // the tab immediately to the RIGHT of the spliced group in the same
+    // alignment zone (matches single-tab moveTab's intuition extended to
+    // a group). If there is no right neighbor in the same alignment, the
+    // left neighbor decides instead. If the group has no neighbor at all
+    // in its alignment, the existing pin state is preserved.
     member this.moveTabs(tabs: Tab list, targetIndex: int, ?newAlignment: TabAlign) =
         if List.isEmpty tabs then () else
         Cell.beginUpdate()
@@ -494,18 +497,51 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             @ tabs
             @ (withoutTabs |> List.skip safeIndex)
         visualOrderCell.set(List2(newOrder))
+        // Smart-pin decision: look at the immediate right neighbor of the
+        // spliced group in the same alignment zone. If absent, fall back
+        // to the left neighbor.
         let pivot = List.head tabs
         let pivotAlign = this.getTabAlign pivot
-        let sameGroupTabs = visualOrderCell.value.where(fun t -> this.getTabAlign(t) = pivotAlign)
-        match sameGroupTabs.tryFindIndex((=) pivot) with
-        | Some idx ->
-            let pinnedCountInGroup =
-                sameGroupTabs.where(fun t -> pinnedTabsCell.value.contains(t)).length
-            let shouldBePinned = idx < pinnedCountInGroup
+        let postOrder = visualOrderCell.value.list
+        let groupLastIdx =
+            postOrder
+            |> List.mapi (fun i t -> i, t)
+            |> List.filter (fun (_, t) -> Set.contains t tabSet)
+            |> List.tryLast
+            |> Option.map fst
+        let groupFirstIdx =
+            postOrder
+            |> List.mapi (fun i t -> i, t)
+            |> List.tryFind (fun (_, t) -> Set.contains t tabSet)
+            |> Option.map fst
+        let rightNeighbor =
+            match groupLastIdx with
+            | Some idx ->
+                postOrder
+                |> List.skip (idx + 1)
+                |> List.tryFind (fun t ->
+                    not (Set.contains t tabSet) && this.getTabAlign(t) = pivotAlign)
+            | None -> None
+        let leftNeighbor =
+            match groupFirstIdx with
+            | Some idx when idx > 0 ->
+                postOrder
+                |> List.truncate idx
+                |> List.filter (fun t ->
+                    not (Set.contains t tabSet) && this.getTabAlign(t) = pivotAlign)
+                |> List.tryLast
+            | _ -> None
+        let shouldBePinned =
+            match rightNeighbor, leftNeighbor with
+            | Some r, _ -> Some (pinnedTabsCell.value.contains(r))
+            | None, Some l -> Some (pinnedTabsCell.value.contains(l))
+            | None, None -> None
+        match shouldBePinned with
+        | Some pin ->
             for t in tabs do
-                if shouldBePinned && not (pinnedTabsCell.value.contains(t)) then
+                if pin && not (pinnedTabsCell.value.contains(t)) then
                     pinnedTabsCell.set(pinnedTabsCell.value.add(t))
-                elif not shouldBePinned && pinnedTabsCell.value.contains(t) then
+                elif not pin && pinnedTabsCell.value.contains(t) then
                     pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
         | None -> ()
         this.normalizeVisualOrder()

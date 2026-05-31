@@ -3164,21 +3164,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeAsync <| fun() ->
                 isDraggingCell.value <- false
                 this.ts.transparent <- true
-                match this.ts.movedTab with
-                | Some(tab, index, newAlignment) ->
-                    // Multi-select drag-reorder: ts.dragGroup holds the
-                    // contiguous range; splice-move the whole group.
-                    let grp = this.ts.dragGroup
-                    if grp.Length > 1 then
-                        this.ts.moveTabs(grp, index, newAlignment)
-                        for movedTab in grp do
-                            let (Tab h) = movedTab
-                            Services.program.setWindowAlignment(h, Some(newAlignment))
-                    else
-                        this.ts.moveTab(tab, index, newAlignment)
-                        let (Tab hwnd) = tab
-                        Services.program.setWindowAlignment(hwnd, Some(newAlignment))
-                | None -> ()
+                let didMove =
+                    match this.ts.movedTab with
+                    | Some(tab, index, newAlignment) ->
+                        // Multi-select drag-reorder: ts.dragGroup holds the
+                        // contiguous range; splice-move the whole group.
+                        let grp = this.ts.dragGroup
+                        if grp.Length > 1 then
+                            this.ts.moveTabs(grp, index, newAlignment)
+                            for movedTab in grp do
+                                let (Tab h) = movedTab
+                                Services.program.setWindowAlignment(h, Some(newAlignment))
+                        else
+                            this.ts.moveTab(tab, index, newAlignment)
+                            let (Tab hwnd) = tab
+                            Services.program.setWindowAlignment(hwnd, Some(newAlignment))
+                        true
+                    | None -> false
                 this.ts.dragGroup <- []
                 mouseDownTab := None
 
@@ -3187,7 +3189,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // both the drag-cancel path (DragDetectingState onCancel —
                 // see DragDropController) and the drag-completed path so the
                 // reduction is reliable regardless of OS mouse capture.
-                if !mouseDownOnSelected then
+                //
+                // Exception: if a drag actually moved tab(s), the user
+                // clearly intended the multi-select to persist (the drag
+                // operated on the whole selection). Keep the selection. A
+                // drag that started but ended without moving anything (no
+                // movedTab) is treated as a no-op click and still clears
+                // the selection — this rescues the user from accidental
+                // micro-drags being mistaken for "really meant to drag".
+                if !mouseDownOnSelected && not didMove then
                     group.clearSelected()
                 mouseDownOnSelected := false
 
