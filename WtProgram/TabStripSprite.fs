@@ -696,16 +696,25 @@ type TabStripSprite<'id> when 'id : equality = {
         | Some(tab, x) ->
             if this.count = 0 then Some(tab, 0, TopLeft)
             else
-                // Group-drag detection uses the pivot tab's single width
-                // (the user judges drop position by the visible pivot, not
-                // by the whole group blob). visualWithout still excludes
-                // every group member so target-index math is consistent.
+                // Group-drag detection: judge by the GROUP HEAD's center
+                // (= dragGroup.[0]), not the pivot's. This keeps the drop
+                // index stable regardless of which group member the user
+                // grabbed: a stationary [C,D,E] should give the same
+                // visualIdx whether the user pivots on C or D.
+                //
+                // Concretely, pivot.x is the mouse x; the head sits at
+                // pivot.x + dragGroupOffsetOf(head) (negative if head is
+                // left of pivot). The center used for boundary tests is
+                // the head's center.
                 let groupTabs =
                     if List.isEmpty this.dragGroup then [tab] else this.dragGroup
                 let inGroup t = List.contains t groupTabs
+                let groupHead =
+                    if List.isEmpty this.dragGroup then tab else List.head this.dragGroup
                 let dragTabLen =
-                    if this.isPinned(tab) then this.pinnedTabLength else this.unpinnedTabLength
-                let centerX = float(x) + dragTabLen / 2.0
+                    if this.isPinned(groupHead) then this.pinnedTabLength else this.unpinnedTabLength
+                let groupHeadX = float(x) + this.dragGroupOffsetOf groupHead
+                let centerX = groupHeadX + dragTabLen / 2.0
 
                 // Calculate group tabs and widths (exclude every tab in the
                 // drag group, not just the pivot).
