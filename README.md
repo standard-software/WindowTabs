@@ -156,73 +156,80 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 ## Features
 
+### Multi-Select Tabs
+
+- Hold Ctrl and click tabs to add them to / remove them from the selection.
+- Hold Shift and click a tab to select the range from the active tab.
+- Once selected, the right-click context menu and tab drag operations act on the whole selection.
+
 ### Tab Drag and Drop
-- Drag tabs to reorder within the same group
-- Drag tabs to split into a new window or link to another group
+- Drag tabs to reorder within the same group.
+  - Multi-select: the contiguous selected range (= active tab + adjacent selected tabs sharing the same pin state and alignment) moves together as a single block, preserving the normal Chrome-style overlap. Smart-pin auto-converts the group on zone entry; the selection persists across a successful drag.
+- Drag tabs to split into a new window or link to another group.
+  - Multi-select: the whole selection (active + selected tabs) travels together — either into the target group, or as a new tab group when detached.
 
-### Tab Management
+### Tab Context Menu
 
-- **Tab Context Menu**
-  - New launch : execute (exe name)
-    - New tab : right of this tab ((exe name))
-    - New window (position) (same submenu as "Position Move", with a leading "Same position" item)
-    - New window (link to group)
-  - Position Move
-    - Snap Left
-    - Snap Right
-    - Snap Other
-      - Snap Top
-      - Snap Bottom
-      - Snap 90% / 70% / 50% / 30% (each)
-        - Left / Right / Top / Bottom
-        - Top Left / Top Right / Bottom Left / Bottom Right
-        - Center / Center Horizontally / Center Vertically
-      - Snap Display
-      - Snap Desktop
-    - Move
-      - Left Edge / Right Edge / Top Edge / Bottom Edge
+- New launch : execute (exe name)
+  - New tab : right of this tab ((exe name))
+  - New window (position) (same submenu as "Position Move", with a leading "Same position" item)
+  - New window (link to group)
+- Position Move
+  - Snap Left
+  - Snap Right
+  - Snap Other
+    - Snap Top
+    - Snap Bottom
+    - Snap 90% / 70% / 50% / 30% (each)
+      - Left / Right / Top / Bottom
       - Top Left / Top Right / Bottom Left / Bottom Right
-    - (per-display submenus, with leading "Same position on this display")
-  - Link to another tab group (submenu lists other tab groups; choose the destination)
-  - Tab Detach
-    - Detach this tab and reposition (same submenu as "Position Move")
-    - Detach this tab and link to another group
-  - Close Tab
-    - Close tab : (tab name)
-    - Close {N} tabs to the left
-    - Close {N} tabs to the right
-    - Close other tabs
-    - Close all tabs
-  - Tab Margin When Snapping
-    - Add margin at top
-  - Tab Position
-    - Align all tabs to Left
-    - Align all tabs to Right
-    - Align this tab to Left : (tab name)
-    - Align this tab to Right : (tab name)
-  - Tab Pin
-    - Pin this tab : (tab name)
-    - Unpin this tab : (tab name)
-    - Pin all tabs
-    - Unpin all tabs
-  - Tab Color Settings
-    - This tab color : (tab name)
-      - Red / Blue / Green / Yellow / Purple / Orange / Pink
-      - (same 7 colors, Underline variants)
-      - (same 7 colors, Border variants)
-    - Clear this tab color
-    - Clear color settings on all tabs
-  - Tab Name
-    - Rename tab
-    - Reset tab name
-  - System
-    - Copy (exe name) path
-    - Copy window title : (window title)
-    - Open folder of (exe name)
-    - Force kill this process
-  - Settings...
+      - Center / Center Horizontally / Center Vertically
+    - Snap Display
+    - Snap Desktop
+  - Move
+    - Left Edge / Right Edge / Top Edge / Bottom Edge
+    - Top Left / Top Right / Bottom Left / Bottom Right
+  - (per-display submenus, with leading "Same position on this display")
+- Link to another tab group (submenu lists other tab groups; choose the destination)
+- Tab Detach
+  - Detach this tab and reposition (same submenu as "Position Move")
+  - Detach this tab and link to another group
+- Close Tab
+  - Close tab : (tab name)
+  - Close {N} tabs to the left
+  - Close {N} tabs to the right
+  - Close other tabs
+  - Close all tabs
+- Tab Margin When Snapping
+  - Add margin at top
+- Tab Position
+  - Align all tabs to Left
+  - Align all tabs to Right
+  - Align this tab to Left : (tab name)
+  - Align this tab to Right : (tab name)
+- Tab Pin
+  - Pin this tab : (tab name)
+  - Unpin this tab : (tab name)
+  - Pin all tabs
+  - Unpin all tabs
+- Tab Color Settings
+  - This tab color : (tab name)
+    - Red / Blue / Green / Yellow / Purple / Orange / Pink
+    - (same 7 colors, Underline variants)
+    - (same 7 colors, Border variants)
+  - Clear this tab color
+  - Clear color settings on all tabs
+- Tab Name
+  - Rename tab
+  - Reset tab name
+- System
+  - Copy (exe name) path
+  - Copy window title : (window title)
+  - Open folder of (exe name)
+  - Force kill this process
+- Settings...
 
-In multi-select (see [Multi-Select Tabs](#multi-select-tabs)), per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
+In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
 
 ### New Launch
 
@@ -250,15 +257,7 @@ In multi-select (see [Multi-Select Tabs](#multi-select-tabs)), per-tab items sho
 ### Detach Tab
 
 - Detach the selected tab and reposition it, or link it to another tab group.
-- To detach multiple tabs together, use Multi-Select first (see below) and then run "Detach selected N tabs and reposition" / "Detach selected N tabs and link to another group".
-
-### Multi-Select Tabs
-
-- Hold Ctrl and click tabs to add them to / remove them from the selection.
-- Hold Shift and click a tab to select the range from the active tab.
-- Right-click any selected tab to see context menu items labeled "Selected N tabs..." that operate on the active tab plus the selected tabs together (Close, Pin / Unpin, Tab Color, Per-tab Alignment, Detach / Link to group, System submenu's Copy items).
-- Items that need a single pivot tab (Left/Right close) or that target a single process (Open folder, Force kill) are grayed out under multi-select.
-- Drag a selected tab to carry every selected tab into another tab group, or to detach them together into a new group.
+- To detach multiple tabs together, use [Multi-Select Tabs](#multi-select-tabs) first and then run "Detach selected N tabs and reposition" / "Detach selected N tabs and link to another group".
 
 ### Close Tab
 
