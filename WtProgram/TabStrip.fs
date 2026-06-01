@@ -508,11 +508,27 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     not (Set.contains t tabSet) && this.getTabAlign(t) = pivotAlign)
                 |> List.tryLast
             | _ -> None
+        // Smart-pin: only flip pin state when the group ENTERS the other
+        // zone. Concretely:
+        //   - All-unpinned group whose RIGHT neighbor is pinned -> pin
+        //     (the group has slid into the pinned zone from the right edge
+        //     of unpinned).
+        //   - All-pinned group whose LEFT neighbor is unpinned -> unpin
+        //     (the group has slid out of the pinned zone past its right
+        //     edge).
+        // Other configurations leave the pin state alone — in particular,
+        // an all-pinned group whose right neighbor is unpinned (= dropped
+        // at the right end of its own zone) keeps its pin state.
+        let groupIsPinned = pinnedTabsCell.value.contains(pivot)
         let shouldBePinned =
-            match rightNeighbor, leftNeighbor with
-            | Some r, _ -> Some (pinnedTabsCell.value.contains(r))
-            | None, Some l -> Some (pinnedTabsCell.value.contains(l))
-            | None, None -> None
+            if groupIsPinned then
+                match leftNeighbor with
+                | Some l when not (pinnedTabsCell.value.contains(l)) -> Some false
+                | _ -> None
+            else
+                match rightNeighbor with
+                | Some r when pinnedTabsCell.value.contains(r) -> Some true
+                | _ -> None
         match shouldBePinned with
         | Some pin ->
             for t in tabs do
