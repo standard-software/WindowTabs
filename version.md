@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.06.02_next1
+- Build script: retry temp folder cleanup with a 5-second wait (avoids leftover folder from sync locks).
 
 ## version ss_jp_2026.06.02
 - Multi-select tab drag-reorder: dragging a selected tab now moves the whole contiguous selected range together (= active tab + adjacent selected tabs that share the same pin state and alignment) as a single block.
