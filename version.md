@@ -1,6 +1,11 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.05.27_next1
+- Multi-select tab drag-reorder: dragging a selected tab now moves the whole contiguous selected range together (= active tab + adjacent selected tabs that share the same pin state and alignment) as a single block.
+  - Visual: the group slides as one block during drag, preserving the normal Chrome-style overlap between members; non-dragged tabs slide aside for the whole group, not just one tab.
+  - Swap timing: the group's leading edge crossing the next tab's center triggers the swap; right-aligned multi-tab uses the group center to match the visual expectation.
+  - Smart-pin (also unified for single-tab drag): an all-unpinned group whose right neighbor is pinned becomes pinned; an all-pinned group whose left neighbor is unpinned becomes unpinned; otherwise the pin state is preserved.
+  - Selection persists across a successful drag; an accidental drag that ended without moving any tab still falls back to the click-to-reduce-selection behavior.
 
 ## version ss_jp_2026.05.27
 - Fixed: incorrect behavior on maximize for apps configured in Window_Margin.json
