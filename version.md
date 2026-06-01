@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.06.02_next1
+
 ## version ss_jp_2026.06.02
 - Multi-select tab drag-reorder: dragging a selected tab now moves the whole contiguous selected range together (= active tab + adjacent selected tabs that share the same pin state and alignment) as a single block.
   - Visual: the group slides as one block during drag, preserving the normal Chrome-style overlap between members; non-dragged tabs slide aside for the whole group, not just one tab.
