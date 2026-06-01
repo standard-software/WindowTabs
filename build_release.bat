@@ -132,8 +132,18 @@ if not exist "%ZIP_FILE%" (
     exit /b 1
 )
 
-:: Remove temporary directory
-rmdir /s /q "%OUTPUT_DIR%"
+:: Remove temporary directory (Dropbox / OneDrive sync may hold a file
+:: handle on the freshly created folder, so retry once after 5 seconds.)
+rmdir /s /q "%OUTPUT_DIR%" 2>nul
+if exist "%OUTPUT_DIR%" (
+    echo   Temporary folder still present, waiting 5s for sync to release locks...
+    timeout /t 5 /nobreak >nul
+    rmdir /s /q "%OUTPUT_DIR%" 2>nul
+)
+if exist "%OUTPUT_DIR%" (
+    echo   WARNING: Could not remove temporary folder "%OUTPUT_DIR%".
+    echo            ZIP is already created; delete the folder manually later.
+)
 echo ZIP created successfully.
 echo.
 
