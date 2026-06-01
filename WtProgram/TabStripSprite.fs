@@ -757,6 +757,26 @@ type TabStripSprite<'id> when 'id : equality = {
                         let startX = float(this.size.width) - rightWidthFull
                         (rightWithout, startX)
 
+                // Hybrid swap-judge basis (variant S / -19):
+                //   - Right-aligned + multi-tab drag: group CENTER
+                //     (variant R / -18 behaved well for this case because
+                //      the user reads the whole moving block, not its
+                //      left-aligned head).
+                //   - All other cases (single tab, or left-aligned drag):
+                //     group HEAD's LEFT EDGE (variant Q / -17 felt right
+                //      because the leftmost moving tab is the visual
+                //      anchor in those cases).
+                let isRightMulti =
+                    targetAlignment = TopRight && List.length groupTabs > 1
+                let groupTotalWidth =
+                    let n = List.length groupTabs
+                    let total =
+                        groupTabs |> List.sumBy (fun t ->
+                            if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength)
+                    total - float(max 0 (n - 1)) * this.tabOverlap
+                let judgeX =
+                    if isRightMulti then groupHeadX + groupTotalWidth / 2.0
+                    else groupHeadX
                 let groupIndex =
                     if groupList.IsEmpty then 0
                     else
@@ -767,17 +787,12 @@ type TabStripSprite<'id> when 'id : equality = {
                             if not found then
                                 let t = groupList.[i]
                                 let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
-                                // Swap when the group head's LEFT EDGE crosses
-                                // t's CENTER. Using t's center (not "next tab's
-                                // left edge") gives the natural "tabs swap when
-                                // they hit each other's midpoint" feel and
-                                // works uniformly across pinned and unpinned
-                                // tabs even when their widths differ a lot —
-                                // the previous step-boundary rule caused early
-                                // swaps when a wide unpinned group crossed
-                                // narrow pinned tabs.
+                                // Swap when judgeX crosses t's CENTER.
+                                // judgeX is the variant-specific basis
+                                // (group center for right-multi, group
+                                // head's left edge otherwise).
                                 let tCenter = groupStartX + offset + tLen / 2.0
-                                if groupHeadX < tCenter then
+                                if judgeX < tCenter then
                                     idx <- i
                                     found <- true
                                 offset <- offset + (tLen - this.tabOverlap)
