@@ -441,37 +441,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.movedTab = this.ts.movedTab
 
+    // Single-tab move is just a special case of moveTabs (the group is a
+    // 1-element list). Sharing the implementation ensures smart-pin uses
+    // the same right-neighbor / left-neighbor rule for both single and
+    // multi-tab drags.
     member this.moveTab(tab, index, ?newAlignment: TabAlign) =
-        Cell.beginUpdate()
-        // Set alignment if provided (from drag alignment detection)
         match newAlignment with
-        | Some(a) -> tabAlignmentCell.map(fun m -> m.add tab a)
-        | None -> ()
-        visualOrderCell.set(visualOrderCell.value.move((=) tab, index))
-        // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
-        // Only consider tabs in the same alignment group for pin zone detection
-        let newOrder = visualOrderCell.value
-        let tabAlign = this.getTabAlign(tab)
-        let sameGroupTabs = newOrder.where(fun t -> this.getTabAlign(t) = tabAlign)
-        let tabIndexInGroup = sameGroupTabs.tryFindIndex((=) tab)
-        match tabIndexInGroup with
-        | Some idx ->
-            let pinnedCountInGroup =
-                sameGroupTabs.where(fun t -> pinnedTabsCell.value.contains(t)).length
-            if idx < pinnedCountInGroup then
-                // Dropped in pinned zone of same alignment group -> pin the tab
-                if not (pinnedTabsCell.value.contains(tab)) then
-                    pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
-            else
-                // Dropped in unpinned zone of same alignment group -> unpin the tab
-                if pinnedTabsCell.value.contains(tab) then
-                    pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
-        | None -> ()
-        // Restore the canonical visual ordering after any alignment/pin changes
-        this.normalizeVisualOrder()
-        Cell.endUpdate()
-        monitor.tabMoved(tab, index)
-        tabMovedEvent.Trigger(tab, index)
+        | Some a -> this.moveTabs([tab], index, a)
+        | None -> this.moveTabs([tab], index)
 
     // Multi-tab move: splice `tabs` (in the given order) into visualOrder at
     // `targetIndex`. Smart-pin: the whole group adopts the pin state of
