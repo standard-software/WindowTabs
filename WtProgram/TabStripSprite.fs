@@ -767,11 +767,20 @@ type TabStripSprite<'id> when 'id : equality = {
                             if not found then
                                 let t = groupList.[i]
                                 let tLen = if this.isPinned(t) then this.pinnedTabLength else this.unpinnedTabLength
-                                let step = tLen - this.tabOverlap
-                                if centerX < groupStartX + offset + step then
+                                // Swap when the group head's LEFT EDGE crosses
+                                // t's CENTER. Using t's center (not "next tab's
+                                // left edge") gives the natural "tabs swap when
+                                // they hit each other's midpoint" feel and
+                                // works uniformly across pinned and unpinned
+                                // tabs even when their widths differ a lot —
+                                // the previous step-boundary rule caused early
+                                // swaps when a wide unpinned group crossed
+                                // narrow pinned tabs.
+                                let tCenter = groupStartX + offset + tLen / 2.0
+                                if groupHeadX < tCenter then
                                     idx <- i
                                     found <- true
-                                offset <- offset + step
+                                offset <- offset + (tLen - this.tabOverlap)
                         max 0 (min idx groupList.Length)
 
                 // Convert group index to visual order index for splicing.
