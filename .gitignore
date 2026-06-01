@@ -14,3 +14,8 @@ packages/
 **/bin/Release/
 *.pdb
 /exe/
+
+.vscode/
+CCLOG/
+CLAUDE*.md
+
