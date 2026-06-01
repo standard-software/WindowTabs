@@ -50,6 +50,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
     let slideCell = Cell.create(None)
+    // Multi-tab drag group: set by the decorator on drag begin to the
+    // contiguous selected range (in visualOrder). The first element is the
+    // pivot (= slide.tab). Cleared on drag end.
+    let dragGroupCell = Cell.create<Tab list>([])
     let ptCell = Cell.create(None)
     let tabInfoCell = Cell.create(Map2():Map2<Tab,TabInfo>)
     let layeredWindowCell = Cell.create(None)
@@ -199,6 +203,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             selectedTabs = selectedTabsCell.value
             transparent = this.transparent
             appearance = this.appearance
+            dragGroup = dragGroupCell.value
         }
     member private this.ts = this.tsBase this.direction
         
@@ -436,37 +441,109 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.movedTab = this.ts.movedTab
 
+    // Single-tab move is just a special case of moveTabs (the group is a
+    // 1-element list). Sharing the implementation ensures smart-pin uses
+    // the same right-neighbor / left-neighbor rule for both single and
+    // multi-tab drags.
     member this.moveTab(tab, index, ?newAlignment: TabAlign) =
-        Cell.beginUpdate()
-        // Set alignment if provided (from drag alignment detection)
         match newAlignment with
-        | Some(a) -> tabAlignmentCell.map(fun m -> m.add tab a)
+        | Some a -> this.moveTabs([tab], index, a)
+        | None -> this.moveTabs([tab], index)
+
+    // Multi-tab move: splice `tabs` (in the given order) into visualOrder at
+    // `targetIndex`. Smart-pin: the whole group adopts the pin state of
+    // the tab immediately to the RIGHT of the spliced group in the same
+    // alignment zone (matches single-tab moveTab's intuition extended to
+    // a group). If there is no right neighbor in the same alignment, the
+    // left neighbor decides instead. If the group has no neighbor at all
+    // in its alignment, the existing pin state is preserved.
+    member this.moveTabs(tabs: Tab list, targetIndex: int, ?newAlignment: TabAlign) =
+        if List.isEmpty tabs then () else
+        Cell.beginUpdate()
+        match newAlignment with
+        | Some(a) ->
+            for t in tabs do
+                tabAlignmentCell.map(fun m -> m.add t a)
         | None -> ()
-        visualOrderCell.set(visualOrderCell.value.move((=) tab, index))
-        // Auto-pin/unpin based on drop position (VSCode-style cross-zone drag)
-        // Only consider tabs in the same alignment group for pin zone detection
-        let newOrder = visualOrderCell.value
-        let tabAlign = this.getTabAlign(tab)
-        let sameGroupTabs = newOrder.where(fun t -> this.getTabAlign(t) = tabAlign)
-        let tabIndexInGroup = sameGroupTabs.tryFindIndex((=) tab)
-        match tabIndexInGroup with
-        | Some idx ->
-            let pinnedCountInGroup =
-                sameGroupTabs.where(fun t -> pinnedTabsCell.value.contains(t)).length
-            if idx < pinnedCountInGroup then
-                // Dropped in pinned zone of same alignment group -> pin the tab
-                if not (pinnedTabsCell.value.contains(tab)) then
-                    pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
+        let tabSet = Set.ofList tabs
+        let cur = visualOrderCell.value.list
+        let withoutTabs = cur |> List.filter (fun t -> not (Set.contains t tabSet))
+        let safeIndex = max 0 (min withoutTabs.Length targetIndex)
+        let newOrder =
+            (withoutTabs |> List.truncate safeIndex)
+            @ tabs
+            @ (withoutTabs |> List.skip safeIndex)
+        visualOrderCell.set(List2(newOrder))
+        // Smart-pin decision: look at the immediate right neighbor of the
+        // spliced group in the same alignment zone. If absent, fall back
+        // to the left neighbor.
+        let pivot = List.head tabs
+        let pivotAlign = this.getTabAlign pivot
+        let postOrder = visualOrderCell.value.list
+        let groupLastIdx =
+            postOrder
+            |> List.mapi (fun i t -> i, t)
+            |> List.filter (fun (_, t) -> Set.contains t tabSet)
+            |> List.tryLast
+            |> Option.map fst
+        let groupFirstIdx =
+            postOrder
+            |> List.mapi (fun i t -> i, t)
+            |> List.tryFind (fun (_, t) -> Set.contains t tabSet)
+            |> Option.map fst
+        let rightNeighbor =
+            match groupLastIdx with
+            | Some idx ->
+                postOrder
+                |> List.skip (idx + 1)
+                |> List.tryFind (fun t ->
+                    not (Set.contains t tabSet) && this.getTabAlign(t) = pivotAlign)
+            | None -> None
+        let leftNeighbor =
+            match groupFirstIdx with
+            | Some idx when idx > 0 ->
+                postOrder
+                |> List.truncate idx
+                |> List.filter (fun t ->
+                    not (Set.contains t tabSet) && this.getTabAlign(t) = pivotAlign)
+                |> List.tryLast
+            | _ -> None
+        // Smart-pin: only flip pin state when the group ENTERS the other
+        // zone. Concretely:
+        //   - All-unpinned group whose RIGHT neighbor is pinned -> pin
+        //     (the group has slid into the pinned zone from the right edge
+        //     of unpinned).
+        //   - All-pinned group whose LEFT neighbor is unpinned -> unpin
+        //     (the group has slid out of the pinned zone past its right
+        //     edge).
+        // Other configurations leave the pin state alone — in particular,
+        // an all-pinned group whose right neighbor is unpinned (= dropped
+        // at the right end of its own zone) keeps its pin state.
+        let groupIsPinned = pinnedTabsCell.value.contains(pivot)
+        let shouldBePinned =
+            if groupIsPinned then
+                match leftNeighbor with
+                | Some l when not (pinnedTabsCell.value.contains(l)) -> Some false
+                | _ -> None
             else
-                // Dropped in unpinned zone of same alignment group -> unpin the tab
-                if pinnedTabsCell.value.contains(tab) then
-                    pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
+                match rightNeighbor with
+                | Some r when pinnedTabsCell.value.contains(r) -> Some true
+                | _ -> None
+        match shouldBePinned with
+        | Some pin ->
+            for t in tabs do
+                if pin && not (pinnedTabsCell.value.contains(t)) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.add(t))
+                elif not pin && pinnedTabsCell.value.contains(t) then
+                    pinnedTabsCell.set(pinnedTabsCell.value.remove(t))
         | None -> ()
-        // Restore the canonical visual ordering after any alignment/pin changes
         this.normalizeVisualOrder()
         Cell.endUpdate()
-        monitor.tabMoved(tab, index)
-        tabMovedEvent.Trigger(tab, index)
+        for t in tabs do
+            let finalIdx =
+                visualOrderCell.value.tryFindIndex((=) t) |> Option.defaultValue 0
+            monitor.tabMoved(t, finalIdx)
+            tabMovedEvent.Trigger(t, finalIdx)
 
     member this.tabMoved = tabMovedEvent.Publish
 
@@ -808,9 +885,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         with get() = transparentCell.value
         and set(value) = transparentCell.set(value)
 
-    member this.slide 
+    member this.slide
         with get() : (Tab * int) option = slideCell.value
         and set(value) = slideCell.set(value)
+
+    member this.dragGroup
+        with get() : Tab list = dragGroupCell.value
+        and set(value: Tab list) = dragGroupCell.set(value)
 
     member this.renderTs(top) =
         let ts = this.ts
