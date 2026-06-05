@@ -3068,14 +3068,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // of the multi-select set, compute the contiguous range and
                 // hand it to the strip so the slide rendering carries all
                 // members along with the pivot.
+                // Guard: dragBegin runs async (BeginInvoke), but for a
+                // single-tab group the synchronous dragEnter->dragExit that
+                // follows can detach the only tab and empty this group
+                // BEFORE this callback executes. In that case the origin tab
+                // is gone, so there is no group to build — computing it would
+                // call group.topWindow on an empty zorder and crash
+                // ("The input list was empty.").
                 match !mouseDownTab with
-                | Some originTab ->
+                | Some originTab when this.ts.tabs.contains(originTab) ->
                     let grp = this.contiguousSelectedFromTab(originTab)
                     if grp.Length > 1 then
                         this.ts.dragGroup <- grp
                     else
                         this.ts.dragGroup <- []
-                | None ->
+                | _ ->
                     this.ts.dragGroup <- []
                 
         member this.dragEnter dragInfo pt =
