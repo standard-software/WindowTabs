@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.06.06_next1
+
 ## version ss_jp_2026.06.06
 - Fixed: dragging the only tab of a single-tab group could crash WindowTabs (regression from the 2026.06.02 multi-select drag-reorder).
 - Build script: retry temp folder cleanup with a 5-second wait (avoids leftover folder from sync locks).
