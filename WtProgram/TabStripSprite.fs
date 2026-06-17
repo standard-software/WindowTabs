@@ -880,19 +880,25 @@ type TabStripSprite<'id> when 'id : equality = {
     member this.render = this.sprite.render
 
     member this.tryHit pt =
-        let path = this.sprite.hit(pt)
+        // Determine the owning tab purely geometrically (boundary at the
+        // midpoint of each tab overlap, independent of z-order) so a tab that
+        // is drawn on top never steals the exposed area — including the
+        // Close/Pin button — of the tab overlapped behind it. This uses the
+        // same partition as the tooltip hit test: every tab gets a constant
+        // hover width regardless of which tab is frontmost.
         maybe {
-            let! tab = path.tryPick <| fun sprite ->
-                match sprite with
-                | :? TabSprite<'id> as ts -> Some(ts.id)
-                | _ -> None
+            let! tab = this.tryHitForTooltip pt
+            // Resolve the part (Close/Pin/Icon/Background) within that tab by
+            // hit-testing the tab's own sprite at tab-local coordinates.
+            let path = this.tabSprite(tab).hit(pt.sub(this.tabLocation tab))
             let part : TabPart =
-                match path.head with
-                | :? TabSprite<'id> -> TabBackground
-                | :? IconSprite -> TabIcon
-                | :? CloseButtonSprite -> TabClose
-                | :? PinButtonSprite -> TabPin
-                | _ -> TabBackground
+                path.tryPick (fun sprite ->
+                    match sprite with
+                    | :? CloseButtonSprite -> Some(TabClose)
+                    | :? PinButtonSprite -> Some(TabPin)
+                    | :? IconSprite -> Some(TabIcon)
+                    | _ -> None)
+                |> Option.defaultValue TabBackground
             return tab,part
         }
 
