@@ -29,6 +29,22 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let sizeCell = Cell.create(Sz.empty)
     let alphaCell = Cell.create(byte(0xFF))
     let locationCell = Cell.create(Pt.empty)
+    // Non-integer-DPI DRAWING correction for the strip's monitor, stored as
+    // (rate, monitorRelativeLeft). The process is DPI-unaware; at a scale whose
+    // logical resolution is non-integer (e.g. 150%: 2560/1.5 = 1706.67, rounded
+    // to 1707) the OS bitmap-stretches the layered window slightly MORE than it
+    // virtualizes the mouse/coordinates. A pixel at monitor-relative x = X is
+    // therefore displayed X * rate too far right, while the mouse reports the
+    // un-drifted position. The fix is on the DRAWING, not the mouse: render is
+    // pre-compressed horizontally by 1/(1+rate) about the monitor origin so the
+    // displayed tabs land exactly where the (correct, raw) mouse reports them;
+    // hit-testing then uses the untouched sprite layout. The leftover strip area
+    // is transparent (invisible), so no gap appears. rate is computed from
+    // GetDeviceCaps (DESKTOPHORZRES/HORZRES) so it adapts to any DPI and is 0 at
+    // integer-logical scales (100/125/200% on a 2560 panel) -> pixel-perfect
+    // no-op. monitorRelativeLeft = strip's virtual left minus its monitor's
+    // virtual origin; both refreshed in setPlacement.
+    let drawCorrectionCell = Cell.create((0.0, 0.0))
     let visualOrderCell = Cell.create(List2())
     let zorderCell = Cell.create(List2())
     let visibleCell = Cell.create(false)
@@ -338,6 +354,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.update()
 
     member private this.wndProc(msg:Win32Message) =
+        // The mouse point is used as-is: the non-integer-DPI drift is corrected
+        // on the DRAWING side (see applyDrawCorrection), so the raw client point
+        // already matches the displayed tabs.
         let mousePt() = msg.lParam.location
         let mouseDown btn =
             this.processMouse(MouseClick(mousePt(), btn, MouseDown))
@@ -383,14 +402,34 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             this.window.update(this.render, this.location, this.alpha)
         else this.window.hide()
     
-    member private this.render : Img = 
+    // Pre-compress the rendered strip horizontally about the monitor origin to
+    // undo the non-integer-DPI display/mouse drift (see drawCorrectionCell). A
+    // no-op (returns the input) at integer-logical scales where rate = 0.
+    member private this.applyDrawCorrection(img:Img) =
+        let (c, a) = drawCorrectionCell.value
+        if c = 0.0 then img
+        else
+            let scale = 1.0 / (1.0 + c)
+            // x' = scale*x + dx maps monitor-relative x by 1/(1+c) about the
+            // monitor origin (a = strip's monitor-relative virtual left).
+            let dx = float32(- a * c / (1.0 + c))
+            let dst = Img(img.size)
+            let g = dst.graphics
+            g.InterpolationMode <- InterpolationMode.HighQualityBicubic
+            use m = new Matrix(float32 scale, 0.0f, 0.0f, 1.0f, dx, 0.0f)
+            g.Transform <- m
+            g.DrawImage(img.bitmap, 0, 0)
+            g.Dispose()
+            dst
+
+    member private this.render : Img =
         try
-            let img = this.ts.render
+            let img = this.applyDrawCorrection(this.ts.render)
             if this.isShrunk && this.direction = TabDirection.TabDown then
                 img.clip(Rect(Pt(0, img.height - 7), Sz(img.width, 7)))
             else
                 img
-        with ex -> 
+        with ex ->
             Img(Sz(1,1))
 
     
@@ -868,11 +907,51 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             
     member this.bounds = this.window.bounds
 
+    // Drawing-correction (rate, monitor-relative left) for the monitor
+    // containing the given rectangle. Read the monitor's logical (HORZRES) and
+    // physical (DESKTOPHORZRES) widths via GetDeviceCaps — the only DPI source
+    // that is correct from a DPI-unaware process. The display scale Windows
+    // actually applies is set in 25% steps; when (physical / setting) is not a
+    // whole number Windows rounds the logical resolution (e.g. 150%: 2560/1.5 =
+    // 1706.67 -> HORZRES 1707). That rounding makes the layered window's
+    // bitmap-stretch disagree with the mouse virtualization by a tiny amount
+    // that accumulates with monitor-relative x; the rate below captures it. At
+    // scales where physical/setting is whole (100/125/200% on a 2560 panel) the
+    // rounding error is 0, so the rate is 0 and rendering is untouched.
+    member private this.drawCorrectionForRect(r:Rect) =
+        try
+            let center = System.Drawing.Point(r.x + r.width / 2, r.y + r.height / 2)
+            let screen = Screen.FromPoint(center)
+            let monitorX = float screen.Bounds.X
+            let hdc = WinUserApi.CreateDC(screen.DeviceName, null, null, IntPtr.Zero)
+            let logRes = WinUserApi.GetDeviceCaps(hdc, int DeviceCap.HORZRES)
+            let physRes = WinUserApi.GetDeviceCaps(hdc, int DeviceCap.DESKTOPHORZRES)
+            WinUserApi.DeleteDC(hdc) |> ignore
+            // monitor-relative virtual left of the strip (drift is anchored here)
+            let a = float r.x - monitorX
+            if logRes <= 0 || physRes <= 0 then (0.0, a)
+            else
+                // Recover the user-set scale (multiple of 25%) from the ratio.
+                let effective = float physRes / float logRes
+                let setting = System.Math.Round(effective * 4.0) / 4.0
+                if setting <= 0.0 then (0.0, a)
+                else
+                    let idealLog = float physRes / setting     // e.g. 1706.67
+                    let err = float logRes - idealLog          // rounding amount (0 at whole)
+                    // Empirical amplification of the rounding into the
+                    // display/mouse mismatch; verified across 100-200% DPI.
+                    let k = 64.0
+                    (k * err / float logRes, a)
+        with _ -> (0.0, float r.x)
+
     member this.setPlacement(placement) =
         showInsideCell.set(placement.showInside)
         sizeCell.set(placement.bounds.size)
-        locationCell.set(placement.bounds.location)   
-     
+        locationCell.set(placement.bounds.location)
+        // Refresh the DRAWING correction (rate, monitor-relative left) from the
+        // (stable) strip bounds so render can undo the non-integer-DPI drift.
+        drawCorrectionCell.set(this.drawCorrectionForRect(placement.bounds))
+
     member this.alpha
         with get() = alphaCell.value
         and set(value) = alphaCell.set(value)
