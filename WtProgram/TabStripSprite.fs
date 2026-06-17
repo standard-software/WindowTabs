@@ -902,7 +902,14 @@ type TabStripSprite<'id> when 'id : equality = {
             return tab,part
         }
 
-    // Tooltip hit test: boundary at midpoint of tab overlap area, ignoring z-order
+    // Tab-ownership hit test (used by both tooltip and tryHit): boundary at the
+    // midpoint of each tab overlap, ignoring z-order, so every tab gets a
+    // constant hover width. The LAST tab of a group has no right neighbour, so
+    // left unadjusted it would own the full trapezoid down to its slanted
+    // bottom edge — half an overlap wider than the interior tabs. Trim each
+    // group's right limit by overlap/2 so the last tab's hover width matches
+    // the others (treating tabs as equal-width rectangles, ignoring the slanted
+    // bottom edge). The close button stays well inside the trimmed limit.
     member this.tryHitForTooltip (pt: Pt) : Option<'id> =
         if this.count = 0 then None
         else
@@ -916,9 +923,12 @@ type TabStripSprite<'id> when 'id : equality = {
                 let leftWidth = this.calcGroupWidth(leftTabs)
                 let rightWidth = this.calcGroupWidth(rightTabs)
                 let rightStartX = float(this.size.width) - rightWidth
-                if x < leftWidth && not leftTabs.isEmpty then
+                // Trim the last tab's trapezoid-bottom extension (only meaningful
+                // when tabs actually overlap).
+                let trim = max 0.0 (this.tabOverlap / 2.0)
+                if x < leftWidth - trim && not leftTabs.isEmpty then
                     this.hitInGroup leftTabs 0.0 x
-                elif x >= rightStartX && not rightTabs.isEmpty then
+                elif x >= rightStartX && x < float(this.size.width) - trim && not rightTabs.isEmpty then
                     this.hitInGroup rightTabs rightStartX x
                 else
                     None
