@@ -1,6 +1,13 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.06.06_next1
+- High-DPI: fixed several hit-test and rendering bugs at non-integer DPI scales (150% / 175% / etc.) and on multi-monitor mixed-DPI setups
+  - Fixed: Close/Pin button hover and click were offset from the visible button at non-integer DPI scales
+  - Fixed: tab-rename input box was offset and oversized at non-integer DPI
+  - Fixed: at non-integer DPI the rightmost right-aligned tab lost hover at its right edge (incl. the Close button) because the draw-correction left a transparent right margin that the layered strip passed through as click-through; that margin is now an invisible hit-testable fill, and the hover no longer vanishes on a spurious WM_MOUSELEAVE while the cursor is still over a tab
+- Tab hit-test (independent of DPI):
+  - Fixed: hovering/clicking a tab behind an overlapping tab (incl. its Close/Pin button) was stolen by the front tab
+  - Fixed: the last tab in a group had a wider hover area than the others (it extended to the trapezoid's slanted bottom edge); its hit width is now trimmed by half the overlap to match every other tab
 
 ## version ss_jp_2026.06.06
 - Fixed: dragging the only tab of a single-tab group could crash WindowTabs (regression from the 2026.06.02 multi-select drag-reorder).
