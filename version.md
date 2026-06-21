@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_jp_2026.06.22_next1
+
 ## version ss_jp_2026.06.22
 - High-DPI: fixed several hit-test and rendering bugs at non-integer DPI scales (150% / 175% / etc.) and on multi-monitor mixed-DPI setups
   - Fixed: Close/Pin button hover and click were offset from the visible button at non-integer DPI scales
