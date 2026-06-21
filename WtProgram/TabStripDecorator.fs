@@ -294,48 +294,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let form = new FloatingTextBox()
 
-        // Find which screen contains the tab strip window
-        let containingScreen = Screen.FromHandle(this.ts.hwnd)
+        // The rename box is a DPI-unaware WinForms form, like the rest of the
+        // app, so the OS already scales its logical bounds to physical on
+        // display. The strip draws each tab's text with SystemFonts.MenuFont at
+        // these same logical client coordinates, so the box must use the
+        // UNSCALED logical position, size and font to line up. The previous code
+        // multiplied all three by the DPI scale, which the OS then scaled again -
+        // placing the box at pt*2.25 instead of pt*1.5, a rightward offset that
+        // grew with the tab's distance from the monitor's left edge.
+        form.textBox.Font <- SystemFonts.MenuFont
 
-        // Create device context for the specific display to get physical vs logical resolution
-        let hdc = WinUserApi.CreateDC(containingScreen.DeviceName, null, null, IntPtr.Zero)
-        let logicalWidth = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.HORZRES))
-        let physicalWidth = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.DESKTOPHORZRES))
-        let logicalHeight = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.VERTRES))
-        let physicalHeight = WinUserApi.GetDeviceCaps(hdc, int(DeviceCap.DESKTOPVERTRES))
-        WinUserApi.DeleteDC(hdc) |> ignore
-
-        // Calculate scale factor from physical/logical ratio
-        let scaleX = if logicalWidth > 0 then float(physicalWidth) / float(logicalWidth) else 1.0
-        let scaleY = if logicalHeight > 0 then float(physicalHeight) / float(logicalHeight) else 1.0
-        let dpiScale = (scaleX + scaleY) / 2.0
-
-        // Scale font size according to DPI
-        let baseFont = SystemFonts.MenuFont
-        let scaledFontSize = baseFont.Size * float32(dpiScale)
-        form.textBox.Font <- new Font(baseFont.FontFamily, scaledFontSize, baseFont.Style)
-
-        // Convert client coordinates to screen coordinates using Win32 API
+        // Convert the tab's text client position to screen coordinates.
         let mutable pt = POINT(X = textBounds.location.x, Y = textBounds.location.y + verticalMargin)
         WinUserApi.ClientToScreen(this.ts.hwnd, &pt) |> ignore
 
-        // Calculate position: display offset + (relative position × DPI scale)
-        let displayOffset = Point(containingScreen.Bounds.X, containingScreen.Bounds.Y)
-        let relativePos = Point(pt.X - displayOffset.X, pt.Y - displayOffset.Y)
-        let scaledRelativePos = Point(
-            int(float(relativePos.X) * dpiScale),
-            int(float(relativePos.Y) * dpiScale)
-        )
-        let finalPos = Point(
-            displayOffset.X + scaledRelativePos.X,
-            displayOffset.Y + scaledRelativePos.Y
-        )
-
-        form.Location <- finalPos
-        form.SetSize(Size(
-            int(float(textBounds.size.width) * dpiScale),
-            int(float(textBounds.size.height - 2 * verticalMargin) * dpiScale)
-        ))
+        form.Location <- Point(pt.X, pt.Y)
+        form.SetSize(Size(textBounds.size.width, textBounds.size.height - 2 * verticalMargin))
         form.textBox.KeyPress.Add <| fun e ->
             if e.KeyChar = char(Keys.Enter) then
                 let newName = form.textBox.Text
