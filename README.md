@@ -294,8 +294,11 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Multi-Display and DPI Support
 
 - Multi-display support with proper window positioning
-- DPI-aware window placement
+- Tab strip, Close/Pin buttons, and the tab-rename input box render at correct positions and sizes at non-integer DPI scales (125% / 150% / 175% etc.), and hover / click match the visible tab geometry
+- Works the same on multi-monitor mixed-DPI setups (each monitor at a different DPI)
 - Automatic window resizing when dropped to prevent exceeding monitor dimensions
+
+> **Substantially improved in ss_jp_2026.06.22:** Earlier versions had incomplete tab-strip DPI support — at non-integer DPI scales, tab rendering and hit-test areas were offset from the visible tabs. This version finally addresses it properly.
 
 ### Virtual Desktop Support
 
