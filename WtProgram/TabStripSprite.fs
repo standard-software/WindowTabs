@@ -445,6 +445,34 @@ type TabSprite<'id> = {
                 (if showPinButton then Some(this.pinButtonLocation, this.pinButtonSprite) else None)
                 ]).choose(id)
 
+    // Resolve which interactive part a tab-local point hits, by RECTANGLE (not
+    // glyph alpha). The sprite-tree hit tests non-transparent pixels, so a point
+    // landing in the transparent gaps of the close "x" / pin glyph falls through
+    // to the background. That is invisible at 1:1, but once the strip is
+    // DPI-compressed for display (non-integer scales) the crisp hit-test glyph
+    // and the resampled on-screen glyph disagree at the sub-pixel level and the
+    // Close/Pin hover flickers. Testing the full button rectangle is stable at
+    // any DPI. Visibility rules mirror `children`; the buttons never overlap the
+    // icon, so test order is immaterial.
+    member this.partAt (local: Pt) : TabPart =
+        let inRect (loc: Pt) (sz: Sz) =
+            local.x >= loc.x && local.x < loc.x + sz.width &&
+            local.y >= loc.y && local.y < loc.y + sz.height
+        let iconRight = this.iconLocation.x + this.iconSize.width
+        let canShowCloseButton = this.closeButtonLocation.x >= iconRight
+        let canShowPinButton = this.pinButtonLocation.x + this.closeButtonSize.width <= this.size.width
+        // For hit-testing the close button we deliberately drop the hover/capture
+        // gate that `children` uses for drawing: partAt is only ever called for
+        // the tab the cursor is over, which is hovered this frame, so the close
+        // button is (or is about to be) shown. Gating on the PREVIOUS frame's
+        // hover made the close rect flicker close<->bg.
+        let showCloseButton = not this.onlyIcon && not this.isPinned && canShowCloseButton
+        let showPinButton = not this.onlyIcon && this.isPinned && canShowPinButton
+        if showCloseButton && inRect this.closeButtonLocation this.closeButtonSize then TabClose
+        elif showPinButton && inRect this.pinButtonLocation this.closeButtonSize then TabPin
+        elif inRect this.iconLocation this.iconSize then TabIcon
+        else TabBackground
+
 type TabStripSprite<'id> when 'id : equality = {
     tabs: Map2<'id, TabDisplayInfo>
     appearance: TabAppearanceInfo
@@ -602,7 +630,7 @@ type TabStripSprite<'id> when 'id : equality = {
             let unpinnedAvailable = availableWidth - pinnedTotal
             min (unpinnedAvailable / float(this.unpinnedCount)) this.unpinnedTabMaxLen
 
-    member private this.tabSprite (tab:'id) =
+    member private this.tabSpriteRec (tab:'id) : TabSprite<'id> =
         let isPinned = this.isPinned(tab)
         let tabLen = if isPinned then this.pinnedTabLength else this.unpinnedTabLength
         {
@@ -630,7 +658,8 @@ type TabStripSprite<'id> when 'id : equality = {
                 match this.captured with
                 | Some(id, part) when id = tab -> Some(part)
                 | _ -> None
-        } :> ISprite
+        }
+    member private this.tabSprite (tab:'id) = this.tabSpriteRec(tab) :> ISprite
 
     member private this.bgImage =
         let bgColor =
@@ -889,27 +918,20 @@ type TabStripSprite<'id> when 'id : equality = {
         maybe {
             let! tab = this.tryHitForTooltip pt
             // Resolve the part (Close/Pin/Icon/Background) within that tab by
-            // hit-testing the tab's own sprite at tab-local coordinates.
-            let path = this.tabSprite(tab).hit(pt.sub(this.tabLocation tab))
-            let part : TabPart =
-                path.tryPick (fun sprite ->
-                    match sprite with
-                    | :? CloseButtonSprite -> Some(TabClose)
-                    | :? PinButtonSprite -> Some(TabPin)
-                    | :? IconSprite -> Some(TabIcon)
-                    | _ -> None)
-                |> Option.defaultValue TabBackground
+            // rectangle (see TabSprite.partAt) at tab-local coordinates.
+            let part = (this.tabSpriteRec tab).partAt(pt.sub(this.tabLocation tab))
             return tab,part
         }
 
-    // Tab-ownership hit test (used by both tooltip and tryHit): boundary at the
-    // midpoint of each tab overlap, ignoring z-order, so every tab gets a
-    // constant hover width. The LAST tab of a group has no right neighbour, so
-    // left unadjusted it would own the full trapezoid down to its slanted
-    // bottom edge — half an overlap wider than the interior tabs. Trim each
-    // group's right limit by overlap/2 so the last tab's hover width matches
-    // the others (treating tabs as equal-width rectangles, ignoring the slanted
-    // bottom edge). The close button stays well inside the trimmed limit.
+    // Tab-ownership hit test (used by both tooltip and tryHit): every tab's
+    // hover region is a uniform-width rectangle (width = tabLength - overlap),
+    // with boundaries at the overlap midpoints, ignoring z-order, so a tab drawn
+    // on top never steals the area of the tab behind it AND every tab reacts to
+    // hover over the same width. The LAST tab of a group has no right neighbour,
+    // so without adjustment it would own its full trapezoid (half an overlap
+    // wider than the interior tabs); trim its right limit by overlap/2 to keep
+    // the width uniform. The tab's slanted bottom-right corner beyond the trim
+    // is intentionally not hover-sensitive (drawing stays trapezoidal).
     member this.tryHitForTooltip (pt: Pt) : Option<'id> =
         if this.count = 0 then None
         else
@@ -923,8 +945,6 @@ type TabStripSprite<'id> when 'id : equality = {
                 let leftWidth = this.calcGroupWidth(leftTabs)
                 let rightWidth = this.calcGroupWidth(rightTabs)
                 let rightStartX = float(this.size.width) - rightWidth
-                // Trim the last tab's trapezoid-bottom extension (only meaningful
-                // when tabs actually overlap).
                 let trim = max 0.0 (this.tabOverlap / 2.0)
                 if x < leftWidth - trim && not leftTabs.isEmpty then
                     this.hitInGroup leftTabs 0.0 x

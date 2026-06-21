@@ -343,14 +343,28 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 this.onMouse(action, pt, btn, (hitTab, hitPart))
             hoverCell.set(this.hit)
         | MouseLeave ->
-            this.setPt(None)
-            capturedCell.set(None)
-            hoverCell.set(None)
-            // Hide tooltip when mouse leaves
-            lastToolTipTab := None
-            pendingTooltipTab := None
-            tooltipTimer.Stop()
-            tooltipForm.Visible <- false
+            // WM_MOUSELEAVE can fire while the cursor is still on a tab: a
+            // tooltip/overlay pops up over a stationary cursor, or the layered
+            // window repaints at a sub-pixel edge. Clearing the hover then makes
+            // the highlight and Close/Pin button vanish until the next move,
+            // which reads as "hovering but no hover state". Re-check the REAL
+            // cursor position; only clear when it has genuinely left the strip.
+            let c = System.Windows.Forms.Cursor.Position
+            let loc = this.location
+            let clientPt = Pt(c.X - loc.x, c.Y - loc.y)
+            let ts = this.ts
+            if this.window.hasCapture.not && (ts.tryHitForTooltip(clientPt)).IsSome then
+                this.setPt(Some(clientPt))
+                hoverCell.set(ts.tryHit(clientPt))
+            else
+                this.setPt(None)
+                capturedCell.set(None)
+                hoverCell.set(None)
+                // Hide tooltip when mouse leaves
+                lastToolTipTab := None
+                pendingTooltipTab := None
+                tooltipTimer.Stop()
+                tooltipForm.Visible <- false
         this.update()
 
     member private this.wndProc(msg:Win32Message) =
@@ -419,6 +433,19 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             use m = new Matrix(float32 scale, 0.0f, 0.0f, 1.0f, dx, 0.0f)
             g.Transform <- m
             g.DrawImage(img.bitmap, 0, 0)
+            g.ResetTransform()
+            // The leftward compression leaves the rightmost few px of the strip
+            // fully transparent. On this per-pixel-alpha layered window an alpha=0
+            // pixel is click-through, so that margin (the rightmost tab's right
+            // edge, including part of the Close button) stops receiving mouse
+            // events - a dead zone seen only at the right edge. Paint the exposed
+            // margin with a near-transparent (alpha=1, invisible) fill so it stays
+            // hit-testable, matching the uniform per-tab hit region.
+            let w = img.size.width
+            let marginX = int (scale * float w + float dx)
+            if marginX < w then
+                use b = new SolidBrush(Color.FromArgb(1, 0, 0, 0))
+                g.FillRectangle(b, marginX, 0, w - marginX, img.size.height)
             g.Dispose()
             dst
 
@@ -432,7 +459,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         with ex ->
             Img(Sz(1,1))
 
-    
     member private this.withUpdate f =
         Cell.beginUpdate()
         let result = f()
