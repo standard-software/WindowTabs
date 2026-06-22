@@ -58,11 +58,28 @@ type Settings(isStandAlone) as this =
 
         and set(newSettings : string option) =
             try
-                let settingsDir = Path.GetDirectoryName(this.path)
-                if Directory.Exists(settingsDir).not then
-                    Directory.CreateDirectory(settingsDir).ignore
-                File.WriteAllText(this.path, newSettings.Value)
-                this.clearCaches()
+                let newContent = newSettings.Value
+                // Dirty check: skip when the on-disk content (mirrored in cache) is identical.
+                // Periodic save fires every 10s; this avoids the ~7 ms disk write when nothing changed.
+                match cachedSettingsString with
+                | Some(prev) when prev = newContent -> ()
+                | _ ->
+                    let settingsDir = Path.GetDirectoryName(this.path)
+                    if Directory.Exists(settingsDir).not then
+                        Directory.CreateDirectory(settingsDir).ignore
+                    // Atomic write: write the new content to a sibling temp file,
+                    // then move it over the target. Survives force-quit mid-write
+                    // without corrupting the existing settings file.
+                    let tempPath = this.path + ".tmp"
+                    File.WriteAllText(tempPath, newContent)
+                    if File.Exists(this.path) then
+                        File.Replace(tempPath, this.path, null)
+                    else
+                        File.Move(tempPath, this.path)
+                    // Refresh in-memory caches with the freshly written content
+                    cachedSettingsString <- Some(newContent)
+                    cachedSettingsRec <- None
+                    valueCache.Clear()
             with
             | ex ->
                 // Log error but don't crash
