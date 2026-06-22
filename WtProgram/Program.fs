@@ -148,6 +148,12 @@ type Program() as this =
     // otherwise trigger a full window-scan. Coalesce the bursts into a single update.
     let mutable pendingUpdateAppWindowsToken : IDisposable option = None
     let updateAppWindowsDebounceMs = 50
+
+    // Periodic tab-group state save. Without this, a force-quit (Task Manager kill,
+    // crash, power loss) loses everything since the last clean shutdown. Fires on the
+    // UI thread; the dirty check in Settings.fs skips the ~7 ms disk write when nothing
+    // changed, so the steady-state cost is one JArray build and a string compare.
+    let periodicSaveTimer = new System.Windows.Forms.Timer(Interval = 10000)
    
     let isFirstRun = settingsManager.fileExists.not
 
@@ -179,6 +185,14 @@ type Program() as this =
         Services.settings.notifyValue "runAtStartup" this.updateRunAtStartup
         Services.desktop.groupExited.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
         Services.desktop.groupRemoved.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
+        // Start the periodic state-save timer. First tick fires 10s after Start(),
+        // by which time the desktop and groups are fully initialized.
+        periodicSaveTimer.Tick.Add <| fun _ ->
+            try
+                if inShutdown.value.not then
+                    this.saveTabGroupsToSettings()
+            with _ -> ()
+        periodicSaveTimer.Start()
     
     member this.desktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -684,6 +698,9 @@ type Program() as this =
             this.refresh()
 
         member x.shutdown() =
+            // Stop the periodic save before the explicit final save, so we don't
+            // race against an in-flight Tick during shutdown teardown.
+            periodicSaveTimer.Stop()
             // Save tab group configuration before shutdown
             this.saveTabGroupsToSettings()
             inShutdown.set(true)
