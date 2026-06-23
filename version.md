@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.06.22_next1
+- Tab-group state is now saved every 10 seconds (previously only on graceful shutdown), so a force-quit (Task Manager kill, crash, power loss) no longer loses the session
+  - Atomic write (temp file + replace) so a force-quit mid-write cannot corrupt the settings file
+  - Dirty check skips the disk write when nothing has changed, keeping the steady-state cost negligible
 
 ## version ss_jp_2026.06.22
 - High-DPI: fixed several hit-test and rendering bugs at non-integer DPI scales (150% / 175% / etc.) and on multi-monitor mixed-DPI setups
