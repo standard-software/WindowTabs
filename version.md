@@ -4,6 +4,10 @@
 - Tab-group state is now saved every 10 seconds (previously only on graceful shutdown), so a force-quit (Task Manager kill, crash, power loss) no longer loses the session
   - Atomic write (temp file + replace) so a force-quit mid-write cannot corrupt the settings file
   - Dirty check skips the disk write when nothing has changed, keeping the steady-state cost negligible
+- A tab joining an existing group now inherits the alignment of that group's last tab, regardless of the joining window's previous per-tab alignment, and lands at the rightmost slot accordingly
+  - All-left group → joiner becomes left-aligned; any right-aligned tab in the group → joiner becomes right-aligned
+  - Applies to auto-grouping and to the menu commands "Move tab to another group", "Link tab group to another group", and "Detach and link tab to another group" (the latter two route through the move-tab path)
+  - "New Tab" (which still matches the invoker tab) and startup restore (which uses saved values) are unchanged
 
 ## version ss_jp_2026.06.22
 - High-DPI: fixed several hit-test and rendering bugs at non-integer DPI scales (150% / 175% / etc.) and on multi-monitor mixed-DPI setups

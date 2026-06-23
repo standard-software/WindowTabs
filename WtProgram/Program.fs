@@ -415,8 +415,32 @@ type Program() as this =
                         wg.ts.pinTab(newTab)
                         Services.program.setWindowPinned(hwnd, true)
             | _ -> ()
+        else
+            // Joining an existing group: inherit the alignment of the group's
+            // last tab so a fully left-aligned group stays all-left and a group
+            // with any right-aligned tab puts the joiner on the right, regardless
+            // of the joining window's previous per-tab alignment. Then splice to
+            // the rightmost slot — normalize is a stable sort, so when the joiner
+            // ends up in the same zone as the existing tabs it would otherwise
+            // stay at its original index inside that zone instead of landing at
+            // the visual end.
+            if not isNewGroup then
+                match group :> obj with
+                | :? GroupInfo as gi ->
+                    gi.invokeGroup <| fun() ->
+                        let wg = gi.group
+                        let newTab = Tab(hwnd)
+                        let others = wg.ts.visualOrder.where(fun t -> t <> newTab)
+                        match others.list |> List.tryLast with
+                        | Some(lastTab) ->
+                            let lastAlign = wg.ts.getTabAlign(lastTab)
+                            wg.setTabAlign(hwnd, lastAlign)
+                            let endIndex = wg.ts.visualOrder.list.Length
+                            wg.ts.moveTab(newTab, endIndex)
+                        | None -> ()
+                | _ -> ()
         // For auto-grouping, position new tab next to same-exe tabs
-        elif not isNewGroup && not isDropped then
+        if invokerHwnd = IntPtr.Zero && not isNewGroup && not isDropped then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
