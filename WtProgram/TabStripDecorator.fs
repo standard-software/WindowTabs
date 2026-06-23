@@ -606,6 +606,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 // Double-check window is not already in target group
                                 if not (targetGroup.windows.contains hwnd) then
                                     targetGroup.addWindow(hwnd, false)
+                                    // Inherit the destination group's last-tab alignment
+                                    // so a fully left-aligned group stays all-left and any
+                                    // right-aligned tab puts the joiner at the right, regardless
+                                    // of the joiner's previous per-tab alignment.
+                                    // Then splice the joiner to the rightmost slot: normalize is
+                                    // a stable sort, so when the joiner ends up in the same zone
+                                    // as the existing tabs (e.g. all-left group joining all-right)
+                                    // it would otherwise stay at its original index inside that
+                                    // zone instead of landing at the visual end.
+                                    let newTab = Tab(hwnd)
+                                    let others = targetGroup.ts.visualOrder.where(fun t -> t <> newTab)
+                                    match others.list |> List.tryLast with
+                                    | Some(lastTab) ->
+                                        let lastAlign = targetGroup.ts.getTabAlign(lastTab)
+                                        targetGroup.setTabAlign(hwnd, lastAlign)
+                                        let endIndex = targetGroup.ts.visualOrder.list.Length
+                                        targetGroup.ts.moveTab(newTab, endIndex)
+                                    | None -> ()
                                     // Show window again (target group will handle positioning)
                                     window.showWindow(ShowWindowCommands.SW_SHOW)
                                     moveCompleted := true
@@ -648,8 +666,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 Services.program.suspendTabMonitoring()
 
                 try
-                    // Get all tabs in current group (copy to avoid modification during iteration)
-                    let tabsToMove = group.windows.items.list
+                    // Get all tabs in current group in VISUAL order (left-to-right).
+                    // group.windows is a Set with no insertion order, so iterating it
+                    // would scramble the source tabs in the destination group.
+                    let tabsToMove = group.visualOrder.list
 
                     // Move each tab to target group
                     tabsToMove |> List.iter (fun hwnd ->
@@ -2708,7 +2728,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                                 // the target group when multi-select is
                                                 // active. Otherwise just move the
                                                 // right-clicked tab.
-                                                this.actionTargets(hwnd)
+                                                // Iterate in visual (left-to-right) order
+                                                // so the joiners land in the destination
+                                                // group's tail in the same order they had
+                                                // in the source strip.
+                                                this.actionTargetsInVisualOrder(hwnd)
                                                 |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group))
                                             flags = List2()
                                         }))
