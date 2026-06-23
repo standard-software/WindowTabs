@@ -329,6 +329,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Tab Group Persistence
 
 - WindowTabs preserves your tab group configuration across restarts and when disabled.
+- State is saved every 10 seconds, so it survives a force-quit (Task Manager kill, crash, power loss) as well.
 
 ### Watchdog Auto-Restart
 
