@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.06.24_next1
+- Fixed: tab tooltip could stay on screen after the cursor moved off the strip via a screen edge or to another display (200 ms cursor-position polling now force-hides it)
 
 ## version ss_jp_2026.06.24
 - Tab-group state is now saved every 10 seconds (previously only on graceful shutdown), so a force-quit (Task Manager kill, crash, power loss) no longer loses the session

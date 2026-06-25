@@ -91,6 +91,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let tooltipForm = new Form()
     let tooltipLabel = new Label()
     let tooltipTimer = new Timer(Interval = 500)
+    // Polling fallback for stuck tooltips: WM_MOUSELEAVE does not always fire
+    // (e.g. when the cursor glides off the leftmost tab along a screen edge
+    // and then moves further), which would otherwise leave the tooltip
+    // permanently on screen. While the tooltip is visible, this re-checks the
+    // real cursor position on a short interval and force-hides the tooltip
+    // once the cursor has actually left the strip's tooltip hit area.
+    let tooltipHideTimer = new Timer(Interval = 200)
     let lastToolTipTab = ref None
     let pendingTooltipTab = ref None
     let tooltipMaxWidth =
@@ -150,6 +157,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 pendingTooltipTab := None
             | None -> ()
         )
+
+        tooltipHideTimer.Tick.Add(fun _ -> this.tryHideTooltipIfCursorLeft())
+        tooltipHideTimer.Start()
         
         layeredWindowCell.value <-
             let style = WindowsStyles.WS_POPUP
@@ -231,6 +241,33 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let! hit = this.ts.tryHit(pt)
         return hit
         }
+
+    // Polling fallback for stuck tooltips. Called from tooltipHideTimer; the
+    // body lives on a member (not inline in the do block) so this.ts and
+    // this.location resolve through normal forward-reference handling.
+    //
+    // Strict-bounds test instead of tryHitForTooltip: hitInGroup returns
+    // Some(leftmost tab) for any clientX < 0 (cursor is to the left of the
+    // strip on another monitor), so a tryHitForTooltip-based check misses
+    // the case where the cursor moves to a display that sits to the left of
+    // the strip's own display. Rectangle-only containment catches that.
+    member private this.tryHideTooltipIfCursorLeft() =
+        if tooltipForm.Visible then
+            try
+                let c = System.Windows.Forms.Cursor.Position
+                let loc : Pt = this.location
+                let sz : Sz = this.size
+                let clientX = c.X - loc.x
+                let clientY = c.Y - loc.y
+                let outsideStrip =
+                    clientX < 0 || clientX >= sz.width
+                    || clientY < 0 || clientY >= sz.height
+                if outsideStrip then
+                    lastToolTipTab := None
+                    pendingTooltipTab := None
+                    tooltipTimer.Stop()
+                    tooltipForm.Visible <- false
+            with _ -> ()
 
     // Tooltip hit test: boundary at midpoint of tab overlap area, ignoring z-order
     member private this.hitForTooltipTab : Option<Tab> = maybe {
@@ -1012,6 +1049,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         eventHandlersCell.value.items.iter(fun d -> d.Dispose())
         layeredWindowCell.value.iter <| fun w -> (w :?> IDisposable).Dispose()
         tooltipTimer.Dispose()
+        tooltipHideTimer.Dispose()
         tooltipForm.Dispose()
         this.window.destroy()
             
