@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
-## version ss_jp_2026.06.24_next1
+## version ss_2026.07.06
+- Version prefix changed from `ss_jp_` to `ss_`
+  - The `jp` originally indicated a Japanese-language build, but this fork has since gained multi-language support and is no longer Japanese-only, so the `jp` suffix no longer makes sense
+  - Past releases keep their original `ss_jp_...` names (release tags, historical entries in this file); only new releases from 2026.07.06 onward use the `ss_...` prefix
 - Fixed: tab tooltip could stay on screen after the cursor left the strip
   - Happened when the cursor moved off via a screen edge or to another display, so no mouse-leave event fired
   - A 200 ms cursor-position poll now force-hides the tooltip
