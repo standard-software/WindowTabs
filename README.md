@@ -13,41 +13,49 @@ WindowTabs is a tool that extends Windows productivity by letting you manage any
 <details>
 <summary>Read more about WindowTabs</summary>
 
-### Who this tool is for
+### I'd like WindowTabs to greatly enhance how you use Windows
 
-WindowTabs is a tool for people doing some kind of creative work on a PC. For example: accounting, customer support, slide deck preparation, business management, legal paperwork, electronic medical records, video editing, illustration, or — like me — software development. Doing this kind of work on a PC is itself a creative activity.
+WindowTabs is a tool that greatly enhances Windows productivity.
 
-In an era where smartphones and tablets cover most web browsing and entertainment, the fact that you go out of your way to use a Windows PC probably means you are engaged in something creative like that. If you are interested in improving how you operate Windows, I think WindowTabs can serve you as a good tool. I have built its features and shipped versions over time specifically to meet that need.
+In an era when smartphones and tablets can handle web browsing and entertainment, the fact that you're using a Windows PC probably means you're doing some kind of creative work. For example: accounting, customer support, presentation preparation, business management, legal paperwork, electronic medical records for healthcare, video editing, illustration, or software development.
+
+For people doing that kind of work daily and wanting to improve their Windows productivity, I really want them to use WindowTabs to boost both operability and work efficiency. I've built and iterated features across many versions to meet exactly those needs.
 
 ### Why a tab UI?
 
-Do you remember the early design of web browsers? Back then there was no tab UI. As browsers evolved, however, the value of the tab UI became universally recognized. Today every major browser ships with tabs, and their entire feature design is built on the assumption of tabs.
+As you'll feel from using a browser every day, the tab UI is highly intuitive and pleasant for humans.
 
-Just as with browsers, managing all of your Windows windows through a tab UI is genuinely convenient. It is an important kind of usability for getting work done crisply. Windows usability rises in one step, and the cost of switching attention to the task you actually want to do drops dramatically.
+Installing WindowTabs brings browser-like operability to Windows. Once you try it, it's very convenient. I think you'll find it's an important kind of usability for getting work done crisply. You probably switch between many windows to complete a task — WindowTabs lowers the operational cost of doing so, letting you focus on your goal.
 
-Microsoft also once prototyped a feature called **Sets** as an OS-level extension intended to manage every Windows window with tabs. The project was, however, discontinued. The exact reason isn't public, but I suspect integrating it into the OS internals was simply too difficult given backward-compatibility constraints. The experience they were aiming for, though, was excellent. WindowTabs has — since well before Sets — delivered that tab UI without touching the OS internals.
+### Microsoft once prototyped this, but the project was abandoned
 
-### About me (satoshi-yamamoto, the author of the ss_jp version)
+Microsoft too once attempted to manage every window with tabs as an OS-level extension prototype — a feature they called **Sets**. It was, however, discontinued. I don't know the exact reason, so this is just speculation: perhaps integrating it into the OS internals was too difficult given backward-compatibility constraints, or perhaps the benefits didn't justify the complexity.
 
-I have been a paid user of WindowTabs since before it was open-sourced, and have always been very fond of its tab UI. I have long wished that this kind of operation would spread to more people, and I've also tried out various similar tools over the years.
+Still, the direction they were aiming for is right, I think. WindowTabs has existed since before Sets, and delivers an excellent tab UI without touching the OS internals.
 
-This is part of why I keep updating WindowTabs as open source. These days I keep asking myself: "What kind of operation is most efficient for the most people? How can I help work get done faster?" — and I'm gradually improving WindowTabs along those lines. I believe the people who use WindowTabs are operating Windows more efficiently because of it.
+### About me (satoshi-yamamoto, the author of the ss_ version)
 
-### How I use it
+I have been a paid user of WindowTabs since before it was open-sourced, and I love its tab UI. I have long hoped that this kind of operability would spread to more people, and I have also tried out various similar software over the years.
 
-I (satoshi-yamamoto) am a software developer, and I normally build web applications for work. I've built things like a browser-based drawing tool, an in-browser car navigation app, and business chat tools.
+So I'm very happy to have the opportunity to improve WindowTabs as open source and deliver it to others.
 
-As a developer, I run 7 or 8 instances of VSCode, plus Visual Studio, several Windows Terminals, several WinMerges, a file explorer, an image viewer, Excel — and browsers (Edge, Chrome, private mode) — all managed under WindowTabs. Most of those apps already have their own tab UI, but I use WindowTabs to bundle them together at the window level. I snap them to the left and right of each display in a multi-display setup. I color-code the VSCode / Terminal / WinMerge tabs of related projects with the same color so the relationships stand out. I keep all of those running rather than launching them again, and just switch between them.
+Part of my motivation for updating WindowTabs is asking myself: "What kind of operability will be efficient for the most people? How can I help work get done faster?" — and I'm improving WindowTabs little by little along those lines.
 
-There are many ways WindowTabs can be useful for many people. Typical examples include:
-- Operate Chrome, Edge, and Firefox — including each one's incognito / private windows — as a single window.
-- Manage multiple Excel windows, or multiple Word and PowerPoint windows, as a single window.
+### How to use it
 
-Just as every user has their own way of using Windows, each user will find their own convenient way to use it.
+There are many useful ways to use it, but typical examples might be:
+- Operate Chrome, Edge, and Firefox — along with each one's incognito / private windows — all as a single browser window.
+- Manage multiple Excel windows, or multiple Word and PowerPoint windows, as a single office app window.
 
-### What's enhanced in version ss_jp_
+Just as each user has their own way of using Windows, each user is likely to find their own convenient way of using WindowTabs.
 
-WindowTabs version ss_jp_... lets you snap windows to the left/right/top/bottom of a display, and even jump a window across displays — all in a single action. The Windows-native snap feature has been refined to be much easier to use. In a multi-display environment, you can switch window placement without resorting to drag-and-drop. It's quite convenient, and I'm sure it will be useful for you too.
+I (satoshi-yamamoto) am a software developer; in my day job I build web applications. I've built things like a browser-based drawing tool, an in-browser car navigation app, and business chat tools.
+
+As a developer, I run 7 or 8 instances of VSCode, plus Visual Studio, several Windows Terminals, several WinMerges — along with file explorers, image viewers, and Excel — and browsers (Edge, Chrome, private mode), all managed under WindowTabs. Most of those apps already have their own tab UI, but I use WindowTabs to bundle them at the window level. I snap them to the left and right of each display in a multi-display setup. I color-code the VSCode / Terminal / WinMerge tabs of related projects with the same color so the relationships stand out. Rather than relaunching applications, I keep them all running and just switch between them.
+
+### What's enhanced in version ss_
+
+WindowTabs version ss_... lets you snap windows to the left/right/top/bottom of a display, and even jump a window across displays — all in a single action. The Windows-native snap feature has been refined to be much easier to use. In a multi-display environment, you can switch window placement without resorting to drag-and-drop. It's quite convenient, and I'm sure it will be useful for you too.
 
 ### I'd be truly happy if you'd recommend it to people around you
 
@@ -65,7 +73,7 @@ If you have any feedback, I'd love to hear it on GitHub Issues.
 
 <br />
 
-This version (ss_jp_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
+This version (ss_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
 
 <details>
 <summary>Read more about the project history and the lineage of forks</summary>
@@ -109,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_jp_2026.06.24_next1**
+Latest version: **ss_2026.07.06**
 
 See [version.md](version.md) for details.
 
