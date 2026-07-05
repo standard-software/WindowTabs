@@ -1,8 +1,12 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_jp_2026.06.24_next1
-- Fixed: tab tooltip could stay on screen after the cursor moved off the strip via a screen edge or to another display (200 ms cursor-position polling now force-hides it)
-- Context menu: once a submenu opens to the left (no room on the right screen edge), its child submenus now also open to the left instead of wrapping back to the right over earlier levels; the position is corrected before the submenu becomes visible (CBT hook + WM_WINDOWPOSCHANGING rewrite), so there is no flicker
+- Fixed: tab tooltip could stay on screen after the cursor left the strip
+  - Happened when the cursor moved off via a screen edge or to another display, so no mouse-leave event fired
+  - A 200 ms cursor-position poll now force-hides the tooltip
+- Context menu: once a submenu opens to the left, its child submenus also open to the left
+  - Previously a deeper submenu could wrap back to the right and cover earlier levels
+  - The position is corrected before the submenu becomes visible (CBT hook + WM_WINDOWPOSCHANGING rewrite), so there is no flicker
 
 ## version ss_jp_2026.06.24
 - Tab-group state is now saved every 10 seconds (previously only on graceful shutdown), so a force-quit (Task Manager kill, crash, power loss) no longer loses the session
