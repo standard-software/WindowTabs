@@ -27,16 +27,20 @@ type GroupInfo(enableSuperBar) as this =
         (_group, InvokerService.invoker)
 
     do
+        // asyncInvoke, not invoke: these fire on the group thread, and a
+        // synchronous invoke into the (possibly busy) main thread here is one
+        // half of the display-change deadlock — see NonBlockingSyncContext.
+        // Ordering is preserved by the main thread's message queue.
         _group.added.Add <| fun hwnd ->
-            desktopInvoker.invoke <| fun() ->
+            desktopInvoker.asyncInvoke <| fun() ->
                 windowsCell.map <| fun l -> l.where((<>) hwnd).append hwnd
 
         _group.moved.Add <| fun(hwnd, index) ->
-            desktopInvoker.invoke <| fun() ->
+            desktopInvoker.asyncInvoke <| fun() ->
                 windowsCell.map <| fun l -> l.move((=) hwnd, index)
 
         _group.removed.Add <| fun hwnd ->
-            desktopInvoker.invoke <| fun() ->
+            desktopInvoker.asyncInvoke <| fun() ->
                 windowsCell.map <| fun l -> l.where((<>) hwnd)
 
     member this.invokeGroup = invoker.asyncInvoke
