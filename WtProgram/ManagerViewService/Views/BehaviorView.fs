@@ -164,6 +164,48 @@ type HotKeyView() =
 
             table
 
+        // "Change tab position on left/right snap": two radio buttons
+        let snapChangeTabPositionRadio =
+            let table = new TableLayoutPanel()
+            table.AutoSize <- true
+            table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+            table.Margin <- Padding(0)
+            table.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+            table.ColumnCount <- 1
+            table.RowCount <- 2
+
+            let currentMode =
+                let mode = Services.settings.getValue("changeTabPositionOnSnap") :?> string
+                // Valid modes only; default to "change" for invalid/unknown values
+                match mode with
+                | "change" | "nochange" -> mode
+                | _ ->
+                    Services.settings.setValue("changeTabPositionOnSnap", "change")
+                    "change"
+
+            let radioChange = new RadioButton()
+            radioChange.Text <- Localization.getString("ChangeTabPositionOnSnapWhenUniform")
+            radioChange.AutoSize <- true
+            radioChange.Checked <- (currentMode = "change")
+            radioChange.CheckedChanged.Add(fun _ ->
+                if radioChange.Checked then
+                    Services.settings.setValue("changeTabPositionOnSnap", "change")
+            )
+
+            let radioNever = new RadioButton()
+            radioNever.Text <- Localization.getString("ChangeTabPositionOnSnapNever")
+            radioNever.AutoSize <- true
+            radioNever.Checked <- (currentMode = "nochange")
+            radioNever.CheckedChanged.Add(fun _ ->
+                if radioNever.Checked then
+                    Services.settings.setValue("changeTabPositionOnSnap", "nochange")
+            )
+
+            table.Controls.Add(radioChange, 0, 0)
+            table.Controls.Add(radioNever, 0, 1)
+
+            table
+
         let fields = hotKeys.map <| fun(key,text) ->
             let editor = editors.find key
             text, editor.control
@@ -175,6 +217,7 @@ type HotKeyView() =
             ("EnableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("TabPositionByDefault", defaultTabPositionCombo :> Control)
+            ("ChangeTabPositionOnSnap", snapChangeTabPositionRadio :> Control)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
@@ -185,13 +228,15 @@ type HotKeyView() =
 
         // Adjust row heights for radio button groups
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled, 3=enableCtrlNumber,
-        //            4=enableHover, 5=tabPosition, 6=hideTabsWhenDown,
-        //            7+=hotkeys
-        let hideTabsRowIndex = 6
+        //            4=enableHover, 5=tabPosition, 6=changeTabPositionOnSnap, 7=hideTabsWhenDown,
+        //            8+=hotkeys
+        let snapChangeRowIndex = 6
+        let hideTabsRowIndex = 7
 
         if formPanel :? TableLayoutPanel then
             let table = formPanel :?> TableLayoutPanel
-            // Let rows auto-size based on content
+            // Let radio-group rows auto-size based on content
+            table.RowStyles.[snapChangeRowIndex].SizeType <- SizeType.AutoSize
             table.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
 
         "Switch Tabs", formPanel

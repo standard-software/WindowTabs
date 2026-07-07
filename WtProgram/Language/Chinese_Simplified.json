@@ -53,6 +53,9 @@
   "EnableHoverActivate": "鼠标悬停时切换标签页",
 
   "TabPositionByDefault": "标签页位置",
+  "ChangeTabPositionOnSnap": "左右吸附时更改标签页位置",
+  "ChangeTabPositionOnSnapWhenUniform": "组内所有标签页位置相同时更改",
+  "ChangeTabPositionOnSnapNever": "不更改",
   "HideTabsWhenDownByDefault": "标签页在下方时隐藏功能",
   "HideTabsNever": "不隐藏",
   "HideTabsWhenDown": "指定时间后隐藏",
