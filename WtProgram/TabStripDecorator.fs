@@ -1850,7 +1850,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
                 image = None
-                items = List2([newTabInGroupItem] @ newWindowPositionItems @ [newWindowLinkGroupItem])
+                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems @ [newWindowLinkGroupItem])
                 flags = List2()
             })
 
@@ -2447,12 +2447,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let snapFn = (fun dir -> this.detachOrSplitToSnap(hwnd, dir))
             let snapPercentFn = (fun dir pct -> this.detachOrSplitToSnapWithPercent(hwnd, dir, pct))
 
-            let detachMoveTargets = this.actionTargets(hwnd)
-            let detachMoveText =
-                if detachMoveTargets.Length > 1 then
-                    System.String.Format(Localization.getString("DetachSelectedTabsAndMovePosFormat"), detachMoveTargets.Length)
-                else
-                    Localization.getString("DetachAndMovePosTab")
+            // The tab name / selected-tab count now lives on the parent "Tab
+            // detach" menu, so this submenu is just "Position" in all cases
+            let detachMoveText = Localization.getString("DetachAndMovePosTab")
 
             if not isEnabled then
                 // Disabled (single tab): a single grayed item, no per-display split
@@ -2781,14 +2778,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     None
                             )
 
-                        let detachLinkTargets = this.actionTargets(hwnd)
-                        let detachLinkText =
-                            if detachLinkTargets.Length > 1 then
-                                System.String.Format(Localization.getString("DetachSelectedTabsAndDockingToGroupFormat"), detachLinkTargets.Length)
-                            else
-                                Localization.getString("DetachAndDockingTabToGroup")
+                        // The tab name / selected-tab count now lives on the
+                        // parent "Tab detach" menu
                         Some(CmiPopUp({
-                            text = detachLinkText
+                            text = Localization.getString("DetachAndDockingTabToGroup")
                             image = None
                             items = List2(menuItems)
                             flags = if group.zorder.value.length <= 1 then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -2805,8 +2798,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                 if subMenuItems.IsEmpty then None
                 else
+                    // "Detach this tab : <name>", or "Detach <n> selected tabs"
+                    // when a multi-select is active
+                    let detachParentTargets = this.actionTargets(hwnd)
+                    let detachParentText =
+                        if detachParentTargets.Length > 1 then
+                            String.Format(Localization.getString("TabDetachSelectedFormat"), detachParentTargets.Length)
+                        else
+                            String.Format(Localization.getString("TabDetachThisFormat"), TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text))
                     Some(CmiPopUp({
-                        text = Localization.getString("TabDetachAndSplit")
+                        text = detachParentText
                         image = None
                         items = List2(subMenuItems)
                         flags = List2()
