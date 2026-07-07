@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.07.06_next1
+
 ## version ss_2026.07.06
 - Version prefix changed from `ss_jp_` to `ss_`
   - The `jp` originally indicated a Japanese-language build, but this fork has since gained multi-language support and is no longer Japanese-only, so the `jp` suffix no longer makes sense
