@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- Multi-monitor: per-display "Position Move" menus
+  - "Position Move", "New window (position)" and "Detach this tab and move (position)" now show one menu per display, e.g. "Position Move Main display" (the window's current display is marked with " *")
+  - Replaces the display submenus that used to sit at the bottom of a single menu; single-display layout is unchanged
 
 ## version ss_2026.07.06
 - Version prefix changed from `ss_jp_` to `ss_`

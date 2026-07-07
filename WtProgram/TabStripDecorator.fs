@@ -1361,7 +1361,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Record shrunk size for tracking
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
-
     member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
         let activeHwnd = group.topWindow
@@ -1415,7 +1414,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds2)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
-
     member this.moveTabGroupToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position with percentage
         let activeHwnd = group.topWindow
@@ -1435,7 +1433,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
-
     member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
         let activeHwnd = group.topWindow
@@ -1468,7 +1465,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds2)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
-
     member private  this.contextMenu(hwnd) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -1554,61 +1550,53 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 buildMoveEdgeSubMenu moveFn
             ]
 
-        // Per-display submenu. For non-current displays, a "Same position on this display"
-        // item appears at the top; the current display's submenu is grayed because the
-        // position is already on that display.
-        let buildScreenPositionSubMenu (screen: System.Windows.Forms.Screen) (isCurrentScreen: bool) (moveFn: System.Windows.Forms.Screen -> string option -> unit) (snapFn: System.Windows.Forms.Screen -> string -> unit) (snapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) (getScreenName: System.Windows.Forms.Screen -> string) =
-            let screenItems =
-                let samePositionItems =
-                    if isCurrentScreen then []
-                    else
-                        [
-                            CmiRegular({ text = Localization.getString("SamePositionThisDisplay"); image = None; click = (fun() -> moveFn screen None); flags = List2() })
-                            CmiSeparator
-                        ]
-                samePositionItems @
-                buildPositionMoveInnerItems false
-                    (fun pos -> moveFn screen pos)
-                    (fun dir -> snapFn screen dir)
-                    (fun dir pct -> snapPercentFn screen dir pct)
-            CmiPopUp({
-                text = getScreenName screen
-                image = None
-                items = List2(screenItems)
-                flags = if isCurrentScreen then List2([MenuFlags.MF_GRAYED]) else List2()
-            })
-
-        // Build the full "Position Move" popup: the inner items plus per-display submenus
-        // (when multiple monitors are present).
-        let buildPositionMovePopup
+        // One "<menuTextPrefix> <display>" submenu per attached monitor, used
+        // only when multiple monitors are present. The monitor the window
+        // currently sits on is marked with a trailing " *" and drives the plain
+        // (current-screen) move/snap functions, so its behavior matches the
+        // previous single menu; other monitors use the screen-targeted
+        // functions and get a leading "Same position on this display" item.
+        // currentScreenExtraItems is prepended to the current monitor's submenu
+        // (keeps the "Same position" entry that the new-window and detach menus
+        // show). The submenus are meant to be spliced into the parent menu in
+        // place of the old single "<menuTextPrefix>" item.
+        let buildPerDisplayPositionItems
                 (contextHwnd: IntPtr)
+                (menuTextPrefix: string)
+                (currentScreenExtraItems: ContextMenuItem list)
                 (moveFn: string option -> unit)
                 (snapFn: string -> unit)
                 (snapPercentFn: string -> int -> unit)
                 (screenMoveFn: System.Windows.Forms.Screen -> string option -> unit)
                 (screenSnapFn: System.Windows.Forms.Screen -> string -> unit)
-                (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) =
-            let innerItems = buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
-            let displayItems =
-                let allScreens = this.getAllScreensSorted()
-                let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
-                if allScreens.Length > 1 then
-                    let screenSubMenus =
-                        allScreens
-                        |> Array.map (fun screen ->
-                            let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen
-                                screenMoveFn screenSnapFn screenSnapPercentFn
-                                (fun s -> this.getScreenName(s)))
-                        |> Array.toList
-                    CmiSeparator :: screenSubMenus
-                else []
-            CmiPopUp({
-                text = Localization.getString("PositionMoveMenu")
-                image = None
-                items = List2(innerItems @ displayItems)
-                flags = List2()
-            })
+                (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) : ContextMenuItem list =
+            let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
+            this.getAllScreensSorted()
+            |> Array.map (fun screen ->
+                let isCurrentScreen = screen.Equals(currentScreen)
+                let menuText =
+                    menuTextPrefix + " " + this.getScreenName(screen)
+                    + (if isCurrentScreen then " *" else "")
+                let items =
+                    if isCurrentScreen then
+                        currentScreenExtraItems @
+                        buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
+                    else
+                        [
+                            CmiRegular({ text = Localization.getString("SamePositionThisDisplay"); image = None; click = (fun() -> screenMoveFn screen None); flags = List2() })
+                            CmiSeparator
+                        ] @
+                        buildPositionMoveInnerItems false
+                            (fun pos -> screenMoveFn screen pos)
+                            (fun dir -> screenSnapFn screen dir)
+                            (fun dir pct -> screenSnapPercentFn screen dir pct)
+                CmiPopUp({
+                    text = menuText
+                    image = None
+                    items = List2(items)
+                    flags = List2()
+                }))
+            |> Array.toList
 
         let window = os.windowFromHwnd(hwnd)
         let pid = window.pid
@@ -1676,8 +1664,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     handleLaunchError (fun path -> Services.program.launchNewWindow group.hwnd hwnd path)
             })
 
-        // Item 2: "New window (position)" submenu — launch as standalone then apply a position to the new group
-        let newWindowPositionItem =
+        // Item 2: "New window (position)" — launch as standalone then apply a position to the new group.
+        // Single monitor: one "New window (position)" submenu. Multiple monitors:
+        // one flattened "New window (position) <display>" item per display,
+        // spliced directly into the "New launch" menu.
+        let newWindowPositionItems =
             let launchStandaloneThen (postAction: TabStripDecorator -> IntPtr -> unit) =
                 handleLaunchError (fun path ->
                     Services.program.launchStandaloneWindow path (fun newHwnd ->
@@ -1706,35 +1697,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = (fun() -> launchStandaloneThen (fun _ _ -> ()))
                     flags = List2()
                 })
-            let baseMenuItems =
-                [samePositionItem; CmiSeparator] @
-                buildPositionMoveInnerItems true
-                    (fun pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToPosition(h, pos)))
-                    (fun dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnap(h, dir)))
-                    (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
-            let allScreens = this.getAllScreensSorted()
-            let currentScreen = this.getCurrentScreenForWindow(hwnd)
-            let positionItems =
-                if allScreens.Length > 1 then
-                    let screenSubMenus =
-                        allScreens
-                        |> Array.map (fun screen ->
-                            let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen
-                                (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
-                                (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
-                                (fun s dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnapWithPercent(h, s, dir, pct)))
-                                (fun s -> this.getScreenName(s)))
-                        |> Array.toList
-                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
-                else
-                    baseMenuItems
-            CmiPopUp({
-                text = Localization.getString("NewWindowPositionMenu")
-                image = None
-                items = List2(positionItems)
-                flags = List2()
-            })
+            let currentScreenExtraItems = [samePositionItem; CmiSeparator]
+            let moveFn = (fun pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToPosition(h, pos)))
+            let snapFn = (fun dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnap(h, dir)))
+            let snapPercentFn = (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
+            if this.getAllScreensSorted().Length > 1 then
+                // Multi-monitor: flattened "New window (position) <display>" items
+                buildPerDisplayPositionItems hwnd (Localization.getString("NewWindowPositionMenu")) currentScreenExtraItems
+                    moveFn snapFn snapPercentFn
+                    (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
+                    (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
+                    (fun s dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnapWithPercent(h, s, dir, pct)))
+            else
+                // Single monitor: one "New window (position)" submenu (unchanged)
+                [ CmiPopUp({
+                    text = Localization.getString("NewWindowPositionMenu")
+                    image = None
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    flags = List2()
+                }) ]
 
         // Item 3: "New window (link to group)" submenu — launch as a new tab docked into an existing other group
         let newWindowLinkGroupItem =
@@ -1817,13 +1798,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = if List.isEmpty groupItems then List2([MenuFlags.MF_GRAYED]) else List2()
             })
 
-        // Top-level wrapper: "New launch : execute <exe>" containing the three variants
+        // Top-level wrapper: "New launch : execute <exe>" containing the variants
+        // (the "New window (position)" part expands to one item per display).
         let newLaunchMenu =
             let exeName = System.IO.Path.GetFileName(processPath)
             CmiPopUp({
                 text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
                 image = None
-                items = List2([newTabInGroupItem; newWindowPositionItem; newWindowLinkGroupItem])
+                items = List2([newTabInGroupItem] @ newWindowPositionItems @ [newWindowLinkGroupItem])
                 flags = List2()
             })
 
@@ -2402,44 +2384,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
-        let detachTabSubMenu =
+        // "Detach this tab and move (position)". Single monitor: one submenu.
+        // Multiple monitors: one flattened "<detach position move> <display>"
+        // item per display, spliced directly into the "Tab detach" menu.
+        let detachTabPositionItems =
             let isEnabled = group.zorder.value.length > 1  // Only enabled when there are 2+ tabs
-            let allScreens = this.getAllScreensSorted()
-            let currentScreen = this.getCurrentScreenForWindow(hwnd)
 
             // When the user has a multi-select active, "Detach this tab"
             // detaches the active + selected tabs together into ONE new tab
             // group (similar shape to Split Right/Left). detachOrSplitToPosition
             // handles both cases (single-tab fallback when no selection).
-            let samePositionItem = [
+            let currentScreenExtraItems = [
                 CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachOrSplitToPosition(hwnd, None)); flags = List2() })
                 CmiSeparator
             ]
-
-            let baseMenuItems =
-                samePositionItem @
-                buildPositionMoveInnerItems true
-                    (fun pos -> this.detachOrSplitToPosition(hwnd, pos))
-                    (fun dir -> this.detachOrSplitToSnap(hwnd, dir))
-                    (fun dir pct -> this.detachOrSplitToSnapWithPercent(hwnd, dir, pct))
-
-            let menuItems =
-                if allScreens.Length > 1 then
-                    let screenSubMenus =
-                        allScreens
-                        |> Array.map (fun screen ->
-                            let isCurrentScreen = screen.Equals(currentScreen)
-                            buildScreenPositionSubMenu screen isCurrentScreen
-                                (fun s pos -> this.detachOrSplitToScreen(hwnd, s, pos))
-                                (fun s dir -> this.detachOrSplitToScreenSnap(hwnd, s, dir))
-                                (fun s dir pct -> this.detachOrSplitToScreenSnapWithPercent(hwnd, s, dir, pct))
-                                (fun s -> this.getScreenName(s))
-                        )
-                        |> Array.toList
-
-                    baseMenuItems @ [CmiSeparator] @ screenSubMenus
-                else
-                    baseMenuItems
+            let moveFn = (fun pos -> this.detachOrSplitToPosition(hwnd, pos))
+            let snapFn = (fun dir -> this.detachOrSplitToSnap(hwnd, dir))
+            let snapPercentFn = (fun dir pct -> this.detachOrSplitToSnapWithPercent(hwnd, dir, pct))
 
             let detachMoveTargets = this.actionTargets(hwnd)
             let detachMoveText =
@@ -2447,25 +2408,53 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     System.String.Format(Localization.getString("DetachSelectedTabsAndMovePosFormat"), detachMoveTargets.Length)
                 else
                     Localization.getString("DetachAndMovePosTab")
-            Some(CmiPopUp({
-                text = detachMoveText
-                image = None
-                items = List2(menuItems)
-                flags = if isEnabled then List2() else List2([MenuFlags.MF_GRAYED])
-            }))
 
-        // Unified "Position Move" submenu for the tab group: direct Snap Left/Right/Top/Bottom,
-        // Move submenu, Snap Other submenu (percent variants + display/desktop max), and — when
-        // multiple monitors are attached — per-display submenus.
-        let positionMovePopup =
-            buildPositionMovePopup
-                hwnd
-                (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
-                (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
-                (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
-                (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
-                (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
-                (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
+            if not isEnabled then
+                // Disabled (single tab): a single grayed item, no per-display split
+                [ CmiPopUp({
+                    text = detachMoveText
+                    image = None
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    flags = List2([MenuFlags.MF_GRAYED])
+                }) ]
+            elif this.getAllScreensSorted().Length > 1 then
+                // Multi-monitor: flattened "<detach position move> <display>" items
+                buildPerDisplayPositionItems hwnd detachMoveText currentScreenExtraItems
+                    moveFn snapFn snapPercentFn
+                    (fun s pos -> this.detachOrSplitToScreen(hwnd, s, pos))
+                    (fun s dir -> this.detachOrSplitToScreenSnap(hwnd, s, dir))
+                    (fun s dir pct -> this.detachOrSplitToScreenSnapWithPercent(hwnd, s, dir, pct))
+            else
+                // Single monitor: one submenu (unchanged)
+                [ CmiPopUp({
+                    text = detachMoveText
+                    image = None
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    flags = List2()
+                }) ]
+
+        // "Position Move" for the tab group: direct Snap Left/Right/Top/Bottom,
+        // Move submenu, Snap Other submenu (percent variants + display/desktop max).
+        // Single monitor: one "Position Move" submenu. Multiple monitors: one
+        // top-level "Position Move <display>" submenu per display (the display
+        // the window is on is marked with a trailing " *").
+        let positionMoveMenuItems =
+            let moveFn = (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
+            let snapFn = (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
+            let snapPercentFn = (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
+            if this.getAllScreensSorted().Length > 1 then
+                buildPerDisplayPositionItems hwnd (Localization.getString("PositionMoveMenu")) []
+                    moveFn snapFn snapPercentFn
+                    (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
+                    (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
+                    (fun s dir pct -> this.moveTabGroupToScreenSnapWithPercent(hwnd, s, dir, pct))
+            else
+                [ CmiPopUp({
+                    text = Localization.getString("PositionMoveMenu")
+                    image = None
+                    items = List2(buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    flags = List2()
+                }) ]
 
         let moveTabGroupToGroupMenu =
             // Update all group infos before building menu (same as moveTabMenu)
@@ -2600,10 +2589,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     flags = List2([MenuFlags.MF_GRAYED])
                 })
 
-        List2([
+        List2(
+            [
             Some(newLaunchMenu)
             Some(CmiSeparator)
-            Some(positionMovePopup)
+            ]
+            @ (positionMoveMenuItems |> List.map Some)
+            @ [
             Some(moveTabGroupToGroupMenu)
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
@@ -2760,12 +2752,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         // No other groups available
                         None
 
-                // Wrap detach menus in parent submenu
+                // Wrap detach menus in parent submenu (the detach-position part
+                // expands to one item per display on multi-monitor setups)
                 let subMenuItems =
-                    [
-                        detachTabSubMenu
-                        moveTabMenu
-                    ] |> List.choose id
+                    (detachTabPositionItems |> List.map Some) @ [ moveTabMenu ]
+                    |> List.choose id
 
                 if subMenuItems.IsEmpty then None
                 else
