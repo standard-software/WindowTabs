@@ -7,9 +7,41 @@ open System.Windows.Forms
 module ForceExitState =
     let mutable isForceExiting = false
 
+// Records, per thread, the synchronous cross-thread calls it is currently
+// blocked in. When the watchdog detects a UI freeze it dumps this table to a
+// log file, so a deadlock cycle can be identified from the log (thread A
+// waiting for thread B, thread B waiting for thread A) instead of guessed at.
+module SyncCallTracker =
+    let private sync = obj()
+    let private pending = System.Collections.Generic.Dictionary<int, (string * DateTime) list>()
+
+    let enter (desc: string) =
+        let tid = Thread.CurrentThread.ManagedThreadId
+        lock sync <| fun() ->
+            let cur = match pending.TryGetValue(tid) with | true, l -> l | _ -> []
+            pending.[tid] <- (desc, DateTime.Now) :: cur
+
+    let exit() =
+        let tid = Thread.CurrentThread.ManagedThreadId
+        lock sync <| fun() ->
+            match pending.TryGetValue(tid) with
+            | true, _ :: rest ->
+                if rest.IsEmpty then pending.Remove(tid).ignore
+                else pending.[tid] <- rest
+            | _ -> ()
+
+    let dump() =
+        lock sync <| fun() ->
+            pending
+            |> Seq.collect (fun kv ->
+                kv.Value |> List.map (fun (desc, at) ->
+                    sprintf "thread %d: %s (since %s)" kv.Key desc (at.ToString("HH:mm:ss.fff"))))
+            |> String.concat Environment.NewLine
+
 type InvokeDelegate<'a> = delegate of unit -> 'a
 [<AllowNullLiteral>]
 type Invoker() as this =
+    let ownerThreadId = Thread.CurrentThread.ManagedThreadId
     let form =
         let f = new Form()
         f.Handle.ignore
@@ -24,7 +56,11 @@ type Invoker() as this =
 
     member this.invoke f=
         if this.invokeRequired then
-            form.Invoke(InvokeDelegate(fun() -> f()), null) :?> 'a
+            SyncCallTracker.enter (sprintf "Invoker.invoke, blocked waiting for thread %d" ownerThreadId)
+            try
+                form.Invoke(InvokeDelegate(fun() -> f()), null) :?> 'a
+            finally
+                SyncCallTracker.exit()
         else
             f()
 
