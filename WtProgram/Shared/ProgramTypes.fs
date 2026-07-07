@@ -35,6 +35,9 @@ type SettingsRec = {
     hideTabsDelayMilliseconds: int
     hideTabsOnFullscreen: bool
     snapTabHeightMargin: bool
+    // "change": on a left/right snap, re-align every tab of a uniformly-aligned
+    // group to match the snap direction. "nochange": leave tab alignment alone.
+    changeTabPositionOnSnap: string
     }
 
 type ILicenseManager =

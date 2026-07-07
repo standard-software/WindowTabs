@@ -53,6 +53,9 @@
   "EnableHoverActivate": "マウスオーバーでタブをアクティブにする",
 
   "TabPositionByDefault": "タブの位置",
+  "ChangeTabPositionOnSnap": "左右スナップ時にタブの位置を変更する",
+  "ChangeTabPositionOnSnapWhenUniform": "グループの全てのタブ位置が同じときに変更",
+  "ChangeTabPositionOnSnapNever": "変更しない",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
   "HideTabsNever": "隠さない",
   "HideTabsWhenDown": "指定した時間で隠す",

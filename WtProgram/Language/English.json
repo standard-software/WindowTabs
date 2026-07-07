@@ -53,6 +53,9 @@
   "EnableHoverActivate": "Enable mouse hover to activate tab",
 
   "TabPositionByDefault": "Tab position",
+  "ChangeTabPositionOnSnap": "Change tab position on left/right snap",
+  "ChangeTabPositionOnSnapWhenUniform": "Change when all tabs in the group share the same position",
+  "ChangeTabPositionOnSnapNever": "Don't change",
   "HideTabsWhenDownByDefault": "Hide tabs when positioned at bottom",
   "HideTabsNever": "Never hide",
   "HideTabsWhenDown": "Hide after specified time",

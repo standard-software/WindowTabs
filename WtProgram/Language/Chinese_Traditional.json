@@ -53,6 +53,9 @@
   "EnableHoverActivate": "滑鼠懸停時切換分頁",
 
   "TabPositionByDefault": "分頁位置",
+  "ChangeTabPositionOnSnap": "左右吸附時變更分頁位置",
+  "ChangeTabPositionOnSnapWhenUniform": "群組內所有分頁位置相同時變更",
+  "ChangeTabPositionOnSnapNever": "不變更",
   "HideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
   "HideTabsNever": "不隱藏",
   "HideTabsWhenDown": "指定時間後隱藏",

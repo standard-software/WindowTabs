@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- New Behavior setting: "Change tab position on left/right snap" (default: change when all tabs in the group share the same position)
+  - When a group whose tabs are all left-aligned or all right-aligned is snapped left or right (including x% snaps), the tabs realign to the snap side; mixed groups are unchanged
+  - Applies to tab-group snap, detach-and-snap, and new-window snap
 - Multi-monitor: per-display "Position Move" menus
   - "Position Move", "New window (position)" and "Detach this tab and move (position)" now show one menu per display, e.g. "Position Move Main display" (the window's current display is marked with " *")
   - Replaces the display submenus that used to sit at the bottom of a single menu; single-display layout is unchanged

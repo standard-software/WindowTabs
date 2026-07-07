@@ -909,10 +909,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         else this.detachTabsToPosition(targets, position)
     member private this.detachOrSplitToSnap(hwnd: IntPtr, snapDirection: string) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        // Persist the realigned position before detaching so the freshly formed
+        // group inherits it (WindowGroup.addWindow reads the per-window alignment)
+        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
         if List.length targets <= 1 then this.detachTabToSnap(hwnd, snapDirection)
         else this.detachTabsToSnap(targets, snapDirection)
     member private this.detachOrSplitToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
         if List.length targets <= 1 then this.detachTabToSnapWithPercent(hwnd, snapDirection, percent)
         else this.detachTabsToSnapWithPercent(targets, snapDirection, percent)
     member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
@@ -921,10 +925,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         else this.detachTabsToScreen(targets, targetScreen, position)
     member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
         if List.length targets <= 1 then this.detachTabToScreenSnap(hwnd, targetScreen, snapDirection)
         else this.detachTabsToScreenSnap(targets, targetScreen, snapDirection)
     member private this.detachOrSplitToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
         if List.length targets <= 1 then this.detachTabToScreenSnapWithPercent(hwnd, targetScreen, snapDirection, percent)
         else this.detachTabsToScreenSnapWithPercent(targets, targetScreen, snapDirection, percent)
 
@@ -1332,6 +1338,37 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
+    // Whether the "change tab position on left/right snap" setting is enabled.
+    member private this.snapRealignEnabled() =
+        try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
+        with _ -> false
+
+    // Realign tabs to match a left/right snap, when the setting is enabled and
+    // the given tabs are uniformly aligned (all left or all right). A left snap
+    // makes them all left, a right snap all right; a mixed group is left as is.
+    // Non-left/right snaps (top/bottom) never realign. setAlign applies the new
+    // alignment (in-place group snap updates the visible tabs; detach persists
+    // it so the freshly formed group inherits it). tabHwnds are read from the
+    // current group for the uniformity check, so this must run before detaching.
+    member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlign: IntPtr -> TabAlign -> unit) =
+        if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
+            let desiredOpt =
+                match snapDirection with
+                | "snapleft" -> Some TopLeft
+                | "snapright" -> Some TopRight
+                | _ -> None
+            match desiredOpt with
+            | Some desired ->
+                let allLeft = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
+                let allRight = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
+                if allLeft || allRight then
+                    tabHwnds |> List.iter (fun h -> setAlign h desired)
+            | None -> ()
+
+    // Realign the whole current group after an in-place left/right snap.
+    member private this.applyGroupSnapRealign(snapDirection: string) =
+        this.applySnapRealign(group.visualOrder.list, snapDirection, fun h a -> group.setTabAlign(h, a))
+
     member this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
         let activeHwnd = group.topWindow
@@ -1361,6 +1398,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Record shrunk size for tracking
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
+        this.applyGroupSnapRealign(snapDirection)
+
     member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
         let activeHwnd = group.topWindow
@@ -1414,6 +1453,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds2)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
+        this.applyGroupSnapRealign(snapDirection)
+
     member this.moveTabGroupToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position with percentage
         let activeHwnd = group.topWindow
@@ -1433,6 +1474,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
+        this.applyGroupSnapRealign(snapDirection)
+
     member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
         let activeHwnd = group.topWindow
@@ -1465,6 +1508,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         window.move(finalBounds2)
         if group.hasExeMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
+        this.applyGroupSnapRealign(snapDirection)
+
     member private  this.contextMenu(hwnd) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
