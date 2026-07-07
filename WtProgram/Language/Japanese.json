@@ -188,8 +188,8 @@
   "TabColorPinkBorder": "ピンク 枠線",
 
   "TabNameEdit": "タブ名の編集",
-  "RenameTab": "タブの名前を変更",
-  "ResetTabName": "タブの名前をリセット",
+  "RenameTabFormat": "このタブの名前を変更 : {0}",
+  "ResetTabNameFormat": "このタブの名前をリセット : {0}",
 
   "TabDetachThisFormat": "このタブの分離 : {0}",
   "TabDetachSelectedFormat": "選択した{0}タブの分離",

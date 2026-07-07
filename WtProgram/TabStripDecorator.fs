@@ -310,20 +310,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         form.Location <- Point(pt.X, pt.Y)
         form.SetSize(Size(textBounds.size.width, textBounds.size.height - 2 * verticalMargin))
+        let tabText = this.ts.tabInfo(Tab(hwnd)).text
+        // Confirming the unchanged name is treated as cancel: it must not
+        // register a rename override for a name the tab already shows
+        let commit (newName: string) =
+            if newName <> tabText then
+                group.setTabName(hwnd, if newName.Length = 0 then None else Some(newName))
         form.textBox.KeyPress.Add <| fun e ->
             if e.KeyChar = char(Keys.Enter) then
-                let newName = form.textBox.Text
-                group.setTabName(hwnd, if newName.Length = 0 then None else Some(newName))
+                commit form.textBox.Text
                 form.Close()
             elif e.KeyChar = char(Keys.Escape) then
                 form.Close()
-        let tabText = this.ts.tabInfo(Tab(hwnd)).text
         form.textBox.Text <- tabText
         form.textBox.SelectionStart <- 0
         form.textBox.SelectionLength <- tabText.Length
         form.textBox.LostFocus.Add <| fun _ ->
-            let newName = form.textBox.Text
-            group.setTabName(hwnd, if newName.Length = 0 then None else Some(newName))
+            commit form.textBox.Text
             form.Close()
         group.bb.write("renamingTab", true)
         form.Closed.Add <| fun _ ->
@@ -2194,19 +2197,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         let tabNameSubMenu =
+            // Rename / reset operate on the single right-clicked tab only
+            // (never on a multi-select), so show which tab that is: the
+            // current displayed name for rename, and the name the tab will
+            // return to (the window title) for reset
+            let displayedName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+            let resetName = TabNameHelper.truncate (try os.windowFromHwnd(hwnd).text with _ -> "")
             CmiPopUp({
                 text = Localization.getString("TabNameEdit")
                 image = None
                 items = List2([
                     CmiRegular({
-                        text = Localization.getString("RenameTab")
+                        text = String.Format(Localization.getString("RenameTabFormat"), displayedName)
                         image = None
                         flags = List2()
                         click = fun() ->
                             this.beginRename(hwnd)
                     })
                     CmiRegular({
-                        text = Localization.getString("ResetTabName")
+                        text = String.Format(Localization.getString("ResetTabNameFormat"), resetName)
                         image = None
                         flags = if group.isRenamed(hwnd) then List2() else List2([MenuFlags.MF_GRAYED])
                         click = fun() -> group.setTabName(hwnd, None)
