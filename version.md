@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- Menu wording: the "New launch" and "Tab detach" context menus were restructured
+  - "New tab : execute <exe>" now contains "Right of this tab : <name>", a separator, per-display "Position" items, and "Link to another group"
+  - "Detach this tab : <name>" (or "Detach <n> selected tabs" in multi-select) now contains prefix-less per-display "Position" items and "Link to another group"
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
   - Display-settings events were delivered synchronously into the tab-group UI threads while those threads were making synchronous calls back into the main thread, deadlocking both; cross-thread deliveries are now non-blocking
   - Window title / icon queries no longer use unbounded SendMessage, so a busy or hung application can no longer stall WindowTabs either
