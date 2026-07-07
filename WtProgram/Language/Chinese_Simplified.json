@@ -188,8 +188,8 @@
   "TabColorPinkBorder": "粉色 边框",
 
   "TabNameEdit": "标签页名称编辑",
-  "RenameTab": "重命名标签页",
-  "ResetTabName": "重置标签页名称",
+  "RenameTabFormat": "重命名此标签页 : {0}",
+  "ResetTabNameFormat": "重置此标签页名称 : {0}",
 
   "TabDetachThisFormat": "分离此标签页 : {0}",
   "TabDetachSelectedFormat": "分离已选{0}个标签页",

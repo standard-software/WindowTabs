@@ -192,8 +192,8 @@ module Localization_English =
         ("TabColorPinkBorder", "Pink Border")
 
         ("TabNameEdit", "Tab Name")
-        ("RenameTab", "Rename tab")
-        ("ResetTabName", "Reset tab name")
+        ("RenameTabFormat", "Rename this tab : {0}")
+        ("ResetTabNameFormat", "Reset this tab name : {0}")
 
         ("TabDetachThisFormat", "Detach this tab : {0}")
         ("TabDetachSelectedFormat", "Detach {0} selected tabs")

@@ -188,8 +188,8 @@
   "TabColorPinkBorder": "粉紅色 邊框",
 
   "TabNameEdit": "分頁名稱編輯",
-  "RenameTab": "重新命名分頁",
-  "ResetTabName": "重設分頁名稱",
+  "RenameTabFormat": "重新命名此分頁 : {0}",
+  "ResetTabNameFormat": "重設此分頁名稱 : {0}",
 
   "TabDetachThisFormat": "分離此分頁 : {0}",
   "TabDetachSelectedFormat": "分離已選{0}個分頁",

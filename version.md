@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- Tab rename menu: "Rename tab" is now "Rename this tab : <name>" and "Reset tab name" is "Reset this tab name : <name after reset>", making clear they act on the right-clicked tab only
+  - Confirming the rename box without changing the name is now treated as cancel (previously it registered a pointless rename override)
 - Menu wording: the "New launch" and "Tab detach" context menus were restructured
   - "New tab : execute <exe>" now contains "Right of this tab : <name>", a separator, per-display "Position" items, and "Link to another group"
   - "Detach this tab : <name>" (or "Detach <n> selected tabs" in multi-select) now contains prefix-less per-display "Position" items and "Link to another group"
