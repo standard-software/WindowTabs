@@ -1,6 +1,9 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
+  - Display-settings events were delivered synchronously into the tab-group UI threads while those threads were making synchronous calls back into the main thread, deadlocking both; cross-thread deliveries are now non-blocking
+  - Window title / icon queries no longer use unbounded SendMessage, so a busy or hung application can no longer stall WindowTabs either
 - New Behavior setting: "Change tab position on left/right snap" (default: change when all tabs in the group share the same position)
   - When a group whose tabs are all left-aligned or all right-aligned is snapped left or right (including x% snaps), the tabs realign to the snap side; mixed groups are unchanged
   - Applies to tab-group snap, detach-and-snap, and new-window snap

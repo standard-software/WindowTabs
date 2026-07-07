@@ -146,22 +146,53 @@ namespace Bemo
             POINT dstLocation = POINT.FromPoint(location);
             WinUserApi.UpdateLayeredWindow(hwnd, IntPtr.Zero, ref dstLocation, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero, 0);
         }
+        // Send a message to another thread's window without risking an
+        // unbounded block: a plain SendMessage waits until the target thread
+        // processes the message, so a busy or deadlocked target freezes the
+        // caller too (one half of the display-change freeze).
+        private static IntPtr SendMessageSafe(IntPtr handle, int msg, IntPtr wParam, IntPtr lParam, int timeoutMs)
+        {
+            IntPtr result;
+            if (WinUserApi.SendMessageTimeout(handle, msg, wParam, lParam,
+                    SendMessageTimeoutFlags.SMTO_ABORTIFHUNG, timeoutMs, out result) == IntPtr.Zero)
+            {
+                return IntPtr.Zero;
+            }
+            return result;
+        }
         public static IntPtr GetWindowIcon(IntPtr handle, int iconType)
         {
             IntPtr icon;
-            icon = WinUserApi.SendMessage(handle, WindowMessages.WM_GETICON, (IntPtr)iconType, IntPtr.Zero);
+            icon = SendMessageSafe(handle, WindowMessages.WM_GETICON, (IntPtr)iconType, IntPtr.Zero, 500);
             if (icon == IntPtr.Zero)
             {
                 if (iconType == IconTypeCodes.ICON_SMALL)
                 {
-                    icon = WinUserApi.SendMessage(handle, WindowMessages.WM_GETICON, (IntPtr)IconTypeCodes.ICON_SMALL2, IntPtr.Zero);
+                    icon = SendMessageSafe(handle, WindowMessages.WM_GETICON, (IntPtr)IconTypeCodes.ICON_SMALL2, IntPtr.Zero, 500);
                 }
                 icon = WinUserApi.GetClassLong(handle, iconType == IconTypeCodes.ICON_SMALL ? ClassLongFieldOffset.GCL_HICONSM : ClassLongFieldOffset.GCL_HICON);
             }
             return icon;
         }
+        private static readonly int currentProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
         public static String GetWindowText(IntPtr handle)
         {
+            // GetWindowText never hangs on another process's window (it reads
+            // the cached title), but for a window of the CURRENT process it
+            // dispatches WM_GETTEXT synchronously to the owning thread. When
+            // that thread is itself blocked waiting on this one (e.g. a
+            // tab-group thread inside a synchronous service call into the
+            // main thread while the main thread enumerates windows), both
+            // threads deadlock. Route own-process windows of OTHER threads
+            // through SendMessageTimeout instead.
+            if (GetWindowProcessId(handle) == currentProcessId && !IsUiThread(handle))
+            {
+                StringBuilder buffer = new StringBuilder(256);
+                IntPtr result;
+                WinUserApi.SendMessageTimeout(handle, WindowMessages.WM_GETTEXT, buffer.Capacity, buffer,
+                    SendMessageTimeoutFlags.SMTO_ABORTIFHUNG, 500, out result);
+                return buffer.ToString();
+            }
             StringBuilder windowText = new StringBuilder(256);
             WinUserApi.GetWindowText(handle, windowText, windowText.Capacity);
             return windowText.ToString();

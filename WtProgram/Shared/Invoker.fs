@@ -48,6 +48,37 @@ type InvokerService =
                 InvokerService._invoker <- Invoker()
             InvokerService._invoker
 
+// Deadlock guard for secondary UI threads (one per tab group).
+//
+// On a display-settings change (monitor added/removed, resolution change),
+// Microsoft.Win32.SystemEvents — whose broadcast window lives on the MAIN
+// thread — delivers DisplaySettingsChanged / UserPreferenceChanged to every
+// WinForms control that subscribed from a group thread via that thread's
+// SynchronizationContext.Send, i.e. the main thread BLOCKS until the group
+// thread has processed the callback. At the same moment the group thread is
+// typically handling the same broadcast on its own windows and makes a
+// synchronous service call into the main thread (ServiceProxy /
+// Invoker.invoke). Both threads then wait on each other forever — this is
+// the freeze that the watchdog used to "fix" by force-restarting the app.
+//
+// Installing this context on a group thread before any control is created
+// makes WinForms and SystemEvents capture it (WinForms only auto-installs
+// its own context over a null/default one, never over a custom type).
+// A cross-thread Send is then degraded to Post: the callback still runs on
+// the correct (owning) thread, just asynchronously, so the sender never
+// blocks and the cycle cannot form. Same-thread Send runs inline as before.
+type NonBlockingSyncContext private (inner: SynchronizationContext, ownerThreadId: int) =
+    inherit SynchronizationContext()
+    new (inner: SynchronizationContext) =
+        NonBlockingSyncContext(inner, Thread.CurrentThread.ManagedThreadId)
+    override this.Post(d, state) = inner.Post(d, state)
+    override this.Send(d, state) =
+        if Thread.CurrentThread.ManagedThreadId = ownerThreadId
+        then d.Invoke(state)
+        else inner.Post(d, state)
+    override this.CreateCopy() =
+        NonBlockingSyncContext(inner, ownerThreadId) :> SynchronizationContext
+
 module ThreadHelper =
     let queueBackground f =
         System.Threading.ThreadPool.QueueUserWorkItem(Threading.WaitCallback(fun _ -> f())).ignore
@@ -56,6 +87,11 @@ module ThreadHelper =
         let evt = ManualResetEvent(false)
         let results = ref None
         let start() =
+            // Must run before the first control is created on this thread so
+            // that every SystemEvents subscription captures the non-blocking
+            // context (see NonBlockingSyncContext above).
+            let inner = new WindowsFormsSynchronizationContext()
+            SynchronizationContext.SetSynchronizationContext(NonBlockingSyncContext(inner))
             results := Some(fStart())
             evt.Set().ignore
             Application.EnableVisualStyles()
