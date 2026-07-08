@@ -3133,48 +3133,47 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeSync <| fun() ->
                 let dragInfo = dragInfo :?> TabDragInfo
                 let (Tab(hwnd)) = dragInfo.tab
-                let result =
-                    if this.ts.tabs.contains(dragInfo.tab) &&
-                        this.ts.tabs.count = 1 then
-                        dragPtCell.set(pt)
-                        dragInfoCell.set(Some(dragInfo))
-                        false
-                    else
-                        dragPtCell.set(pt)
-                        dragInfoCell.set(Some(dragInfo))
-                        this.ts.addTabSlide dragInfo.tab this.tabSlide
-                        this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
-                        group.addWindow(hwnd, false)
+                // No special case for a single-tab group: it used to return
+                // false here (= reject the strip as a drop target), which sent
+                // the drag straight into floating-window mode. Sliding the
+                // lone tab inside the strip is still useful — dropping it on
+                // the other half of the strip switches its left/right
+                // alignment — and dragging beyond the strip bounds still
+                // exits into floating-window mode as before.
+                dragPtCell.set(pt)
+                dragInfoCell.set(Some(dragInfo))
+                this.ts.addTabSlide dragInfo.tab this.tabSlide
+                this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
+                group.addWindow(hwnd, false)
 
-                        // Multi-select continuation: the source's dragExit
-                        // already removed the selected tabs and hid them
-                        // off-screen, so we just need to add + show them in
-                        // this group. This single branch handles both
-                        // drag-link (target group is different from source)
-                        // and drag-cancel (target group IS the source).
-                        if not (List.isEmpty dragInfo.selectedHwnds) then
-                            // Drop the target's pre-existing multi-select —
-                            // the dragged set wins.
-                            group.clearSelected()
-                            Services.program.suspendTabMonitoring()
-                            try
-                                for selHwnd in dragInfo.selectedHwnds do
-                                    if not (group.windows.contains selHwnd) then
-                                        group.addWindow(selHwnd, false)
-                                    let selWindow = os.windowFromHwnd(selHwnd)
-                                    selWindow.showWindow(ShowWindowCommands.SW_SHOW)
-                            finally
-                                Services.program.resumeTabMonitoring()
-                            // Re-establish the active + selected state at the
-                            // destination: dragged is the active, prior
-                            // selection becomes the new selected set.
-                            group.tabActivate(dragInfo.tab, false)
-                            for selHwnd in dragInfo.selectedHwnds do
-                                group.setSelected(selHwnd, true)
+                // Multi-select continuation: the source's dragExit
+                // already removed the selected tabs and hid them
+                // off-screen, so we just need to add + show them in
+                // this group. This single branch handles both
+                // drag-link (target group is different from source)
+                // and drag-cancel (target group IS the source).
+                if not (List.isEmpty dragInfo.selectedHwnds) then
+                    // Drop the target's pre-existing multi-select —
+                    // the dragged set wins.
+                    group.clearSelected()
+                    Services.program.suspendTabMonitoring()
+                    try
+                        for selHwnd in dragInfo.selectedHwnds do
+                            if not (group.windows.contains selHwnd) then
+                                group.addWindow(selHwnd, false)
+                            let selWindow = os.windowFromHwnd(selHwnd)
+                            selWindow.showWindow(ShowWindowCommands.SW_SHOW)
+                    finally
+                        Services.program.resumeTabMonitoring()
+                    // Re-establish the active + selected state at the
+                    // destination: dragged is the active, prior
+                    // selection becomes the new selected set.
+                    group.tabActivate(dragInfo.tab, false)
+                    for selHwnd in dragInfo.selectedHwnds do
+                        group.setSelected(selHwnd, true)
 
-                        true
                 this.updateTsSlide()
-                result
+                true
 
         member this.dragMove(pt) =
             this.invokeSync <| fun() ->
