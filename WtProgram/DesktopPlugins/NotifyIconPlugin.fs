@@ -22,20 +22,6 @@ module Watchdog =
     let respondToPing() =
         pingResponse.Set() |> ignore
 
-    // Write a diagnostic log describing which threads are blocked in which
-    // synchronous cross-thread calls, so the cause of a freeze can be read
-    // from %APPDATA%\WindowTabs\freeze_dump_*.log after the auto-restart.
-    let private dumpFreezeInfo() =
-        try
-            let dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-            if not (Directory.Exists(dir)) then Directory.CreateDirectory(dir) |> ignore
-            let path = Path.Combine(dir, sprintf "freeze_dump_%s.log" (DateTime.Now.ToString("yyyyMMdd_HHmmss")))
-            let body =
-                sprintf "UI thread unresponsive for %d ms. Pending synchronous cross-thread calls:%s%s%s"
-                    freezeTimeout Environment.NewLine (SyncCallTracker.dump()) Environment.NewLine
-            File.WriteAllText(path, body)
-        with _ -> ()
-
     let private trySaveAndRestart() =
         try
             // Try to save tab groups before restart
@@ -95,7 +81,6 @@ module Watchdog =
 
                     if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
                         // UI thread is frozen (confirmed by multiple consecutive failures), force restart
-                        dumpFreezeInfo()
                         trySaveAndRestart()
 
                 // Wait before next check
