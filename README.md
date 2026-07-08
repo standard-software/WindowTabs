@@ -178,30 +178,25 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 ### Tab Context Menu
 
-- New launch : execute (exe name)
-  - New tab : right of this tab ((exe name))
-  - New window (position) (same submenu as "Position Move", with a leading "Same position" item)
-  - New window (link to group)
+- New tab : execute (exe name)
+  - Right of this tab : (tab name)
+  - Position (same submenu as "Position Move", with a leading "Same position" item)
+  - Link to another group
 - Position Move
-  - Snap Left
-  - Snap Right
-  - Snap Other
-    - Snap Top
-    - Snap Bottom
-    - Snap 90% / 70% / 50% / 30% (each)
-      - Left / Right / Top / Bottom
-      - Top Left / Top Right / Bottom Left / Bottom Right
-      - Center / Center Horizontally / Center Vertically
-    - Snap Display
-    - Snap Desktop
+  - Snap Left / Snap Right / Snap Top / Snap Bottom
+  - Snap 90% / 70% / 50% / 30% (each)
+    - Left / Right / Top / Bottom
+    - Top Left / Top Right / Bottom Left / Bottom Right
+    - Center / Center Horizontally / Center Vertically
+  - Snap Display
+  - Snap Desktop (multi-monitor only)
   - Move
     - Left Edge / Right Edge / Top Edge / Bottom Edge
     - Top Left / Top Right / Bottom Left / Bottom Right
-  - (per-display submenus, with leading "Same position on this display")
-- Link to another tab group (submenu lists other tab groups; choose the destination)
-- Tab Detach
-  - Detach this tab and reposition (same submenu as "Position Move")
-  - Detach this tab and link to another group
+- Link this tab group to another group (submenu lists other tab groups; choose the destination)
+- Detach this tab : (tab name)
+  - Position (same submenu as "Position Move")
+  - Link to another group
 - Close Tab
   - Close tab : (tab name)
   - Close {N} tabs to the left
@@ -228,8 +223,8 @@ Download the installer or the zip containing the exe from the [releases](https:/
   - Clear this tab color
   - Clear color settings on all tabs
 - Tab Name
-  - Rename tab
-  - Reset tab name
+  - Rename this tab : (tab name)
+  - Reset this tab name : (name after reset)
 - System
   - Copy (exe name) path
   - Copy window title : (window title)
@@ -239,23 +234,24 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
 
-### New Launch
+### New Tab (New Launch)
 
 - Launch a new instance of the same exe as the target tab.
-- You can launch as a new tab to the right of the target, as a new standalone window, or linked to another tab group.
+- You can launch as a new tab to the right of the target, as a new window with a specified position, or linked to another tab group.
 
 ![Popup Menu](README_Image/PopupMenu.png)
 
 ### Position Move
 
 - Move a tab group's position.
-- Snap keeps the current width / height and snaps to a screen edge. Snap Left and Snap Right are commonly used so they sit at the top of the menu for quick access.
+- Snap keeps the current width / height and snaps to a screen edge. Snap Left / Right / Top / Bottom sit at the top of the menu for quick access.
 - Snap with a percentage resizes the width / height to the specified portion of the display and snaps to an edge.
 - Move to a display edge or corner, and snap-to-display / snap-to-desktop maximize-style options are also available.
+- On multi-monitor setups, the position menus ("Position Move", the new-tab "Position", and the detach "Position") appear once per display, e.g. "Position Move Display Left"; the display the window currently sits on is marked with a trailing " \*". The other displays' menus start with a "Same position on this display" item.
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
-### Link to another tab group
+### Link this tab group to another group
 
 - Move all tabs of the current tab group into another existing tab group.
 - Other tab groups can be distinguished by their leading tab icon, tab name, and tab count.
@@ -264,8 +260,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Detach Tab
 
-- Detach the selected tab and reposition it, or link it to another tab group.
-- To detach multiple tabs together, use [Multi-Select Tabs](#multi-select-tabs) first and then run "Detach selected N tabs and reposition" / "Detach selected N tabs and link to another group".
+- Detach the selected tab ("Detach this tab : (tab name)") and reposition it, or link it to another tab group.
+- To detach multiple tabs together, use [Multi-Select Tabs](#multi-select-tabs) first and then run "Detach {N} selected tabs".
 
 ### Close Tab
 
@@ -277,6 +273,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 - Each tab can be individually set to left- or right-aligned within a tab group.
 - The "align all tabs to left / right" menu items are placed first for quick batch alignment.
+- Alignment can also be changed by dragging: drop a tab on the other half of the strip. This works for a single-tab group too — the lone tab slides inside the strip, and dragging beyond the strip detaches it as before.
+- Optionally (Behavior tab setting, on by default), snapping a uniformly-aligned group left or right (including x% snaps) realigns its tabs to the snap side.
 
 ### Pinned Tabs
 
@@ -341,11 +339,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Watchdog Auto-Restart
 
-- WindowTabs may occasionally freeze in the following situations; in those cases the watchdog mechanism detects the unresponsive state and automatically restarts the application.
-  - Switching monitors
-  - Waking from sleep or hibernate
-  - Changing Windows display settings
-- Tab group configuration is preserved and restored on restart.
+- If WindowTabs ever becomes unresponsive, a watchdog detects the frozen state and automatically restarts the application; tab group configuration is preserved and restored.
+- The freeze that used to occur when changing the number of displays, the resolution, or waking from sleep has been fixed, so the watchdog now remains only as a safety net.
 
 ## Settings
 
@@ -379,6 +374,7 @@ Configure programs to use tabs and auto-grouping.
 ### Behavior Tab
 
 - Configure tab behavior.
+- "Change tab position on left/right snap": when a group whose tabs are all left-aligned or all right-aligned is snapped left or right (including x% snaps), the tabs realign to the snap side. Default is on; select "Don't change" to keep alignment untouched.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
