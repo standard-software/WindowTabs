@@ -65,14 +65,8 @@ type ServiceProxy<'a>(service:'a) =
         this.methodInfo(msg).ReturnType = typeof<unit>
 
     member private this.doSyncInvoke(msg: IMessage) =
-        // Tracked so a watchdog freeze dump shows WHICH service call a
-        // blocked thread was waiting in (see SyncCallTracker)
-        SyncCallTracker.enter (sprintf "ServiceProxy sync call: %s.%s" typeof<'a>.Name (this.methodInfo(msg).Name))
-        try
-            invoker.invoke <| fun() ->
-                this.invokeMethod(msg)
-        finally
-            SyncCallTracker.exit()
+        invoker.invoke <| fun() ->
+            this.invokeMethod(msg)
 
     member private this.doAsyncInvoke(msg: IMessage) =  
         let asyncResult = ServiceAsyncResult()
