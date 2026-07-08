@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
+- Top-level menu wording: "Link to another group" → "Link this tab group to another group"
 - Dragging the only tab of a single-tab group now slides it inside the strip like a reorder drag, so its left/right alignment can be changed by dropping it on the other half; dragging beyond the strip still detaches into window-drag mode as before (previously the drag went straight to window-drag mode and the alignment could not be changed)
 - Tab rename menu: "Rename tab" is now "Rename this tab : <name>" and "Reset tab name" is "Reset this tab name : <name after reset>", making clear they act on the right-clicked tab only
   - Confirming the rename box without changing the name is now treated as cancel (previously it registered a pointless rename override)

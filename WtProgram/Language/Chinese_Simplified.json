@@ -125,7 +125,7 @@
   "Down": "下",
   "Main": "主",
 
-  "DockingTabGroupToGroup": "连接到其他组",
+  "DockingTabGroupToGroup": "将此标签页组连接到其他组",
 
   "CloseTabMenu": "关闭标签页",
   "CloseTab": "关闭此标签页 : {0}",

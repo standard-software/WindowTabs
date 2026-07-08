@@ -125,7 +125,7 @@
   "Down": "下",
   "Main": "メイン",
 
-  "DockingTabGroupToGroup": "他のグループへ連結",
+  "DockingTabGroupToGroup": "このタブグループを他のグループへ連結",
 
   "CloseTabMenu": "タブを閉じる",
   "CloseTab": "このタブを閉じる : {0}",

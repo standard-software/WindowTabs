@@ -125,7 +125,7 @@
   "Down": "下",
   "Main": "メイン",
 
-  "DockingTabGroupToGroup": "他のグループにくっつける",
+  "DockingTabGroupToGroup": "このタブグループを他のグループにくっつける",
 
   "CloseTabMenu": "タブを閉じるで",
   "CloseTab": "このタブ閉じるで : {0}",

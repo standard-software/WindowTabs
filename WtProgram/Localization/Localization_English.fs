@@ -129,7 +129,7 @@ module Localization_English =
         ("Down", "Down")
         ("Main", "Main")
 
-        ("DockingTabGroupToGroup", "Link to another group")
+        ("DockingTabGroupToGroup", "Link this tab group to another group")
 
         ("CloseTabMenu", "Close Tab")
         ("CloseTab", "Close tab : {0}")
