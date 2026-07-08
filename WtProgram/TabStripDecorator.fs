@@ -1560,40 +1560,32 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
-        // Build the "Snap Other" submenu. Holds Snap Top / Snap Bottom at the top, then the
-        // percent-variant snaps, then Snap Display / Snap Desktop.
-        // `includeSnapDesktop` adds the desktop-maximize item when there are multiple monitors.
-        let buildSnapOtherSubMenu (includeSnapDesktop: bool) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
+        // Inner items for a "Position Move" submenu, flat (the old "Snap Other"
+        // submenu is expanded in place): Snap Left / Right / Top / Bottom, the
+        // percent-variant snap submenus, Snap Display (and Snap Desktop on
+        // multi-monitor when includeSnapDesktop), then the Move edge submenu,
+        // each block separated by a divider.
+        // Display submenus are appended separately by the caller when needed.
+        let buildPositionMoveInnerItems (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             let desktopSnap =
                 if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
                     [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
                 else []
-            CmiPopUp({
-                text = Localization.getString("SnapOtherMenu")
-                image = None
-                items = List2([
-                    CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
-                    CmiSeparator
-                    buildSnapPercentSubMenu snapPercentFn 90
-                    buildSnapPercentSubMenu snapPercentFn 70
-                    buildSnapPercentSubMenu snapPercentFn 50
-                    buildSnapPercentSubMenu snapPercentFn 30
-                    CmiSeparator
-                    CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
-                ] @ desktopSnap)
-                flags = List2()
-            })
-
-        // Inner items for a "Position Move" submenu: Snap Left / Snap Right, the Snap Other
-        // submenu (which now contains Snap Top / Snap Bottom plus the percent / display / desktop
-        // variants), then a separator and the Move edge submenu below it.
-        // Display submenus are appended separately by the caller when needed.
-        let buildPositionMoveInnerItems (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             [
-                CmiRegular({ text = Localization.getString("SnapLeft");  image = None; click = (fun() -> snapFn("snapleft"));  flags = List2() })
-                CmiRegular({ text = Localization.getString("SnapRight"); image = None; click = (fun() -> snapFn("snapright")); flags = List2() })
-                buildSnapOtherSubMenu includeSnapDesktop snapFn snapPercentFn
+                CmiRegular({ text = Localization.getString("SnapLeft");   image = None; click = (fun() -> snapFn("snapleft"));   flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapRight");  image = None; click = (fun() -> snapFn("snapright"));  flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() })
+                CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                CmiSeparator
+                buildSnapPercentSubMenu snapPercentFn 90
+                buildSnapPercentSubMenu snapPercentFn 70
+                buildSnapPercentSubMenu snapPercentFn 50
+                buildSnapPercentSubMenu snapPercentFn 30
+                CmiSeparator
+                CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+            ]
+            @ desktopSnap
+            @ [
                 CmiSeparator
                 buildMoveEdgeSubMenu moveFn
             ]
