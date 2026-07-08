@@ -125,7 +125,7 @@
   "Down": "下",
   "Main": "主",
 
-  "DockingTabGroupToGroup": "連結到其他群組",
+  "DockingTabGroupToGroup": "將此分頁群組連結到其他群組",
 
   "CloseTabMenu": "關閉分頁",
   "CloseTab": "關閉此分頁 : {0}",
