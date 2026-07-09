@@ -64,7 +64,6 @@ type Program() as this =
     let version = "ss_2026.07.10_next1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
-    let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
     let Cell = CellScope()
     let os = OS()
     let invoker = InvokerService.invoker
@@ -1011,11 +1010,6 @@ type Program() as this =
             with
             | _ -> "English"
         Localization.initLanguage(language)
-        
-        if System.Diagnostics.Debugger.IsAttached.not then
-            if mutex.WaitOne(TimeSpan.FromSeconds(0.5), false).not then
-                MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
-                exit(0)
 
         Application.EnableVisualStyles()
 
@@ -1049,10 +1043,23 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+    // The single-instance check must run before Program() is constructed.
+    // The constructor registers shell hooks and starts timers, and the
+    // "already running" MessageBox pumps messages, so checking later lets
+    // a second instance run updateAppWindows before services are registered
+    // and crash with KeyNotFoundException.
+    let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
+    if System.Diagnostics.Debugger.IsAttached.not then
+        if mutex.WaitOne(TimeSpan.FromSeconds(0.5), false).not then
+            MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
+            exit(0)
     let program = Program()
     program.run(List2<obj>([
         InputManagerPlugin(Set2(List2([WindowMessages.WM_MOUSEWHEEL])))
         NotifyIconPlugin()
         ExceptionHandlerPlugin()
     ]).map(fun o -> o.cast<IPlugin>()))
+    // Keep the single-instance mutex alive for the whole process lifetime;
+    // if the GC collected it, its handle would close and release the mutex.
+    GC.KeepAlive(mutex)
     0
