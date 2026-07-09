@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.06_next1
+## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
 - Multi-monitor: position menus now appear once per display (the current display is marked with " *")
 - Context menus reorganized: the "Snap Other" submenu was flattened into the position menu, and the launch / detach / rename items now show their target tab name (e.g. "Detach this tab : <name>")
