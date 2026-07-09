@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.07.10_next1
+
 ## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
 - Multi-monitor: position menus now appear once per display (the current display is marked with " *")
