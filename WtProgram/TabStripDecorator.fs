@@ -1574,6 +1574,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             [
                 CmiRegular({ text = Localization.getString("SnapLeft");   image = None; click = (fun() -> snapFn("snapleft"));   flags = List2() })
                 CmiRegular({ text = Localization.getString("SnapRight");  image = None; click = (fun() -> snapFn("snapright"));  flags = List2() })
+                CmiSeparator
                 CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() })
                 CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
                 CmiSeparator
