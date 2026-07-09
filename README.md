@@ -256,7 +256,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 - Move all tabs of the current tab group into another existing tab group.
 - Other tab groups can be distinguished by their leading tab icon, tab name, and tab count.
 
-![Link to another tab group](README_Image/MoveTabGroupToGroup.png)
+![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
 ### Detach Tab
 
