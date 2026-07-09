@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.10_next1
+- Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
+  - The single-instance check now runs before any hooks or timers are set up, so the second instance can no longer execute window scans against unregistered services
 
 ## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
