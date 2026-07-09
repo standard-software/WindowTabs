@@ -1,23 +1,11 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.06_next1
-- The "Snap Other" submenu was removed and its items expanded into the parent position menu: Snap Left / Right / Top / Bottom, separator, Snap 90/70/50/30% submenus, separator, Snap Display (/ Snap Desktop), separator, Move submenu
-- Top-level menu wording: "Link to another group" → "Link this tab group to another group"
-- Dragging the only tab of a single-tab group now slides it inside the strip like a reorder drag, so its left/right alignment can be changed by dropping it on the other half; dragging beyond the strip still detaches into window-drag mode as before (previously the drag went straight to window-drag mode and the alignment could not be changed)
-- Tab rename menu: "Rename tab" is now "Rename this tab : <name>" and "Reset tab name" is "Reset this tab name : <name after reset>", making clear they act on the right-clicked tab only
-  - Confirming the rename box without changing the name is now treated as cancel (previously it registered a pointless rename override)
-- Menu wording: the "New launch" and "Tab detach" context menus were restructured
-  - "New tab : execute <exe>" now contains "Right of this tab : <name>", a separator, per-display "Position" items, and "Link to another group"
-  - "Detach this tab : <name>" (or "Detach <n> selected tabs" in multi-select) now contains prefix-less per-display "Position" items and "Link to another group"
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
-  - Display-settings events were delivered synchronously into the tab-group UI threads while those threads were making synchronous calls back into the main thread, deadlocking both; cross-thread deliveries are now non-blocking
-  - Window title / icon queries no longer use unbounded SendMessage, so a busy or hung application can no longer stall WindowTabs either
-- New Behavior setting: "Change tab position on left/right snap" (default: change when all tabs in the group share the same position)
-  - When a group whose tabs are all left-aligned or all right-aligned is snapped left or right (including x% snaps), the tabs realign to the snap side; mixed groups are unchanged
-  - Applies to tab-group snap, detach-and-snap, and new-window snap
-- Multi-monitor: per-display "Position Move" menus
-  - "Position Move", "New window (position)" and "Detach this tab and move (position)" now show one menu per display, e.g. "Position Move Main display" (the window's current display is marked with " *")
-  - Replaces the display submenus that used to sit at the bottom of a single menu; single-display layout is unchanged
+- Multi-monitor: position menus now appear once per display (the current display is marked with " *")
+- Context menus reorganized: the "Snap Other" submenu was flattened into the position menu, and the launch / detach / rename items now show their target tab name (e.g. "Detach this tab : <name>")
+- New Behavior setting: on a left/right snap, tabs of a uniformly-aligned group realign to the snap side (default on)
+- The tab of a single-tab group can now be dragged inside the strip to change its left/right alignment
 
 ## version ss_2026.07.06
 - Version prefix changed from `ss_jp_` to `ss_`
