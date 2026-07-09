@@ -61,7 +61,7 @@ let colorToRRGGBBAA (c: Color) : string =
     sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
 
 type Program() as this =
-    let version = "ss_2026.07.10"
+    let version = "ss_2026.07.10_next1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
