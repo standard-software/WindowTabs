@@ -7,6 +7,28 @@ open System.Windows.Forms
 module ForceExitState =
     let mutable isForceExiting = false
 
+// Crash diagnostics: writes unhandled-exception details to
+// %APPDATA%\WindowTabs\crash_*.log so a crash can be diagnosed after the
+// fact (the Windows event log only records the native exit, not the .NET
+// exception type or stack trace).
+module CrashLog =
+    let private logDir =
+        lazy (
+            let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+            try IO.Directory.CreateDirectory(dir) |> ignore with _ -> ()
+            dir)
+    let write (source: string) (ex: exn) =
+        try
+            let file = IO.Path.Combine(logDir.Value, sprintf "crash_%s.log" (DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff")))
+            let text =
+                sprintf "%s\r\nSource: %s\r\nThread: %d\r\n\r\n%s\r\n"
+                    (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                    source
+                    Thread.CurrentThread.ManagedThreadId
+                    (ex.ToString())
+            IO.File.WriteAllText(file, text)
+        with _ -> ()
+
 type InvokeDelegate<'a> = delegate of unit -> 'a
 [<AllowNullLiteral>]
 type Invoker() as this =
@@ -87,6 +109,10 @@ module ThreadHelper =
         let evt = ManualResetEvent(false)
         let results = ref None
         let start() =
+            // Log-and-continue instead of the default kill-the-process for
+            // unhandled exceptions in this group thread's message loop
+            // (Application.ThreadException handlers are per-thread).
+            Application.ThreadException.Add(fun e -> CrashLog.write "group-thread ThreadException" e.Exception)
             // Must run before the first control is created on this thread so
             // that every SystemEvents subscription captures the non-blocking
             // context (see NonBlockingSyncContext above).

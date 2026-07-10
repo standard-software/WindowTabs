@@ -60,8 +60,52 @@ let parseColorRRGGBBAA (s: string) : Color option =
 let colorToRRGGBBAA (c: Color) : string =
     sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
 
+// Closed-tab restore diagnostics (temporary): append-only log of the
+// record / match / apply steps in %APPDATA%\WindowTabs\closedtab_debug.log
+// so ordering issues can be diagnosed from real data.
+module ClosedTabLog =
+    let private sync = obj()
+    let private path =
+        lazy (
+            let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+            try IO.Directory.CreateDirectory(dir) |> ignore with _ -> ()
+            IO.Path.Combine(dir, "closedtab_debug.log"))
+    let write (msg: string) =
+        try
+            lock sync (fun() ->
+                IO.File.AppendAllText(path.Value, sprintf "%s  %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) msg))
+        with _ -> ()
+
+// State snapshot of a tab whose window was closed while WindowTabs runs,
+// used to restore the tab (state + group + position) when the same app
+// window (same exe path + window title) reappears.
+type ClosedTabInfo = {
+    exePath: string
+    windowTitle: string
+    renamedTabName: string option
+    isPinned: bool
+    fillColor: Color option
+    underlineColor: Color option
+    borderColor: Color option
+    tabAlign: TabAlign option
+    groupHwnd: IntPtr
+    tabIndex: int
+    closedHwnd: IntPtr
+    closedAt: DateTime
+    // Full tab order (hwnds) of the group at close time. Restore placement is
+    // computed RELATIVE to this snapshot (count of current tabs that came
+    // before this one), which keeps surviving tabs in their original relative
+    // position instead of being displaced by absolute-index insertion.
+    orderSnapshot: IntPtr list
+}
+
+// Titles are compared after removing VSCode's unsaved-changes marker
+// ("● "), so a document that closed clean and reopens dirty (or vice
+// versa) still matches.
+let normalizeClosedTabTitle (t: string) = t.Replace("● ", "")
+
 type Program() as this =
-    let version = "ss_2026.07.10_next1"
+    let version = "ss_2026.07.10_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -131,6 +175,22 @@ type Program() as this =
     let pendingStandaloneLaunches = Cell.create(Map2<string, (IntPtr -> unit) * DateTime>())
     // Carry a standalone launch's postAction from tryStandaloneLaunch to addWindowToGroup, keyed by new window hwnd
     let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
+    // Closed-tab restore: state + position of tabs whose windows were closed
+    // while WindowTabs runs, matched by exe path + window title when the app
+    // window reappears. In-memory only — a WindowTabs restart clears it.
+    let closedTabCache = Cell.create<ClosedTabInfo list>([])
+    let closedTabCacheLimit = 500
+    // Live snapshot of (exePath, windowTitle) per grouped hwnd, so the info
+    // is still available when the closed tab is recorded after its window
+    // has already been destroyed
+    let windowInfoCache = Cell.create(Map2() : Map2<IntPtr, string * string>)
+    // Carries a matched ClosedTabInfo from tryClosedTabRestore to the
+    // positioning step at the end of addWindowToGroup
+    let pendingClosedTabRestores = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
+    // relative placement can locate already-restored siblings in an order
+    // snapshot taken before they closed
+    let restoredFromMap = Cell.create(Map2() : Map2<IntPtr, IntPtr>)
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
@@ -153,6 +213,11 @@ type Program() as this =
     // UI thread; the dirty check in Settings.fs skips the ~7 ms disk write when nothing
     // changed, so the steady-state cost is one JArray build and a string compare.
     let periodicSaveTimer = new System.Windows.Forms.Timer(Interval = 10000)
+    // Title polling for the closed-tab late restore. A title change alone fires
+    // no shell event, so without this the restore could wait for the next event.
+    // Cheap: GetWindowText on another process's window is a cached read (no
+    // message is sent), and only grouped windows are scanned.
+    let titleSyncTimer = new System.Windows.Forms.Timer(Interval = 1000)
    
     let isFirstRun = settingsManager.fileExists.not
 
@@ -192,6 +257,12 @@ type Program() as this =
                     this.saveTabGroupsToSettings()
             with _ -> ()
         periodicSaveTimer.Start()
+        titleSyncTimer.Tick.Add <| fun _ ->
+            try
+                if inShutdown.value.not && isDisabledCell.value.not then
+                    this.syncWindowTitles()
+            with _ -> ()
+        titleSyncTimer.Start()
     
     member this.desktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -289,6 +360,255 @@ type Program() as this =
             Some(group)
         else None
 
+    // Record a closed window's tab state + position so the tab can be
+    // restored if the same app window (same exe path + window title)
+    // reappears while WindowTabs is still running. Called just before the
+    // window is removed from its group; the window itself is already
+    // destroyed, so the identity comes from the windowInfoCache snapshot.
+    member this.recordClosedTab(hwnd: IntPtr, group: IGroup) =
+        try
+            // The two removal paths (HSHELL_WINDOWDESTROYED and the periodic
+            // scan) can both see the window still in its group because removal
+            // is async — record each closed hwnd only once.
+            if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = hwnd) then
+                ClosedTabLog.write (sprintf "RECORD-DUP hwnd=%X already recorded, skipped" (int hwnd))
+            else
+            match windowInfoCache.value.tryFind(hwnd) with
+            | Some((exePath, windowTitle)) when exePath <> "" && windowTitle <> "" ->
+                let groupHwnd = (try group.hwnd with _ -> IntPtr.Zero)
+                // Use the strip's real on-screen order; the visualOrder mirror
+                // goes stale after pin/unpin normalization.
+                let order = group.visualOrderThreadSafe
+                let now = DateTime.Now
+                // When several tabs of one group close in a burst (an app
+                // quitting all its windows), the list shrinks unpredictably
+                // between the closes (removal is async). Anchor every burst
+                // member to the order snapshot taken at the FIRST close of the
+                // burst — the tab's index there is its true pre-close position,
+                // and all burst entries then share one consistent snapshot for
+                // relative placement at restore time.
+                let burstAnchor =
+                    closedTabCache.value
+                    |> List.filter (fun e ->
+                        e.groupHwnd = groupHwnd &&
+                        (now - e.closedAt).TotalSeconds < 5.0 &&
+                        not (List.isEmpty e.orderSnapshot))
+                    |> List.tryLast
+                let orderSnapshot, tabIndex =
+                    let fallback() =
+                        order.list, (order.tryFindIndex((=) hwnd)
+                                     |> Option.orElseWith (fun() -> group.visualOrder.tryFindIndex((=) hwnd))
+                                     |> Option.defaultValue -1)
+                    match burstAnchor with
+                    | Some(anchor) ->
+                        match anchor.orderSnapshot |> List.tryFindIndex ((=) hwnd) with
+                        | Some(i) -> anchor.orderSnapshot, i
+                        | None -> fallback()
+                    | None -> fallback()
+                let info = {
+                    exePath = exePath
+                    windowTitle = normalizeClosedTabTitle windowTitle
+                    renamedTabName = windowNameOverride.value.tryFind(hwnd) |> Option.bind id
+                    isPinned = windowPinned.value.contains(hwnd)
+                    fillColor = windowFillColor.value.tryFind(hwnd)
+                    underlineColor = windowUnderlineColor.value.tryFind(hwnd)
+                    borderColor = windowBorderColor.value.tryFind(hwnd)
+                    tabAlign = windowAlignment.value.tryFind(hwnd)
+                    groupHwnd = groupHwnd
+                    tabIndex = tabIndex
+                    closedHwnd = hwnd
+                    closedAt = now
+                    orderSnapshot = orderSnapshot
+                }
+                closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
+                ClosedTabLog.write (sprintf "RECORD exe=%s title='%s' group=%X idx=%d pinned=%b anchored=%b cache=%d"
+                    (IO.Path.GetFileName exePath) info.windowTitle (int groupHwnd) tabIndex info.isPinned burstAnchor.IsSome (closedTabCache.value.Length))
+            | _ ->
+                ClosedTabLog.write (sprintf "RECORD-SKIP hwnd=%X (no windowInfoCache entry or empty exe/title)" (int hwnd))
+        with _ -> ()
+
+    // Take (and consume) the most recently recorded closed-tab entry that
+    // matches exe path + window title exactly (after title normalization).
+    // Exact match only: restoring nothing is better than restoring onto the
+    // wrong window.
+    member private this.takeClosedTabMatch(exePath: string, windowTitle: string) =
+        if exePath = "" || windowTitle = "" then None else
+        let windowTitle = normalizeClosedTabTitle windowTitle
+        match closedTabCache.value |> List.tryFindIndex (fun i -> i.exePath = exePath && i.windowTitle = windowTitle) with
+        | Some(idx) ->
+            let info = closedTabCache.value.[idx]
+            closedTabCache.map(fun l ->
+                l |> List.mapi (fun i v -> (i, v)) |> List.filter (fun (i, _) -> i <> idx) |> List.map snd)
+            ClosedTabLog.write (sprintf "CONSUME title='%s' idx=%d remaining=%d" info.windowTitle info.tabIndex (closedTabCache.value.Length))
+            Some(info)
+        | None -> None
+
+    // Relative placement for a restored tab: the target index is the number
+    // of current tabs (excluding the restored one) that sat BEFORE it in the
+    // close-time order snapshot — survivors matched by their own hwnd,
+    // already-restored siblings via restoredFromMap. Tabs unknown to the
+    // snapshot (opened after the close) are treated as coming after. Runs on
+    // the group thread; reads only the arguments.
+    member private this.closedTabTargetIdx(currentTabs: List2<Tab>, selfTab: Tab, info: ClosedTabInfo, restoredPairs: Map2<IntPtr, IntPtr>) =
+        match info.orderSnapshot |> List.tryFindIndex ((=) info.closedHwnd) with
+        | Some(rank) ->
+            let originalPos (t: Tab) =
+                let (Tab h) = t
+                match info.orderSnapshot |> List.tryFindIndex ((=) h) with
+                | Some(i) -> Some(i)
+                | None ->
+                    restoredPairs.tryFind(h)
+                    |> Option.bind (fun oldH -> info.orderSnapshot |> List.tryFindIndex ((=) oldH))
+            currentTabs.list
+            |> List.filter (fun t -> t <> selfTab)
+            |> List.filter (fun t -> match originalPos t with Some(p) -> p < rank | None -> false)
+            |> List.length
+        | None ->
+            // No usable snapshot: fall back to the recorded absolute index
+            let count = currentTabs.list.Length
+            if info.tabIndex >= 0 && info.tabIndex < count then info.tabIndex else count
+
+    // Closed-tab restore: when a window matching a recorded closed tab
+    // appears, restore its tab state and put it back into its former group.
+    // Runs before category/exe auto-grouping in findGroupForWindow.
+    member this.tryClosedTabRestore(window:Window) =
+        if closedTabCache.value.IsEmpty then None else
+        let exePath = try window.pid.processPath with _ -> ""
+        let windowTitle = try window.text with _ -> ""
+        match this.takeClosedTabMatch(exePath, windowTitle) with
+        | Some(info) ->
+            let hwnd = window.hwnd
+            // Restore state to the global maps before addWindow so the tab is
+            // created with the saved name/colors/pin/alignment (same pattern
+            // as restoreTabGroupsFromSettings)
+            match info.renamedTabName with
+            | Some(name) -> windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
+            | None -> ()
+            info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
+            info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
+            info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
+            if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
+            info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
+            // Remember old->new hwnd so siblings restored later can locate this
+            // tab in their close-time order snapshot
+            restoredFromMap.map(fun m -> m.add hwnd info.closedHwnd)
+            // Remember the entry so addWindowToGroup can restore the position
+            pendingClosedTabRestores.map(fun m -> m.add hwnd info)
+            match this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false)) with
+            | Some(g) ->
+                ClosedTabLog.write (sprintf "GROUPING-MATCH title='%s' idx=%d -> saved group %X alive" windowTitle info.tabIndex (int info.groupHwnd))
+                Some(Some(g))
+            | None ->
+                ClosedTabLog.write (sprintf "GROUPING-MATCH title='%s' idx=%d -> saved group %X GONE, state only" windowTitle info.tabIndex (int info.groupHwnd))
+                None  // former group is gone: state is restored, grouping falls through
+        | None -> None
+
+    // Main-thread title sync (no cross-thread notification): compares each
+    // grouped window's current title with the windowInfoCache snapshot.
+    // On a change it refreshes the snapshot and runs the closed-tab late
+    // restore for apps whose title settles only after grouping (e.g. VSCode
+    // starting on "Welcome" before showing the workspace name). Only
+    // pristine tabs (no custom state yet) are touched. Grouped windows
+    // without a snapshot yet (e.g. restored at startup, which bypasses
+    // addWindowToGroup) get one here, so closing them can be recorded.
+    // Called from updateAppWindows and the 1s titleSyncTimer.
+    member this.syncWindowTitles() =
+        try
+            this.desktop.groups.iter <| fun gi ->
+                gi.windows.iter <| fun hwnd ->
+                    match windowInfoCache.value.tryFind(hwnd) with
+                    | Some((exePath, oldTitle)) ->
+                        let window = os.windowFromHwnd(hwnd)
+                        if window.isWindow then
+                            let newTitle = try window.text with _ -> oldTitle
+                            if newTitle <> oldTitle then
+                                windowInfoCache.map(fun m -> m.add hwnd (exePath, newTitle))
+                                if newTitle <> "" then
+                                    this.tryLateClosedTabRestore(hwnd, exePath, newTitle)
+                    | None ->
+                        let window = os.windowFromHwnd(hwnd)
+                        if window.isWindow then
+                            let exePath = try window.pid.processPath with _ -> ""
+                            let title = try window.text with _ -> ""
+                            if exePath <> "" then
+                                windowInfoCache.map(fun m -> m.add hwnd (exePath, title))
+        with _ -> ()
+
+    member private this.tryLateClosedTabRestore(hwnd: IntPtr, exePath: string, windowTitle: string) =
+        try
+                let isPristine =
+                    windowNameOverride.value.tryFind(hwnd).IsNone &&
+                    windowPinned.value.contains(hwnd).not &&
+                    windowFillColor.value.tryFind(hwnd).IsNone &&
+                    windowUnderlineColor.value.tryFind(hwnd).IsNone &&
+                    windowBorderColor.value.tryFind(hwnd).IsNone
+                if closedTabCache.value.IsEmpty.not && isPristine then
+                    // Peek first: the entry is only consumed when applied in place
+                    let normTitle = normalizeClosedTabTitle windowTitle
+                    match closedTabCache.value |> List.tryFind (fun i -> i.exePath = exePath && i.windowTitle = normTitle) with
+                    | Some(info) ->
+                        let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
+                        let savedGroup = this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false))
+                        match currentGroup, savedGroup with
+                        | Some(cur), Some(saved) when (try cur.hwnd <> saved.hwnd with _ -> false) ->
+                            // The tab sits in the wrong group (e.g. VSCode's "Welcome"
+                            // window was auto-grouped before the workspace title
+                            // appeared). Detach it and let the normal grouping
+                            // pipeline re-add it: with the title now matching,
+                            // tryClosedTabRestore performs the full group +
+                            // position + state restore and consumes the entry.
+                            ClosedTabLog.write (sprintf "TITLE-MATCH title='%s' -> detach-regroup toward saved group %X" windowTitle (int info.groupHwnd))
+                            cur.removeWindow(hwnd)
+                            this.scheduleUpdateAppWindows()
+                        | _ ->
+                        match this.takeClosedTabMatch(exePath, windowTitle) with
+                        | Some(info) ->
+                            info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
+                            info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
+                            info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
+                            if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
+                            info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
+                            restoredFromMap.map(fun m -> m.add hwnd info.closedHwnd)
+                            let restoredPairs = restoredFromMap.value
+                            match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
+                            | Some(g) ->
+                                let isSavedGroup = try g.hwnd = info.groupHwnd with _ -> false
+                                match g :> obj with
+                                | :? GroupInfo as gi ->
+                                    gi.invokeGroup <| fun() ->
+                                        try
+                                            let wg = gi.group
+                                            let tab = Tab(hwnd)
+                                            info.renamedTabName |> Option.iter (fun n -> wg.setTabName(hwnd, Some(n)))
+                                            info.fillColor |> Option.iter (fun c -> wg.ts.setTabFillColor(tab, Some(c)))
+                                            info.underlineColor |> Option.iter (fun c -> wg.ts.setTabUnderlineColor(tab, Some(c)))
+                                            info.borderColor |> Option.iter (fun c -> wg.ts.setTabBorderColor(tab, Some(c)))
+                                            info.tabAlign |> Option.iter (fun a -> wg.ts.setTabAlign(tab, a))
+                                            if isSavedGroup then
+                                                let currentTabs = wg.ts.visualOrder
+                                                let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredPairs)
+                                                match currentTabs.tryFindIndex((=) tab) with
+                                                | Some(curIdx) when curIdx <> targetIdx ->
+                                                    wg.ts.moveTab(tab, targetIdx)
+                                                    ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' target=%d moved %d->%d" info.windowTitle targetIdx curIdx targetIdx)
+                                                | curIdx ->
+                                                    ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' target=%d no move (cur=%A)" info.windowTitle targetIdx curIdx)
+                                            else
+                                                ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' state only (saved group %X gone)" info.windowTitle (int info.groupHwnd))
+                                            // Enforce the saved pin state AFTER the move:
+                                            // moveTab applies smart-pin, which can flip the
+                                            // pin state depending on the tab's neighbors.
+                                            if info.isPinned && not (wg.ts.isPinned(tab)) then
+                                                wg.pinTab(hwnd)
+                                            elif not info.isPinned && wg.ts.isPinned(tab) then
+                                                wg.unpinTab(hwnd)
+                                        with _ -> ()
+                                | _ -> ()
+                            | None -> ()
+                        | None -> ()
+                    | None -> ()
+        with _ -> ()
+
     member this.updateAppWindows() =
         if this.desktop.isDragging.not then
             // If restoration is needed on startup, do it first before auto-grouping
@@ -301,6 +621,7 @@ type Program() as this =
                     this.ensureWindowIsSubscribed(window)
                     if this.isTabMonitoringSuspended.not then
                         this.ensureWindowIsGrouped(window)
+                this.syncWindowTitles()
             this.destroyEmptyGroups()
             this.removeUntabableWindows()
 
@@ -360,6 +681,11 @@ type Program() as this =
                    this.isTabbableWindow(window).not &&
                    not (isRecentlyPlaced(hwnd))
                 then
+                    // Record only genuinely destroyed windows; a window that is
+                    // merely hidden (e.g. minimized to tray) keeps its hwnd and
+                    // its state in the global maps
+                    if window.isWindow.not then
+                        this.recordClosedTab(hwnd, gi)
                     gi.removeWindow hwnd
 
     member this.findGroupForWindow(window:Window) =
@@ -368,12 +694,17 @@ type Program() as this =
             launcher.findGroup
             this.tryStandaloneLaunch
             this.tryNewWindowLaunch
+            this.tryClosedTabRestore
             this.tryAutoGroup
             ])
         handlers.tryPick(fun f -> f(window)).def(None)
 
     member this.addWindowToGroup(window:Window) =
         let hwnd = window.hwnd
+        // Snapshot exe path + title now; recordClosedTab needs them after the
+        // window has been destroyed and can no longer be queried
+        windowInfoCache.map(fun m ->
+            m.add hwnd ((try window.pid.processPath with _ -> ""), (try window.text with _ -> "")))
         let group,isNewGroup =
             match this.findGroupForWindow(window) with
             | Some(group) -> (group, false)
@@ -465,6 +796,43 @@ type Program() as this =
                         | _ -> ()
             | _ -> ()
 
+        // Closed-tab restore: reapply saved alignment and visual position after
+        // the generic join/positioning blocks above so the restored values win.
+        // The position is only meaningful inside the tab's former group.
+        match pendingClosedTabRestores.value.tryFind(hwnd) with
+        | Some(info) ->
+            pendingClosedTabRestores.map(fun m -> m.remove hwnd)
+            let isSavedGroup = try group.hwnd = info.groupHwnd with _ -> false
+            let restoredPairs = restoredFromMap.value
+            match group :> obj with
+            | :? GroupInfo as gi ->
+                gi.invokeGroup <| fun() ->
+                    try
+                        let wg = gi.group
+                        let newTab = Tab(hwnd)
+                        info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
+                        if isSavedGroup then
+                            let currentTabs = wg.ts.visualOrder
+                            let targetIdx = this.closedTabTargetIdx(currentTabs, newTab, info, restoredPairs)
+                            match currentTabs.tryFindIndex((=) newTab) with
+                            | Some(curIdx) when curIdx <> targetIdx ->
+                                wg.ts.moveTab(newTab, targetIdx)
+                                ClosedTabLog.write (sprintf "APPLY title='%s' target=%d moved %d->%d" info.windowTitle targetIdx curIdx targetIdx)
+                            | curIdx ->
+                                ClosedTabLog.write (sprintf "APPLY title='%s' target=%d no move (cur=%A)" info.windowTitle targetIdx curIdx)
+                        else
+                            ClosedTabLog.write (sprintf "APPLY title='%s' state only (group differs from saved %X)" info.windowTitle (int info.groupHwnd))
+                        // Enforce the saved pin state AFTER the move: moveTab
+                        // applies smart-pin, which can flip the pin state
+                        // depending on the restored tab's neighbors.
+                        if info.isPinned && not (wg.ts.isPinned(newTab)) then
+                            wg.pinTab(hwnd)
+                        elif not info.isPinned && wg.ts.isPinned(newTab) then
+                            wg.unpinTab(hwnd)
+                    with _ -> ()
+            | _ -> ()
+        | None -> ()
+
         // Run any post-action registered for a standalone launch (position, etc.)
         match pendingStandalonePostActions.value.tryFind(hwnd) with
         | Some(action) ->
@@ -491,7 +859,9 @@ type Program() as this =
                 // EVENT_OBJECT_HIDE already handles tab removal via updateAppWindows(),
                 // so HSHELL_WINDOWDESTROYED only needs cleanup for any remaining cases.
                 this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)).iter <| fun g ->
+                    this.recordClosedTab(hwnd, g)
                     g.removeWindow(hwnd)
+                windowInfoCache.map(fun m -> m.remove hwnd)
                 this.destroyEmptyGroups()
                 this.exitIfNeeded()
                 skipFullUpdate <- true
@@ -542,7 +912,13 @@ type Program() as this =
             let groupsArray = JArray()
             this.desktop.groups.iter <| fun gi ->
                 let windowsArray = JArray()
-                gi.visualOrder.iter <| fun hwnd ->
+                // Save in the strip's real on-screen order (the visualOrder
+                // mirror goes stale after pin/unpin normalization). Windows
+                // not yet present in the strip snapshot (added moments ago,
+                // strip add still pending) are appended so none are lost.
+                let snapshotOrder = gi.visualOrderThreadSafe
+                let order = snapshotOrder.appendList(gi.visualOrder.where(fun h -> snapshotOrder.contains((=) h).not))
+                order.iter <| fun hwnd ->
                     let window = os.windowFromHwnd(hwnd)
                     if window.isWindow then
                         let windowObj = JObject()

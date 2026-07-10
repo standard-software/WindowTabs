@@ -411,6 +411,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.isPinned(hwnd) = this.ts.isPinned(Tab(hwnd))
     // Thread-safe version for cross-thread reads (e.g., save from main thread)
     member this.isPinnedThreadSafe(hwnd) = this.ts.isPinnedThreadSafe(Tab(hwnd))
+    // Real on-screen tab order for cross-thread reads (thread-safe snapshot)
+    member this.visualOrderHwndsThreadSafe = this.ts.visualOrderThreadSafe.map(fun (Tab h) -> h)
     member this.pinTab(hwnd) =
         this.ts.pinTab(Tab(hwnd))
         Services.program.setWindowPinned(hwnd, true)

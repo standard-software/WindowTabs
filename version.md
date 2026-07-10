@@ -1,5 +1,13 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.07.10_next2
+- Closed-tab restore: when a tab's window is closed (or its app exits) and the same app window reopens while WindowTabs is running, the tab returns to its former group and position with its state (colors, pin, rename, alignment) intact
+  - Matches by exe path + window title (exact match; VSCode's unsaved-changes marker is ignored); runs before category auto-grouping
+  - The position is restored relative to the tab order at close time, so surviving tabs keep their place even when several windows close and reopen together
+  - Apps whose title settles after startup (e.g. VSCode opening on "Welcome") are matched again when the title changes
+  - The record is in-memory only and is cleared when WindowTabs restarts
+- Fixed: the saved tab order could go stale after pin/unpin operations, so a WindowTabs restart could restore tabs in the wrong order (the saved order now always matches the on-screen order)
+
 ## version ss_2026.07.10_next1
 - Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
   - The single-instance check now runs before any hooks or timers are set up, so the second instance can no longer execute window scans against unregistered services

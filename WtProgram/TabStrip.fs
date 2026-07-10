@@ -55,6 +55,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Thread-safe snapshot of pinned tabs for cross-thread reads (e.g., save from main thread)
     [<VolatileField>]
     let mutable pinnedTabsSnapshot = Set2<Tab>()
+    // Thread-safe snapshot of the on-screen visual order. GroupInfo's
+    // windowsCell mirror misses reorders done by normalizeVisualOrder
+    // (pin/unpin/align), so cross-thread readers that need the REAL order
+    // (save, closed-tab recording) must use this instead.
+    [<VolatileField>]
+    let mutable visualOrderSnapshot = List2<Tab>()
     // Selected tabs (multi-select via Shift/Ctrl click). The active tab is
     // never part of this set — it is the implicit primary action target.
     let selectedTabsCell = Cell.create(Set2<Tab>())
@@ -176,6 +182,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             pinnedTabsSnapshot <- pinnedTabsCell.value
         Cell.listen <| fun() ->
             tabAlignmentSnapshot <- tabAlignmentCell.value
+        Cell.listen <| fun() ->
+            visualOrderSnapshot <- visualOrderCell.value
 
         // Sync tab color snapshots for thread-safe cross-thread reads
         Cell.listen <| fun() ->
@@ -678,6 +686,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isPinnedThreadSafe(tab) = pinnedTabsSnapshot.contains(tab)
+
+    // Thread-safe visual order for cross-thread reads (reads from volatile snapshot)
+    member this.visualOrderThreadSafe = visualOrderSnapshot
 
     // Canonical visual zone for a tab: left-pinned (0), left-unpinned (1),
     // right-pinned (2), right-unpinned (3). The stored visualOrder list is kept
