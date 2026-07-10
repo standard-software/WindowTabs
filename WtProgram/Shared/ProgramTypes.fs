@@ -148,6 +148,10 @@ type IGroup =
     abstract member switchWindow: bool * bool -> unit
     abstract member windows: List2<IntPtr>
     abstract member visualOrder: List2<IntPtr>  // Tab display order (left to right)
+    // Real on-screen order from the tab strip's thread-safe snapshot. The
+    // visualOrder mirror above misses reorders done by pin/unpin/align
+    // normalization, so order-sensitive readers must use this one.
+    abstract member visualOrderThreadSafe: List2<IntPtr>
     abstract member destroy: unit -> unit
     abstract member perGroupTabPositionValue: string with get, set
     abstract member snapTabHeightMargin: bool with get, set
