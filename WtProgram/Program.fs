@@ -60,22 +60,6 @@ let parseColorRRGGBBAA (s: string) : Color option =
 let colorToRRGGBBAA (c: Color) : string =
     sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
 
-// Closed-tab restore diagnostics (temporary): append-only log of the
-// record / match / apply steps in %APPDATA%\WindowTabs\closedtab_debug.log
-// so ordering issues can be diagnosed from real data.
-module ClosedTabLog =
-    let private sync = obj()
-    let private path =
-        lazy (
-            let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-            try IO.Directory.CreateDirectory(dir) |> ignore with _ -> ()
-            IO.Path.Combine(dir, "closedtab_debug.log"))
-    let write (msg: string) =
-        try
-            lock sync (fun() ->
-                IO.File.AppendAllText(path.Value, sprintf "%s  %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) msg))
-        with _ -> ()
-
 // State snapshot of a tab whose window was closed while WindowTabs runs,
 // used to restore the tab (state + group + position) when the same app
 // window (same exe path + window title) reappears.
@@ -370,9 +354,7 @@ type Program() as this =
             // The two removal paths (HSHELL_WINDOWDESTROYED and the periodic
             // scan) can both see the window still in its group because removal
             // is async — record each closed hwnd only once.
-            if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = hwnd) then
-                ClosedTabLog.write (sprintf "RECORD-DUP hwnd=%X already recorded, skipped" (int hwnd))
-            else
+            if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = hwnd) then () else
             match windowInfoCache.value.tryFind(hwnd) with
             | Some((exePath, windowTitle)) when exePath <> "" && windowTitle <> "" ->
                 let groupHwnd = (try group.hwnd with _ -> IntPtr.Zero)
@@ -421,10 +403,7 @@ type Program() as this =
                     orderSnapshot = orderSnapshot
                 }
                 closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
-                ClosedTabLog.write (sprintf "RECORD exe=%s title='%s' group=%X idx=%d pinned=%b anchored=%b cache=%d"
-                    (IO.Path.GetFileName exePath) info.windowTitle (int groupHwnd) tabIndex info.isPinned burstAnchor.IsSome (closedTabCache.value.Length))
-            | _ ->
-                ClosedTabLog.write (sprintf "RECORD-SKIP hwnd=%X (no windowInfoCache entry or empty exe/title)" (int hwnd))
+            | _ -> ()
         with _ -> ()
 
     // Take (and consume) the most recently recorded closed-tab entry that
@@ -439,7 +418,6 @@ type Program() as this =
             let info = closedTabCache.value.[idx]
             closedTabCache.map(fun l ->
                 l |> List.mapi (fun i v -> (i, v)) |> List.filter (fun (i, _) -> i <> idx) |> List.map snd)
-            ClosedTabLog.write (sprintf "CONSUME title='%s' idx=%d remaining=%d" info.windowTitle info.tabIndex (closedTabCache.value.Length))
             Some(info)
         | None -> None
 
@@ -495,12 +473,8 @@ type Program() as this =
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
             match this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false)) with
-            | Some(g) ->
-                ClosedTabLog.write (sprintf "GROUPING-MATCH title='%s' idx=%d -> saved group %X alive" windowTitle info.tabIndex (int info.groupHwnd))
-                Some(Some(g))
-            | None ->
-                ClosedTabLog.write (sprintf "GROUPING-MATCH title='%s' idx=%d -> saved group %X GONE, state only" windowTitle info.tabIndex (int info.groupHwnd))
-                None  // former group is gone: state is restored, grouping falls through
+            | Some(g) -> Some(Some(g))
+            | None -> None  // former group is gone: state is restored, grouping falls through
         | None -> None
 
     // Main-thread title sync (no cross-thread notification): compares each
@@ -557,7 +531,6 @@ type Program() as this =
                             // pipeline re-add it: with the title now matching,
                             // tryClosedTabRestore performs the full group +
                             // position + state restore and consumes the entry.
-                            ClosedTabLog.write (sprintf "TITLE-MATCH title='%s' -> detach-regroup toward saved group %X" windowTitle (int info.groupHwnd))
                             cur.removeWindow(hwnd)
                             this.scheduleUpdateAppWindows()
                         | _ ->
@@ -590,11 +563,7 @@ type Program() as this =
                                                 match currentTabs.tryFindIndex((=) tab) with
                                                 | Some(curIdx) when curIdx <> targetIdx ->
                                                     wg.ts.moveTab(tab, targetIdx)
-                                                    ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' target=%d moved %d->%d" info.windowTitle targetIdx curIdx targetIdx)
-                                                | curIdx ->
-                                                    ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' target=%d no move (cur=%A)" info.windowTitle targetIdx curIdx)
-                                            else
-                                                ClosedTabLog.write (sprintf "APPLY-INPLACE title='%s' state only (saved group %X gone)" info.windowTitle (int info.groupHwnd))
+                                                | _ -> ()
                                             // Enforce the saved pin state AFTER the move:
                                             // moveTab applies smart-pin, which can flip the
                                             // pin state depending on the tab's neighbors.
@@ -817,11 +786,7 @@ type Program() as this =
                             match currentTabs.tryFindIndex((=) newTab) with
                             | Some(curIdx) when curIdx <> targetIdx ->
                                 wg.ts.moveTab(newTab, targetIdx)
-                                ClosedTabLog.write (sprintf "APPLY title='%s' target=%d moved %d->%d" info.windowTitle targetIdx curIdx targetIdx)
-                            | curIdx ->
-                                ClosedTabLog.write (sprintf "APPLY title='%s' target=%d no move (cur=%A)" info.windowTitle targetIdx curIdx)
-                        else
-                            ClosedTabLog.write (sprintf "APPLY title='%s' state only (group differs from saved %X)" info.windowTitle (int info.groupHwnd))
+                            | _ -> ()
                         // Enforce the saved pin state AFTER the move: moveTab
                         // applies smart-pin, which can flip the pin state
                         // depending on the restored tab's neighbors.
