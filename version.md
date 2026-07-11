@@ -1,21 +1,13 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.10_next5
-- Update installer: a "Check for Updates" item in the tray menu (below Disable, in its own section) checks the latest GitHub release and installs it after an OK on the confirmation dialog (the dialog defaults to Cancel)
-  - MSI installs download WtSetup.msi and launch the installer (which closes and can relaunch WindowTabs); portable/zip installs download WindowTabs.zip, overwrite the app folder after WindowTabs exits and restart it
-  - The check runs only when the menu item is clicked — WindowTabs never checks on its own
-- Drag preview modernized: the window image in the tab-drag preview is now captured from the DWM-composed surface (PW_RENDERFULLCONTENT) and cropped to the visible frame, so it looks like the actual window instead of the legacy (Windows 7 style) theme frame
-- Drag preview alignment: dragging a right-aligned tab now shows the tab at the right end of the preview, matching its alignment (previously always drawn left-aligned)
-- Closed-tab restore: when a tab's window is closed (or its app exits) and the same app window reopens while WindowTabs is running, the tab returns to its former group and position with its state (colors, pin, rename, alignment) intact
-  - Matches by exe path + window title (exact match; VSCode's unsaved-changes marker is ignored); runs before category auto-grouping
-  - The position is restored relative to the tab order at close time, so surviving tabs keep their place even when several windows close and reopen together
-  - Apps whose title settles after startup (e.g. VSCode opening on "Welcome") are matched again when the title changes
-  - The record is in-memory only and is cleared when WindowTabs restarts
-- Fixed: the saved tab order could go stale after pin/unpin operations, so a WindowTabs restart could restore tabs in the wrong order (the saved order now always matches the on-screen order)
-- Fixed: closing a grouped window (e.g. LibreOffice under high load) could shrink the other windows of the group to the minimum size (#13)
-  - A window being torn down can report degenerate (0x0) bounds; those are no longer saved or propagated to the rest of the group
-- Fixed: clicking a grouped window's resize edge could dissolve the group under high load (#12)
-  - While a window is moved/resized the other group members are parked off-screen; the periodic cleanup scan misread them as untabbable and removed them, and now spares groups during a move/size
+- Added "Check for Updates" to the tray menu: checks the latest GitHub release only when clicked, and installs it after confirmation (MSI runs the installer; the zip version is updated in place and restarted)
+- Drag preview now shows the window as it actually looks on screen, instead of with the old Windows 7 style frame
+- Drag preview of a right-aligned tab is now drawn right-aligned (was always left-aligned)
+- Closed-tab restore: when an app window is closed and reopened while WindowTabs is running, its tab returns to the former group and position with its colors, pin, rename and alignment (cleared on WindowTabs restart)
+- Fixed: the saved tab order could go stale after pin/unpin, restoring tabs in the wrong order after a restart
+- Fixed: closing a grouped window under high load could shrink the other windows of the group to the minimum size (#13)
+- Fixed: clicking a window's resize edge under high load could remove the other windows from the group (#12)
 
 ## version ss_2026.07.10_next1
 - Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
