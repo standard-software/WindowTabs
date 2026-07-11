@@ -876,9 +876,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let bmpHwnd : Img = this.tabInfo(tab).preview()
         let previewWidth = bmpHwnd.width
 
-        // Create a TabStrip with scaled size and single tab
+        // Create a TabStrip with scaled size and single tab, keeping the
+        // dragged tab's alignment so a right-aligned tab stays at the right
+        // end of the preview
         let baseTabStrip = this.tsBase(TabUp)
-        let singleTabAligns = Map2<Tab, TabAlign>().add tab TopLeft
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab (this.getTabAlign(tab))
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
@@ -898,9 +900,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Calculate the scale ratio
         let scaleRatio = float(previewWidth) / float(this.size.width)
 
-        // Create a TabStrip with scaled size and single tab
+        // Create a TabStrip with scaled size and single tab, keeping the
+        // dragged tab's alignment (see dragTabLocation)
         let baseTabStrip = this.tsBase(TabUp)
-        let singleTabAligns = Map2<Tab, TabAlign>().add tab TopLeft
+        let singleTabAligns = Map2<Tab, TabAlign>().add tab (this.getTabAlign(tab))
         let scaledTabStrip = {
             baseTabStrip with
                 size = Sz(previewWidth, baseTabStrip.size.height)
