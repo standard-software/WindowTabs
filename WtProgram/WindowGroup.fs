@@ -83,6 +83,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let windowsCell = Cell.create(Set2())
     let _ts = ref None 
     let inMoveSize = Cell.create(false)
+    // Thread-safe mirror of inMoveSize for cross-thread reads (the main
+    // thread's untabbable-window scan must spare groups whose child windows
+    // are parked off-screen during a move/size)
+    [<VolatileField>]
+    let mutable inMoveSizeSnapshot = false
     let foregroundCell = Cell.create(_os.foreground.hwnd)
     let prevForegroundCell = ref None
     let isMinimized hwnd = this.os.windowFromHwnd(hwnd).isMinimized
@@ -788,16 +793,21 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.onEnterMoveSize() =
         inMoveSize.set(true)
+        inMoveSizeSnapshot <- true
         this.hideChildWindows()
         this.saveTopWindowPlacement()
         this.updateIsVisible()
 
     member this.onExitMoveSize() =
         inMoveSize.set(false)
+        inMoveSizeSnapshot <- false
         this.saveTopWindowPlacement()
         this.adjustChildWindows()
         this.makeTopWindowForeground()
         this.updateIsVisible()
+
+    // Thread-safe version for cross-thread reads (reads from volatile snapshot)
+    member this.isInMoveSizeThreadSafe = inMoveSizeSnapshot
 
     member this.main(hwnd, evt) = this.invokeAsync <| fun() -> this.withUpdate <| fun() ->
         match evt with

@@ -9,6 +9,8 @@
 - Fixed: the saved tab order could go stale after pin/unpin operations, so a WindowTabs restart could restore tabs in the wrong order (the saved order now always matches the on-screen order)
 - Fixed: closing a grouped window (e.g. LibreOffice under high load) could shrink the other windows of the group to the minimum size (#13)
   - A window being torn down can report degenerate (0x0) bounds; those are no longer saved or propagated to the rest of the group
+- Fixed: clicking a grouped window's resize edge could dissolve the group under high load (#12)
+  - While a window is moved/resized the other group members are parked off-screen; the periodic cleanup scan misread them as untabbable and removed them, and now spares groups during a move/size
 
 ## version ss_2026.07.10_next1
 - Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
