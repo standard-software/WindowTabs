@@ -5,7 +5,10 @@ open System.Reflection
 open Newtonsoft.Json.Linq
 open System.Diagnostics
 open System.IO
+open System.Net
+open System.Text.RegularExpressions
 open System.Threading
+open Microsoft.Win32
 
 // Watchdog module to detect UI thread freeze and auto-restart
 module Watchdog =
@@ -106,6 +109,102 @@ module Watchdog =
         stopRequested <- true
         pingResponse.Set() |> ignore  // Unblock any waiting
 
+// Auto-update: checks the GitHub releases of this repository and installs a
+// newer release on request. The MSI install is detected by comparing the exe
+// folder with the InstallPath the installer writes to HKCU; anything else
+// (the portable zip, dev builds) uses the zip overwrite flow.
+module UpdateChecker =
+    let private releaseApiUrl = "https://api.github.com/repos/standard-software/WindowTabs/releases/latest"
+
+    type ReleaseInfo = {
+        tag: string
+        msiUrl: string option
+        zipUrl: string option
+    }
+
+    // Version strings look like ss_2026.07.10, ss_jp_2026.03.25 or the dev
+    // form ss_2026.07.10_next3 — compare by the embedded date only.
+    let versionDate (v: string) =
+        let m = Regex.Match(v, @"(\d{4})\.(\d{2})\.(\d{2})")
+        if m.Success then
+            try Some(DateTime(int m.Groups.[1].Value, int m.Groups.[2].Value, int m.Groups.[3].Value)) with _ -> None
+        else None
+
+    let isNewer (currentVersion: string) (tag: string) =
+        match versionDate currentVersion, versionDate tag with
+        | Some(cur), Some(latest) -> latest > cur
+        | _ -> false
+
+    let private newWebClient() =
+        // GitHub requires TLS 1.2+, which .NET Framework does not enable by default
+        ServicePointManager.SecurityProtocol <- ServicePointManager.SecurityProtocol ||| SecurityProtocolType.Tls12
+        let wc = new WebClient()
+        wc.Headers.Add("User-Agent", "WindowTabs")
+        wc
+
+    let fetchLatestRelease() =
+        use wc = newWebClient()
+        let json = JObject.Parse(wc.DownloadString(releaseApiUrl))
+        let assetUrl (name: string) =
+            match json.["assets"] with
+            | :? JArray as assets ->
+                assets
+                |> Seq.tryPick (fun a ->
+                    let o = a :?> JObject
+                    if String.Equals(o.["name"].ToString(), name, StringComparison.OrdinalIgnoreCase)
+                    then Some(o.["browser_download_url"].ToString())
+                    else None)
+            | _ -> None
+        {
+            tag = json.["tag_name"].ToString()
+            msiUrl = assetUrl "WtSetup.msi"
+            zipUrl = assetUrl "WindowTabs.zip"
+        }
+
+    let appDir() = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+
+    let isMsiInstall() =
+        try
+            use key = Registry.CurrentUser.OpenSubKey(@"Software\WindowTabs")
+            match key with
+            | null -> false
+            | key ->
+                match key.GetValue("InstallPath") with
+                | :? string as installPath when installPath <> "" ->
+                    let norm (p: string) = p.Trim().TrimEnd('\\').ToLowerInvariant()
+                    norm installPath = norm (appDir())
+                | _ -> false
+        with _ -> false
+
+    let download (url: string) =
+        let dest = Path.Combine(Path.GetTempPath(), "WindowTabsUpdate_" + Path.GetFileName(Uri(url).LocalPath))
+        use wc = newWebClient()
+        wc.DownloadFile(url, dest)
+        dest
+
+    // The installer closes the running WindowTabs itself (util:CloseApplication)
+    // and offers to relaunch it when done.
+    let installMsi (msiPath: string) =
+        Process.Start("msiexec.exe", sprintf "/i \"%s\"" msiPath) |> ignore
+
+    // Overwrite-in-place update for the portable zip: a detached PowerShell
+    // waits for this process to exit, extracts the zip over the app folder
+    // and restarts WindowTabs.
+    let installZipAndExit (zipPath: string) =
+        let extractDir = zipPath + ".extracted"
+        let exePath = Path.Combine(appDir(), "WindowTabs.exe")
+        let pid = Process.GetCurrentProcess().Id
+        let command =
+            sprintf "Wait-Process -Id %d -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Expand-Archive -LiteralPath '%s' -DestinationPath '%s' -Force; Copy-Item -Path '%s\\*' -Destination '%s' -Recurse -Force; Start-Process -FilePath '%s'"
+                pid zipPath extractDir extractDir (appDir()) exePath
+        let psi = ProcessStartInfo()
+        psi.FileName <- "powershell.exe"
+        psi.Arguments <- sprintf "-NoProfile -ExecutionPolicy Bypass -Command \"%s\"" command
+        psi.WindowStyle <- ProcessWindowStyle.Hidden
+        psi.CreateNoWindow <- true
+        Process.Start(psi) |> ignore
+        Services.program.shutdown()
+
 type NotifyIconPlugin() as this =
     let Cell = CellScope()
 
@@ -154,6 +253,7 @@ type NotifyIconPlugin() as this =
                 | :? string as tag ->
                     match tag with
                     | "Settings" -> menuItem.Text <- Localization.getString("Settings")
+                    | "CheckForUpdates" -> menuItem.Text <- Localization.getString("CheckForUpdates")
                     | "Language" ->
                         menuItem.Text <- Localization.getString("Language")
                         // Update language menu checkmarks using current language from Localization module
@@ -200,6 +300,45 @@ type NotifyIconPlugin() as this =
             "Please visit windowtabs.com to download the latest version.",
             ToolTipIcon.Info
         )
+
+    // Check the latest GitHub release and report the result. Only invoked
+    // from the tray-menu item — WindowTabs never checks on its own.
+    member this.checkForUpdates() =
+        let invoker = InvokerService.invoker
+        let currentVersion = Services.program.version
+        ThreadHelper.queueBackground <| fun() ->
+            let release = try Some(UpdateChecker.fetchLatestRelease()) with _ -> None
+            invoker.asyncInvoke <| fun() ->
+                match release with
+                | None ->
+                    MessageBox.Show(Localization.getString("UpdateCheckFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+                | Some(release) ->
+                    if UpdateChecker.isNewer currentVersion release.tag then
+                        let message = String.Format(Localization.getString("UpdateAvailableFormat"), release.tag)
+                        // Default to Cancel so an accidental Enter does not start the update
+                        let result = MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+                        if result = DialogResult.OK then
+                            this.startUpdate(release)
+                    else
+                        MessageBox.Show(String.Format(Localization.getString("UpdateUpToDateFormat"), currentVersion), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+
+    member this.startUpdate(release: UpdateChecker.ReleaseInfo) =
+        let invoker = InvokerService.invoker
+        let useMsi = UpdateChecker.isMsiInstall()
+        match (if useMsi then release.msiUrl else release.zipUrl) with
+        | None ->
+            MessageBox.Show(Localization.getString("UpdateDownloadFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+        | Some(url) ->
+            this.icon.ShowBalloonTip(1000, "WindowTabs", Localization.getString("UpdateDownloading"), ToolTipIcon.Info)
+            ThreadHelper.queueBackground <| fun() ->
+                let downloaded = try Some(UpdateChecker.download url) with _ -> None
+                invoker.asyncInvoke <| fun() ->
+                    match downloaded with
+                    | None ->
+                        MessageBox.Show(Localization.getString("UpdateDownloadFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+                    | Some(path) ->
+                        if useMsi then UpdateChecker.installMsi path
+                        else UpdateChecker.installZipAndExit path
 
     // Restart application using normal shutdown
     member this.restartApplication() =
@@ -344,6 +483,13 @@ type NotifyIconPlugin() as this =
                 Services.program.setDisabled(newState)
             disableMenuItem.Tag <- box("Disable")
             this.contextMenuItems.Add(disableMenuItem) |> ignore
+
+            this.contextMenuItems.Add("-") |> ignore
+
+            let updateMenuItem = new MenuItem(Localization.getString("CheckForUpdates"))
+            updateMenuItem.Click.Add <| fun _ -> this.checkForUpdates()
+            updateMenuItem.Tag <- box("CheckForUpdates")
+            this.contextMenuItems.Add(updateMenuItem) |> ignore
 
             this.contextMenuItems.Add("-") |> ignore
 

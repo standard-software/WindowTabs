@@ -210,6 +210,13 @@
   "Settings": "設定...",
   "Disable": "無効化",
   "RestartWindowTabs": "WindowTabs の再起動",
-  "CloseWindowTabs": "WindowTabs の終了"
+  "CloseWindowTabs": "WindowTabs の終了",
+
+  "CheckForUpdates": "最新バージョンの確認",
+  "UpdateUpToDateFormat": "このバージョンが最新版です。(version {0})",
+  "UpdateAvailableFormat": "新しいバージョンがあります。version {0}\nインストールしますか？",
+  "UpdateCheckFailed": "更新の確認に失敗しました。",
+  "UpdateDownloading": "更新をダウンロードしています...",
+  "UpdateDownloadFailed": "更新のダウンロードに失敗しました。"
 
 }
