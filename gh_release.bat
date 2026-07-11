@@ -14,7 +14,7 @@ if "%VERSION%"=="" (
 
 set TAG=%VERSION%
 set TITLE=WindowTabs version %VERSION%
-set NOTES=For details, see [version.md](https://github.com/standard-software/WindowTabs/blob/master/version.md)
+set NOTES=For details, see [version.md](https://github.com/standard-software/WindowTabs/blob/main/version.md)
 
 echo Extracted version: %VERSION%
 echo.
