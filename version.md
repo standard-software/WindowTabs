@@ -7,6 +7,8 @@
   - Apps whose title settles after startup (e.g. VSCode opening on "Welcome") are matched again when the title changes
   - The record is in-memory only and is cleared when WindowTabs restarts
 - Fixed: the saved tab order could go stale after pin/unpin operations, so a WindowTabs restart could restore tabs in the wrong order (the saved order now always matches the on-screen order)
+- Fixed: closing a grouped window (e.g. LibreOffice under high load) could shrink the other windows of the group to the minimum size (#13)
+  - A window being torn down can report degenerate (0x0) bounds; those are no longer saved or propagated to the rest of the group
 
 ## version ss_2026.07.10_next1
 - Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
