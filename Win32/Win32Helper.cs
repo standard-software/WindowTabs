@@ -85,6 +85,11 @@ namespace Bemo
         {
             return p == IntPtr.Zero ? false : true;
         }
+        // PW_RENDERFULLCONTENT (Win 8.1+): capture the DWM-composed surface so
+        // the image matches what is actually on screen (modern frame, GPU-
+        // rendered content) instead of the legacy theme rendering.
+        private const int PW_RENDERFULLCONTENT = 0x00000002;
+
         public static Bitmap PrintWindow(IntPtr hwnd)
         {
             RECT windowRect;
@@ -94,7 +99,12 @@ namespace Bemo
             Graphics gfxBmp = Graphics.FromImage(bmp);
             gfxBmp.FillRectangle(new SolidBrush(Color.FromArgb(0,0,0,0)), new Rectangle(Point.Empty, bmp.Size));
             IntPtr hdcBitmap = gfxBmp.GetHdc();
-            bool succeeded = WinUserApi.PrintWindow(hwnd, hdcBitmap, 0);
+            bool succeeded = WinUserApi.PrintWindow(hwnd, hdcBitmap, PW_RENDERFULLCONTENT);
+            if (!succeeded)
+            {
+                // Fall back to the legacy rendering path
+                succeeded = WinUserApi.PrintWindow(hwnd, hdcBitmap, 0);
+            }
             gfxBmp.ReleaseHdc(hdcBitmap);
             if (!succeeded)
             {
@@ -112,6 +122,26 @@ namespace Bemo
             WinGdiApi.DeleteObject(hRgn);
             gfxBmp.Dispose();
             WinUserApi.ReleaseDC(hwnd, hdc);
+
+            // The window rect of a DWM window includes the invisible resize
+            // borders; the visible window is the extended frame bounds. Crop
+            // them off so the preview has no transparent/stale margin.
+            RECT frameRect;
+            if (DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, out frameRect, Marshal.SizeOf(typeof(RECT))) == 0)
+            {
+                int cropX = frameRect.Left - windowRect.Left;
+                int cropY = frameRect.Top - windowRect.Top;
+                if (cropX >= 0 && cropY >= 0 &&
+                    frameRect.Width > 0 && frameRect.Height > 0 &&
+                    cropX + frameRect.Width <= bmp.Width &&
+                    cropY + frameRect.Height <= bmp.Height &&
+                    (cropX > 0 || cropY > 0 || frameRect.Width < bmp.Width || frameRect.Height < bmp.Height))
+                {
+                    Bitmap cropped = bmp.Clone(new Rectangle(cropX, cropY, frameRect.Width, frameRect.Height), bmp.PixelFormat);
+                    bmp.Dispose();
+                    return cropped;
+                }
+            }
             return bmp;
         }
  
