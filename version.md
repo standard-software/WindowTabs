@@ -8,10 +8,7 @@
 - Fixed: the saved tab order could go stale after pin/unpin, restoring tabs in the wrong order after a restart
 - Fixed: closing a grouped window under high load could shrink the other windows of the group to the minimum size (#13)
 - Fixed: clicking a window's resize edge under high load could remove the other windows from the group (#12)
-
-## version ss_2026.07.10_next1
-- Fixed: starting WindowTabs while another instance was already running could show an unhandled-exception dialog (KeyNotFoundException) instead of the "already running" message
-  - The single-instance check now runs before any hooks or timers are set up, so the second instance can no longer execute window scans against unregistered services
+- Fixed: starting WindowTabs while another instance was already running could show an error dialog instead of the "already running" message
 
 ## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
