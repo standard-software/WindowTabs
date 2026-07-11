@@ -1,6 +1,8 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.10_next3
+## version ss_2026.07.10_next4
+- Drag preview modernized: the window image in the tab-drag preview is now captured from the DWM-composed surface (PW_RENDERFULLCONTENT) and cropped to the visible frame, so it looks like the actual window instead of the legacy (Windows 7 style) theme frame
+- Drag preview alignment: dragging a right-aligned tab now shows the tab at the right end of the preview, matching its alignment (previously always drawn left-aligned)
 - Closed-tab restore: when a tab's window is closed (or its app exits) and the same app window reopens while WindowTabs is running, the tab returns to its former group and position with its state (colors, pin, rename, alignment) intact
   - Matches by exe path + window title (exact match; VSCode's unsaved-changes marker is ignored); runs before category auto-grouping
   - The position is restored relative to the tab order at close time, so surviving tabs keep their place even when several windows close and reopen together
