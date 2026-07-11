@@ -296,49 +296,61 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             not allWindowsCloaked
 
     member private this.adjustChildWindows = fun() ->
-        zorderCell.value.tail.iter(this.adjustWindowPlacement)
+        // Skip entirely while the top window reports degenerate bounds (its
+        // GetWindowRect fails during teardown, yielding (0,0,0,0)): applying
+        // that would shrink every other window in the group to the OS minimum
+        // size (issue #13, seen when closing LibreOffice under load).
+        let topIsValid =
+            match zorderCell.value.tryHead with
+            | Some(topHwnd) ->
+                let w = this.os.windowFromHwnd(topHwnd)
+                let b = w.bounds
+                w.isWindow && (w.isMinimized || (b.width > 0 && b.height > 0))
+            | None -> false
+        if topIsValid then
+            zorderCell.value.tail.iter(this.adjustWindowPlacement)
 
-        // After initial placement, adjust sizes again to ensure DPI is considered
-        match zorderCell.value.tryHead with
-        | Some(topHwnd) ->
-            let topWindow = this.os.windowFromHwnd(topHwnd)
-            let topBounds = topWindow.bounds
-            // When the top window is maximized, its bounds already match the
-            // monitor work rect — skip per-exe margin on both sides.
-            let topMaximized = topWindow.isMaximized
+            // After initial placement, adjust sizes again to ensure DPI is considered
+            match zorderCell.value.tryHead with
+            | Some(topHwnd) ->
+                let topWindow = this.os.windowFromHwnd(topHwnd)
+                let topBounds = topWindow.bounds
+                // When the top window is maximized, its bounds already match the
+                // monitor work rect — skip per-exe margin on both sides.
+                let topMaximized = topWindow.isMaximized
 
-            // If the top window has a margin, always expand to get group bounds
-            let groupBounds =
-                if this.hasExeMargin(topHwnd) && not topMaximized then
-                    this.removeExeMarginForRead(topHwnd, topBounds)
-                else topBounds
+                // If the top window has a margin, always expand to get group bounds
+                let groupBounds =
+                    if this.hasExeMargin(topHwnd) && not topMaximized then
+                        this.removeExeMarginForRead(topHwnd, topBounds)
+                    else topBounds
 
-            // Move all background windows again with the correct size
-            zorderCell.value.tail.iter(fun hwnd ->
-                let window = this.os.windowFromHwnd(hwnd)
-                if window.isMinimized.not then
-                    // Apply per-exe margin for this background window
-                    let targetBounds =
-                        if topMaximized then groupBounds
-                        else this.applyExeMarginForWrite(hwnd, groupBounds)
-                    let currentBounds = window.bounds
-                    // Keep current position but use correct size
-                    let correctBounds = Rect(currentBounds.location, targetBounds.size)
-                    System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] 2nd pass: %s group=(%d,%d,%d,%d) target=(%d,%d,%d,%d) correct=(%d,%d,%d,%d)"
-                        window.pid.exeName
-                        groupBounds.x groupBounds.y groupBounds.width groupBounds.height
-                        targetBounds.x targetBounds.y targetBounds.width targetBounds.height
-                        correctBounds.x correctBounds.y correctBounds.width correctBounds.height)
-                    // Skip the move if size already matches - SetWindowPos is expensive and apps that
-                    // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
-                    // otherwise trigger redundant work and follow-up events on every spurious change.
-                    if currentBounds.size <> correctBounds.size then
-                        window.move(correctBounds)
-                    // Track the margin-shrunk size for this window
-                    if this.hasExeMargin(hwnd) && not topMaximized then
-                        marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
-            )
-        | None -> ()
+                // Move all background windows again with the correct size
+                zorderCell.value.tail.iter(fun hwnd ->
+                    let window = this.os.windowFromHwnd(hwnd)
+                    if window.isMinimized.not then
+                        // Apply per-exe margin for this background window
+                        let targetBounds =
+                            if topMaximized then groupBounds
+                            else this.applyExeMarginForWrite(hwnd, groupBounds)
+                        let currentBounds = window.bounds
+                        // Keep current position but use correct size
+                        let correctBounds = Rect(currentBounds.location, targetBounds.size)
+                        System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] 2nd pass: %s group=(%d,%d,%d,%d) target=(%d,%d,%d,%d) correct=(%d,%d,%d,%d)"
+                            window.pid.exeName
+                            groupBounds.x groupBounds.y groupBounds.width groupBounds.height
+                            targetBounds.x targetBounds.y targetBounds.width targetBounds.height
+                            correctBounds.x correctBounds.y correctBounds.width correctBounds.height)
+                        // Skip the move if size already matches - SetWindowPos is expensive and apps that
+                        // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
+                        // otherwise trigger redundant work and follow-up events on every spurious change.
+                        if currentBounds.size <> correctBounds.size then
+                            window.move(correctBounds)
+                        // Track the margin-shrunk size for this window
+                        if this.hasExeMargin(hwnd) && not topMaximized then
+                            marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
+                )
+            | None -> ()
         
     member private this.makeTopWindowForeground() =
         match zorderCell.value.where(isMinimized >> not).tryHead with
@@ -578,8 +590,15 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member private this.saveTopWindowPlacement() =
         let window = this.os.windowFromHwnd(zorderCell.value.head)
-        if  window.isMinimized.not &&
-            this.os.isOnScreen(window.bounds)
+        // A dying window (e.g. LibreOffice tearing down under load) reports
+        // degenerate bounds: GetWindowRect fails and yields (0,0,0,0). Never
+        // save such a placement — it would later be applied to every other
+        // window in the group.
+        let liveBounds = window.bounds
+        if  window.isWindow &&
+            window.isMinimized.not &&
+            liveBounds.width > 0 && liveBounds.height > 0 &&
+            this.os.isOnScreen(liveBounds)
             then
             let bounds =
                 if window.isMaximized then
