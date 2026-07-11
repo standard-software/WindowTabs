@@ -78,6 +78,7 @@ type GroupInfo(enableSuperBar) as this =
         member x.isPinned(hwnd) = _group.isPinnedThreadSafe(hwnd)
         member x.pinTab(hwnd) = this.invokeGroup <| fun() -> _group.pinTab(hwnd)
         member x.isPinnedThreadSafe(hwnd) = _group.isPinnedThreadSafe(hwnd)
+        member x.isInMoveSizeThreadSafe = _group.isInMoveSizeThreadSafe
         member x.setTabFillColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabFillColor(hwnd, color)
         member x.getTabFillColorThreadSafe(hwnd) = _group.getTabFillColorThreadSafe(hwnd)
         member x.setTabUnderlineColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabUnderlineColor(hwnd, color)

@@ -158,6 +158,9 @@ type IGroup =
     abstract member isPinned: IntPtr -> bool
     abstract member pinTab: IntPtr -> unit
     abstract member isPinnedThreadSafe: IntPtr -> bool
+    // True while the group's top window is in a native move/size loop and the
+    // other windows are parked off-screen (thread-safe snapshot)
+    abstract member isInMoveSizeThreadSafe: bool
     abstract member setTabFillColor: IntPtr * Color option -> unit
     abstract member getTabFillColorThreadSafe: IntPtr -> Color option
     abstract member setTabUnderlineColor: IntPtr * Color option -> unit

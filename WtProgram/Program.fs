@@ -638,6 +638,12 @@ type Program() as this =
             | Some _ -> true
             | None -> false
         this.desktop.groups.iter <| fun gi ->
+            // Skip groups whose top window is in a native move/size loop: the
+            // other windows are parked off-screen for the duration
+            // (hideChildWindows) and would wrongly fail the tabbable check,
+            // getting kicked out of the group (issue #12 — a click on the
+            // window edge could dissolve the group under high load).
+            if (try gi.isInMoveSizeThreadSafe with _ -> false) then () else
             gi.windows.iter <| fun hwnd ->
                 let window = os.windowFromHwnd(hwnd)
                 // Only remove windows that are on the current virtual desktop and not tabbable
