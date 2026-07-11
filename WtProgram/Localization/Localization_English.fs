@@ -215,4 +215,11 @@ module Localization_English =
         ("Disable", "Disable")
         ("RestartWindowTabs", "Restart WindowTabs")
         ("CloseWindowTabs", "Close WindowTabs")
+
+        ("CheckForUpdates", "Check for Updates")
+        ("UpdateUpToDateFormat", "This version is the latest. (version {0})")
+        ("UpdateAvailableFormat", "A new version is available: version {0}\nInstall it now?")
+        ("UpdateCheckFailed", "Failed to check for updates.")
+        ("UpdateDownloading", "Downloading the update...")
+        ("UpdateDownloadFailed", "Failed to download the update.")
     ]

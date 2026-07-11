@@ -210,6 +210,13 @@
   "Settings": "设置",
   "Disable": "禁用",
   "RestartWindowTabs": "重启 WindowTabs",
-  "CloseWindowTabs": "关闭 WindowTabs"
+  "CloseWindowTabs": "关闭 WindowTabs",
+
+  "CheckForUpdates": "检查更新",
+  "UpdateUpToDateFormat": "当前已是最新版本。(version {0})",
+  "UpdateAvailableFormat": "有新版本可用：version {0}\n现在安装吗？",
+  "UpdateCheckFailed": "检查更新失败。",
+  "UpdateDownloading": "正在下载更新...",
+  "UpdateDownloadFailed": "下载更新失败。"
 
 }

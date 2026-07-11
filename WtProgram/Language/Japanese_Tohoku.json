@@ -210,6 +210,13 @@
   "Settings": "設定だべ",
   "Disable": "止めでおぐ",
   "RestartWindowTabs": "WindowTabs 再起動すっぺ",
-  "CloseWindowTabs": "WindowTabs 終わんべ"
+  "CloseWindowTabs": "WindowTabs 終わんべ",
+
+  "CheckForUpdates": "最新バージョンのチェックすっぺ",
+  "UpdateUpToDateFormat": "このバージョンが最新版だべ。(version {0})",
+  "UpdateAvailableFormat": "新しいバージョンあるべ。version {0}\nインストールすっか？",
+  "UpdateCheckFailed": "更新のチェック失敗しただ。",
+  "UpdateDownloading": "更新ダウンロード中だべ...",
+  "UpdateDownloadFailed": "更新のダウンロード失敗しただ。"
 
 }
