@@ -205,6 +205,10 @@ type OS() as this=
                 SetWindowPosFlags.SWP_NOMOVE |||
                 SetWindowPosFlags.SWP_NOSIZE |||
                 SetWindowPosFlags.SWP_NOACTIVATE)
+                // NOTE: do not add SWP_ASYNCWINDOWPOS here — posting the
+                // repositions to each window's own thread loses the relative
+                // ordering of the batch, and the restored-window-to-front
+                // ordering silently breaks.
         WinUserApi.EndDeferWindowPos(!hdswp).ignore
 
 
@@ -311,6 +315,11 @@ and
     member this.isMinimized = WinUserApi.IsIconic(hwnd)
 
     member this.showWindow(cmd:int) = WinUserApi.ShowWindow(hwnd, cmd).ignore
+
+    // Non-blocking show-state change: posts to the target window's thread and
+    // returns immediately (ShowWindow waits for the app to process it, which
+    // stalls the caller on a busy app).
+    member this.showWindowAsync(cmd:int) = WinUserApi.ShowWindowAsync(hwnd, cmd) |> ignore
 
     member this.isMaximized = WinUserApi.IsZoomed(hwnd)
 
@@ -419,6 +428,19 @@ and
             SetWindowPosFlags.SWP_NOSIZE |||
             SetWindowPosFlags.SWP_NOACTIVATE) |> ignore
 
+    // Async z-order insert (posted to this window's thread): place this window
+    // directly behind hwndInsertAfter without waiting on the app. Used when
+    // restoring group siblings so each surfaces already behind the window the
+    // user restored (no flicker on top).
+    member this.insertAfterAsync(hwndInsertAfter:IntPtr) =
+        WinUserApi.SetWindowPos(hwnd,
+            hwndInsertAfter, 0, 0, 0, 0,
+            SetWindowPosFlags.SWP_NOOWNERZORDER |||
+            SetWindowPosFlags.SWP_NOMOVE |||
+            SetWindowPosFlags.SWP_NOSIZE |||
+            SetWindowPosFlags.SWP_NOACTIVATE |||
+            SetWindowPosFlags.SWP_ASYNCWINDOWPOS) |> ignore
+
     member this.makeTopMost() =
         this.insertAfter(WindowHandleTypes.HWND_TOPMOST)
 
@@ -505,6 +527,23 @@ and
             0,
             0,
             SetWindowPosFlags.SWP_NOSIZE ||| SetWindowPosFlags.SWP_NOACTIVATE ||| SetWindowPosFlags.SWP_NOZORDER) |> ignore
+
+    // Position + size change posted to the target window's thread instead of
+    // waiting on it. Safe where z-order is not being changed (SWP_NOZORDER):
+    // used to correct the size of just-restored group siblings without
+    // blocking the strip thread on each busy app (Excel, Visual Studio).
+    member this.moveAsync (bounds:Rect) =
+        WinUserApi.SetWindowPos(
+            hwnd,
+            IntPtr.Zero,
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+            SetWindowPosFlags.SWP_NOACTIVATE |||
+            SetWindowPosFlags.SWP_NOZORDER |||
+            SetWindowPosFlags.SWP_NOOWNERZORDER |||
+            SetWindowPosFlags.SWP_ASYNCWINDOWPOS) |> ignore
 
     member this.setText text = WinUserApi.SetWindowText(hwnd, text) |> ignore
     

@@ -164,7 +164,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             | None -> ()
         )
 
-        tooltipHideTimer.Tick.Add(fun _ -> this.tryHideTooltipIfCursorLeft())
+        tooltipHideTimer.Tick.Add(fun _ ->
+            this.tryHideTooltipIfCursorLeft()
+            this.validateHoverAgainstCursor())
         tooltipHideTimer.Start()
         
         layeredWindowCell.value <-
@@ -275,6 +277,26 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     pendingTooltipTab := None
                     tooltipTimer.Stop()
                     tooltipForm.Visible <- false
+            with _ -> ()
+
+    // Hover is otherwise driven purely by mouse Enter/Move/Leave events, so a
+    // tab redrawn while the cursor is elsewhere (e.g. the strip reappearing
+    // after a group restore) can keep a stale hover color forever. Reconcile
+    // the hover state with the real cursor position: if the cursor is not
+    // over the strip at all, there can be no hovered tab.
+    member private this.validateHoverAgainstCursor() =
+        if hoverCell.value.IsSome then
+            try
+                let c = System.Windows.Forms.Cursor.Position
+                let loc : Pt = this.location
+                let sz : Sz = this.size
+                let clientX = c.X - loc.x
+                let clientY = c.Y - loc.y
+                let outsideStrip =
+                    clientX < 0 || clientX >= sz.width
+                    || clientY < 0 || clientY >= sz.height
+                if outsideStrip then
+                    hoverCell.set(None)
             with _ -> ()
 
     // Tooltip hit test: boundary at midpoint of tab overlap area, ignoring z-order
