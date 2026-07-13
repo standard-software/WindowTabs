@@ -13,6 +13,7 @@
 - Fixed: closing a grouped window under high load could shrink the other windows of the group to the minimum size (#13)
 - Fixed: clicking a window's resize edge under high load could remove the other windows from the group (#12)
 - Fixed: starting WindowTabs while another instance was already running could show an error dialog instead of the "already running" message
+- README: the download badge now shows the exact total download count (e.g. "6,512" instead of "6.5k"); a GitHub Actions workflow recounts every 6 hours and on each release publish, and serves the number to shields.io via the badge-data branch
 
 ## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
