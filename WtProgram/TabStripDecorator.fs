@@ -82,6 +82,12 @@ module TabNameHelper =
         if endIdx < text.Length then text.Substring(0, endIdx) + "..."
         else text
 
+    // Build a menu label from a localization template. Translations may embed
+    // the truncated tab name with {TabName} or {0} (e.g. "Close tab : {0}");
+    // the default strings omit the placeholder, so the name is not shown.
+    let format (template: string) (name: string) =
+        template.Replace("{TabName}", name).Replace("{0}", name)
+
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
@@ -1694,11 +1700,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         WinUserApi.IsWindow(d.group.hwnd) && d.group.windows.contains(winHwnd)
                     with _ -> false))
 
-        // Item 1: "New tab : right of this tab (<name>)" — launch and dock into the current tab group
         let currentTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
+
+        // Disabled header at the top of the menu showing which tab it targets
+        let targetTabHeaderItem =
+            CmiRegular({
+                text = TabNameHelper.format (Localization.getString("TargetTabHeader")) currentTabName
+                image = None
+                flags = List2([MenuFlags.MF_GRAYED])
+                click = fun() -> ()
+            })
+
+        // Item 1: "New tab : right of this tab" — launch and dock into the current tab group
         let newTabInGroupItem =
             CmiRegular({
-                text = String.Format(Localization.getString("NewTabInGroup"), currentTabName)
+                text = TabNameHelper.format (Localization.getString("NewTabInGroup")) currentTabName
                 flags = List2()
                 image = None
                 click = fun() ->
@@ -1867,7 +1883,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if isMultiSelect then
                     System.String.Format(Localization.getString("AlignSelectedTabsLeftFormat"), alignTargets.Length)
                 else
-                    Localization.getString("AlignThisTabLeft") + " : " + shortTabName
+                    TabNameHelper.format (Localization.getString("AlignThisTabLeft")) shortTabName
             let leftItemFlags =
                 let disable = if isMultiSelect then allTargetsLeft else currentAlignment = TopLeft
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -1883,7 +1899,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if isMultiSelect then
                     System.String.Format(Localization.getString("AlignSelectedTabsRightFormat"), alignTargets.Length)
                 else
-                    Localization.getString("AlignThisTabRight") + " : " + shortTabName
+                    TabNameHelper.format (Localization.getString("AlignThisTabRight")) shortTabName
             let rightItemFlags =
                 let disable = if isMultiSelect then allTargetsRight else currentAlignment = TopRight
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -1935,7 +1951,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if isMultiSelect then
                     System.String.Format(Localization.getString("PinSelectedTabsFormat"), pinTargets.Length)
                 else
-                    Localization.getString("PinThisTab") + " : " + tabName
+                    TabNameHelper.format (Localization.getString("PinThisTab")) tabName
             let pinItemFlags =
                 let disable = if isMultiSelect then allTargetsPinned else isPinned
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -1951,7 +1967,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if isMultiSelect then
                     System.String.Format(Localization.getString("UnpinSelectedTabsFormat"), pinTargets.Length)
                 else
-                    Localization.getString("UnpinThisTab") + " : " + tabName
+                    TabNameHelper.format (Localization.getString("UnpinThisTab")) tabName
             let unpinItemFlags =
                 let disable = if isMultiSelect then noneTargetsPinned else not isPinned
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -2138,7 +2154,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if isMultiSelect then
                     String.Format(Localization.getString("TabColorSelectedTabsFormat"), colorTargets.Length)
                 else
-                    String.Format(Localization.getString("TabColorThisTab"), shortTabText)
+                    TabNameHelper.format (Localization.getString("TabColorThisTab")) shortTabText
             let thisTabSubMenu =
                 CmiPopUp({
                     text = thisTabSubMenuText
@@ -2201,14 +2217,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 image = None
                 items = List2([
                     CmiRegular({
-                        text = String.Format(Localization.getString("RenameTabFormat"), displayedName)
+                        text = TabNameHelper.format (Localization.getString("RenameTabFormat")) displayedName
                         image = None
                         flags = List2()
                         click = fun() ->
                             this.beginRename(hwnd)
                     })
                     CmiRegular({
-                        text = String.Format(Localization.getString("ResetTabNameFormat"), resetName)
+                        text = TabNameHelper.format (Localization.getString("ResetTabNameFormat")) resetName
                         image = None
                         flags = if group.isRenamed(hwnd) then List2() else List2([MenuFlags.MF_GRAYED])
                         click = fun() -> group.setTabName(hwnd, None)
@@ -2274,7 +2290,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     })
                 else
                     CmiRegular({
-                        text = String.Format(Localization.getString("SystemCopyWindowTitle"), shortWindowTitle)
+                        text = TabNameHelper.format (Localization.getString("SystemCopyWindowTitle")) shortWindowTitle
                         image = None
                         flags = List2()
                         click = fun() ->
@@ -2333,7 +2349,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     String.Format(Localization.getString("CloseSelectedTabsFormat"), closeTargets.Length)
                 else
                     let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
-                    String.Format(Localization.getString("CloseTab"), displayText)
+                    TabNameHelper.format (Localization.getString("CloseTab")) displayText
             CmiRegular({
                 text = menuText
                 image = None
@@ -2635,6 +2651,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         List2(
             [
+            Some(targetTabHeaderItem)
+            Some(CmiSeparator)
             Some(newLaunchMenu)
             Some(CmiSeparator)
             ]
@@ -2807,7 +2825,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         if detachParentTargets.Length > 1 then
                             String.Format(Localization.getString("TabDetachSelectedFormat"), detachParentTargets.Length)
                         else
-                            String.Format(Localization.getString("TabDetachThisFormat"), TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text))
+                            TabNameHelper.format (Localization.getString("TabDetachThisFormat")) (TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text))
                     Some(CmiPopUp({
                         text = detachParentText
                         image = None

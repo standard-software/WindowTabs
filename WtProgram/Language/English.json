@@ -78,8 +78,9 @@
   "Diagnostics": "Diagnostics",
   "Reset": "Reset",
 
+  "TargetTabHeader": "Target tab : {TabName}",
   "NewLaunchMenu": "New tab : execute {0}",
-  "NewTabInGroup": "Right of this tab : {0}",
+  "NewTabInGroup": "Right of this tab",
   "NewWindowPositionMenu": "Position",
   "NewWindowLinkGroupMenu": "Link to another group",
   "NewLaunchErrorUWP": "Failed to start new window.\n\nThis application ({0}) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead.",
@@ -127,7 +128,7 @@
   "DockingTabGroupToGroup": "Link this tab group to another group",
 
   "CloseTabMenu": "Close Tab",
-  "CloseTab": "Close tab : {0}",
+  "CloseTab": "Close tab",
   "CloseSelectedTabsFormat": "Close {0} selected tabs",
   "CloseTabsToTheRightFormat": "Close {0} tabs to the right",
   "CloseTabsToTheLeftFormat": "Close {0} tabs to the left",
@@ -159,7 +160,7 @@
   "UnpinAllTabs": "Unpin all tabs",
 
   "TabColorMenu": "Tab Color Settings",
-  "TabColorThisTab": "This tab color : {0}",
+  "TabColorThisTab": "This tab color",
   "TabColorClearThisTab": "Clear this tab color",
   "TabColorSelectedTabsFormat": "Selected {0} tabs color",
   "TabColorClearSelectedTabsFormat": "Clear selected {0} tabs color",
@@ -187,10 +188,10 @@
   "TabColorPinkBorder": "Pink Border",
 
   "TabNameEdit": "Tab Name",
-  "RenameTabFormat": "Rename this tab : {0}",
-  "ResetTabNameFormat": "Reset this tab name : {0}",
+  "RenameTabFormat": "Rename this tab",
+  "ResetTabNameFormat": "Reset this tab name",
 
-  "TabDetachThisFormat": "Detach this tab : {0}",
+  "TabDetachThisFormat": "Detach this tab",
   "TabDetachSelectedFormat": "Detach {0} selected tabs",
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Same position",
@@ -199,7 +200,7 @@
 
   "SystemMenu": "System",
   "SystemCopyExePath": "Copy {0} path",
-  "SystemCopyWindowTitle": "Copy window title : {0}",
+  "SystemCopyWindowTitle": "Copy window title",
   "SystemCopySelectedTabsExePathFormat": "Copy {0} selected tabs process paths",
   "SystemCopySelectedTabsWindowTitleFormat": "Copy {0} selected tabs window titles",
   "SystemOpenExeFolder": "Open folder of {0}",
