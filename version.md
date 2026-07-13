@@ -1,9 +1,10 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.10_next6
+## version ss_2026.07.10_next7
 - Minimizing or restoring one window of a group no longer animates or flashes the group's other windows — only the window you operated animates
 - Fixed several group minimize/restore glitches: the restored window not coming to the front, windows shrinking, the group toggling between minimized and restored, a stuck hover color, and a brief freeze
 - Added "Check for Updates" to the tray menu: checks the latest GitHub release only when clicked, and installs it after confirmation (MSI runs the installer; the zip version is updated in place and restarted)
+- Tray menu reorganized: the current version is shown at the top, "Settings" is bold as the default (double-click) action, and "Check for Updates" is grouped with restart/exit
 - Drag preview now shows the window as it actually looks on screen, instead of with the old Windows 7 style frame
 - Drag preview of a right-aligned tab is now drawn right-aligned (was always left-aligned)
 - Closed-tab restore: when an app window is closed and reopened while WindowTabs is running, its tab returns to the former group and position with its colors, pin, rename and alignment (cleared on WindowTabs restart)
