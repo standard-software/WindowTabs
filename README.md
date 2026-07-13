@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.07.14_next1**
+Latest version: **ss_2026.07.14_next2**
 
 See [version.md](version.md) for details.
 
@@ -319,7 +319,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Multi-Language Support
 
-- English, Japanese, Chinese Simplified, and Chinese Traditional language support
+- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, and Portuguese language support
 - Japanese Kansai and Tohoku dialect files included
 - Any language can be supported by adding a language file
 - Runtime language switching without restart

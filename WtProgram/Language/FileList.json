@@ -4,5 +4,11 @@
   { "name": "Japanese 関西弁", "fileName": "Japanese_Kansai.json" },
   { "name": "Japanese 東北弁", "fileName": "Japanese_Tohoku.json" },
   { "name": "Chinese Simplified", "fileName": "Chinese_Simplified.json" },
-  { "name": "Chinese Traditional", "fileName": "Chinese_Traditional.json" }
+  { "name": "Chinese Traditional", "fileName": "Chinese_Traditional.json" },
+  { "name": "Korean", "fileName": "Korean.json" },
+  { "name": "French", "fileName": "French.json" },
+  { "name": "German", "fileName": "German.json" },
+  { "name": "Italian", "fileName": "Italian.json" },
+  { "name": "Spanish", "fileName": "Spanish.json" },
+  { "name": "Portuguese", "fileName": "Portuguese.json" }
 ]

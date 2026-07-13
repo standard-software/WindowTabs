@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.14_next1
+## version ss_2026.07.14_next2
+- Added 6 language files: Korean, French, German, Italian, Spanish, Portuguese (Brazilian)
 
 ## version ss_2026.07.14
 - Group minimize/restore: only the operated window animates, no flash on the others; fixed glitches — restored window not coming to front, shrinking windows, minimize/restore oscillation, stuck hover color, brief freeze
