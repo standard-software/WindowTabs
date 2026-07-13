@@ -1,0 +1,48 @@
+name: Update download badge
+
+on:
+  schedule:
+    # Runs every 6 hours. Note: GitHub disables scheduled workflows after
+    # 60 days without repository activity; the release trigger below also
+    # updates the badge whenever a new release is published.
+    - cron: '17 */6 * * *'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute total downloads and publish badge JSON
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          total=$(gh api --paginate "repos/${REPO}/releases" \
+            --jq '.[].assets[].download_count' | awk '{s+=$1} END {print s+0}')
+          message=$(python3 -c "print(format(${total}, ','))")
+          echo "Total downloads: ${message}"
+
+          mkdir -p out
+          cat > out/downloads.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "downloads",
+            "message": "${message}",
+            "color": "brightgreen"
+          }
+          EOF
+
+          # Publish as a single-commit orphan branch so main history stays clean
+          cd out
+          git init -q -b badge-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads.json
+          git commit -q -m "Update download badge: ${message}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" badge-data
