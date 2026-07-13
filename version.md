@@ -1,19 +1,16 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.10_next8
-- Minimizing or restoring one window of a group no longer animates or flashes the group's other windows — only the window you operated animates
-- Fixed several group minimize/restore glitches: the restored window not coming to the front, windows shrinking, the group toggling between minimized and restored, a stuck hover color, and a brief freeze
-- Added "Check for Updates" to the tray menu: checks the latest GitHub release only when clicked, and installs it after confirmation (MSI runs the installer; the zip version is updated in place and restarted)
-- Tray menu reorganized: the current version is shown at the top, "Settings" is bold as the default (double-click) action, and "Check for Updates" is grouped with restart/exit
-- Tab context menu: a disabled "Target tab : <name>" header now tops the menu, and the per-tab items no longer repeat the tab name (translation files can bring it back with {TabName} or {0})
-- Drag preview now shows the window as it actually looks on screen, instead of with the old Windows 7 style frame
-- Drag preview of a right-aligned tab is now drawn right-aligned (was always left-aligned)
-- Closed-tab restore: when an app window is closed and reopened while WindowTabs is running, its tab returns to the former group and position with its colors, pin, rename and alignment (cleared on WindowTabs restart)
-- Fixed: the saved tab order could go stale after pin/unpin, restoring tabs in the wrong order after a restart
-- Fixed: closing a grouped window under high load could shrink the other windows of the group to the minimum size (#13)
-- Fixed: clicking a window's resize edge under high load could remove the other windows from the group (#12)
-- Fixed: starting WindowTabs while another instance was already running could show an error dialog instead of the "already running" message
-- README: the download badge now shows the exact total download count (e.g. "6,512" instead of "6.5k"); a GitHub Actions workflow recounts every 6 hours and on each release publish, and serves the number to shields.io via the badge-data branch
+- Group minimize/restore: only the operated window animates, no flash on the others; fixed glitches — restored window not coming to front, shrinking windows, minimize/restore oscillation, stuck hover color, brief freeze
+- Tray menu: added "Check for Updates" — on-demand check of the latest GitHub release, install after confirmation (MSI runs the installer; zip updates in place and restarts)
+- Tray menu reorganized: version at top, bold "Settings" as default (double-click) action, update check grouped with restart/exit
+- Tab context menu: "Target tab : <name>" header added; per-tab items no longer repeat the tab name ({TabName} or {0} in translations restores it)
+- Drag preview: shows the window's actual look (was a Windows 7 style frame); right-aligned tabs drawn right-aligned
+- Closed-tab restore: a window closed and reopened while WindowTabs runs returns to its former group/position with color, pin, rename, alignment (cleared on restart)
+- Fixed: pin/unpin could leave the saved tab order stale, restoring in the wrong order after restart
+- Fixed under high load: closing a grouped window could shrink the others to minimum (#13); clicking a resize edge could remove the others from the group (#12)
+- Fixed: a second instance could show an error dialog instead of the "already running" message
+- README: download badge now shows the exact count (e.g. "6,512", not "6.5k"), recounted by GitHub Actions every 6 hours and on each release
 
 ## version ss_2026.07.10
 - Fixed: WindowTabs could freeze (and be auto-restarted by the watchdog) when the display count or resolution changed
