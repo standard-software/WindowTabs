@@ -1,6 +1,6 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.10_next8
+## version ss_2026.07.14
 - Group minimize/restore: only the operated window animates, no flash on the others; fixed glitches — restored window not coming to front, shrinking windows, minimize/restore oscillation, stuck hover color, brief freeze
 - Tray menu: added "Check for Updates" — on-demand check of the latest GitHub release, install after confirmation (MSI runs the installer; zip updates in place and restarts)
 - Tray menu reorganized: version at top, bold "Settings" as default (double-click) action, update check grouped with restart/exit
