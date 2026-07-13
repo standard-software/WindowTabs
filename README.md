@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.07.10_next6**
+Latest version: **ss_2026.07.10_next7**
 
 See [version.md](version.md) for details.
 
@@ -126,7 +126,7 @@ See [version.md](version.md) for details.
 
 **Supported OS:** Windows 10, Windows 11
 
-<a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/standard-software/windowtabs/total)</a>
+<a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 
 Download the installer or the zip containing the exe from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
 

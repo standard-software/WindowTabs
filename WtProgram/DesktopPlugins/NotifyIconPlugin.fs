@@ -231,7 +231,7 @@ type NotifyIconPlugin() as this =
     member this.icon = Cell.cacheProp this <| fun() ->
         let notifyIcon = new NotifyIcon()
         notifyIcon.Visible <- true
-        notifyIcon.Text <- "WindowTabs (version " + Services.program.version + ")"
+        notifyIcon.Text <- "WindowTabs version " + Services.program.version
         notifyIcon.Icon <- Services.openIcon("Bemo.ico")
         let contextMenu = new ContextMenu()
 
@@ -462,9 +462,18 @@ type NotifyIconPlugin() as this =
             let contextMenu = notifyIcon.ContextMenu
 
             // Create menu items
+            // Non-clickable caption showing the running version
+            let versionMenuItem = new MenuItem("version " + Services.program.version)
+            versionMenuItem.Enabled <- false
+            this.contextMenuItems.Add(versionMenuItem) |> ignore
+
+            this.contextMenuItems.Add("-") |> ignore
+
             let settingsMenuItem = new MenuItem(Localization.getString("Settings"))
             settingsMenuItem.Click.Add <| fun _ -> Services.managerView.show()
             settingsMenuItem.Tag <- box("Settings")
+            // Bold: matches the tray icon double-click default action
+            settingsMenuItem.DefaultItem <- true
             this.contextMenuItems.Add(settingsMenuItem) |> ignore
 
             // Only add Language menu if FileList.json exists and is not empty
@@ -490,8 +499,6 @@ type NotifyIconPlugin() as this =
             updateMenuItem.Click.Add <| fun _ -> this.checkForUpdates()
             updateMenuItem.Tag <- box("CheckForUpdates")
             this.contextMenuItems.Add(updateMenuItem) |> ignore
-
-            this.contextMenuItems.Add("-") |> ignore
 
             let restartMenuItem = new MenuItem(Localization.getString("RestartWindowTabs"))
             restartMenuItem.Click.Add <| fun _ -> this.restartApplication()
