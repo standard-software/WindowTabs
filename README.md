@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.07.10_next7**
+Latest version: **ss_2026.07.10_next8**
 
 See [version.md](version.md) for details.
 
@@ -324,6 +324,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 - Any language can be supported by adding a language file
 - Runtime language switching without restart
 - Switch languages via tray menu
+- Per-tab context menu items (such as "Close tab") can show the target tab name: put `{TabName}` (or `{0}`) in the language file string where the name should appear
+  - Example: `"CloseTab": "Close tab : {TabName}"`
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 

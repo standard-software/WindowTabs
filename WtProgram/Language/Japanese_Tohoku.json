@@ -78,8 +78,9 @@
   "Diagnostics": "診断",
   "Reset": "リセット",
 
+  "TargetTabHeader": "対象タブだべ : {TabName}",
   "NewLaunchMenu": "新しいタブだべ : {0} 起動",
-  "NewTabInGroup": "このタブの右だべ : {0}",
+  "NewTabInGroup": "このタブの右だべ",
   "NewWindowPositionMenu": "位置指定だべ",
   "NewWindowLinkGroupMenu": "他のグループへ連結だべ",
   "NewLaunchErrorUWP": "新規ウィンドウの起動に失敗したべ。\n\nこのアプリ ({0}) はUWPアプリだがら、\n直接起動でぎねぇのよ。\n\n代わりにスタートメニューから起動してけろ。",
@@ -127,7 +128,7 @@
   "DockingTabGroupToGroup": "このタブグループを他のグループさくっつげる",
 
   "CloseTabMenu": "タブを閉じっぺ",
-  "CloseTab": "このタブ閉じっぺ : {0}",
+  "CloseTab": "このタブ閉じっぺ",
   "CloseSelectedTabsFormat": "選んだ{0}タブ閉じっぺ",
   "CloseTabsToTheRightFormat": "右の{0}タブ閉じっぺ",
   "CloseTabsToTheLeftFormat": "左の{0}タブ閉じっぺ",
@@ -159,7 +160,7 @@
   "UnpinAllTabs": "全部のタブのピン止め外すべ",
 
   "TabColorMenu": "タブの色設定だべ",
-  "TabColorThisTab": "このタブの色設定すっぺ : {0}",
+  "TabColorThisTab": "このタブの色設定すっぺ",
   "TabColorClearThisTab": "このタブの色設定解除すっぺ",
   "TabColorSelectedTabsFormat": "選んだ{0}タブの色設定すっぺ",
   "TabColorClearSelectedTabsFormat": "選んだ{0}タブの色設定解除すっぺ",
@@ -187,10 +188,10 @@
   "TabColorPinkBorder": "ピンク 枠線",
 
   "TabNameEdit": "タブ名の編集だべ",
-  "RenameTabFormat": "このタブの名前変えっぺ : {0}",
-  "ResetTabNameFormat": "このタブの名前リセットすっぺ : {0}",
+  "RenameTabFormat": "このタブの名前変えっぺ",
+  "ResetTabNameFormat": "このタブの名前リセットすっぺ",
 
-  "TabDetachThisFormat": "このタブの分離だべ : {0}",
+  "TabDetachThisFormat": "このタブの分離だべ",
   "TabDetachSelectedFormat": "選んだ{0}タブの分離だべ",
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "同じ位置",
@@ -199,7 +200,7 @@
 
   "SystemMenu": "システムだべ",
   "SystemCopyExePath": "{0}のパスコピーすっぺ",
-  "SystemCopyWindowTitle": "ウィンドウタイトルコピーすっぺ : {0}",
+  "SystemCopyWindowTitle": "ウィンドウタイトルコピーすっぺ",
   "SystemCopySelectedTabsExePathFormat": "選んだ{0}タブのプロセスパスコピーすっぺ",
   "SystemCopySelectedTabsWindowTitleFormat": "選んだ{0}タブのウィンドウタイトルコピーすっぺ",
   "SystemOpenExeFolder": "{0}のフォルダ開くべ",

@@ -78,8 +78,9 @@
   "Diagnostics": "诊断",
   "Reset": "重置",
 
+  "TargetTabHeader": "目标标签页 : {TabName}",
   "NewLaunchMenu": "新建标签页 : 启动{0}",
-  "NewTabInGroup": "此标签页的右侧 : {0}",
+  "NewTabInGroup": "此标签页的右侧",
   "NewWindowPositionMenu": "位置指定",
   "NewWindowLinkGroupMenu": "连接到其他组",
   "NewLaunchErrorUWP": "启动新窗口失败。\n\n此应用程序 ({0}) 是 UWP 应用,\n无法直接启动。\n\n请改从开始菜单启动。",
@@ -127,7 +128,7 @@
   "DockingTabGroupToGroup": "将此标签页组连接到其他组",
 
   "CloseTabMenu": "关闭标签页",
-  "CloseTab": "关闭此标签页 : {0}",
+  "CloseTab": "关闭此标签页",
   "CloseSelectedTabsFormat": "关闭已选{0}个标签页",
   "CloseTabsToTheRightFormat": "关闭右侧{0}个标签页",
   "CloseTabsToTheLeftFormat": "关闭左侧{0}个标签页",
@@ -159,7 +160,7 @@
   "UnpinAllTabs": "取消固定全部标签页",
 
   "TabColorMenu": "标签页颜色设置",
-  "TabColorThisTab": "此标签页颜色 : {0}",
+  "TabColorThisTab": "此标签页颜色",
   "TabColorClearThisTab": "清除此标签页颜色",
   "TabColorSelectedTabsFormat": "已选{0}个标签页颜色",
   "TabColorClearSelectedTabsFormat": "清除已选{0}个标签页颜色",
@@ -187,10 +188,10 @@
   "TabColorPinkBorder": "粉色 边框",
 
   "TabNameEdit": "标签页名称编辑",
-  "RenameTabFormat": "重命名此标签页 : {0}",
-  "ResetTabNameFormat": "重置此标签页名称 : {0}",
+  "RenameTabFormat": "重命名此标签页",
+  "ResetTabNameFormat": "重置此标签页名称",
 
-  "TabDetachThisFormat": "分离此标签页 : {0}",
+  "TabDetachThisFormat": "分离此标签页",
   "TabDetachSelectedFormat": "分离已选{0}个标签页",
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "在原位置分离",
@@ -199,7 +200,7 @@
 
   "SystemMenu": "系统",
   "SystemCopyExePath": "复制{0}路径",
-  "SystemCopyWindowTitle": "复制窗口标题 : {0}",
+  "SystemCopyWindowTitle": "复制窗口标题",
   "SystemCopySelectedTabsExePathFormat": "复制已选{0}个标签页的进程路径",
   "SystemCopySelectedTabsWindowTitleFormat": "复制已选{0}个标签页的窗口标题",
   "SystemOpenExeFolder": "打开{0}的文件夹",
