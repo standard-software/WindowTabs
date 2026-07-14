@@ -124,6 +124,7 @@
   "Up": "上",
   "Down": "下",
   "Main": "主",
+  "CurrentDisplaySuffix": "(当前)",
 
   "DockingTabGroupToGroup": "将此标签页组连接到其他组",
 

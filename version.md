@@ -1,7 +1,8 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.14_next2
+## version ss_2026.07.14_next3
 - Added 6 language files: Korean, French, German, Italian, Spanish, Portuguese (Brazilian)
+- Multi-monitor position menus: the current display is now marked with a localized "(here)" suffix instead of " *"
 
 ## version ss_2026.07.14
 - Group minimize/restore: only the operated window animates, no flash on the others; fixed glitches — restored window not coming to front, shrinking windows, minimize/restore oscillation, stuck hover color, brief freeze

@@ -127,6 +127,7 @@ module Localization_English =
         ("Up", "Up")
         ("Down", "Down")
         ("Main", "Main")
+        ("CurrentDisplaySuffix", "(here)")
 
         ("DockingTabGroupToGroup", "Link this tab group to another group")
 

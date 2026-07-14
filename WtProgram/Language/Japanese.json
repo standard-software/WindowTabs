@@ -124,6 +124,7 @@
   "Up": "上",
   "Down": "下",
   "Main": "メイン",
+  "CurrentDisplaySuffix": "(ここ)",
 
   "DockingTabGroupToGroup": "このタブグループを他のグループへ連結",
 

@@ -124,6 +124,7 @@
   "Up": "Arriba",
   "Down": "Abajo",
   "Main": "Principal",
+  "CurrentDisplaySuffix": "(aquí)",
 
   "DockingTabGroupToGroup": "Vincular este grupo de pestañas a otro grupo",
 

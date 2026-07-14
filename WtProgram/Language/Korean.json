@@ -124,6 +124,7 @@
   "Up": "위",
   "Down": "아래",
   "Main": "메인",
+  "CurrentDisplaySuffix": "(여기)",
 
   "DockingTabGroupToGroup": "이 탭 그룹을 다른 그룹에 연결",
 

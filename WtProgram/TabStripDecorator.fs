@@ -1599,7 +1599,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // One "<menuTextPrefix> <display>" submenu per attached monitor, used
         // only when multiple monitors are present. The monitor the window
-        // currently sits on is marked with a trailing " *" and drives the plain
+        // currently sits on is marked with a localized "(here)" suffix and
+        // drives the plain
         // (current-screen) move/snap functions, so its behavior matches the
         // previous single menu; other monitors use the screen-targeted
         // functions and get a leading "Same position on this display" item.
@@ -1623,7 +1624,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let isCurrentScreen = screen.Equals(currentScreen)
                 let menuText =
                     menuTextPrefix + " " + this.getScreenName(screen)
-                    + (if isCurrentScreen then " *" else "")
+                    + (if isCurrentScreen then " " + Localization.getString("CurrentDisplaySuffix") else "")
                 let items =
                     if isCurrentScreen then
                         currentScreenExtraItems @
@@ -2497,7 +2498,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Move submenu, Snap Other submenu (percent variants + display/desktop max).
         // Single monitor: one "Position Move" submenu. Multiple monitors: one
         // top-level "Position Move <display>" submenu per display (the display
-        // the window is on is marked with a trailing " *").
+        // the window is on is marked with a localized "(here)" suffix).
         let positionMoveMenuItems =
             let moveFn = (fun pos -> this.moveTabGroupToPosition(hwnd, pos))
             let snapFn = (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
