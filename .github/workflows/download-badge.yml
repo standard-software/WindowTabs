@@ -2,10 +2,10 @@ name: Update download badge
 
 on:
   schedule:
-    # Runs every 6 hours. Note: GitHub disables scheduled workflows after
+    # Runs every 4 hours. Note: GitHub disables scheduled workflows after
     # 60 days without repository activity; the release trigger below also
     # updates the badge whenever a new release is published.
-    - cron: '17 */6 * * *'
+    - cron: '17 */4 * * *'
   release:
     types: [published]
   workflow_dispatch:
@@ -23,8 +23,9 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -eu
-          total=$(gh api --paginate "repos/${REPO}/releases" \
-            --jq '.[].assets[].download_count' | awk '{s+=$1} END {print s+0}')
+          releases=$(gh api --paginate "repos/${REPO}/releases" \
+            --jq '.[] | "\(.tag_name),\(([.assets[].download_count] | add) // 0)"')
+          total=$(echo "${releases}" | awk -F, '{s+=$2} END {print s+0}')
           message=$(python3 -c "print(format(${total}, ','))")
           echo "Total downloads: ${message}"
 
@@ -38,11 +39,28 @@ jobs:
           }
           EOF
 
+          # Daily history: carry the CSV over from the previous badge-data
+          # commit and append one snapshot per day (JST), all releases + TOTAL
+          if gh api "repos/${REPO}/contents/downloads-history.csv?ref=badge-data" \
+               --jq '.content' > history.b64 2>/dev/null; then
+            base64 -d history.b64 > out/downloads-history.csv
+          else
+            echo "date,tag,downloads" > out/downloads-history.csv
+          fi
+          today=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          if ! grep -q "^${today}," out/downloads-history.csv; then
+            echo "${today},TOTAL,${total}" >> out/downloads-history.csv
+            echo "${releases}" | sed "s/^/${today},/" >> out/downloads-history.csv
+            echo "History: appended snapshot for ${today}"
+          else
+            echo "History: snapshot for ${today} already recorded"
+          fi
+
           # Publish as a single-commit orphan branch so main history stays clean
           cd out
           git init -q -b badge-data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads.json
+          git add downloads.json downloads-history.csv
           git commit -q -m "Update download badge: ${message}"
           git push -f "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" badge-data
