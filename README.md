@@ -178,8 +178,9 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 ### Tab Context Menu
 
+- Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
 - New tab : execute (exe name)
-  - Right of this tab : (tab name)
+  - Right of this tab
   - Position (same submenu as "Position Move", with a leading "Same position" item)
   - Link to another group
 - Position Move
@@ -194,11 +195,11 @@ Download the installer or the zip containing the exe from the [releases](https:/
     - Left Edge / Right Edge / Top Edge / Bottom Edge
     - Top Left / Top Right / Bottom Left / Bottom Right
 - Link this tab group to another group (submenu lists other tab groups; choose the destination)
-- Detach this tab : (tab name)
+- Detach this tab
   - Position (same submenu as "Position Move")
   - Link to another group
 - Close Tab
-  - Close tab : (tab name)
+  - Close tab
   - Close {N} tabs to the left
   - Close {N} tabs to the right
   - Close other tabs
@@ -208,31 +209,33 @@ Download the installer or the zip containing the exe from the [releases](https:/
 - Tab Position
   - Align all tabs to Left
   - Align all tabs to Right
-  - Align this tab to Left : (tab name)
-  - Align this tab to Right : (tab name)
+  - Align this tab to Left
+  - Align this tab to Right
 - Tab Pin
-  - Pin this tab : (tab name)
-  - Unpin this tab : (tab name)
+  - Pin this tab
+  - Unpin this tab
   - Pin all tabs
   - Unpin all tabs
 - Tab Color Settings
-  - This tab color : (tab name)
+  - This tab color
     - Red / Blue / Green / Yellow / Purple / Orange / Pink
     - (same 7 colors, Underline variants)
     - (same 7 colors, Border variants)
   - Clear this tab color
   - Clear color settings on all tabs
 - Tab Name
-  - Rename this tab : (tab name)
-  - Reset this tab name : (name after reset)
+  - Rename this tab
+  - Reset this tab name
 - System
   - Copy (exe name) path
-  - Copy window title : (window title)
+  - Copy window title
   - Open folder of (exe name)
   - Force kill this process
 - Settings...
 
 In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
+
+Per-tab items no longer repeat the tab name; the "Target tab" caption at the top of the menu shows it instead. A language file can bring the old "... : (tab name)" style back with `{TabName}` (see [Multi-Language Support](#multi-language-support)).
 
 ### New Tab (New Launch)
 
@@ -247,7 +250,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 - Snap keeps the current width / height and snaps to a screen edge. Snap Left / Right / Top / Bottom sit at the top of the menu for quick access.
 - Snap with a percentage resizes the width / height to the specified portion of the display and snaps to an edge.
 - Move to a display edge or corner, and snap-to-display / snap-to-desktop maximize-style options are also available.
-- On multi-monitor setups, the position menus ("Position Move", the new-tab "Position", and the detach "Position") appear once per display, e.g. "Position Move Display Left"; the display the window currently sits on is marked with a trailing " \*". The other displays' menus start with a "Same position on this display" item.
+- On multi-monitor setups, the position menus ("Position Move", the new-tab "Position", and the detach "Position") appear once per display, e.g. "Position Move Display Left"; the display the window currently sits on is marked with a "(here)" suffix. The other displays' menus start with a "Same position on this display" item.
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
@@ -260,7 +263,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Detach Tab
 
-- Detach the selected tab ("Detach this tab : (tab name)") and reposition it, or link it to another tab group.
+- Detach the selected tab ("Detach this tab") and reposition it, or link it to another tab group.
 - To detach multiple tabs together, use [Multi-Select Tabs](#multi-select-tabs) first and then run "Detach {N} selected tabs".
 
 ### Close Tab
@@ -328,6 +331,12 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
   - Example: `"CloseTab": "Close tab : {TabName}"`
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+
+### Check for Updates
+
+- "Check for Updates" in the tray menu checks the latest GitHub release.
+- The check runs only when you click the menu item — WindowTabs never checks automatically (e.g. at startup).
+- If a newer version exists, it can be installed on the spot after a confirmation dialog: the MSI install runs the installer, and the zip install replaces the executable in place and restarts automatically.
 
 ### Disable Feature
 
