@@ -88,6 +88,42 @@ module TabNameHelper =
     let format (template: string) (name: string) =
         template.Replace("{TabName}", name).Replace("{0}", name)
 
+// Temporary diagnostics for the multi-monitor position menus. Symptom being
+// chased: display names lose their left/right direction, the "(here)" mark
+// disappears, and screen-targeted snaps land at the main display's top-left —
+// consistent with WinForms' process-wide Screen.AllScreens cache going stale
+// (or holding zero-bounds entries) after a display-configuration change.
+// Every per-display menu build dumps the cached WinForms view next to a fresh
+// native enumeration; read %APPDATA%\WindowTabs\display_debug.log when it
+// reproduces. Remove this module once the cause is confirmed.
+module DisplayLog =
+    let private lockObj = obj()
+    let private logPath =
+        let dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+        System.IO.Path.Combine(dir, "display_debug.log")
+    let write (msg: string) =
+        try
+            lock lockObj (fun() ->
+                let dir = System.IO.Path.GetDirectoryName(logPath)
+                if not (System.IO.Directory.Exists(dir)) then System.IO.Directory.CreateDirectory(dir) |> ignore
+                System.IO.File.AppendAllText(logPath,
+                    sprintf "%s [%02d] %s\r\n"
+                        (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                        System.Threading.Thread.CurrentThread.ManagedThreadId msg))
+        with _ -> ()
+    let fmtRect (r: System.Drawing.Rectangle) = sprintf "(%d,%d %dx%d)" r.X r.Y r.Width r.Height
+    let mutable private hooked = false
+    // Log the display-change events themselves so a later stale dump can be
+    // correlated with when the configuration actually changed.
+    let hookDisplayChangeEvents() =
+        lock lockObj (fun() ->
+            if not hooked then
+                hooked <- true
+                try
+                    Microsoft.Win32.SystemEvents.DisplaySettingsChanging.AddHandler(EventHandler(fun _ _ -> write "SystemEvents.DisplaySettingsChanging"))
+                    Microsoft.Win32.SystemEvents.DisplaySettingsChanged.AddHandler(EventHandler(fun _ _ -> write "SystemEvents.DisplaySettingsChanged"))
+                with _ -> ())
+
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
@@ -1281,6 +1317,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
         // Always use the active window (topWindow) as the reference point
+        DisplayLog.write (sprintf "moveTabGroupToScreen: target=%s bounds=%s pos=%A" targetScreen.DeviceName (DisplayLog.fmtRect targetScreen.Bounds) position)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
@@ -1411,6 +1448,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
+        DisplayLog.write (sprintf "moveTabGroupToScreenSnap: target=%s bounds=%s dir=%s" targetScreen.DeviceName (DisplayLog.fmtRect targetScreen.Bounds) snapDirection)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
@@ -1487,6 +1525,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
+        DisplayLog.write (sprintf "moveTabGroupToScreenSnapWithPercent: target=%s bounds=%s dir=%s pct=%d" targetScreen.DeviceName (DisplayLog.fmtRect targetScreen.Bounds) snapDirection percent)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
 
@@ -1619,6 +1658,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 (screenSnapFn: System.Windows.Forms.Screen -> string -> unit)
                 (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) : ContextMenuItem list =
             let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
+            // Diagnostics: cached WinForms view vs fresh native enumeration
+            DisplayLog.hookDisplayChangeEvents()
+            try
+                let b = os.windowFromHwnd(contextHwnd).bounds
+                DisplayLog.write (sprintf "menu build: hwnd=%X window=(%d,%d %dx%d)" (int64 contextHwnd) b.location.x b.location.y b.size.width b.size.height)
+                Screen.AllScreens |> Array.iter (fun s ->
+                    DisplayLog.write (sprintf "  cached: %s primary=%b bounds=%s work=%s name='%s'%s"
+                        s.DeviceName s.Primary (DisplayLog.fmtRect s.Bounds) (DisplayLog.fmtRect s.WorkingArea)
+                        (this.getScreenName(s)) (if s.Equals(currentScreen) then " <=current" else "")))
+                Mon.all.iter (fun m ->
+                    let r = m.displayRect
+                    DisplayLog.write (sprintf "  native: hmon=%X rect=(%d,%d %dx%d)" (int64 m.hMonitor) r.location.x r.location.y r.size.width r.size.height))
+                DisplayLog.write (sprintf "  current(FromPoint): %s bounds=%s matchedInCache=%b"
+                    currentScreen.DeviceName (DisplayLog.fmtRect currentScreen.Bounds)
+                    (Screen.AllScreens |> Array.exists (fun s -> s.Equals(currentScreen))))
+            with ex -> DisplayLog.write (sprintf "menu build: dump failed: %s" ex.Message)
             this.getAllScreensSorted()
             |> Array.map (fun screen ->
                 let isCurrentScreen = screen.Equals(currentScreen)
