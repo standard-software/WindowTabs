@@ -124,6 +124,7 @@
   "Up": "Haut",
   "Down": "Bas",
   "Main": "Principal",
+  "CurrentDisplaySuffix": "(ici)",
 
   "DockingTabGroupToGroup": "Lier ce groupe d'onglets à un autre groupe",
 

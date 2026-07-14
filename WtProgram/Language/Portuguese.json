@@ -124,6 +124,7 @@
   "Up": "Acima",
   "Down": "Abaixo",
   "Main": "Principal",
+  "CurrentDisplaySuffix": "(aqui)",
 
   "DockingTabGroupToGroup": "Vincular este grupo de guias a outro grupo",
 
