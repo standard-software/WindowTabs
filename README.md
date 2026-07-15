@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.07.14_next10**
+Latest version: **ss_2026.07.14_next11**
 
 See [version.md](version.md) for details.
 
@@ -206,7 +206,7 @@ Download the installer or the zip containing the exe from the [releases](https:/
   - Close all tabs
 - Tab Margin When Snapping
   - Add margin at top
-- Tab Position
+- Tab Alignment
   - Align all tabs to Left
   - Align all tabs to Right
   - Align this tab to Left

@@ -142,7 +142,7 @@
   "SnapTabMarginMenu": "スナップ時のタブの余白",
   "SnapTabMarginTop": "上に余白をあける",
 
-  "TabAlignMenu": "タブの位置",
+  "TabAlignMenu": "タブの配置",
   "AlignAllTopLeft": "全てのタブを左寄せ",
   "AlignAllTopRight": "全てのタブを右寄せ",
   "AlignThisTabLeft": "このタブを左寄せにする",
