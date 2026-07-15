@@ -512,6 +512,10 @@ type NotifyIconPlugin() as this =
 
             Services.program.newVersion.Add this.onNewVersion
 
+            // Hook from the main thread so display-change events are logged
+            // from startup (the menu-side hook only runs on first menu open)
+            DisplayLog.hookDisplayChangeEvents()
+
             // Start watchdog to detect UI freeze and auto-restart
             Watchdog.start()
 
