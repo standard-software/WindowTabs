@@ -415,6 +415,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if targets |> List.contains hwnd then targets
             else hwnd :: targets
 
+    // Label for a multi-select menu item. When the right-clicked tab is part
+    // of the selection (or is the active tab) the plain "Selected {N} tabs"
+    // format already covers it; when the menu added it on top of the
+    // selection, use the "...PlusTargetFormat" variant where {N} counts only
+    // the selection and the target tab is named separately.
+    member private this.formatSelectedTabs(hwnd: IntPtr, targets: List<IntPtr>, formatKey: string) =
+        if group.actionTargetTabs() |> List.contains hwnd then
+            String.Format(Localization.getString(formatKey), targets.Length)
+        else
+            let plusKey = formatKey.Substring(0, formatKey.Length - "Format".Length) + "PlusTargetFormat"
+            String.Format(Localization.getString(plusKey), targets.Length - 1)
+
     // Multi-select drag-reorder: from the drag-origin tab, expand left and
     // right through visualOrder as long as the next tab is selected or
     // active, AND shares the same pin state AND same alignment. Used by
@@ -1970,7 +1982,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let leftItemText =
                 if isMultiSelect then
-                    System.String.Format(Localization.getString("AlignSelectedTabsLeftFormat"), alignTargets.Length)
+                    this.formatSelectedTabs(hwnd, alignTargets, "AlignSelectedTabsLeftFormat")
                 else
                     TabNameHelper.format (Localization.getString("AlignThisTabLeft")) shortTabName
             let leftItemFlags =
@@ -1986,7 +1998,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let rightItemText =
                 if isMultiSelect then
-                    System.String.Format(Localization.getString("AlignSelectedTabsRightFormat"), alignTargets.Length)
+                    this.formatSelectedTabs(hwnd, alignTargets, "AlignSelectedTabsRightFormat")
                 else
                     TabNameHelper.format (Localization.getString("AlignThisTabRight")) shortTabName
             let rightItemFlags =
@@ -2038,7 +2050,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let pinItemText =
                 if isMultiSelect then
-                    System.String.Format(Localization.getString("PinSelectedTabsFormat"), pinTargets.Length)
+                    this.formatSelectedTabs(hwnd, pinTargets, "PinSelectedTabsFormat")
                 else
                     TabNameHelper.format (Localization.getString("PinThisTab")) tabName
             let pinItemFlags =
@@ -2054,7 +2066,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let unpinItemText =
                 if isMultiSelect then
-                    System.String.Format(Localization.getString("UnpinSelectedTabsFormat"), pinTargets.Length)
+                    this.formatSelectedTabs(hwnd, pinTargets, "UnpinSelectedTabsFormat")
                 else
                     TabNameHelper.format (Localization.getString("UnpinThisTab")) tabName
             let unpinItemFlags =
@@ -2241,7 +2253,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let thisTabSubMenuText =
                 if isMultiSelect then
-                    String.Format(Localization.getString("TabColorSelectedTabsFormat"), colorTargets.Length)
+                    this.formatSelectedTabs(hwnd, colorTargets, "TabColorSelectedTabsFormat")
                 else
                     TabNameHelper.format (Localization.getString("TabColorThisTab")) shortTabText
             let thisTabSubMenu =
@@ -2253,7 +2265,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 })
             let clearThisTabText =
                 if isMultiSelect then
-                    String.Format(Localization.getString("TabColorClearSelectedTabsFormat"), colorTargets.Length)
+                    this.formatSelectedTabs(hwnd, colorTargets, "TabColorClearSelectedTabsFormat")
                 else
                     Localization.getString("TabColorClearThisTab")
             // Multi-select: gray out when none of the selected targets has any color set.
@@ -2345,7 +2357,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let copyPathItem =
                 if isMultiSelect then
                     CmiRegular({
-                        text = String.Format(Localization.getString("SystemCopySelectedTabsExePathFormat"), sysTargets.Length)
+                        text = this.formatSelectedTabs(hwnd, sysTargets, "SystemCopySelectedTabsExePathFormat")
                         image = None
                         flags = List2()
                         click = fun() ->
@@ -2370,7 +2382,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let copyTitleItem =
                 if isMultiSelect then
                     CmiRegular({
-                        text = String.Format(Localization.getString("SystemCopySelectedTabsWindowTitleFormat"), sysTargets.Length)
+                        text = this.formatSelectedTabs(hwnd, sysTargets, "SystemCopySelectedTabsWindowTitleFormat")
                         image = None
                         flags = List2()
                         click = fun() ->
@@ -2441,7 +2453,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let closeTargets = this.actionTargets(hwnd)
             let menuText =
                 if closeTargets.Length > 1 then
-                    String.Format(Localization.getString("CloseSelectedTabsFormat"), closeTargets.Length)
+                    this.formatSelectedTabs(hwnd, closeTargets, "CloseSelectedTabsFormat")
                 else
                     let displayText = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
                     TabNameHelper.format (Localization.getString("CloseTab")) displayText
@@ -2918,7 +2930,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     let detachParentTargets = this.actionTargets(hwnd)
                     let detachParentText =
                         if detachParentTargets.Length > 1 then
-                            String.Format(Localization.getString("TabDetachSelectedFormat"), detachParentTargets.Length)
+                            this.formatSelectedTabs(hwnd, detachParentTargets, "TabDetachSelectedFormat")
                         else
                             TabNameHelper.format (Localization.getString("TabDetachThisFormat")) (TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text))
                     Some(CmiPopUp({
