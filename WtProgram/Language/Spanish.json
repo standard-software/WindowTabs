@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Borde rosa",
 
   "TabNameEdit": "Nombre de la pestaña",
-  "RenameTabFormat": "Cambiar el nombre de esta pestaña",
-  "ResetTabNameFormat": "Restablecer el nombre de esta pestaña",
+  "RenameTabFormat": "Cambiar el nombre de esta pestaña : {TabName}",
+  "ResetTabNameFormat": "Restablecer el nombre de esta pestaña : {TabName}",
 
   "TabDetachThisFormat": "Separar esta pestaña",
   "TabDetachSelectedFormat": "Separar {0} pestañas seleccionadas",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "Sistema",
   "SystemCopyExePath": "Copiar la ruta de {0}",
-  "SystemCopyWindowTitle": "Copiar el título de la ventana",
+  "SystemCopyWindowTitle": "Copiar el título de la ventana : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Copiar las rutas de proceso de {0} pestañas seleccionadas",
   "SystemCopySelectedTabsWindowTitleFormat": "Copiar los títulos de ventana de {0} pestañas seleccionadas",
   "SystemOpenExeFolder": "Abrir la carpeta de {0}",

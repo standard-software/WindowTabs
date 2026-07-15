@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Rosa Rahmen",
 
   "TabNameEdit": "Tab-Name",
-  "RenameTabFormat": "Diesen Tab umbenennen",
-  "ResetTabNameFormat": "Namen dieses Tabs zurücksetzen",
+  "RenameTabFormat": "Diesen Tab umbenennen : {TabName}",
+  "ResetTabNameFormat": "Namen dieses Tabs zurücksetzen : {TabName}",
 
   "TabDetachThisFormat": "Diesen Tab abtrennen",
   "TabDetachSelectedFormat": "{0} ausgewählte Tabs abtrennen",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "System",
   "SystemCopyExePath": "Pfad von {0} kopieren",
-  "SystemCopyWindowTitle": "Fenstertitel kopieren",
+  "SystemCopyWindowTitle": "Fenstertitel kopieren : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Prozesspfade der {0} ausgewählten Tabs kopieren",
   "SystemCopySelectedTabsWindowTitleFormat": "Fenstertitel der {0} ausgewählten Tabs kopieren",
   "SystemOpenExeFolder": "Ordner von {0} öffnen",

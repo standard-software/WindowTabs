@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.07.14_next11**
+Latest version: **ss_2026.07.14_next12**
 
 See [version.md](version.md) for details.
 
@@ -224,11 +224,11 @@ Download the installer or the zip containing the exe from the [releases](https:/
   - Clear this tab color
   - Clear color settings on all tabs
 - Tab Name
-  - Rename this tab
-  - Reset this tab name
+  - Rename this tab : (tab name)
+  - Reset this tab name : (name after reset)
 - System
   - Copy (exe name) path
-  - Copy window title
+  - Copy window title : (window title)
   - Open folder of (exe name)
   - Force kill this process
 - Settings...

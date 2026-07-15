@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "ピンク 枠線",
 
   "TabNameEdit": "タブ名の編集",
-  "RenameTabFormat": "このタブの名前を変更",
-  "ResetTabNameFormat": "このタブの名前をリセット",
+  "RenameTabFormat": "このタブの名前を変更 : {TabName}",
+  "ResetTabNameFormat": "このタブの名前をリセット : {TabName}",
 
   "TabDetachThisFormat": "このタブの分離",
   "TabDetachSelectedFormat": "選択した{0}タブの分離",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "システム",
   "SystemCopyExePath": "{0} のパスをコピー",
-  "SystemCopyWindowTitle": "ウィンドウタイトルをコピー",
+  "SystemCopyWindowTitle": "ウィンドウタイトルをコピー : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "選択した{0}タブのプロセスパスをコピー",
   "SystemCopySelectedTabsWindowTitleFormat": "選択した{0}タブのウィンドウタイトルをコピー",
   "SystemOpenExeFolder": "{0} のフォルダを開く",

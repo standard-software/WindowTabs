@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Bordo rosa",
 
   "TabNameEdit": "Nome scheda",
-  "RenameTabFormat": "Rinomina questa scheda",
-  "ResetTabNameFormat": "Reimposta il nome di questa scheda",
+  "RenameTabFormat": "Rinomina questa scheda : {TabName}",
+  "ResetTabNameFormat": "Reimposta il nome di questa scheda : {TabName}",
 
   "TabDetachThisFormat": "Stacca questa scheda",
   "TabDetachSelectedFormat": "Stacca {0} schede selezionate",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "Sistema",
   "SystemCopyExePath": "Copia il percorso di {0}",
-  "SystemCopyWindowTitle": "Copia il titolo della finestra",
+  "SystemCopyWindowTitle": "Copia il titolo della finestra : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Copia i percorsi dei processi delle {0} schede selezionate",
   "SystemCopySelectedTabsWindowTitleFormat": "Copia i titoli delle finestre delle {0} schede selezionate",
   "SystemOpenExeFolder": "Apri la cartella di {0}",
