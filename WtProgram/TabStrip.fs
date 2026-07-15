@@ -867,6 +867,15 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Restore canonical visual ordering after changing alignment
         this.normalizeVisualOrder()
 
+    // Change several tabs' alignment as ONE operation (single map update +
+    // single normalize). Aligning them one at a time sends each converted tab
+    // to the far end of the destination zone in turn, which reverses the
+    // group's relative order on an all-left <-> all-right switch.
+    member this.setTabsAlign(tabs: Tab list, newAlignment) =
+        tabAlignmentCell.map(fun m ->
+            tabs |> List.fold (fun (acc: Map2<Tab, TabAlign>) t -> acc.add t newAlignment) m)
+        this.normalizeVisualOrder()
+
     member this.getTabAlign(tab) =
         match tabAlignmentCell.value.tryFind(tab) with
         | Some(a) -> a

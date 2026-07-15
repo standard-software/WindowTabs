@@ -656,6 +656,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.setTabAlign(hwnd, alignment : TabAlign) =
         this.ts.setTabAlign(Tab(hwnd), alignment)
         Services.program.setWindowAlignment(hwnd, Some(alignment))
+    // Bulk variant: keeps the tabs' relative order (see TabStrip.setTabsAlign)
+    member this.setTabsAlign(hwnds: IntPtr list, alignment : TabAlign) =
+        this.ts.setTabsAlign(hwnds |> List.map Tab, alignment)
+        hwnds |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some(alignment)))
     member this.getTabAlign(hwnd) = this.ts.getTabAlign(Tab(hwnd))
     member this.alignCountToLeft(hwnd) = this.ts.alignCountToLeft(Tab(hwnd))
     member this.alignCountToRight(hwnd) = this.ts.alignCountToRight(Tab(hwnd))

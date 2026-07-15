@@ -973,12 +973,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let targets = this.actionTargetsInVisualOrder(hwnd)
         // Persist the realigned position before detaching so the freshly formed
         // group inherits it (WindowGroup.addWindow reads the per-window alignment)
-        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
+        this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToSnap(hwnd, snapDirection)
         else this.detachTabsToSnap(targets, snapDirection)
     member private this.detachOrSplitToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
-        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
+        this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToSnapWithPercent(hwnd, snapDirection, percent)
         else this.detachTabsToSnapWithPercent(targets, snapDirection, percent)
     member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
@@ -987,12 +987,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         else this.detachTabsToScreen(targets, targetScreen, position)
     member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
-        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
+        this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToScreenSnap(hwnd, targetScreen, snapDirection)
         else this.detachTabsToScreenSnap(targets, targetScreen, snapDirection)
     member private this.detachOrSplitToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
-        this.applySnapRealign(targets, snapDirection, fun h a -> Services.program.setWindowAlignment(h, Some a))
+        this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToScreenSnapWithPercent(hwnd, targetScreen, snapDirection, percent)
         else this.detachTabsToScreenSnapWithPercent(targets, targetScreen, snapDirection, percent)
 
@@ -1413,7 +1413,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // alignment (in-place group snap updates the visible tabs; detach persists
     // it so the freshly formed group inherits it). tabHwnds are read from the
     // current group for the uniformity check, so this must run before detaching.
-    member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlign: IntPtr -> TabAlign -> unit) =
+    member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
         if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
             let desiredOpt =
                 match snapDirection with
@@ -1425,12 +1425,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let allLeft = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
                 let allRight = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
                 if allLeft || allRight then
-                    tabHwnds |> List.iter (fun h -> setAlign h desired)
+                    setAlignAll tabHwnds desired
             | None -> ()
 
     // Realign the whole current group after an in-place left/right snap.
+    // Bulk-align so the tabs keep their relative order.
     member private this.applyGroupSnapRealign(snapDirection: string) =
-        this.applySnapRealign(group.visualOrder.list, snapDirection, fun h a -> group.setTabAlign(h, a))
+        this.applySnapRealign(group.visualOrder.list, snapDirection, fun hs a -> group.setTabsAlign(hs, a))
 
     member this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
@@ -1974,7 +1975,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     text = leftItemText
                     image = None
                     flags = leftItemFlags
-                    click = fun() -> alignTargets |> List.iter (fun h -> group.setTabAlign(h, TopLeft))
+                    click = fun() -> group.setTabsAlign(alignTargets, TopLeft)
                 })
 
             let rightItemText =
@@ -1990,7 +1991,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     text = rightItemText
                     image = None
                     flags = rightItemFlags
-                    click = fun() -> alignTargets |> List.iter (fun h -> group.setTabAlign(h, TopRight))
+                    click = fun() -> group.setTabsAlign(alignTargets, TopRight)
                 })
 
             CmiPopUp({
@@ -2002,14 +2003,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         image = None
                         flags = if allTopLeft then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.visualOrder.list |> List.iter (fun h -> group.setTabAlign(h, TopLeft))
+                            group.setTabsAlign(group.visualOrder.list, TopLeft)
                     })
                     CmiRegular({
                         text = Localization.getString("AlignAllTopRight")
                         image = None
                         flags = if allTopRight then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.visualOrder.list |> List.iter (fun h -> group.setTabAlign(h, TopRight))
+                            group.setTabsAlign(group.visualOrder.list, TopRight)
                     })
                     CmiSeparator
                     leftItem
