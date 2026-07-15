@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "粉色 边框",
 
   "TabNameEdit": "标签页名称编辑",
-  "RenameTabFormat": "重命名此标签页",
-  "ResetTabNameFormat": "重置此标签页名称",
+  "RenameTabFormat": "重命名此标签页 : {TabName}",
+  "ResetTabNameFormat": "重置此标签页名称 : {TabName}",
 
   "TabDetachThisFormat": "分离此标签页",
   "TabDetachSelectedFormat": "分离已选{0}个标签页",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "系统",
   "SystemCopyExePath": "复制{0}路径",
-  "SystemCopyWindowTitle": "复制窗口标题",
+  "SystemCopyWindowTitle": "复制窗口标题 : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "复制已选{0}个标签页的进程路径",
   "SystemCopySelectedTabsWindowTitleFormat": "复制已选{0}个标签页的窗口标题",
   "SystemOpenExeFolder": "打开{0}的文件夹",

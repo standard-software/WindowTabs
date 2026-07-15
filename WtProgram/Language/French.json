@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Bordure rose",
 
   "TabNameEdit": "Nom de l'onglet",
-  "RenameTabFormat": "Renommer cet onglet",
-  "ResetTabNameFormat": "Réinitialiser le nom de cet onglet",
+  "RenameTabFormat": "Renommer cet onglet : {TabName}",
+  "ResetTabNameFormat": "Réinitialiser le nom de cet onglet : {TabName}",
 
   "TabDetachThisFormat": "Détacher cet onglet",
   "TabDetachSelectedFormat": "Détacher les {0} onglets sélectionnés",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "Système",
   "SystemCopyExePath": "Copier le chemin de {0}",
-  "SystemCopyWindowTitle": "Copier le titre de la fenêtre",
+  "SystemCopyWindowTitle": "Copier le titre de la fenêtre : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Copier les chemins des processus des {0} onglets sélectionnés",
   "SystemCopySelectedTabsWindowTitleFormat": "Copier les titres des fenêtres des {0} onglets sélectionnés",
   "SystemOpenExeFolder": "Ouvrir le dossier de {0}",

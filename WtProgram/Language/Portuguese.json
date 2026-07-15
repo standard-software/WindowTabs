@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Borda rosa",
 
   "TabNameEdit": "Nome da guia",
-  "RenameTabFormat": "Renomear esta guia",
-  "ResetTabNameFormat": "Redefinir o nome desta guia",
+  "RenameTabFormat": "Renomear esta guia : {TabName}",
+  "ResetTabNameFormat": "Redefinir o nome desta guia : {TabName}",
 
   "TabDetachThisFormat": "Desanexar esta guia",
   "TabDetachSelectedFormat": "Desanexar {0} guias selecionadas",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "Sistema",
   "SystemCopyExePath": "Copiar caminho de {0}",
-  "SystemCopyWindowTitle": "Copiar título da janela",
+  "SystemCopyWindowTitle": "Copiar título da janela : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Copiar caminhos dos processos das {0} guias selecionadas",
   "SystemCopySelectedTabsWindowTitleFormat": "Copiar títulos das janelas das {0} guias selecionadas",
   "SystemOpenExeFolder": "Abrir pasta de {0}",

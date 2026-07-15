@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "Pink Border",
 
   "TabNameEdit": "Tab Name",
-  "RenameTabFormat": "Rename this tab",
-  "ResetTabNameFormat": "Reset this tab name",
+  "RenameTabFormat": "Rename this tab : {TabName}",
+  "ResetTabNameFormat": "Reset this tab name : {TabName}",
 
   "TabDetachThisFormat": "Detach this tab",
   "TabDetachSelectedFormat": "Detach {0} selected tabs",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "System",
   "SystemCopyExePath": "Copy {0} path",
-  "SystemCopyWindowTitle": "Copy window title",
+  "SystemCopyWindowTitle": "Copy window title : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "Copy {0} selected tabs process paths",
   "SystemCopySelectedTabsWindowTitleFormat": "Copy {0} selected tabs window titles",
   "SystemOpenExeFolder": "Open folder of {0}",

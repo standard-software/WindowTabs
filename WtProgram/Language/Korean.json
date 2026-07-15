@@ -189,8 +189,8 @@
   "TabColorPinkBorder": "분홍 테두리",
 
   "TabNameEdit": "탭 이름",
-  "RenameTabFormat": "이 탭 이름 바꾸기",
-  "ResetTabNameFormat": "이 탭 이름 초기화",
+  "RenameTabFormat": "이 탭 이름 바꾸기 : {TabName}",
+  "ResetTabNameFormat": "이 탭 이름 초기화 : {TabName}",
 
   "TabDetachThisFormat": "이 탭 분리",
   "TabDetachSelectedFormat": "선택한 {0}개 탭 분리",
@@ -201,7 +201,7 @@
 
   "SystemMenu": "시스템",
   "SystemCopyExePath": "{0} 경로 복사",
-  "SystemCopyWindowTitle": "창 제목 복사",
+  "SystemCopyWindowTitle": "창 제목 복사 : {TabName}",
   "SystemCopySelectedTabsExePathFormat": "선택한 {0}개 탭의 프로세스 경로 복사",
   "SystemCopySelectedTabsWindowTitleFormat": "선택한 {0}개 탭의 창 제목 복사",
   "SystemOpenExeFolder": "{0} 폴더 열기",
