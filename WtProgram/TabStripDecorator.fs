@@ -124,6 +124,23 @@ module DisplayLog =
                     Microsoft.Win32.SystemEvents.DisplaySettingsChanged.AddHandler(EventHandler(fun _ _ -> write "SystemEvents.DisplaySettingsChanged"))
                 with _ -> ())
 
+// WinForms caches Screen.AllScreens for the process lifetime. A display
+// configuration change (monitor on/off, resolution change) can leave the
+// cache stale, or — when the re-enumeration races the transition — filled
+// with zero-bounds entries (GetMonitorInfo fails on dying HMONITORs). That
+// breaks the display names, the "(here)" mark and screen-targeted snaps.
+// Clearing the private cache field forces the next Screen.AllScreens access
+// to re-enumerate; a full enumeration costs microseconds, so it is done on
+// every context-menu build.
+module ScreenCache =
+    let private screensField =
+        try typeof<Screen>.GetField("screens", System.Reflection.BindingFlags.Static ||| System.Reflection.BindingFlags.NonPublic)
+        with _ -> null
+    let refresh() =
+        try
+            if screensField <> null then screensField.SetValue(null, null)
+        with _ -> ()
+
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
@@ -1559,6 +1576,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         this.applyGroupSnapRealign(snapDirection)
 
     member private  this.contextMenu(hwnd) =
+        // The whole menu is built from display info, so refresh the WinForms
+        // screen cache first — a display configuration change can leave
+        // Screen.AllScreens stale or zero-bounds (see ScreenCache). The dump
+        // of the pre-refresh state is temporary diagnostics (DisplayLog).
+        DisplayLog.hookDisplayChangeEvents()
+        try
+            let cached = Screen.AllScreens
+            let native = Mon.all
+            let anyZero = cached |> Array.exists (fun s -> s.Bounds.Width = 0 || s.Bounds.Height = 0)
+            DisplayLog.write (sprintf "contextMenu: cachedCount=%d nativeCount=%d anyZeroBounds=%b" cached.Length native.length anyZero)
+            cached |> Array.iter (fun s ->
+                DisplayLog.write (sprintf "  cached: %s primary=%b bounds=%s work=%s" s.DeviceName s.Primary (DisplayLog.fmtRect s.Bounds) (DisplayLog.fmtRect s.WorkingArea)))
+            native.iter (fun m ->
+                let r = m.displayRect
+                DisplayLog.write (sprintf "  native: hmon=%X rect=(%d,%d %dx%d)" (int64 m.hMonitor) r.location.x r.location.y r.size.width r.size.height))
+            if anyZero || cached.Length <> native.length then
+                DisplayLog.write "  !!! STALE CACHE DETECTED (pre-refresh)"
+        with ex -> DisplayLog.write (sprintf "contextMenu: dump failed: %s" ex.Message)
+        ScreenCache.refresh()
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
 
@@ -1658,22 +1694,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 (screenSnapFn: System.Windows.Forms.Screen -> string -> unit)
                 (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) : ContextMenuItem list =
             let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
-            // Diagnostics: cached WinForms view vs fresh native enumeration
-            DisplayLog.hookDisplayChangeEvents()
+            // Diagnostics: post-refresh view actually used to build the menu
             try
-                let b = os.windowFromHwnd(contextHwnd).bounds
-                DisplayLog.write (sprintf "menu build: hwnd=%X window=(%d,%d %dx%d)" (int64 contextHwnd) b.location.x b.location.y b.size.width b.size.height)
-                Screen.AllScreens |> Array.iter (fun s ->
-                    DisplayLog.write (sprintf "  cached: %s primary=%b bounds=%s work=%s name='%s'%s"
-                        s.DeviceName s.Primary (DisplayLog.fmtRect s.Bounds) (DisplayLog.fmtRect s.WorkingArea)
-                        (this.getScreenName(s)) (if s.Equals(currentScreen) then " <=current" else "")))
-                Mon.all.iter (fun m ->
-                    let r = m.displayRect
-                    DisplayLog.write (sprintf "  native: hmon=%X rect=(%d,%d %dx%d)" (int64 m.hMonitor) r.location.x r.location.y r.size.width r.size.height))
-                DisplayLog.write (sprintf "  current(FromPoint): %s bounds=%s matchedInCache=%b"
-                    currentScreen.DeviceName (DisplayLog.fmtRect currentScreen.Bounds)
+                DisplayLog.write (sprintf "menu build: hwnd=%X current=%s bounds=%s matchedInCache=%b"
+                    (int64 contextHwnd) currentScreen.DeviceName (DisplayLog.fmtRect currentScreen.Bounds)
                     (Screen.AllScreens |> Array.exists (fun s -> s.Equals(currentScreen))))
-            with ex -> DisplayLog.write (sprintf "menu build: dump failed: %s" ex.Message)
+            with _ -> ()
             this.getAllScreensSorted()
             |> Array.map (fun screen ->
                 let isCurrentScreen = screen.Equals(currentScreen)

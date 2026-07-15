@@ -1,8 +1,9 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.14_next4
+## version ss_2026.07.14_next5
 - Added 6 language files: Korean, French, German, Italian, Spanish, Portuguese (Brazilian)
 - Multi-monitor position menus: the current display is now marked with a localized "(here)" suffix instead of " *"
+- Fixed: after a display was turned on/off, context menus could lose the display direction names and the "(here)" mark, and screen-targeted snaps could land at the main display's top-left (stale WinForms screen cache; now refreshed on every menu build)
 
 ## version ss_2026.07.14
 - Group minimize/restore: only the operated window animates, no flash on the others; fixed glitches — restored window not coming to front, shrinking windows, minimize/restore oscillation, stuck hover color, brief freeze
