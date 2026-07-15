@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.07.16_next1
+
 ## version ss_2026.07.16
 - Added 6 language files: Korean, French, German, Italian, Spanish, Portuguese (Brazilian)
 - Multi-monitor position menus: the current display is now marked with a localized "(here)" suffix instead of " *"
