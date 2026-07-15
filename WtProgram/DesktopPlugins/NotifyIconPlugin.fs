@@ -516,6 +516,40 @@ type NotifyIconPlugin() as this =
             // from startup (the menu-side hook only runs on first menu open)
             DisplayLog.hookDisplayChangeEvents()
 
+            // Temporary diagnostics: real-time watch for the stale/zero screen
+            // cache (2 s poll on the main thread, logs only on state changes)
+            // so a display on/off storm test can pinpoint the moment the
+            // corruption happens without having to open a menu each cycle.
+            let staleWatchTimer = new System.Windows.Forms.Timer()
+            staleWatchTimer.Interval <- 2000
+            let mutable lastStale = false
+            staleWatchTimer.Tick.Add <| fun _ ->
+                try
+                    let cached = Screen.AllScreens
+                    let native = Mon.all
+                    let anyZero = cached |> Array.exists (fun s -> s.Bounds.Width = 0 || s.Bounds.Height = 0)
+                    let cachedRects =
+                        cached
+                        |> Array.map (fun s -> (s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height))
+                        |> Set.ofArray
+                    let missing = native.where(fun (m: Mon) ->
+                        let r = m.displayRect
+                        not (cachedRects.Contains((r.location.x, r.location.y, r.size.width, r.size.height))))
+                    let stale = anyZero || cached.Length <> native.count || missing.count > 0
+                    if stale <> lastStale then
+                        lastStale <- stale
+                        if stale then
+                            DisplayLog.write (sprintf "STALE-WATCH: cache went stale (zero=%b cached=%d native=%d missing=%d)" anyZero cached.Length native.count missing.count)
+                            cached |> Array.iter (fun s ->
+                                DisplayLog.write (sprintf "  cached: %s bounds=%s" s.DeviceName (DisplayLog.fmtRect s.Bounds)))
+                            native.iter (fun (m: Mon) ->
+                                let r = m.displayRect
+                                DisplayLog.write (sprintf "  native: hmon=%X rect=(%d,%d %dx%d)" (int64 m.hMonitor) r.location.x r.location.y r.size.width r.size.height))
+                        else
+                            DisplayLog.write "STALE-WATCH: cache recovered"
+                with _ -> ()
+            staleWatchTimer.Start()
+
             // Start watchdog to detect UI freeze and auto-restart
             Watchdog.start()
 
