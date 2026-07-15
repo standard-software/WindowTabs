@@ -88,6 +88,12 @@ module TabNameHelper =
     let format (template: string) (name: string) =
         template.Replace("{TabName}", name).Replace("{0}", name)
 
+    // Drop the tab-name placeholder (and its " : " separator) from a template.
+    // Used when the item is disabled and the name would be meaningless.
+    let stripName (template: string) =
+        template.Replace(" : {TabName}", "").Replace(" : {0}", "")
+                .Replace("{TabName}", "").Replace("{0}", "")
+
 // Temporary diagnostics for the multi-monitor position menus. Symptom being
 // chased: display names lose their left/right direction, the "(here)" mark
 // disappears, and screen-targeted snaps land at the main display's top-left —
@@ -2307,7 +2313,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             this.beginRename(hwnd)
                     })
                     CmiRegular({
-                        text = TabNameHelper.format (Localization.getString("ResetTabNameFormat")) resetName
+                        // When disabled (tab not renamed) the reset-to name is
+                        // meaningless, so show the plain label without it
+                        text =
+                            if group.isRenamed(hwnd) then
+                                TabNameHelper.format (Localization.getString("ResetTabNameFormat")) resetName
+                            else
+                                TabNameHelper.stripName (Localization.getString("ResetTabNameFormat"))
                         image = None
                         flags = if group.isRenamed(hwnd) then List2() else List2([MenuFlags.MF_GRAYED])
                         click = fun() -> group.setTabName(hwnd, None)
