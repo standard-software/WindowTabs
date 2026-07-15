@@ -145,7 +145,7 @@ module Localization_English =
         ("SnapTabMarginMenu", "Tab Margin When Snapping")
         ("SnapTabMarginTop", "Add margin at top")
 
-        ("TabAlignMenu", "Tab Position")
+        ("TabAlignMenu", "Tab Alignment")
         ("AlignAllTopLeft", "Align all tabs to Left")
         ("AlignAllTopRight", "Align all tabs to Right")
         ("AlignThisTabLeft", "Align this tab to Left")
