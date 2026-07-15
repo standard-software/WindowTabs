@@ -11,22 +11,6 @@ open System.Windows.Forms
 open Bemo.Win32.Forms
 open Newtonsoft.Json.Linq
 
-// Minimize/restore diagnostics (temporary): append-only log of the group
-// minimize/restore handlers in %APPDATA%\WindowTabs\minmax_debug.log so the
-// reported minimize<->restore oscillation can be diagnosed from real data.
-module MinMaxLog =
-    let private sync = obj()
-    let private path =
-        lazy (
-            let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-            try IO.Directory.CreateDirectory(dir) |> ignore with _ -> ()
-            IO.Path.Combine(dir, "minmax_debug.log"))
-    let write (msg: string) =
-        try
-            lock sync (fun() ->
-                IO.File.AppendAllText(path.Value, sprintf "%s  %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) msg))
-        with _ -> ()
-
 // Per-exe margin settings loaded from Settings/Window_Margin.json
 module WindowMarginSettings =
     // Cache: exe name (lowercase) -> (top, left, right, bottom)
@@ -347,10 +331,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 let b = w.bounds
                 w.isWindow && w.isMinimized.not && b.width > 0 && b.height > 0
             | None -> false
-        if not topIsValid then
-            MinMaxLog.write (sprintf "  adjustChildWindows SKIPPED (top invalid) [%s]" (this.groupStateStr()))
         if topIsValid then
-            let sw = System.Diagnostics.Stopwatch.StartNew()
             // This is the de-facto "restore follows the group" path: when the
             // user restores one window (e.g. from the taskbar), the siblings
             // are still minimized here and adjustWindowPlacement below
@@ -366,7 +347,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                     restoreFrontHwnd <- front
                     restoreFrontUntil <- DateTime.Now.AddMilliseconds(1500.0))
             zorderCell.value.tail.iter(this.adjustWindowPlacement)
-            let phase1Ms = sw.ElapsedMilliseconds
 
             // After initial placement, adjust sizes again to ensure DPI is considered
             match zorderCell.value.tryHead with
@@ -414,16 +394,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
                 )
             | None -> ()
-            let phase2Ms = sw.ElapsedMilliseconds - phase1Ms
 
             // If this pass just restored minimized siblings, keep the window
             // the user restored in front of them.
             if siblingsWereMinimized then
-                restoredHwnd |> Option.iter (fun front ->
-                    MinMaxLog.write (sprintf "  adjustChildWindows restored siblings; front=%X" (int front))
-                    this.bringRestoredToFront(front))
-            if sw.ElapsedMilliseconds > 100L then
-                MinMaxLog.write (sprintf "  adjustChildWindows took %dms (phase1=%dms phase2=%dms siblingsWereMinimized=%b)" sw.ElapsedMilliseconds phase1Ms phase2Ms siblingsWereMinimized)
+                restoredHwnd |> Option.iter this.bringRestoredToFront
 
     // Put the user-restored window in front of the group and keep it there:
     // siblings restored in the background may raise or activate themselves a
@@ -458,7 +433,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                     let coveredBySibling =
                         zorderCell.value.any(fun h -> h <> hwnd && idxOf h < idxOf hwnd)
                     if coveredBySibling then
-                        MinMaxLog.write (sprintf "  reassert front hwnd=%X (fg=%X)" (int hwnd) (int fg))
                         this.os.setZorder(List2([hwnd]).appendList(zorderCell.value.where((<>) hwnd)))
                         if fg <> hwnd then
                             this.os.windowFromHwnd(hwnd).setForeground(false)
@@ -910,7 +884,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         | ShellEvent.HSHELL_FLASH ->
             if this.windows.contains(hwnd) then
                 let suppressed = DateTime.Now < suppressFlashUntil
-                MinMaxLog.write (sprintf "FLASH hwnd=%X suppressed=%b [%s]" (int hwnd) suppressed (this.groupStateStr()))
                 if suppressed then
                     // The flash was caused by the group's own minimize/restore
                     // (activation denied for a background window). The OS keeps
@@ -954,10 +927,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then
-                if this.consumeMinMaxEcho(hwnd, evt) then MinMaxLog.write (sprintf "MINIMIZESTART hwnd=%X ECHO ignored" (int hwnd)) else
+                if this.consumeMinMaxEcho(hwnd, evt) then () else
                 let needsMinimized = zorderCell.value.any <| fun hwnd ->
                     this.os.windowFromHwnd(hwnd).isMinimized.not
-                MinMaxLog.write (sprintf "MINIMIZESTART hwnd=%X needsMin=%b [%s]" (int hwnd) needsMinimized (this.groupStateStr()))
                 suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
                 if needsMinimized then
                     this.minimizeAll()
@@ -966,10 +938,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         //this happens when a window is restored from minimize
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND ->
             if this.windows.contains(hwnd) then
-                if this.consumeMinMaxEcho(hwnd, evt) then MinMaxLog.write (sprintf "MINIMIZEEND   hwnd=%X ECHO ignored" (int hwnd)) else
+                if this.consumeMinMaxEcho(hwnd, evt) then () else
                 let needsRestore = zorderCell.value.any <| fun hwnd ->
                     this.os.windowFromHwnd(hwnd).isMinimized
-                MinMaxLog.write (sprintf "MINIMIZEEND   hwnd=%X needsRestore=%b [%s]" (int hwnd) needsRestore (this.groupStateStr()))
                 suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
                 if needsRestore then
                     this.restoreAll()
@@ -1241,15 +1212,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
    
 
-    // Diagnostic: compact "hwnd:min|nrm" list of the group's windows (for
-    // the minimize/restore oscillation log)
-    member private this.groupStateStr() =
-        zorderCell.value.list
-        |> List.map (fun h ->
-            let st = try (if this.os.windowFromHwnd(h).isMinimized then "min" else "nrm") with _ -> "err"
-            sprintf "%X:%s" (int h) st)
-        |> String.concat " "
-
     // Run a window state change without the DWM transition animation. Only
     // the window the user actually operated should animate — the rest of the
     // group follows silently. DWMWA_TRANSITIONS_FORCEDISABLED is per-window
@@ -1284,24 +1246,20 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         pendingMinMaxEchoes.Remove((hwnd, evt))
 
     member this.minimizeAll() =
-        MinMaxLog.write (sprintf "  minimizeAll BEGIN [%s]" (this.groupStateStr()))
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.reverse.iter <| fun hwnd ->
             let window = this.os.windowFromHwnd(hwnd)
             if window.isMinimized.not then
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
-        MinMaxLog.write (sprintf "  minimizeAll END   [%s]" (this.groupStateStr()))
 
     member this.restoreAll() =
-        MinMaxLog.write (sprintf "  restoreAll BEGIN [%s]" (this.groupStateStr()))
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.iter <| fun hwnd ->
             let window = this.os.windowFromHwnd(hwnd)
             if window.isMinimized then
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
-        MinMaxLog.write (sprintf "  restoreAll END   [%s]" (this.groupStateStr()))
         
     member this.tabActivate(Tab(hwnd), force) =
         let window = this.os.windowFromHwnd(hwnd)
