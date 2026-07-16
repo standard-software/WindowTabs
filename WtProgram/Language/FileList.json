@@ -10,5 +10,9 @@
   { "name": "German", "fileName": "German.json" },
   { "name": "Italian", "fileName": "Italian.json" },
   { "name": "Spanish", "fileName": "Spanish.json" },
-  { "name": "Portuguese", "fileName": "Portuguese.json" }
+  { "name": "Portuguese", "fileName": "Portuguese.json" },
+  { "name": "Turkish", "fileName": "Turkish.json" },
+  { "name": "Polish", "fileName": "Polish.json" },
+  { "name": "Vietnamese", "fileName": "Vietnamese.json" },
+  { "name": "Indonesian", "fileName": "Indonesian.json" }
 ]

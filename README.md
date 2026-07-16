@@ -322,7 +322,7 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 ### Multi-Language Support
 
-- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, and Portuguese language support
+- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian language support
 - Japanese Kansai and Tohoku dialect files included
 - Any language can be supported by adding a language file
 - Runtime language switching without restart
