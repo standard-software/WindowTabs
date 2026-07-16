@@ -64,6 +64,18 @@
                            Source="$(var.WtProgram.TargetDir)Language\Chinese_Simplified.json" />
                      <File Id="ChineseTraditionalJson"
                            Source="$(var.WtProgram.TargetDir)Language\Chinese_Traditional.json" />
+                     <File Id="KoreanJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Korean.json" />
+                     <File Id="FrenchJson"
+                           Source="$(var.WtProgram.TargetDir)Language\French.json" />
+                     <File Id="GermanJson"
+                           Source="$(var.WtProgram.TargetDir)Language\German.json" />
+                     <File Id="ItalianJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Italian.json" />
+                     <File Id="SpanishJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Spanish.json" />
+                     <File Id="PortugueseJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Portuguese.json" />
                   </Component>
                </Directory>
 
