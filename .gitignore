@@ -2,6 +2,7 @@
 /UpgradeLog.htm
 .vs/WindowTabs/
 .claude
+.codex
 *.wixpdb
 
 # NuGet packages (auto-restored on build)
