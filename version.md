@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.07.17_next1
+- Build script: the release build now fails if WtSetup.wxs lacks a File entry for any Language\*.json (guards against the ss_2026.07.16 MSI omission)
 
 ## version ss_2026.07.17
 - Fixed: the MSI installer was missing the 6 language files added in ss_2026.07.16 (Korean, French, German, Italian, Spanish, Portuguese) — the Language menu listed them but they fell back to English; the zip package was unaffected

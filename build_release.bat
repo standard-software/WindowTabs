@@ -68,6 +68,28 @@ echo   ILRepack merge verified successfully.
 echo.
 
 :: ----------------------------------------
+:: Verify installer language file list
+:: (Every shipped Language\*.json needs a <File> entry in WtSetup.wxs;
+::  the MSI silently omits unlisted files - this caused the ss_2026.07.16
+::  MSI to ship without the 6 newly added languages.)
+:: ----------------------------------------
+echo Verifying installer language file list...
+set LANG_DIR_COUNT=0
+for %%f in (WtProgram\bin\Release\Language\*.json) do set /a LANG_DIR_COUNT+=1
+set LANG_WXS_COUNT=0
+for /f %%c in ('findstr /c:"TargetDir)Language" WtSetup\WtSetup.wxs ^| find /c /v ""') do set LANG_WXS_COUNT=%%c
+echo   Language JSON files in build output : %LANG_DIR_COUNT%
+echo   Language File entries in WtSetup.wxs: %LANG_WXS_COUNT%
+if not "%LANG_DIR_COUNT%"=="%LANG_WXS_COUNT%" (
+    echo ERROR: WtSetup.wxs is out of sync with the Language folder.
+    echo        Add a File entry to the LanguageFiles component in WtSetup.wxs
+    echo        for every Language\*.json, then run this build again.
+    exit /b 1
+)
+echo   Installer language file list is in sync.
+echo.
+
+:: ----------------------------------------
 :: Create ZIP
 :: ----------------------------------------
 echo [2/4] Creating ZIP...
