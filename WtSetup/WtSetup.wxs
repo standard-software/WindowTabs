@@ -76,6 +76,14 @@
                            Source="$(var.WtProgram.TargetDir)Language\Spanish.json" />
                      <File Id="PortugueseJson"
                            Source="$(var.WtProgram.TargetDir)Language\Portuguese.json" />
+                     <File Id="TurkishJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Turkish.json" />
+                     <File Id="PolishJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Polish.json" />
+                     <File Id="VietnameseJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Vietnamese.json" />
+                     <File Id="IndonesianJson"
+                           Source="$(var.WtProgram.TargetDir)Language\Indonesian.json" />
                   </Component>
                </Directory>
 
