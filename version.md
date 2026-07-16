@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.16_next1
+## version ss_2026.07.17
+- Fixed: the MSI installer was missing the 6 language files added in ss_2026.07.16 (Korean, French, German, Italian, Spanish, Portuguese) — the Language menu listed them but they fell back to English; the zip package was unaffected
 
 ## version ss_2026.07.16
 - Added 6 language files: Korean, French, German, Italian, Spanish, Portuguese (Brazilian)
