@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.08.12_next1
+
 ## version ss_2026.08.12
 - Added 4 language files: Turkish, Polish, Vietnamese, Indonesian
 - Build script: the release build verifies the installer file list by name (Language/Settings vs WtSetup.wxs) and checks the actual MSI contents after build (guards against the ss_2026.07.16 MSI omission)
