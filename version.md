@@ -1,11 +1,8 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.07.17_next2
+## version ss_2026.08.12
 - Added 4 language files: Turkish, Polish, Vietnamese, Indonesian
 - Build script: the release build verifies the installer file list by name (Language/Settings vs WtSetup.wxs) and checks the actual MSI contents after build (guards against the ss_2026.07.16 MSI omission)
-
-## version ss_2026.07.17_next1
-- Build script: the release build now fails if WtSetup.wxs lacks a File entry for any Language\*.json (guards against the ss_2026.07.16 MSI omission)
 
 ## version ss_2026.07.17
 - Fixed: the MSI installer was missing the 6 language files added in ss_2026.07.16 (Korean, French, German, Italian, Spanish, Portuguese) — the Language menu listed them but they fell back to English; the zip package was unaffected
