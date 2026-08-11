@@ -73,9 +73,16 @@ type OS() as this=
 
     member this.getTaskbar() = if this.isWin7OrHigher then Some(ShellApi.GetTaskbar()) else None
     
+    // Compare (Major, Minor) as a pair, not each field independently: the old
+    // "Major >= 6 && Minor >= 1" is false on Windows 10/11, which report 10.0,
+    // because Minor 0 fails the second test. It only ever worked because an
+    // executable without a <supportedOS> manifest entry is told 6.2 by the OS
+    // compatibility shim. Adding such an entry - as a DPI-awareness manifest
+    // does - would flip this to false and silently disable the taskbar
+    // integration, DWM iconic thumbnails and MOD_NOREPEAT hotkeys.
     member this.isWin7OrHigher =
-        System.Environment.OSVersion.Version.Major >= 6 &&
-        System.Environment.OSVersion.Version.Minor >= 1
+        let v = System.Environment.OSVersion.Version
+        v.Major > 6 || (v.Major = 6 && v.Minor >= 1)
     
     member this.lockForeground() = WinUserApi.LockSetForegroundWindow(1)
     member this.unlockForeground() = WinUserApi.LockSetForegroundWindow(2).ignore
