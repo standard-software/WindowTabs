@@ -17,6 +17,11 @@ packages/
 /exe/
 
 .vscode/
-CCLOG/
+CCXLOG/
 CLAUDE*.md
+
+# cc-cx-unite working area (task files, agent logs, measurement screenshots,
+# analysis reports). Kept on disk as the record of how a change was arrived at,
+# but not part of the shipped source.
+unite/
 
