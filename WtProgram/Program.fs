@@ -1358,25 +1358,6 @@ type Program() as this =
             | _ -> "English"
         Localization.initLanguage(language)
 
-        Application.EnableVisualStyles()
-
-        // WinForms takes ONE process-wide DPI snapshot, the first time any
-        // Control is constructed, and uses it for its legacy scaling
-        // decisions. Take that snapshot here, under a DPI-unaware context, so
-        // it reads the 96 dpi it always read before this change: the settings
-        // dialog is deliberately kept DPI-unaware (ManagerViewService) and must
-        // not have WinForms scale its contents a second time on top of the OS
-        // bitmap stretch. Everything WindowTabs draws itself is scaled
-        // explicitly (see the Dpi module), so nothing depends on this value.
-        //
-        // Placed AFTER EnableVisualStyles on purpose: that call has to happen
-        // before the process creates any window handle, and this one may.
-        Dpi.withUnawareContext <| fun() ->
-            try
-                use c = new Control()
-                c.DeviceDpi.ignore
-            with _ -> ()
-
         // Check if there are saved tab groups to restore
         let hasSavedTabGroups =
             try
@@ -1423,6 +1404,33 @@ let main argv =
         if mutex.WaitOne(TimeSpan.FromSeconds(0.5), false).not then
             MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
             exit(0)
+
+    Application.EnableVisualStyles()
+
+    // WinForms takes ONE process-wide DPI snapshot, the first time any Control
+    // is constructed, and uses it for its legacy scaling decisions. Take that
+    // snapshot here, under a DPI-unaware context, so it reads the 96 dpi it
+    // always read before this change: the settings dialog is deliberately kept
+    // DPI-unaware (ManagerViewService) and must not have WinForms scale its
+    // contents a second time on top of the OS bitmap stretch. Everything
+    // WindowTabs draws itself is scaled explicitly (see the Dpi module), so
+    // nothing depends on this value.
+    //
+    // Placed AFTER EnableVisualStyles because that call has to happen before
+    // the process creates any window handle, and this one does. Placed BEFORE
+    // Program() because its constructor resolves InvokerService.invoker, and
+    // Invoker() builds a Form and forces its handle (Shared/Invoker.fs:14) -
+    // that Form would otherwise take the snapshot first, under the per-monitor
+    // context enabled at the top of main, making this block a no-op.
+    //
+    // Placed AFTER the single-instance check so a losing instance, which only
+    // shows a message box and exits, never touches the snapshot at all.
+    Dpi.withUnawareContext <| fun() ->
+        try
+            use c = new Control()
+            c.DeviceDpi.ignore
+        with _ -> ()
+
     let program = Program()
     program.run(List2<obj>([
         InputManagerPlugin(Set2(List2([WindowMessages.WM_MOUSEWHEEL])))
