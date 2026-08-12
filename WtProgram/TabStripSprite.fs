@@ -8,6 +8,8 @@ open System.Windows.Forms
 type IconSprite = {
     icon: Icon
     size: Sz
+    // Device-pixel scale of the strip's monitor (1.0 = 100%).
+    scale: float
     } with
     interface ISprite with
         member this.image =
@@ -16,9 +18,16 @@ type IconSprite = {
             // Fill with near-transparent color so entire icon area is hit-testable
             g.Clear(Color.FromArgb(1, 0, 0, 0))
             try
-                // Draw icon with proper scaling to fit the target size
+                // At 100% the icon is drawn exactly as it always was, so a
+                // 100% monitor is untouched by this change. Above 100% the box
+                // is a size no application publishes (25 px at 150%, 33 px at
+                // 200%), so ask Windows to produce that size from the icon's
+                // own resource instead of stretching the 16 or 32 px handle.
+                let icon =
+                    if this.scale = 1.0 then this.icon
+                    else ScaledIcon.at this.icon this.size.width
                 let rect = new Rectangle(0, 0, this.size.width, this.size.height)
-                do g.DrawIcon(this.icon, rect)
+                do g.DrawIcon(icon, rect)
             with | e -> ()
             bitmap
         member this.children = List2()
@@ -27,6 +36,9 @@ type CloseButtonSprite = {
     hover: bool
     captured: bool
     size: Sz
+    // Device-pixel scale of the strip's monitor (1.0 = 100%). Every constant
+    // below is a 96-dpi design value multiplied by it.
+    scale: float
     }
     with
     member private this.bgColor =
@@ -35,16 +47,15 @@ type CloseButtonSprite = {
         | true, false -> Some(Color.FromArgb(90, 90, 90))
         | _ -> None
     member private this.penColor = if this.bgColor.IsSome then Color.White else Color.Gray
-    member private this.pen = new Pen(this.penColor, 1.7f)
+    member private this.pen = new Pen(this.penColor, Dpi.pxf this.scale 1.7f)
     interface ISprite with
         member this.image =
-            let crossOffset = 3
             let bitmap = Img(this.size)
             let g = bitmap.graphics
             g.SmoothingMode <- SmoothingMode.AntiAlias
             // Draw rounded rectangle background
             let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
-            let r = 3
+            let r = Dpi.px this.scale 3
             let rect = Rectangle(0, 0, this.size.width - 1, this.size.height - 1)
             use path = new GraphicsPath()
             path.AddArc(rect.X, rect.Y, r * 2, r * 2, 180.0f, 90.0f)
@@ -56,25 +67,31 @@ type CloseButtonSprite = {
             // Draw X mark centered on rounded rect
             let cx = float32(this.size.width - 1) / 2.0f
             let cy = float32(this.size.height - 1) / 2.0f
-            let half = 4.0f
+            let half = Dpi.pxf this.scale 4.0f
             g.DrawLine(this.pen, cx - half, cy - half, cx + half, cy + half)
             g.DrawLine(this.pen, cx - half, cy + half, cx + half, cy - half)
             bitmap
         member this.children = List2()
 
-// Pin icon font: use Segoe MDL2 Assets (Windows 10/11 system icon font)
+// Pin icon font: Segoe MDL2 Assets (the Windows 10/11 system icon font).
+//
+// Requested in PIXELS, not points. The old 12 pt request was 16 px only
+// because the destination bitmap happened to be 96 dpi; in a Per-Monitor-V2
+// process a plain `new Bitmap()` reports the system DPI instead, so the same
+// 12 pt would come out 24 px on a 150% primary - on every monitor - and a
+// version that also multiplied by the monitor scale would reach 36 px and
+// cover the tab title. 16 px * scale says exactly what is meant.
 module private PinIcon =
-    let font : Font option =
-        try
-            let f = new Font("Segoe MDL2 Assets", 12.0f)
-            if f.Name = "Segoe MDL2 Assets" then Some(f)
-            else f.Dispose(); None
-        with _ -> None
+    [<Literal>]
+    let private basePixelSize = 16.0f
+    let font (scale: float) : Font option =
+        Dpi.scaledFontFamily "Segoe MDL2 Assets" basePixelSize FontStyle.Regular scale
 
 type PinButtonSprite = {
     hover: bool
     captured: bool
     size: Sz
+    scale: float
     }
     with
     member private this.bgColor =
@@ -90,7 +107,7 @@ type PinButtonSprite = {
             g.SmoothingMode <- SmoothingMode.AntiAlias
             // Draw rounded rectangle background (same as close button)
             let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
-            let r = 3
+            let r = Dpi.px this.scale 3
             let rect = Rectangle(0, 0, this.size.width - 1, this.size.height - 1)
             use path = new GraphicsPath()
             path.AddArc(rect.X, rect.Y, r * 2, r * 2, 180.0f, 90.0f)
@@ -102,7 +119,8 @@ type PinButtonSprite = {
             // Draw pin icon
             let color = this.penColor
             use brush = new SolidBrush(color)
-            match PinIcon.font with
+            let pxf = Dpi.pxf this.scale
+            match PinIcon.font this.scale with
             | Some font ->
                 // Use Segoe MDL2 Assets system font for pin icon (E718 = Pin glyph)
                 // Rotate -45 degrees (left tilt) around center
@@ -115,7 +133,7 @@ type PinButtonSprite = {
                 use format = new StringFormat()
                 format.Alignment <- StringAlignment.Center
                 format.LineAlignment <- StringAlignment.Center
-                let drawRect = RectangleF(-1.0f, 2.0f, float32 this.size.width, float32 this.size.height)
+                let drawRect = RectangleF(pxf -1.0f, pxf 2.0f, float32 this.size.width, float32 this.size.height)
                 g.DrawString("\uE718", font, brush, drawRect, format)
                 g.ResetTransform()
             | None ->
@@ -123,8 +141,10 @@ type PinButtonSprite = {
                 let cx = float32(this.size.width - 1) / 2.0f
                 let cy = float32(this.size.height - 1) / 2.0f
                 let dc = 0.707f
-                let ptf s p = PointF(cx + (s + p) * dc, cy + (s - p) * dc)
-                use headPen = new Pen(color, 1.8f)
+                // s / p are design-unit offsets from the button centre, so they
+                // are scaled before the 45-degree rotation is applied.
+                let ptf s p = PointF(cx + (pxf s + pxf p) * dc, cy + (pxf s - pxf p) * dc)
+                use headPen = new Pen(color, pxf 1.8f)
                 headPen.StartCap <- Drawing2D.LineCap.Round
                 headPen.EndCap <- Drawing2D.LineCap.Round
                 g.DrawLine(headPen, ptf -3.5f -4.0f, ptf -3.5f 4.0f)
@@ -136,7 +156,7 @@ type PinButtonSprite = {
                     ptf  1.0f -0.7f
                 |])
                 g.FillPath(brush, bodyPath)
-                use needlePen = new Pen(color, 1.2f)
+                use needlePen = new Pen(color, pxf 1.2f)
                 g.DrawLine(needlePen, ptf 1.0f 0.0f, ptf 5.0f 0.0f)
             bitmap
         member this.children = List2()
@@ -164,19 +184,55 @@ type TabSprite<'id> = {
     direction: TabDirection
     hover: TabPart option
     captured: TabPart option
+    // Device-pixel scale of the strip's monitor. `appearance` arrives already
+    // scaled (Dpi.scaleAppearance); this covers the constants written here.
+    scale: float
     } with
+
+    // Design unit (96 dpi) -> device pixels, for this tab's monitor.
+    //
+    // ONE-DEVICE-PIXEL RULE. Two kinds of number live in this file and only
+    // the first one goes through px / pxf:
+    //
+    //  * DIMENSIONS - heights, widths, paddings, corner radii, glyph strokes
+    //    (the close "x" at 1.7, the fallback pin at 1.8 / 1.2). These are
+    //    apparent sizes and must grow with the monitor, or the strip shrinks
+    //    to two thirds of itself on a 150% monitor (requirement R2).
+    //
+    //  * HAIRLINES - the tab outline pen, and the single row that separates
+    //    the tab from the edge of the strip (`size.height - 1` here, mirrored
+    //    by tabYOffset, TabStripSprite.pinnedTabMinLen, the TabDown branch of
+    //    borderPath and the hit test in tryHitForTooltip). These are always
+    //    exactly ONE DEVICE PIXEL, at every scale.
+    //
+    // The second rule is not a compromise, it is what makes the separation
+    // legible: a scaled outline and an unscaled gap would read as different
+    // weights sitting next to each other. It is also the interpretation the
+    // measured 150% screenshots already show, because GDI+ rasterizes any
+    // aliased pen narrower than 2.0 as a single pixel - a 1.5 px pen and a
+    // 1.0 px pen produce identical output at 125% and 150%, and only diverge
+    // at 200% and above, where the old code would have drawn a 2 px outline
+    // beside a 1 px gap. Keeping the gap at one pixel also keeps the strip
+    // geometry that was measured on real hardware (38 px strip / 37 px tab at
+    // 150%) exactly reproducible, and keeps the gap identical to the value
+    // the hit test uses.
+    // (No pxf counterpart: every float32 constant a TabSprite draws itself is
+    // a hairline, and the child sprites scale their own glyph strokes.)
+    member private this.px value = Dpi.px this.scale value
 
     member private this.iconSprite =
         {
             IconSprite.icon = this.displayInfo.icon
             size = this.iconSize
+            scale = this.scale
         } :> ISprite
-    
+
     member private this.closeButtonSprite =
         {
             CloseButtonSprite.size = this.closeButtonSize
             hover = this.hover = Some(TabClose)
             captured = this.captured = Some(TabClose)
+            scale = this.scale
         } :> ISprite
 
     member private this.pinButtonSprite =
@@ -184,9 +240,10 @@ type TabSprite<'id> = {
             PinButtonSprite.size = this.closeButtonSize
             hover = this.hover = Some(TabPin)
             captured = this.captured = Some(TabPin)
+            scale = this.scale
         } :> ISprite
 
-    member private this.edgeWidth = 18
+    member private this.edgeWidth = this.px 18
 
     member private this.renderTabEdge(path:GraphicsPath, startPoint:PointF, endPoint:PointF) =
         let width = endPoint.X - startPoint.X
@@ -245,6 +302,8 @@ type TabSprite<'id> = {
                 elif this.hover.IsSome || this.captured.IsSome then highlight
                 elif this.isSelected then selected
                 else inactive
+        // HAIRLINE, deliberately NOT scaled - see the note above TabSprite.size
+        // about the one-device-pixel rule.
         new Pen(new SolidBrush(color), 1.0f)
 
     member private this.borderPath =
@@ -258,33 +317,35 @@ type TabSprite<'id> = {
         do this.renderTabEdge(path, PointF(float32(this.size.width) - float32(this.edgeWidth), top), PointF(float32(this.size.width), bottom))
         path
 
-    member private this.iconSize = 
+    member private this.iconSize =
         // Calculate icon size based on tab height, leaving some padding
-        let iconHeight = max 16 (this.size.height - 8)
-        let iconHeight = min iconHeight 24  // Cap at 24 pixels
+        let iconHeight = max (this.px 16) (this.size.height - this.px 8)
+        let iconHeight = min iconHeight (this.px 24)  // Cap at 24 design pixels
         Sz(iconHeight, iconHeight)
 
     member private this.iconLocation =
         let y = (this.size.height - this.iconSize.height) / 2
         Pt(this.edgeWidth, y)
 
-    member private this.closeButtonSize = Sz(18, 18)
+    member private this.closeButtonSize =
+        let s = this.px 18
+        Sz(s, s)
 
     member private this.closeButtonLocation =
-        let x = this.size.width - this.edgeWidth - this.closeButtonSize.width + 3
+        let x = this.size.width - this.edgeWidth - this.closeButtonSize.width + this.px 3
         let y = (this.size.height - this.closeButtonSize.height) / 2
         Pt(x, y)
 
     // Pin button location: same as close button but never overlaps with program icon
     member private this.pinButtonLocation =
         let normalX = this.closeButtonLocation.x
-        let minX = this.iconLocation.x + this.iconSize.width + 2
+        let minX = this.iconLocation.x + this.iconSize.width + this.px 2
         let x = max normalX minX
         let y = (this.size.height - this.closeButtonSize.height) / 2
         Pt(x, y)
 
     member this.textLocation =
-        let x = this.iconLocation.x + this.iconSize.width + 5
+        let x = this.iconLocation.x + this.iconSize.width + this.px 5
         Pt(x, 0)
 
     member this.textSize =
@@ -297,7 +358,7 @@ type TabSprite<'id> = {
                 this.closeButtonLocation.x - this.textLocation.x
             else
                 // Not hovered: extend text closer to right edge (fade handles visual boundary)
-                this.size.width - this.textLocation.x - 18
+                this.size.width - this.textLocation.x - this.px 18
         let width = max 0 width
         Sz(width, this.size.height)
 
@@ -349,7 +410,7 @@ type TabSprite<'id> = {
                 // Draw fade-out gradient at right edge of text area (VSCode-style)
                 let textMeasured = g.MeasureString(text, font)
                 if textMeasured.Width > float32(bounds.size.width) then
-                    let fadeWidth = min 15 this.textSize.width
+                    let fadeWidth = min (this.px 15) this.textSize.width
                     if fadeWidth > 0 then
                         let fadeX = this.textLocation.x + this.textSize.width - fadeWidth
                         // Compute effective background color considering fill color overlay
@@ -378,7 +439,7 @@ type TabSprite<'id> = {
             // Draw underline color at bottom/top of tab with gradient (opaque left half, fading to transparent on right)
             match this.displayInfo.underlineColor with
             | Some(underlineColor) ->
-                let underlineHeight = 3
+                let underlineHeight = this.px 3
                 let state = g.Save()
                 g.SetClip(this.borderPath)
                 let y =
@@ -405,11 +466,13 @@ type TabSprite<'id> = {
             match this.displayInfo.borderColor with
             | Some(borderColor) ->
                 let state = g.Save()
-                // Draw the tab shape border (top and sides) with normal 1px width
+                // Draw the tab shape border (top and sides): the same
+                // one-device-pixel hairline as borderPen, so a coloured tab
+                // outline and an uncoloured one have identical weight.
                 use shapePen = new Pen(new SolidBrush(borderColor), 1.0f)
                 g.DrawPath(shapePen, this.borderPath)
                 // Draw bottom/top edge using same logic as underline (SetClip + FillRectangle + gradient)
-                let underlineHeight = 3
+                let underlineHeight = this.px 3
                 g.SetClip(this.borderPath)
                 let y =
                     match this.direction with
@@ -492,15 +555,22 @@ type TabStripSprite<'id> when 'id : equality = {
     // along with the pivot, drawn at pivot.x + their relative offset.
     // Empty list = no group drag (= single-tab slide, existing behavior).
     dragGroup: 'id list
+    // Device-pixel scale of the strip's monitor (1.0 = 100%). `appearance` is
+    // already scaled by it; this is for the constants written here and for the
+    // per-tab sprites.
+    scale: float
     } with
+
+    member private this.px value = Dpi.px this.scale value
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
     member private this.unpinnedTabMaxLen = float(this.appearance.tabMaxWidth)
     member private this.pinnedTabMinLen =
         // Calculate dynamically based on tab height and icon size
+        // (mirrors TabSprite.iconSize / edgeWidth, hence the same scaling)
         let tabHeight = this.size.height - 1
-        let iconHeight = min (max 16 (tabHeight - 8)) 24
-        float(18 + iconHeight + 18)  // left edge + icon width + right padding
+        let iconHeight = min (max (this.px 16) (tabHeight - this.px 8)) (this.px 24)
+        float(this.px 18 + iconHeight + this.px 18)  // left edge + icon width + right padding
     member private this.pinnedTabSettingLen = float(this.appearance.tabPinnedTabWidth)
     member private this.pinnedTabMaxLen =
         if this.appearance.tabPinnedTabWidthIcon then this.pinnedTabMinLen
@@ -646,6 +716,10 @@ type TabStripSprite<'id> when 'id : equality = {
                     { this.appearance with tabMaxWidth = int(this.pinnedTabLength) }
                 else
                     this.appearance
+            // - 1: the one-device-pixel hairline that separates the tab from
+            // the far edge of the strip. Never scaled (see TabSprite.px), and
+            // the same expression appears in pinnedTabMinLen and in
+            // tryHitForTooltip so drawing and hit testing cannot drift apart.
             size = Sz(int(tabLen), (this.size.height) - 1)
             onlyIcon = isPinned && this.appearance.tabPinnedTabWidthIcon
             isPinned = isPinned
@@ -658,6 +732,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 match this.captured with
                 | Some(id, part) when id = tab -> Some(part)
                 | _ -> None
+            scale = this.scale
         }
     member private this.tabSprite (tab:'id) = this.tabSpriteRec(tab) :> ISprite
 
@@ -665,22 +740,18 @@ type TabStripSprite<'id> when 'id : equality = {
         let bgColor =
             if this.transparent then Color.FromArgb(0, 0, 0, 0)
             else Color.FromArgb(1, 1, 1, 1)
-        let gr, img =
-            let sz = this.size
-            if sz.isEmptyArea then
-                let bmp = new Bitmap(1,1)
-                let gr = Graphics.FromImage(bmp)
-                do gr.SmoothingMode <- SmoothingMode.AntiAlias
-                (gr, bmp)
-            else
-                let bmp = new Bitmap(sz.width, sz.height)
-                let gr = Graphics.FromImage(bmp)
-                do gr.SmoothingMode <- SmoothingMode.AntiAlias
-                (gr, bmp)
+        // Img rather than a bare Bitmap so this surface is pinned to 96 dpi
+        // like every other one (see Drawing.fs).
+        let img = Img(if this.size.isEmptyArea then Sz(1, 1) else this.size)
+        let gr = img.graphics
+        do gr.SmoothingMode <- SmoothingMode.AntiAlias
         let bounds = Rect(Pt(), this.size)
         do  gr.FillRectangle(new SolidBrush(bgColor), bounds.Rectangle)
-        img.img
+        img
 
+    // Which end of the strip the one-pixel hairline sits at: below the tabs
+    // when they point up, above them when they point down. One device pixel
+    // at every scale, like the "- 1" it complements (see TabSprite.px).
     member private this.tabYOffset =
         match this.direction with
         | TabUp -> 0

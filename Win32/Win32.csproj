@@ -69,6 +69,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CommCtrl.cs" />
+    <Compile Include="DpiApi.cs" />
     <Compile Include="DwmApi.cs" />
     <Compile Include="Forms\FloatingTextBox.cs">
       <SubType>Form</SubType>

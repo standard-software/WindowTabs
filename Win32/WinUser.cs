@@ -1216,6 +1216,11 @@ namespace Bemo
 		public const int WM_STYLECHANGING                = 0x007C;
 		public const int WM_STYLECHANGED                 = 0x007D;
 		public const int WM_DISPLAYCHANGE                = 0x007E;
+		/// <summary>Sent to a per-monitor DPI aware top-level window when the
+		/// DPI of the monitor it is on changes: the display scale was changed
+		/// while the app runs, or the window moved to a monitor with another
+		/// scale.</summary>
+		public const int WM_DPICHANGED                   = 0x02E0;
 		public const int WM_GETICON                      = 0x007F;
 		public const int WM_SETICON                      = 0x0080;
 		public const int WM_NCCREATE                     = 0x0081;

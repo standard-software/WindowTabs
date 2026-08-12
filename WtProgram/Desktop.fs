@@ -121,11 +121,10 @@ type Desktop(notify:IDesktopNotification) as this =
             ).ignore
         group.cast<IGroup>() 
 
-    member private this.windowOffset = 
-        let tabAppearance = Services.program.tabAppearanceInfo
-        Pt(-tabAppearance.tabIndentNormal, tabAppearance.tabHeight - (tabAppearance.tabHeightOffset + 1))
-          
-    member this.findGroupContainingHwnd hwnd : IGroup option =  
+    // (windowOffset removed: it had no callers and read the RAW, unscaled
+    // appearance, so reviving it on a scaled monitor would have placed windows
+    // a third of a strip height off.)
+    member this.findGroupContainingHwnd hwnd : IGroup option =
         this.cast<IDesktop>().groups.tryFind(fun g -> g.windows.contains((=)hwnd))
 
     member this.restartGroup(groupHwnd, enableSuperBar) =
@@ -167,7 +166,11 @@ type Desktop(notify:IDesktopNotification) as this =
             let window = os.windowFromHwnd(hwnd)
             // Calculate window position from drop point
             // In preview image: click position is at imageOffset, window top-left is at (0, tabHeight - tabHeightOffset - 1)
-            let tabAppearance = Services.program.tabAppearanceInfo
+            // Device pixels for the monitor the tab was dropped on: the drop
+            // point and the window rectangles are physical now that the process
+            // is DPI aware, so this offset has to be scaled to match or the
+            // window lands about a third of a strip height too high at 150%.
+            let tabAppearance = Dpi.scaleAppearance (Dpi.scaleForPoint pt) Services.program.tabAppearanceInfo
             let previewWindowOffset = Pt(0, tabAppearance.tabHeight - (tabAppearance.tabHeightOffset + 1))
             let windowPt = pt.sub(dragInfo.imageOffset).add(previewWindowOffset)
             let monitor = Mon.fromPoint windowPt
@@ -181,21 +184,27 @@ type Desktop(notify:IDesktopNotification) as this =
             // Get window size for boundary checking
             let windowSize = window.bounds.size
 
-            // Calculate window center point to determine which screen it belongs to
+            // Calculate window center point to determine which screen it belongs to.
+            // Mon (a live MonitorFromPoint query) instead of Screen.FromPoint:
+            // the WinForms screen cache is process-wide and may have been filled
+            // by the deliberately DPI-unaware settings dialog, whose rectangles
+            // are virtualized rather than device pixels.
             let centerX = windowPt.x + windowSize.width / 2
             let centerY = windowPt.y + windowSize.height / 2
-            let centerPoint = System.Drawing.Point(centerX, centerY)
-            let screen = Screen.FromPoint(centerPoint)
+            let workArea =
+                match Mon.nearestFromPoint(Pt(centerX, centerY)) with
+                | Some(mon) -> mon.workRect
+                | None -> Rect(windowPt, windowSize)
 
             // Limit window size to screen size if it exceeds
-            let maxWidth = screen.WorkingArea.Width
-            let maxHeight = screen.WorkingArea.Height
+            let maxWidth = workArea.width
+            let maxHeight = workArea.height
             let finalWidth = min windowSize.width maxWidth
             let finalHeight = min windowSize.height maxHeight
 
             // Adjust position to keep window within screen boundaries
-            let adjustedX = max screen.WorkingArea.Left (min windowPt.x (screen.WorkingArea.Right - finalWidth))
-            let adjustedY = max screen.WorkingArea.Top (min windowPt.y (screen.WorkingArea.Bottom - finalHeight))
+            let adjustedX = max workArea.left (min windowPt.x (workArea.right - finalWidth))
+            let adjustedY = max workArea.top (min windowPt.y (workArea.bottom - finalHeight))
 
             // Resize window if it exceeds screen size, then move to position
             if windowSize.width > maxWidth || windowSize.height > maxHeight then

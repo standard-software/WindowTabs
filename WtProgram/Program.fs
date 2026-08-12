@@ -1360,6 +1360,23 @@ type Program() as this =
 
         Application.EnableVisualStyles()
 
+        // WinForms takes ONE process-wide DPI snapshot, the first time any
+        // Control is constructed, and uses it for its legacy scaling
+        // decisions. Take that snapshot here, under a DPI-unaware context, so
+        // it reads the 96 dpi it always read before this change: the settings
+        // dialog is deliberately kept DPI-unaware (ManagerViewService) and must
+        // not have WinForms scale its contents a second time on top of the OS
+        // bitmap stretch. Everything WindowTabs draws itself is scaled
+        // explicitly (see the Dpi module), so nothing depends on this value.
+        //
+        // Placed AFTER EnableVisualStyles on purpose: that call has to happen
+        // before the process creates any window handle, and this one may.
+        Dpi.withUnawareContext <| fun() ->
+            try
+                use c = new Control()
+                c.DeviceDpi.ignore
+            with _ -> ()
+
         // Check if there are saved tab groups to restore
         let hasSavedTabGroups =
             try
@@ -1390,6 +1407,12 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+    // Per-Monitor-V2 DPI awareness, before anything creates a window or a DC.
+    // app.manifest declares the same thing and normally wins, in which case
+    // this call simply fails and changes nothing; keeping it means the tab
+    // strips still render natively if a packaging step ever drops the win32
+    // manifest from the executable.
+    Dpi.enablePerMonitorV2()
     // The single-instance check must run before Program() is constructed.
     // The constructor registers shell hooks and starts timers, and the
     // "already running" MessageBox pumps messages, so checking later lets

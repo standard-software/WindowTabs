@@ -12,7 +12,11 @@ type DragDetectingStateInfo = {
     }
 
 type DragDetectingState(info:DragDetectingStateInfo) as this =
-    let dragStartDistance = 5.0
+    // Screen distances are device pixels now that the process is DPI aware, so
+    // the drag thresholds are scaled to keep the same physical feel: a fixed
+    // 5 device px would fire after two thirds of the former mouse travel on a
+    // 150% monitor, turning careful clicks into accidental drags.
+    let dragStartDistance = 5.0 * Dpi.scaleForPoint info.initialPt
     interface IDragState with
         member this.mouseMove(ptScreen) =
             if ptScreen.distance(info.initialPt) > dragStartDistance then
@@ -27,7 +31,8 @@ type DragCapturedStateInfo = {
     }
 
 type DragCapturedState(info:DragCapturedStateInfo) as this =
-    let dragOutDistance = 20
+    // Device pixels for the strip's monitor (see DragDetectingState).
+    let dragOutDistance = Dpi.px (Dpi.scaleForRect info.targetWindow.bounds) 20
     interface IDragState with
         member this.mouseMove(ptScreen) =
             let dragBounds = info.targetWindow.bounds.inflate(0, dragOutDistance)

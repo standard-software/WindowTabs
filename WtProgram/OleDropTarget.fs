@@ -84,7 +84,10 @@ type OleDropTarget(ts:TabStrip) as this=
                                 | Some(value) -> value
                                 | None -> false
                             with | _ -> false
-                        Win32Menu.show window.hwnd ptScreen (List2([
+                        // Text-only menu, but the scale still has to be the
+                        // menu's own monitor so a future item with a bitmap
+                        // gets it right by construction.
+                        Win32Menu.show window.hwnd ptScreen (Dpi.scaleForPoint ptScreen) (List2([
                             CmiRegular({
                                 text = "Copy"
                                 image = None

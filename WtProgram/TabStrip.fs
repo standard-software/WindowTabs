@@ -29,22 +29,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let sizeCell = Cell.create(Sz.empty)
     let alphaCell = Cell.create(byte(0xFF))
     let locationCell = Cell.create(Pt.empty)
-    // Non-integer-DPI DRAWING correction for the strip's monitor, stored as
-    // (rate, monitorRelativeLeft). The process is DPI-unaware; at a scale whose
-    // logical resolution is non-integer (e.g. 150%: 2560/1.5 = 1706.67, rounded
-    // to 1707) the OS bitmap-stretches the layered window slightly MORE than it
-    // virtualizes the mouse/coordinates. A pixel at monitor-relative x = X is
-    // therefore displayed X * rate too far right, while the mouse reports the
-    // un-drifted position. The fix is on the DRAWING, not the mouse: render is
-    // pre-compressed horizontally by 1/(1+rate) about the monitor origin so the
-    // displayed tabs land exactly where the (correct, raw) mouse reports them;
-    // hit-testing then uses the untouched sprite layout. The leftover strip area
-    // is transparent (invisible), so no gap appears. rate is computed from
-    // GetDeviceCaps (DESKTOPHORZRES/HORZRES) so it adapts to any DPI and is 0 at
-    // integer-logical scales (100/125/200% on a 2560 panel) -> pixel-perfect
-    // no-op. monitorRelativeLeft = strip's virtual left minus its monitor's
-    // virtual origin; both refreshed in setPlacement.
-    let drawCorrectionCell = Cell.create((0.0, 0.0))
+    // DPI scale of the monitor the strip is currently placed on (1.0 = 100%),
+    // refreshed from every setPlacement. The process is Per-Monitor-V2 aware,
+    // so the strip's bitmap is presented 1:1 on that monitor and every
+    // self-drawn size has to be multiplied by this factor to keep its former
+    // apparent size. It replaces the old non-integer-DPI draw correction: with
+    // no OS bitmap stretch left there is no drift to compensate for.
+    let scaleCell = Cell.create(1.0)
     let visualOrderCell = Cell.create(List2())
     let zorderCell = Cell.create(List2())
     let visibleCell = Cell.create(false)
@@ -106,10 +97,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let tooltipHideTimer = new Timer(Interval = 200)
     let lastToolTipTab = ref None
     let pendingTooltipTab = ref None
-    let tooltipMaxWidth =
-        use g = Graphics.FromHwnd(IntPtr.Zero)
-        let dpiScale = g.DpiX / 96.0f
-        int(500.0f * dpiScale)
+    // Tooltip metrics are scaled per strip (see this.scale), not from the
+    // system DPI as before: on a desktop whose primary monitor is scaled, the
+    // old Graphics.FromHwnd(IntPtr.Zero) reading made tooltips on the 100%
+    // monitors 1.5x too wide as well.
+    let tooltipBaseMaxWidth = 500
 
     let isMouseOverExport = Cell.export <| fun() ->
         hoverCell.value.IsSome
@@ -126,17 +118,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tooltipForm.StartPosition <- FormStartPosition.Manual
         tooltipForm.BackColor <- Color.FromArgb(40, 40, 40) // Dark gray background
         tooltipForm.AutoSize <- false  // Manual size control
-        tooltipForm.Padding <- new Padding(8, 8, 8, 8) // Equal padding on all sides
+        tooltipForm.Padding <- new Padding(8, 8, 8, 8) // Equal padding on all sides (rescaled per monitor on show)
+        // Size and font are computed in device pixels for the strip's monitor;
+        // WinForms must not apply its own scaling on top of them.
+        tooltipForm.AutoScaleMode <- AutoScaleMode.None
         tooltipForm.TopMost <- true
         // Set form opacity for modern look
         tooltipForm.Opacity <- 0.95
         
         tooltipLabel.ForeColor <- Color.White
         tooltipLabel.BackColor <- Color.FromArgb(40, 40, 40)
-        tooltipLabel.Font <- SystemFonts.MenuFont
+        tooltipLabel.Font <- SystemFonts.MenuFont // replaced with the DPI-scaled font on show
         tooltipLabel.TextAlign <- ContentAlignment.TopLeft  // Top-left aligned for proper wrapping
         tooltipLabel.AutoSize <- false  // Keep false for proper width control
-        tooltipLabel.MaximumSize <- new Size(tooltipMaxWidth, 0)
+        tooltipLabel.MaximumSize <- new Size(tooltipBaseMaxWidth, 0)
         tooltipLabel.Dock <- DockStyle.Fill  // Fill the parent container
         tooltipLabel.Parent <- tooltipForm
         
@@ -146,7 +141,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             g.SmoothingMode <- SmoothingMode.AntiAlias
             let rect = new Rectangle(0, 0, tooltipForm.Width - 1, tooltipForm.Height - 1)
             use path = new GraphicsPath()
-            let radius = 4
+            let radius = Dpi.px scaleCell.value 4
             path.AddArc(rect.X, rect.Y, radius * 2, radius * 2, 180.0f, 90.0f)
             path.AddArc(rect.Right - radius * 2, rect.Y, radius * 2, radius * 2, 270.0f, 90.0f)
             path.AddArc(rect.Right - radius * 2, rect.Bottom - radius * 2, radius * 2, radius * 2, 0.0f, 90.0f)
@@ -211,7 +206,30 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.showInside = showInsideCell.value
 
+    // DPI scale of the monitor the strip is placed on. Every hand-drawn size
+    // in the strip is written as a 96-dpi design unit and multiplied by this.
+    member this.scale = scaleCell.value
+
+    // Which of the window's two published icons to use as the drawing source.
+    //
+    // Above 100% the icon box is bigger than 16 px, so the small icon would
+    // have to be enlarged and would stay soft while everything around it is
+    // finally crisp; the big icon (usually 32 px) is the better source, and
+    // ScaledIcon then asks Windows for the exact box size from the underlying
+    // resource. A window that publishes no big icon gets the shared
+    // SystemIcons.Application instance from Window.icon - detected by
+    // reference, so such windows keep their real small icon instead of being
+    // silently replaced by the generic one.
+    member private this.tabIcon (ti: TabInfo) =
+        let isGeneric (icon: Icon) = Object.ReferenceEquals(icon, SystemIcons.Application)
+        if isGeneric ti.iconBig then ti.iconSmall
+        elif isGeneric ti.iconSmall then ti.iconBig
+        elif this.scale > 1.0 then ti.iconBig
+        else ti.iconSmall
+
     member private this.tsBase direction =
+        // One font instance for the whole sprite tree (pixel-sized, see Dpi).
+        let textFont = Dpi.scaledFont SystemFonts.MenuFont this.scale
         {
             tabs = Map2(this.tabs.items.map <| fun tab ->
                 let ti = this.tabInfo(tab)
@@ -221,8 +239,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     underlineColor = tabUnderlineColor.value.tryFind(tab)
                     borderColor = tabBorderColor.value.tryFind(tab)
                     TabDisplayInfo.text = ti.text
-                    icon = ti.iconSmall
-                    textFont = SystemFonts.MenuFont
+                    icon = this.tabIcon ti
+                    textFont = textFont
                     textBrush = SystemBrushes.MenuText
                 }
                 tab,tabInfo
@@ -240,6 +258,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             transparent = this.transparent
             appearance = this.appearance
             dragGroup = dragGroupCell.value
+            scale = this.scale
         }
     member private this.ts = this.tsBase this.direction
         
@@ -309,6 +328,16 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.updateTooltipForTab(tab: Tab) =
         let tabInfo = this.tabInfo(tab)
         if tabInfo.text <> "" then
+            // Everything below is device pixels for the strip's OWN monitor.
+            // The font is a pixel-sized copy of the menu font, so MeasureString
+            // returns device pixels whatever DPI this control's DC reports.
+            let scale = this.scale
+            let scaled = Dpi.px scale
+            let tooltipMaxWidth = scaled tooltipBaseMaxWidth
+            let padding = scaled 8
+            tooltipForm.Padding <- new Padding(padding, padding, padding, padding)
+            tooltipLabel.Font <- Dpi.scaledFont SystemFonts.MenuFont scale
+            tooltipLabel.MaximumSize <- new Size(tooltipMaxWidth, 0)
             // Move off-screen and ensure visible so rendering can occur
             tooltipForm.Location <- new Point(-10000, -10000)
             if not tooltipForm.Visible then
@@ -321,8 +350,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             use g = tooltipLabel.CreateGraphics()
             let textSize = g.MeasureString(tabInfo.text, tooltipLabel.Font, tooltipMaxWidth)
             let charWidth = g.MeasureString("W", tooltipLabel.Font).Width
-            let labelWidth = min tooltipMaxWidth (int(textSize.Width + charWidth) + 16)
-            let labelHeight = int(textSize.Height) + 16
+            let labelWidth = min tooltipMaxWidth (int(textSize.Width + charWidth) + scaled 16)
+            let labelHeight = int(textSize.Height) + scaled 16
             tooltipForm.Size <- new Size(labelWidth, labelHeight)
 
             // Force synchronous repaint with new content while off-screen
@@ -334,16 +363,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let tabScreenX = stripLoc.x + tabLoc.x
             let tabScreenY = stripLoc.y
             let tabStripHeight = this.ts.size.height
-            tooltipForm.Location <- new Point(tabScreenX, tabScreenY + tabStripHeight + 2)
+            tooltipForm.Location <- new Point(tabScreenX, tabScreenY + tabStripHeight + scaled 2)
 
-            // Ensure tooltip is within screen bounds
-            let screen = Screen.FromPoint(new Point(tabScreenX, tabScreenY))
-            let formRight = tooltipForm.Location.X + tooltipForm.Width
-            let formBottom = tooltipForm.Location.Y + tooltipForm.Height
-            if formRight > screen.WorkingArea.Right then
-                tooltipForm.Location <- new Point(screen.WorkingArea.Right - tooltipForm.Width, tooltipForm.Location.Y)
-            if formBottom > screen.WorkingArea.Bottom then
-                tooltipForm.Location <- new Point(tooltipForm.Location.X, tabScreenY - tooltipForm.Height - 5)
+            // Ensure tooltip is within screen bounds. Mon (a live
+            // MonitorFromPoint query) instead of Screen.FromPoint: the WinForms
+            // screen cache is process-wide and may hold the virtualized
+            // rectangles of the DPI-unaware settings dialog.
+            Mon.nearestFromPoint(Pt(tabScreenX, tabScreenY)) |> Option.iter (fun mon ->
+                let work = mon.workRect
+                let formRight = tooltipForm.Location.X + tooltipForm.Width
+                let formBottom = tooltipForm.Location.Y + tooltipForm.Height
+                if formRight > work.right then
+                    tooltipForm.Location <- new Point(work.right - tooltipForm.Width, tooltipForm.Location.Y)
+                if formBottom > work.bottom then
+                    tooltipForm.Location <- new Point(tooltipForm.Location.X, tabScreenY - tooltipForm.Height - scaled 5))
 
             tooltipForm.BringToFront()
 
@@ -435,9 +468,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         this.update()
 
     member private this.wndProc(msg:Win32Message) =
-        // The mouse point is used as-is: the non-integer-DPI drift is corrected
-        // on the DRAWING side (see applyDrawCorrection), so the raw client point
-        // already matches the displayed tabs.
+        // The mouse point is used as-is. The strip window is per-monitor DPI
+        // aware, so the client point Windows reports is in the same device
+        // pixels the sprite tree was laid out in: hit test == what is drawn, at
+        // any DPI, with no coordinate conversion in between.
         let mousePt() = msg.lParam.location
         let mouseDown btn =
             this.processMouse(MouseClick(mousePt(), btn, MouseDown))
@@ -483,44 +517,22 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             this.window.update(this.render, this.location, this.alpha)
         else this.window.hide()
     
-    // Pre-compress the rendered strip horizontally about the monitor origin to
-    // undo the non-integer-DPI display/mouse drift (see drawCorrectionCell). A
-    // no-op (returns the input) at integer-logical scales where rate = 0.
-    member private this.applyDrawCorrection(img:Img) =
-        let (c, a) = drawCorrectionCell.value
-        if c = 0.0 then img
-        else
-            let scale = 1.0 / (1.0 + c)
-            // x' = scale*x + dx maps monitor-relative x by 1/(1+c) about the
-            // monitor origin (a = strip's monitor-relative virtual left).
-            let dx = float32(- a * c / (1.0 + c))
-            let dst = Img(img.size)
-            let g = dst.graphics
-            g.InterpolationMode <- InterpolationMode.HighQualityBicubic
-            use m = new Matrix(float32 scale, 0.0f, 0.0f, 1.0f, dx, 0.0f)
-            g.Transform <- m
-            g.DrawImage(img.bitmap, 0, 0)
-            g.ResetTransform()
-            // The leftward compression leaves the rightmost few px of the strip
-            // fully transparent. On this per-pixel-alpha layered window an alpha=0
-            // pixel is click-through, so that margin (the rightmost tab's right
-            // edge, including part of the Close button) stops receiving mouse
-            // events - a dead zone seen only at the right edge. Paint the exposed
-            // margin with a near-transparent (alpha=1, invisible) fill so it stays
-            // hit-testable, matching the uniform per-tab hit region.
-            let w = img.size.width
-            let marginX = int (scale * float w + float dx)
-            if marginX < w then
-                use b = new SolidBrush(Color.FromArgb(1, 0, 0, 0))
-                g.FillRectangle(b, marginX, 0, w - marginX, img.size.height)
-            g.Dispose()
-            dst
-
+    // No draw correction any more. The former applyDrawCorrection pre-compressed
+    // the rendered strip horizontally to cancel the drift between the OS bitmap
+    // stretch and the mouse virtualization of a DPI-UNAWARE layered window. A
+    // per-monitor aware window is not stretched at all, so that compression
+    // would now BE the distortion it used to remove - and it re-sampled the
+    // whole strip with HighQualityBicubic on every frame, which fought the very
+    // sharpness this change is about. (It would also be dead code: it derived
+    // its rate from GetDeviceCaps HORZRES vs DESKTOPHORZRES, and an aware
+    // process gets the same physical value from both, so the rate is always 0.)
     member private this.render : Img =
         try
-            let img = this.applyDrawCorrection(this.ts.render)
+            let img = this.ts.render
             if this.isShrunk && this.direction = TabDirection.TabDown then
-                img.clip(Rect(Pt(0, img.height - 7), Sz(img.width, 7)))
+                // Sliver of strip left visible when auto-hidden.
+                let sliver = Dpi.px this.scale 7
+                img.clip(Rect(Pt(0, img.height - sliver), Sz(img.width, sliver)))
             else
                 img
         with ex ->
@@ -553,6 +565,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.addTab tab = this.addTabSlide tab None
 
     member this.removeTab tab =
+        // The scaled-icon cache is keyed by source HICON, and Windows recycles
+        // icon handles once the window that owned them is gone. Dropping the
+        // cache whenever a tab leaves a strip is the cheap, coarse way to make
+        // sure a recycled handle can never resurrect the previous window's
+        // picture; the cache refills with one CopyImage per visible tab.
+        ScaledIcon.invalidate()
         Cell.beginUpdate()
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
@@ -1001,7 +1019,18 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.getTabBorderColorThreadSafe(tab) = tabBorderColorSnapshot.tryFind(tab)
 
-    member this.setTabAppearance(appearance) = appearanceCell.set(Some(appearance))
+    // The appearance and the monitor scale it was computed at are ONE value:
+    // the appearance carries the already-scaled heights and indents, `scale`
+    // covers the constants the sprite tree writes itself. Taking them as a
+    // pair means no caller can push a 150% appearance while the sprites still
+    // draw at 100%, which is the state a window crossing a monitor boundary
+    // would otherwise be in for a frame. setPlacement pushes the same scale
+    // again, with the bounds it produced.
+    member this.setTabAppearance(appearance, scale: float) =
+        Cell.beginUpdate()
+        appearanceCell.set(Some(appearance))
+        scaleCell.set(scale)
+        Cell.endUpdate()
             
     member this.contentBounds 
         with get() = contentBoundsCell.value
@@ -1015,50 +1044,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             
     member this.bounds = this.window.bounds
 
-    // Drawing-correction (rate, monitor-relative left) for the monitor
-    // containing the given rectangle. Read the monitor's logical (HORZRES) and
-    // physical (DESKTOPHORZRES) widths via GetDeviceCaps — the only DPI source
-    // that is correct from a DPI-unaware process. The display scale Windows
-    // actually applies is set in 25% steps; when (physical / setting) is not a
-    // whole number Windows rounds the logical resolution (e.g. 150%: 2560/1.5 =
-    // 1706.67 -> HORZRES 1707). That rounding makes the layered window's
-    // bitmap-stretch disagree with the mouse virtualization by a tiny amount
-    // that accumulates with monitor-relative x; the rate below captures it. At
-    // scales where physical/setting is whole (100/125/200% on a 2560 panel) the
-    // rounding error is 0, so the rate is 0 and rendering is untouched.
-    member private this.drawCorrectionForRect(r:Rect) =
-        try
-            let center = System.Drawing.Point(r.x + r.width / 2, r.y + r.height / 2)
-            let screen = Screen.FromPoint(center)
-            let monitorX = float screen.Bounds.X
-            let hdc = WinUserApi.CreateDC(screen.DeviceName, null, null, IntPtr.Zero)
-            let logRes = WinUserApi.GetDeviceCaps(hdc, int DeviceCap.HORZRES)
-            let physRes = WinUserApi.GetDeviceCaps(hdc, int DeviceCap.DESKTOPHORZRES)
-            WinUserApi.DeleteDC(hdc) |> ignore
-            // monitor-relative virtual left of the strip (drift is anchored here)
-            let a = float r.x - monitorX
-            if logRes <= 0 || physRes <= 0 then (0.0, a)
-            else
-                // Recover the user-set scale (multiple of 25%) from the ratio.
-                let effective = float physRes / float logRes
-                let setting = System.Math.Round(effective * 4.0) / 4.0
-                if setting <= 0.0 then (0.0, a)
-                else
-                    let idealLog = float physRes / setting     // e.g. 1706.67
-                    let err = float logRes - idealLog          // rounding amount (0 at whole)
-                    // Empirical amplification of the rounding into the
-                    // display/mouse mismatch; verified across 100-200% DPI.
-                    let k = 64.0
-                    (k * err / float logRes, a)
-        with _ -> (0.0, float r.x)
-
     member this.setPlacement(placement) =
         showInsideCell.set(placement.showInside)
         sizeCell.set(placement.bounds.size)
         locationCell.set(placement.bounds.location)
-        // Refresh the DRAWING correction (rate, monitor-relative left) from the
-        // (stable) strip bounds so render can undo the non-integer-DPI drift.
-        drawCorrectionCell.set(this.drawCorrectionForRect(placement.bounds))
+        // The scale that produced these bounds. It travels with the placement
+        // instead of being re-derived here so the decorator and the strip can
+        // never disagree about which monitor the strip is on.
+        scaleCell.set(placement.scale)
 
     member this.alpha
         with get() = alphaCell.value

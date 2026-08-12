@@ -180,10 +180,17 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         boundsExport.init()
         isForegroundExport.init()
 
-        this.ts.setTabAppearance(this.tabAppearance)
-        Services.settings.notifyValue "tabAppearance" <| fun(_) ->
-            this.invokeAsync <| fun() ->
-                this.ts.setTabAppearance(this.tabAppearance)
+        // Seed the strip so it has an appearance before its first placement.
+        // Appearance and scale go in together (TabStrip.setTabAppearance).
+        //
+        // There is deliberately NO settings listener here: the decorator owns
+        // that (TabStripDecorator.init, "tabAppearance" -> updateTsPlacement),
+        // and it re-pushes the appearance AND the placement bounds from one
+        // scale query. A second listener that pushed only the appearance would
+        // leave the strip box sized for the old settings until the next bounds
+        // event.
+        let seedScale = this.dpiScale
+        this.ts.setTabAppearance(this.tabAppearanceAt seedScale, seedScale)
 
         // Listen for tabPositionByDefault changes (apply to all groups)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
@@ -287,7 +294,42 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.windows : Set2<IntPtr> = windowsCell.value
 
     
-    member this.tabAppearance = Services.settings.getValue("tabAppearance").cast<TabAppearanceInfo>()
+    // Appearance exactly as the user configured it, in 96-dpi design units.
+    // The settings UI reads this one (through Services.program.tabAppearanceInfo),
+    // so a scaled value can never be written back to the settings file.
+    member this.tabAppearanceRaw = Services.settings.getValue("tabAppearance").cast<TabAppearanceInfo>()
+
+    // DPI scale of the monitor this group's tab strip is displayed on.
+    //
+    // The strip is anchored on the top edge of the tracked window, so the
+    // monitor is chosen from that edge rather than from the whole window
+    // rectangle (Dpi.scaleForStripAnchor explains why, and why the strip's own
+    // height is deliberately not part of the query).
+    //
+    // This is a LIVE query, so it is read in exactly two places: once per
+    // placement update (TabStripDecorator.placement, whose result is then
+    // handed to everything downstream) and once when a group seeds its strip.
+    // Anything that needs "the scale the strip is currently drawn at" must use
+    // TabStrip.scale instead, or it can disagree with the strip for the frames
+    // during which a window straddles a monitor boundary.
+    member this.dpiScale =
+        try
+            match placement.value with
+            | Some(rect, _) when rect.width > 0 && rect.height > 0 -> Dpi.scaleForStripAnchor(rect)
+            | _ -> Dpi.scaleForHwnd(this.ts.hwnd)
+        with _ -> 1.0
+
+    // Appearance in device pixels for a given monitor scale. Everything that
+    // lays out or positions the strip - decorator bounds, snap margin, sprite
+    // metrics - goes through here, so one conversion covers them all and the
+    // strip box can never end up scaled differently from its contents.
+    member this.tabAppearanceAt(scale: float) = Dpi.scaleAppearance scale this.tabAppearanceRaw
+
+    // (There is deliberately no `tabAppearance` shorthand for
+    // `tabAppearanceAt this.dpiScale`. Such a property looks like a field but
+    // issues a MonitorFromRect + GetDpiForMonitor pair on every read, and two
+    // reads a few microseconds apart can straddle a boundary crossing and
+    // return different scales. Callers name the scale they mean.)
 
     member private this.withUpdate f =
         Cell.beginUpdate()
@@ -760,14 +802,35 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     // Get per-exe margin as (top, left, right, bottom) from Settings/Window_Margin.json
     // Positive = shrink window, Negative = expand window
-    member this.getExeMargin(hwnd:IntPtr) =
+    member this.getExeMarginRaw(hwnd:IntPtr) =
         let window = this.os.windowFromHwnd(hwnd)
         let exeName = window.pid.exeName
         WindowMarginSettings.getMargin(exeName)
 
-    // Check if a window has any non-zero margin
+    // The same margin in device pixels for the monitor `bounds` lives on.
+    //
+    // The JSON values compensate for an app's invisible resize border. That
+    // border is itself DPI-scaled by the app, and the values were authored
+    // while every coordinate WindowTabs saw was virtualized to 96 dpi. Window
+    // rects are real device pixels now, so the margin has to be scaled too.
+    //
+    // The scale comes from the RECTANGLE being adjusted, not from the group's
+    // current monitor: apply-on-write and remove-on-read then use the same
+    // factor for the same window on the same monitor, and a window that has
+    // moved to a 100% monitor gets the 100% margin removed - which is correct,
+    // because its invisible border is now 100% wide as well. Deriving the
+    // factor from a single group-level value would make shrink and un-shrink
+    // disagree by the ratio of the two monitors.
+    member this.getExeMargin(hwnd:IntPtr, bounds:Rect) =
+        let (top, left, right, bottom) = this.getExeMarginRaw(hwnd)
+        let scale = try Dpi.scaleForRect bounds with _ -> 1.0
+        if scale = 1.0 then (top, left, right, bottom)
+        else (Dpi.px scale top, Dpi.px scale left, Dpi.px scale right, Dpi.px scale bottom)
+
+    // Check if a window has any non-zero margin. Scale-independent: Dpi.px
+    // maps 0 to 0 and never turns a non-zero value into zero.
     member this.hasExeMargin(hwnd:IntPtr) =
-        let (top, left, right, bottom) = this.getExeMargin(hwnd)
+        let (top, left, right, bottom) = this.getExeMarginRaw(hwnd)
         top <> 0 || left <> 0 || right <> 0 || bottom <> 0
 
     // Record that margin was applied to a window (for tracking shrunk state)
@@ -779,7 +842,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // Result: window becomes smaller by margin on each side
     member this.applyExeMarginForWrite(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasExeMargin(hwnd) then
-            let (top, left, right, bottom) = this.getExeMargin(hwnd)
+            let (top, left, right, bottom) = this.getExeMargin(hwnd, bounds)
             let result = Rect(Pt(bounds.x + left, bounds.y + top),
                               Sz(bounds.width - left - right, bounds.height - top - bottom))
             System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] Write: %s margin=(%d,%d,%d,%d) input=(%d,%d,%d,%d) output=(%d,%d,%d,%d)"
@@ -794,7 +857,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // Result: reported bounds become larger by margin on each side
     member private this.removeExeMarginForRead(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasExeMargin(hwnd) then
-            let (top, left, right, bottom) = this.getExeMargin(hwnd)
+            let (top, left, right, bottom) = this.getExeMargin(hwnd, bounds)
             let result = Rect(Pt(bounds.x - left, bounds.y - top),
                               Sz(bounds.width + left + right, bounds.height + top + bottom))
             System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] Read: %s margin=(%d,%d,%d,%d) input=(%d,%d,%d,%d) output=(%d,%d,%d,%d)"
@@ -876,7 +939,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.flashTab(tab, flash) =
         flashEvent.Trigger(tab, flash)
-        this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearance.tabFlashTabColor) else None)
+        // Raw: a colour is DPI-independent, and reading the raw appearance
+        // avoids issuing a monitor DPI query for it.
+        this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearanceRaw.tabFlashTabColor) else None)
         
     member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() ->
         Cell.beginUpdate()
