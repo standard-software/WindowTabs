@@ -10,7 +10,16 @@ type TabGroupInfo = {
     hwnd: IntPtr
     tabNames: string list
     tabCount: int
+    // Two pictures of the same icon, because a context menu can pop up on a
+    // monitor with any scale (see TabStripDecorator.groupMenuIcon):
+    //   firstTabIconSmall - the window's own 16 px ICON_SMALL artwork, byte for
+    //                       byte what every release before this one showed. Used
+    //                       whenever the menu is drawn at 100%.
+    //   firstTabIcon      - 32 px, so a menu drawn at 125% / 150% / 200% has a
+    //                       source to shrink from instead of a 16 px picture to
+    //                       stretch.
     firstTabIcon: Img option
+    firstTabIconSmall: Img option
     tabHwnds: IntPtr list
 }
 
@@ -94,22 +103,41 @@ module TabNameHelper =
         template.Replace(" : {TabName}", "").Replace(" : {0}", "")
                 .Replace("{TabName}", "").Replace("{0}", "")
 
-// WinForms caches Screen.AllScreens for the process lifetime. A display
-// configuration change (monitor on/off, resolution change) can leave the
-// cache stale, or — when the re-enumeration races the transition — filled
-// with zero-bounds entries (GetMonitorInfo fails on dying HMONITORs). That
-// breaks the display names, the "(here)" mark and screen-targeted snaps.
-// Clearing the private cache field forces the next Screen.AllScreens access
-// to re-enumerate; a full enumeration costs microseconds, so it is done on
-// every context-menu build.
-module ScreenCache =
-    let private screensField =
-        try typeof<Screen>.GetField("screens", System.Reflection.BindingFlags.Static ||| System.Reflection.BindingFlags.NonPublic)
-        with _ -> null
-    let refresh() =
-        try
-            if screensField <> null then screensField.SetValue(null, null)
-        with _ -> ()
+// ScreenCache lives in Shared/Dpi.fs now; nothing in this file needs it any
+// more (see MonitorScreen below), and the DPI-unaware settings dialog, which
+// does, is compiled after that file.
+
+/// A monitor, for the snap / detach / "move to display" code paths.
+///
+/// This exists so System.Windows.Forms.Screen cannot be used here at all. That
+/// type is backed by a process-wide array WinForms enumerates once and caches
+/// forever, in the coordinate space of whichever thread happened to fill it -
+/// and WindowTabs deliberately runs one DPI-UNAWARE thread (the settings
+/// dialog), so the cache can hold virtualized rectangles while everything else
+/// works in device pixels. It also goes stale across a display configuration
+/// change.
+///
+/// The second generation contained that risk by convention: keep the Screen
+/// type, but funnel every instance through two helpers that re-enumerate
+/// first. Convention does not survive the next edit - a Screen.AllScreens
+/// written by someone unaware of the rule compiles and is silently wrong (one
+/// such reference did survive, in the snap-desktop menu item). Here `Screen`
+/// simply does not typecheck in these signatures, and every rectangle comes
+/// from a live MonitorFromPoint / EnumDisplayMonitors query instead.
+///
+/// Bounds / WorkingArea are exposed as System.Drawing.Rectangle so the ~30
+/// interior call sites that pass work areas around keep working unchanged.
+type MonitorScreen(mon: Mon) =
+    member this.Mon = mon
+    member this.Bounds = mon.displayRect.Rectangle
+    member this.WorkingArea = mon.workRect.Rectangle
+    /// Identity is the monitor handle, so "is this the display the window is
+    /// already on?" is a handle comparison rather than a rectangle comparison.
+    override this.Equals(value) =
+        match value with
+        | :? MonitorScreen as other -> mon.hMonitor = other.Mon.hMonitor
+        | _ -> false
+    override this.GetHashCode() = mon.hMonitor.GetHashCode()
 
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
@@ -160,21 +188,36 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let tabHwnds =
                     tabs.list |> List.map (fun (Tab(hwnd)) -> hwnd)
+                let firstTabInfo =
+                    if tabs.count > 0 then Some(this.ts.tabInfo(tabs.at(0))) else None
+                // 32 px, for menus drawn above 100%. Win32Menu resizes this to
+                // 16 px * the menu monitor's scale, so a scaled menu SHRINKS a
+                // large picture instead of stretching a 16 px one - which is
+                // precisely the blur this change removes everywhere else.
                 let firstTabIcon =
-                    if tabs.count > 0 then
-                        let firstTab = tabs.at(0)
-                        let info = this.ts.tabInfo(firstTab)
+                    firstTabInfo |> Option.bind (fun info ->
                         try
-                            Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
-                        with _ ->
-                            None
-                    else
-                        None
+                            let source =
+                                if Object.ReferenceEquals(info.iconBig, SystemIcons.Application)
+                                then info.iconSmall else info.iconBig
+                            Some(ScaledIcon.at source 32 |> fun i -> i.ToBitmap().img.resize(Sz(32,32)))
+                        with _ -> None)
+                // The unchanged, pre-DPI-work expression. A 100% monitor must
+                // show the icon the application actually drew for 16 px, not a
+                // 32 px picture reduced to 16 - many applications simplify
+                // their small icon rather than scale it down, so the two are
+                // visibly different pictures, and "100% is untouched" has to
+                // hold for the context menu as well as for the strip.
+                let firstTabIconSmall =
+                    firstTabInfo |> Option.bind (fun info ->
+                        try Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
+                        with _ -> None)
                 let info = {
                     hwnd = group.hwnd
                     tabNames = tabNames
                     tabCount = tabs.count
                     firstTabIcon = firstTabIcon
+                    firstTabIconSmall = firstTabIconSmall
                     tabHwnds = tabHwnds
                 }
                 lock groupInfos (fun () -> groupInfos.[group.hwnd] <- info)
@@ -215,6 +258,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 this.ts.isShrunk <- true
             | MouseUp, MouseRight ->
                 let ptScreen = os.windowFromHwnd(group.hwnd).ptToScreen(pt)
+                // ONE scale for the whole menu, decided from the point the menu
+                // is anchored at and handed to both the item bitmaps (which
+                // Win32Menu resizes) and the swatches this decorator paints.
+                // Right-clicking near the right edge of a strip can open the
+                // menu on the NEXT monitor; deriving the swatch size from the
+                // strip's scale and the bitmap size from the menu's scale then
+                // meant painting a 24 px swatch only to have it reduced to 16.
+                let menuScale = Dpi.scaleForPoint ptScreen
                 group.bb.write("contextMenuVisible", true)
                 let darkModeEnabled =
                     try
@@ -223,7 +274,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         | Some(value) -> value
                         | None -> false
                     with | _ -> false
-                Win32Menu.show group.hwnd ptScreen (this.contextMenu(hwnd)) darkModeEnabled
+                Win32Menu.show group.hwnd ptScreen menuScale (this.contextMenu(hwnd, menuScale)) darkModeEnabled
                 group.bb.write("contextMenuVisible", false)
             | MouseDown, MouseLeft ->
                 capturedHwnd := Some(hwnd)
@@ -264,7 +315,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.bounds.value.IsNone then
             this.ts.visible <- false
         else
-            this.ts.setPlacement(this.placement)
+            // Appearance and placement are pushed together, from ONE scale
+            // query, so the strip box and the metrics inside it can never
+            // belong to different monitors. Pushing the appearance on every
+            // update (not only when the user edits the settings) is what makes
+            // dragging a window to a monitor with a different scale re-lay-out
+            // the tabs instead of just resizing the box around stale metrics.
+            let placement = this.placement
+            this.ts.setTabAppearance(group.tabAppearanceAt placement.scale, placement.scale)
+            this.ts.setPlacement(placement)
             // Check if tabs should be hidden due to fullscreen window
             let hideForFullscreen =
                 try
@@ -297,18 +356,27 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.invokeAsync f = group.invokeAsync f
     member private this.invokeSync f = group.invokeSync f
 
-    member this.placement =
+    // Pure: reading the placement must not mutate the strip. (The scale and
+    // appearance are pushed by updateTsPlacement, the single writer.)
+    // Return type stated explicitly: TabStripSprite also has a `scale` field,
+    // and F# would otherwise infer the most recently declared matching record.
+    member this.placement : TabStripPlacment =
+        let scale = group.dpiScale
+        // One appearance read, so height / offset / indent and the scale handed
+        // to the strip all describe the same monitor.
+        let appearance = group.tabAppearanceAt scale
         let decorator =  {
             windowBounds = group.bounds.value.def(Rect())
             monitorBounds = Mon.all.map(fun m -> m.workRect)
-            decoratorHeight = group.tabAppearance.tabHeight
-            decoratorHeightOffset = group.tabAppearance.tabHeightOffset
-            decoratorIndentFlipped = group.tabAppearance.tabIndentFlipped
-            decoratorIndentNormal = group.tabAppearance.tabIndentNormal
+            decoratorHeight = appearance.tabHeight
+            decoratorHeightOffset = appearance.tabHeightOffset
+            decoratorIndentFlipped = appearance.tabIndentFlipped
+            decoratorIndentNormal = appearance.tabIndentNormal
         }
         {
             showInside = decorator.shouldShowInside
             bounds = decorator.bounds
+            scale = scale
         }
 
     member this.beginRename(hwnd) =
@@ -319,19 +387,26 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if tabSprite.id = tab then
                     Some(Rect(tabSprite.textLocation.add(tabOffset), tabSprite.textSize))
                 else None
-        let verticalMargin = 2
+        let scale = this.ts.scale
+        let verticalMargin = Dpi.px scale 2
 
         let form = new FloatingTextBox()
 
-        // The rename box is a DPI-unaware WinForms form, like the rest of the
-        // app, so the OS already scales its logical bounds to physical on
-        // display. The strip draws each tab's text with SystemFonts.MenuFont at
-        // these same logical client coordinates, so the box must use the
-        // UNSCALED logical position, size and font to line up. The previous code
-        // multiplied all three by the DPI scale, which the OS then scaled again -
-        // placing the box at pt*2.25 instead of pt*1.5, a rightward offset that
-        // grew with the tab's distance from the monitor's left edge.
-        form.textBox.Font <- SystemFonts.MenuFont
+        // The rename box overlays the tab's own text, so it has to match the
+        // strip exactly. Both are in device pixels for the strip's monitor now:
+        // textBounds comes from the DPI-scaled sprite layout, and the font is
+        // the same pixel-sized menu font the strip draws with (a point-sized
+        // font would follow the system DPI here, because this form renders
+        // through a screen DC rather than into an Img).
+        //
+        // AutoScaleMode is forced off because the designer sets
+        // AutoScaleMode.Font (FloatingTextBox.Designer.cs); WinForms would
+        // otherwise apply its own font-ratio scaling on top of the values
+        // below. The historical bug this replaces was the same double scaling
+        // seen from the other side: the old code multiplied by the DPI scale
+        // and the OS scaled the unaware window again, landing at pt * 2.25.
+        form.AutoScaleMode <- AutoScaleMode.None
+        form.textBox.Font <- Dpi.scaledFont SystemFonts.MenuFont scale
 
         // Convert the tab's text client position to screen coordinates.
         let mutable pt = POINT(X = textBounds.location.x, Y = textBounds.location.y + verticalMargin)
@@ -446,12 +521,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.onCloseAllWindows() =
         group.windows.items.iter this.onCloseWindow
 
-    // Helper methods for multi-display detach support
-    member private this.getAllScreensSorted() =
-        Screen.AllScreens
-        |> Array.sortBy (fun screen -> (screen.Bounds.X, screen.Bounds.Y))
+    // Helper methods for multi-display detach support.
+    //
+    // Live EnumDisplayMonitors, not the WinForms Screen cache: the answer has
+    // to be current (a monitor may have just been switched on or off) and in
+    // this thread's coordinate space (see MonitorScreen).
+    member private this.getAllScreensSorted() : MonitorScreen[] =
+        Mon.all.list
+        |> List.map MonitorScreen
+        |> List.sortBy (fun screen -> (screen.Bounds.X, screen.Bounds.Y))
+        |> Array.ofList
 
-    member private this.getScreenName(screen: Screen) =
+    member private this.getScreenName(screen: MonitorScreen) =
         let centerX = screen.Bounds.Left + screen.Bounds.Width / 2
         let centerY = screen.Bounds.Top + screen.Bounds.Height / 2
 
@@ -479,13 +560,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             | "Japanese" -> directionStr + display
             | _ -> display + " " + directionStr
 
-    member private this.getCurrentScreenForWindow(hwnd: IntPtr) =
+    member private this.getCurrentScreenForWindow(hwnd: IntPtr) : MonitorScreen =
         let window = os.windowFromHwnd(hwnd)
         let bounds = window.bounds
         let centerX = bounds.location.x + bounds.size.width / 2
         let centerY = bounds.location.y + bounds.size.height / 2
-        let centerPoint = System.Drawing.Point(centerX, centerY)
-        Screen.FromPoint(centerPoint)
+        // MONITOR_DEFAULTTONEAREST: a live query that always answers, so there
+        // is no fallback branch to get wrong. (Screen.FromPoint would consult
+        // the cached, possibly virtualized WinForms array - see MonitorScreen.)
+        match Mon.nearestFromPoint(Pt(centerX, centerY)) with
+        | Some(mon) -> MonitorScreen(mon)
+        | None ->
+            // Unreachable while at least one display is attached. Fall back to
+            // the first enumerated monitor rather than throwing out of a menu
+            // build; the previous Screen.FromPoint could not fail either, and
+            // an indexed array access would have been a worse replacement.
+            match Mon.all.list with
+            | mon :: _ -> MonitorScreen(mon)
+            | [] -> MonitorScreen(Mon(IntPtr.Zero))
 
     /// Calculate new position based on position option and work area
     /// Returns (x, y) tuple
@@ -535,7 +627,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         | _ ->
             (currentX, currentY)
 
-    member private this.detachTabToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
+    member private this.detachTabToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
         if group.windows.items.count <= 1 then
             raise (System.InvalidOperationException("detachTabToScreen should not be called when there is only one tab"))
@@ -778,7 +870,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // callers go through the original single-tab detach helpers).
     member private this.detachTabsCommon(
             tabsInOrder: List<IntPtr>,
-            applyToSeedWindow: System.Windows.Forms.Screen -> Rect -> unit
+            applyToSeedWindow: MonitorScreen -> Rect -> unit
         ) =
         match tabsInOrder with
         | [] | [_] -> ()
@@ -883,7 +975,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     snapDirection, percent, screen.WorkingArea)
                 window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
 
-    member private this.detachTabsToScreen(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
+    member private this.detachTabsToScreen(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, position: Option<string>) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreen(singleHwnd, targetScreen, position)
@@ -909,7 +1001,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if newX <> initialX || newY <> initialY then
                     window.setPositionOnly newX newY)
 
-    member private this.detachTabsToScreenSnap(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
+    member private this.detachTabsToScreenSnap(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, snapDirection: string) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnap(singleHwnd, targetScreen, snapDirection)
@@ -926,7 +1018,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     snapDirection, targetWorkArea, newWidth, newHeight)
                 window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))))
 
-    member private this.detachTabsToScreenSnapWithPercent(tabsInOrder: List<IntPtr>, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
+    member private this.detachTabsToScreenSnapWithPercent(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnapWithPercent(singleHwnd, targetScreen, snapDirection, percent)
@@ -963,24 +1055,35 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToSnapWithPercent(hwnd, snapDirection, percent)
         else this.detachTabsToSnapWithPercent(targets, snapDirection, percent)
-    member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, position: Option<string>) =
+    member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
         if List.length targets <= 1 then this.detachTabToScreen(hwnd, targetScreen, position)
         else this.detachTabsToScreen(targets, targetScreen, position)
-    member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string) =
+    member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
         this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToScreenSnap(hwnd, targetScreen, snapDirection)
         else this.detachTabsToScreenSnap(targets, targetScreen, snapDirection)
-    member private this.detachOrSplitToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: System.Windows.Forms.Screen, snapDirection: string, percent: int) =
+    member private this.detachOrSplitToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
         this.applySnapRealign(targets, snapDirection, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a)))
         if List.length targets <= 1 then this.detachTabToScreenSnapWithPercent(hwnd, targetScreen, snapDirection, percent)
         else this.detachTabsToScreenSnapWithPercent(targets, targetScreen, snapDirection, percent)
 
+    // Device pixels: the margin a snap leaves for the strip has to match the
+    // strip's REAL height (38 px at 150%, not 25).
+    //
+    // The scale comes from `this.ts.scale`, i.e. the scale that is currently
+    // committed to the strip, not from a fresh group.dpiScale query. Those two
+    // disagree for exactly as long as a window is straddling a monitor
+    // boundary, and a snap performed in that window would then reserve a
+    // margin for a strip height the strip is not drawing - the one remaining
+    // exception to "decide the scale once and hand it down" that the second
+    // generation left behind.
     member private this.getTabHeightForSnap() =
         try
-            if group.snapTabHeightMargin then group.tabAppearance.tabHeight - 1
+            if group.snapTabHeightMargin then
+                (group.tabAppearanceAt this.ts.scale).tabHeight - 1
             else 0
         with | _ -> 0
 
@@ -1150,7 +1253,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (ThreadHelper.cancelablePostBack 200 <| fun() ->
                 Services.program.resumeTabMonitoring()) |> ignore
 
-    member private this.detachTabToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+    member private this.detachTabToScreenSnap(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
         if group.windows.items.count <= 1 then
             raise (System.InvalidOperationException("detachTabToScreenSnap should not be called when there is only one tab"))
@@ -1242,7 +1345,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (ThreadHelper.cancelablePostBack 200 <| fun() ->
                 Services.program.resumeTabMonitoring()) |> ignore
 
-    member private this.detachTabToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
+    member private this.detachTabToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         // Snap with percentage to another screen
         if group.windows.items.count <= 1 then
             raise (System.InvalidOperationException("detachTabToScreenSnapWithPercent should not be called when there is only one tab"))
@@ -1313,7 +1416,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if newX <> bounds.location.x || newY <> bounds.location.y then
             window.setPositionOnly newX newY
 
-    member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: Screen, position: Option<string>) =
+    member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
         // Always use the active window (topWindow) as the reference point
         let activeHwnd = group.topWindow
@@ -1323,7 +1426,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceWorkArea = sourceScreen.WorkingArea
 
         // Use group bounds (expanded by margin) for percentage calculation
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd)
+        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
         let groupWidth = bounds.size.width + mLeft + mRight
         let groupHeight = bounds.size.height + mTop + mBottom
         let groupX = bounds.location.x - mLeft
@@ -1426,7 +1529,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd)
+        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
         let snapWidth = bounds.size.width + mLeft + mRight
         let snapHeight = bounds.size.height + mTop + mBottom
 
@@ -1445,7 +1548,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
         this.applyGroupSnapRealign(snapDirection)
 
-    member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: Screen, snapDirection: string) =
+    member this.moveTabGroupToScreenSnap(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string) =
         // Move the entire tab group to snap position on target screen (resize and position)
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -1454,7 +1557,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceWorkArea = sourceScreen.WorkingArea
 
         // Use group bounds (expanded by margin) for percentage calculation
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd)
+        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
         let groupWidth = bounds.size.width + mLeft + mRight
         let groupHeight = bounds.size.height + mTop + mBottom
 
@@ -1521,7 +1624,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
         this.applyGroupSnapRealign(snapDirection)
 
-    member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: Screen, snapDirection: string, percent: int) =
+    member this.moveTabGroupToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         // Move the entire tab group to snap position on target screen with percentage
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
@@ -1555,13 +1658,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)
 
-    member private  this.contextMenu(hwnd) =
-        // The whole menu is built from display info, so refresh the WinForms
-        // screen cache first — a display configuration change can leave
-        // Screen.AllScreens stale or zero-bounds (see ScreenCache).
-        ScreenCache.refresh()
+    // `menuScale` is the DPI scale of the monitor the menu is anchored on,
+    // decided once by the caller and used for every picture in the menu:
+    // the per-group application icons and the hand-painted colour swatches.
+    // Win32Menu.show is given the same number for the bitmap size it resizes
+    // to, so nothing in the menu is drawn at one scale and shown at another.
+    member private  this.contextMenu(hwnd, menuScale: float) =
         let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
         let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
+
+        // A group's application icon for this menu. At 100% the item bitmap is
+        // 16 px, so hand over the window's own 16 px artwork and the menu looks
+        // exactly as it did before any of this DPI work - no 32 px picture
+        // reduced to 16, no change of drawing. Above 100% the bitmap is bigger
+        // than 16 px, so the 32 px capture is the right source to shrink from.
+        let groupMenuIcon (info: TabGroupInfo) =
+            if menuScale = 1.0 then info.firstTabIconSmall else info.firstTabIcon
 
         // Build the "Snap Percent" submenu (e.g. "Snap 90%") containing Left/Right/Top/Bottom,
         // corner variants, and Center options at the given percent.
@@ -1614,7 +1726,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Display submenus are appended separately by the caller when needed.
         let buildPositionMoveInnerItems (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             let desktopSnap =
-                if includeSnapDesktop && System.Windows.Forms.Screen.AllScreens.Length > 1 then
+                if includeSnapDesktop && Mon.all.length > 1 then
                     [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
                 else []
             [
@@ -1655,9 +1767,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 (moveFn: string option -> unit)
                 (snapFn: string -> unit)
                 (snapPercentFn: string -> int -> unit)
-                (screenMoveFn: System.Windows.Forms.Screen -> string option -> unit)
-                (screenSnapFn: System.Windows.Forms.Screen -> string -> unit)
-                (screenSnapPercentFn: System.Windows.Forms.Screen -> string -> int -> unit) : ContextMenuItem list =
+                (screenMoveFn: MonitorScreen -> string option -> unit)
+                (screenSnapFn: MonitorScreen -> string -> unit)
+                (screenSnapPercentFn: MonitorScreen -> string -> int -> unit) : ContextMenuItem list =
             let currentScreen = this.getCurrentScreenForWindow(contextHwnd)
             this.getAllScreensSorted()
             |> Array.map (fun screen ->
@@ -1881,7 +1993,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
                                 Some(CmiRegular({
                                     text = menuText
-                                    image = info.firstTabIcon
+                                    image = groupMenuIcon info
                                     click = fun() ->
                                         handleLaunchError (fun path ->
                                             Services.program.launchNewWindow decorator.group.hwnd hwnd path)
@@ -2069,21 +2181,36 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 use checkPen = new Pen(Color.White, 2.0f)
                 g.DrawLine(checkPen, 3, 8, 6, 12)
                 g.DrawLine(checkPen, 6, 12, 13, 4)
-            let createFillIcon (color: Color) (isChecked: bool) =
-                let size = 16
+            // Menu swatch icons are DRAWN at the menu's scale instead of being
+            // drawn at 16 px and enlarged afterwards, so the borders and the
+            // check mark stay crisp next to system-scaled menu text. The
+            // coordinates below stay 96-dpi design units; the transform does
+            // the conversion, pen widths included.
+            //
+            // menuScale, NOT the strip's scale: the menu is not necessarily on
+            // the strip's monitor. Right-clicking near the right edge of a
+            // strip on a 150% monitor opens the menu on the 100% monitor next
+            // to it, and painting a 24 px swatch that Win32Menu then reduces to
+            // 16 px is both wasted work and a softer picture than painting 16
+            // px directly.
+            let swatch (paint: Graphics -> unit) =
+                let size = Dpi.px menuScale 16
                 let img = Img(Sz(size, size))
                 let g = img.graphics
+                if menuScale <> 1.0 then
+                    g.ScaleTransform(float32 menuScale, float32 menuScale)
+                paint g
+                img
+            let createFillIcon (color: Color) (isChecked: bool) = swatch <| fun g ->
+                let size = 16
                 g.Clear(Color.White)
                 use brush = new SolidBrush(Color.FromArgb(255, int color.R, int color.G, int color.B))
                 g.FillRectangle(brush, 1, 1, size - 2, size - 2)
                 use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
                 if isChecked then drawCheckmark g
-                img
-            let createUnderlineIcon (color: Color) (isChecked: bool) =
+            let createUnderlineIcon (color: Color) (isChecked: bool) = swatch <| fun g ->
                 let size = 16
-                let img = Img(Sz(size, size))
-                let g = img.graphics
                 g.Clear(Color.Transparent)
                 use pen = new Pen(Color.FromArgb(160, 160, 160), 1.0f)
                 g.DrawRectangle(pen, 0, 0, size - 1, size - 1)
@@ -2097,16 +2224,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     use checkPen = new Pen(Color.White, 2.0f)
                     g.DrawLine(checkPen, 3, 7, 6, 11)
                     g.DrawLine(checkPen, 6, 11, 13, 3)
-                img
-            let createBorderIcon (color: Color) (isChecked: bool) =
+            let createBorderIcon (color: Color) (isChecked: bool) = swatch <| fun g ->
                 let size = 16
-                let img = Img(Sz(size, size))
-                let g = img.graphics
                 g.Clear(Color.Transparent)
                 use borderPen = new Pen(Color.FromArgb(255, int color.R, int color.G, int color.B), 2.0f)
                 g.DrawRectangle(borderPen, 1, 1, size - 3, size - 3)
                 if isChecked then drawCheckmark g
-                img
             // Targets for the "this tab" submenu and its clear item.
             // Single-select: just the right-clicked hwnd.
             // Multi-select: active + selected (unioned with right-clicked).
@@ -2668,7 +2791,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                                 Some(CmiRegular({
                                     text = menuText
-                                    image = info.firstTabIcon
+                                    image = groupMenuIcon info
                                     click = fun() ->
                                         // Move all tabs to the target group
                                         this.moveTabGroupToGroup(decorator.group)
@@ -2822,7 +2945,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                                         Some(CmiRegular({
                                             text = menuText
-                                            image = info.firstTabIcon
+                                            image = groupMenuIcon info
                                             click = fun() ->
                                                 // Move the right-clicked tab plus any
                                                 // selected tabs (and the active tab) to
@@ -3159,8 +3282,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             os.windowFromHwnd(hwnd).close()
 
         member x.windowMsg(msg) =
-            ()
-            
+            // The strip window is per-monitor DPI aware, so Windows notifies it
+            // whenever the scale of its monitor changes - the display setting
+            // was changed while the app runs, or the strip crossed to a monitor
+            // with a different scale. Recompute the placement: the bounds AND
+            // the metrics derived from the same scale.
+            //
+            // Usually the tracked window moves too and group.bounds.changed has
+            // already done this. This covers the case where the window
+            // rectangle stays byte-for-byte identical - a maximized window
+            // whose monitor's scale was changed - which no bounds event would
+            // ever report.
+            if msg.msg = WindowMessages.WM_DPICHANGED then
+                this.invokeAsync <| fun() ->
+                    this.updateTsPlacement()
+
+
     interface IDragDropTarget with
         member this.dragBegin() =
             this.invokeAsync <| fun() ->

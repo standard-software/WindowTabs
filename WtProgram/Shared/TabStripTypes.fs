@@ -27,6 +27,12 @@ and TabDragInfo = {
 and TabStripPlacment = {
     showInside: bool
     bounds: Rect
+    // DPI scale of the monitor this placement was computed for (1.0 = 100%).
+    // It travels WITH the placement so the strip's own drawing constants use
+    // the exact factor that produced `bounds`; deriving it a second time from
+    // a different rectangle could disagree at a monitor boundary and leave the
+    // box and its contents at different scales.
+    scale: float
     }
 
 and TabPart =

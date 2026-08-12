@@ -163,18 +163,63 @@ type Mon(hMonitor:IntPtr) as this=
     static member fromPoint(pt:Pt) =
         let hMonitor = WinUserApi.MonitorFromPoint(pt.POINT, MonitorFlags.MONITOR_DEFAULTTONULL)
         Mon.fromHMonitor hMonitor
+    // Nearest monitor - never None for a real desktop. Preferred over
+    // Screen.FromPoint in DPI-aware code paths: this is a live MonitorFromPoint
+    // query, while Screen.AllScreens is a process-wide WinForms cache that can
+    // be stale or (because the settings dialog is deliberately DPI-unaware)
+    // filled with virtualized rectangles instead of device pixels.
+    static member nearestFromPoint(pt:Pt) =
+        let hMonitor = WinUserApi.MonitorFromPoint(pt.POINT, MonitorFlags.MONITOR_DEFAULTTONEAREST)
+        Mon.fromHMonitor hMonitor
     static member all = List2(Seq.ofArray(Win32Helper.GetMonitorHandles())).map(fun h -> Mon(h))
     override this.Equals(yobj) =
         match yobj with
         | :? Mon as yobj -> this.hMonitor = yobj.hMonitor
         | _ -> false
     override this.GetHashCode() = hash this.hMonitor
-    override this.Finalize() = WinGdiApi.DeleteObject(hMonitor).ignore
+    // NOTE: no finalizer.
+    //
+    // This type used to end with
+    //     override this.Finalize() = WinGdiApi.DeleteObject(hMonitor).ignore
+    // which is wrong twice over. An HMONITOR is not a GDI object, so it must
+    // never be passed to DeleteObject; and it is not owned by the caller in
+    // the first place - MonitorFromPoint / EnumDisplayMonitors hand out a
+    // handle that stays valid until the display configuration changes, with
+    // nothing to release. DeleteObject normally just returns FALSE, but it is
+    // an unvalidated handle crossing into the GDI handle table, and every Mon
+    // instance also had to go on the finalizer queue for it.
+    //
+    // That mattered more after this change than before it: monitor geometry is
+    // now queried live instead of read from the WinForms Screen cache, so Mon
+    // instances are created on every placement update and every menu build.
+    //
+    // This is a pre-existing bug, unrelated to DPI. It is deliberately a
+    // stand-alone two-line hunk so it can be committed separately - see
+    // DPI_DESIGN.md, "separate commit recommended".
 
 
 [<NoEquality>]
 [<NoComparison>]
-type Img(bitmap:Bitmap) = 
+type Img(bitmap:Bitmap) =
+    // Pin every drawing surface to 96 dpi.
+    //
+    // `new Bitmap(w, h)` inherits the DPI awareness of the process that
+    // creates it: in a Per-Monitor-V2 process it comes out at the system DPI
+    // (144 on a 150% primary monitor), and GDI+ then converts POINT-sized
+    // fonts with size * 144 / 72 - silently drawing a 9 pt menu font 1.5x too
+    // large, on every monitor, including the 100% ones. Code that also
+    // multiplied by the monitor scale would land at 2.25x; that is exactly how
+    // the first-generation CX candidate ended up with clipped tab titles and a
+    // pin glyph sitting on top of the text.
+    //
+    // Fixing the surface at 96 dpi removes the hidden factor at the source, so
+    // a point size means the same thing it always did and the only scaling is
+    // the explicit one in the Dpi module. (The strip's own fonts are requested
+    // in GraphicsUnit.Pixel as well - the two guards are independent, and
+    // tooltips/rename boxes render through screen DCs where only the pixel
+    // font applies.) It also keeps DrawImage(bitmap, point) 1:1, since that
+    // overload scales by the source/destination resolution ratio.
+    do try bitmap.SetResolution(96.0f, 96.0f) with _ -> ()
     new(size:Sz) = Img(new Bitmap(size.width, size.height, PixelFormat.Format32bppArgb))
     member this.bitmap = bitmap
     member this.clone() = Img(bitmap.Clone() :?> Bitmap)

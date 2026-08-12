@@ -28,7 +28,11 @@ module Win32Menu =
     /// Whether dark mode is enabled for the current menu
     let mutable isDarkMode = false
 
-    let show (hwnd:IntPtr) (pt:Pt) (items:List2<_>) (enableDarkMode:bool) =
+    /// Show a popup menu at `pt`. `scale` is the DPI scale of the monitor the
+    /// menu is anchored on; the caller decides it once and uses the same value
+    /// for whatever it draws into the menu, so no picture is produced at one
+    /// scale and displayed at another.
+    let show (hwnd:IntPtr) (pt:Pt) (scale:float) (items:List2<_>) (enableDarkMode:bool) =
         // Set dark mode or light mode for this menu
         DarkMode.setDarkModeForMenus(enableDarkMode)
         isDarkMode <- enableDarkMode
@@ -50,11 +54,19 @@ module Win32Menu =
         // Track submenu handle to its parent menu handle (cascade hierarchy)
         let subMenuParent = ref (Map.empty<IntPtr, IntPtr>)
 
+        // Menu item bitmaps are device pixels. The menu itself is drawn by the
+        // system at the DPI of the monitor it pops up on, so the icons follow
+        // that scale instead of staying 16 px next to 1.5x-sized menu text.
+        // Above 100% the images handed in are 32 px (see
+        // TabStripDecorator.updateGroupInfo), so this is a downscale rather
+        // than a blurry upscale; at 100% it is 16 -> 16, i.e. unchanged.
+        let menuIconSize = Dpi.px scale 16
+
         let rec createMenu (items:List2<_>) : int =
             let hMenu = WinUserApi.CreatePopupMenu()
             let addImage id (image:Option<Img>) =
                 image.iter <| fun image ->
-                    let hBitmap = image.resize(Sz(16,16)).hbitmap
+                    let hBitmap = image.resize(Sz(menuIconSize, menuIconSize)).hbitmap
                     WinUserApi.SetMenuItemBitmaps(hMenu, id, 1, hBitmap, hBitmap).ignore
             menus := menus.Value.add hMenu
             menuPosCounter := (!menuPosCounter).Add(hMenu, 0)

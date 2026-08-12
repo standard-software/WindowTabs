@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="WindowTabs.app" type="win32" />
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!-- Unchanged from the implicit default: WindowTabs runs as the
+             logged-on user. Never request elevation - an elevated process
+             cannot manage the windows of non-elevated apps, which is the
+             whole point of this tool. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- Per-Monitor-V2 DPI awareness.
+
+           The tab strips are per-pixel-alpha layered windows. While the
+           process was DPI-unaware the OS bitmap-stretched every strip on a
+           non-100% monitor (bilinear, hence the blurred text and borders).
+           Declaring Per-Monitor-V2 makes each window render on its own
+           monitor's real pixel grid, so the strip bitmap is presented 1:1.
+
+           dpiAwareness is honoured by Windows 10 1607+; the dpiAware entry
+           below is the pre-1607 fallback ("true/pm" = per-monitor V1 where
+           supported, system aware otherwise). -->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+    </windowsSettings>
+  </application>
+
+  <!-- Deliberately NO <compatibility>/<supportedOS> section.
+
+       DPI awareness does not depend on it: a manifest that declares only
+       windowsSettings still gets Per-Monitor-V2 (verified on this machine in
+       the previous generation). What <supportedOS> would change is
+       Environment.OSVersion, which the OS compatibility shim currently
+       reports as 6.2 and would then report as the true 10.0. That is a
+       process-wide behaviour change - .NET Framework and WinForms branch on
+       it internally - for no DPI benefit, so it is left out of this change.
+       If it is ever wanted, it belongs in its own commit.
+
+       Note for future readers: OS.isWin7OrHigher (Shared/Win32.fs) used to
+       compare Major and Minor independently and would have turned FALSE the
+       moment a <supportedOS> entry made OSVersion report 10.0, silently
+       disabling the taskbar integration, DWM iconic thumbnails and
+       MOD_NOREPEAT hotkeys. That comparison was fixed separately, so the
+       omission above is a conservative choice, not a workaround. -->
+</assembly>

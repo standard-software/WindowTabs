@@ -483,10 +483,16 @@ and
         // this the per-frame allocation leaked LOH pixel buffers, which used
         // to be masked by a forced GC.Collect on every render.
         use imageWithBg = new Bitmap(image.width, image.height)
+        // 96 dpi like every Img (see Drawing.fs) and DrawImageUnscaled rather
+        // than DrawImage: this composite must stay 1:1 whatever DPI awareness
+        // the process runs with. DrawImage(bitmap, point) scales by the
+        // source/destination resolution ratio, which would silently resize the
+        // strip if the two surfaces ever disagreed.
+        imageWithBg.SetResolution(96.0f, 96.0f)
         use gfx = Graphics.FromImage(imageWithBg)
         use b = new SolidBrush(Color.Transparent)
         gfx.FillRectangle(b, new Rectangle(Point.Empty, image.size.Size))
-        gfx.DrawImage(image.bitmap, Point.Empty)
+        gfx.DrawImageUnscaled(image.bitmap, Point.Empty)
         Win32Helper.UpdateLayeredWindow(hwnd, location.Point, imageWithBg, alpha)
         this.showNoActivate()
     

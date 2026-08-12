@@ -16,7 +16,18 @@
     <SccProvider>Mercurial Source Control Package</SccProvider>
     <SccAuxPath>&lt;Source Control Database&gt;</SccAuxPath>
     <SccLocalPath>&lt;Local Binding Root of Project&gt;</SccLocalPath>
-    <Win32Resource>.\app.res</Win32Resource>
+    <!-- DPI awareness is declared in app.manifest. The compiler can only embed
+         a manifest when it also generates the win32 resource block, and
+         <Win32Resource>.\app.res</Win32Resource> suppressed that generation -
+         which is why the shipped executable had no RT_MANIFEST at all and no
+         way to opt into DPI awareness. app.res (built in 2020) contains
+         nothing but the application icon, so the icon is now passed separately
+         via <ApplicationIcon>, and app.rc / app.res have been deleted rather
+         than left in the tree as unbuilt files nobody can regenerate (app.rc
+         was one line: 1 ICON "Bemo.ico"; Resources\Bemo.ico is the same
+         picture and is still in the repository). -->
+    <ApplicationIcon>Resources\Bemo.ico</ApplicationIcon>
+    <Win32Manifest>app.manifest</Win32Manifest>
     <TargetFSharpCoreVersion>2.3.0.0</TargetFSharpCoreVersion>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
     <!-- Suppress satellite resource assembly generation (language folders) -->
@@ -122,6 +133,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Drawing.fs" />
     <Compile Include="Shared/Sprite.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
+    <Compile Include="Shared/Dpi.fs" />
     <Compile Include="Shared/Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />
     <Compile Include="Shared/DragDrop.fs" />
@@ -173,6 +185,7 @@ if $(ConfigurationName) == Release (
     <EmbeddedResource Include="Resources\group-closed.png" />
     <EmbeddedResource Include="Resources\restore.png" />
     <EmbeddedResource Include="Resources\window.png" />
+    <None Include="app.manifest" />
     <None Include="App.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
