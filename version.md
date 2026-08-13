@@ -1,5 +1,7 @@
 # WindowTabs Standard-Software Version
 
+## version ss_2026.08.12_next2
+
 ## version ss_2026.08.12_next1
 - Tab strips are now per-monitor DPI aware: on displays scaled above 100% they are drawn at native resolution instead of being bitmap-stretched by Windows, at the same apparent size as before
 - Tab geometry, fonts, icons, hit-testing and context menus all follow the scale of the monitor the strip sits on, so displays at different scales are correct at the same time
