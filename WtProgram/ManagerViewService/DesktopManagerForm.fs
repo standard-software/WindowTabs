@@ -27,10 +27,9 @@ type DesktopManagerForm() =
             Bemo.Win32.HotKeyControl.UseManaged <- darkOn
             Bemo.DropdownButton.UseDarkMode <- darkOn
             Bemo.DarkMode.darkModeEnabled <- darkOn
-            // Localized "no hotkey set" label (e.g. Japanese: "なし"). Read
-            // here so newly-constructed HotKeyControls use the current
-            // language. Localization.getString falls back to the English
-            // default "None" when the key is missing.
+            // Localized "no hotkey set" label. Read here so newly-constructed
+            // HotKeyControls use the current language. Localization.getString
+            // falls back to the English default "None" when the key is missing.
             Bemo.Win32.HotKeyControl.NoneLabel <- Localization.getString("HotKeyNone")
         with _ -> ()
 

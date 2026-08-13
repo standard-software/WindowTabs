@@ -20,9 +20,9 @@ namespace Bemo.Win32
         public static bool UseManaged = false;
 
         // Localized "no hotkey set" label. Defaults to "None" but the F# side
-        // overwrites this with the localized string (e.g. "なし" in Japanese)
-        // before the dialog is constructed so newly-created HotKeyControls
-        // pick up the user's chosen language.
+        // overwrites this with the string for the current language before the
+        // dialog is constructed, so newly-created HotKeyControls pick up the
+        // user's chosen language.
         public static string NoneLabel = "None";
 
         // Storage for the managed code path (the comctl32 path keeps the value

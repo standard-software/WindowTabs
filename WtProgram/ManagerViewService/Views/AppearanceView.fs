@@ -153,8 +153,8 @@ type AppearanceView() as this =
         p.ColumnCount <- 3
         List2([0..upperRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
-        // Match BehaviorView's UIHelper.form column width (250 px) so long
-        // labels like "設定ダイアログをダークモードにする" stay on a single line.
+        // Match BehaviorView's UIHelper.form column width (250 px) so the
+        // longest translated labels still stay on a single line.
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
         p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
