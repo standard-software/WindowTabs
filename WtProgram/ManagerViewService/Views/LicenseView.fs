@@ -37,6 +37,7 @@ type LicenseView() as this =
         btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Right
         btn.Click.Add <| fun _ ->
             let form = Form()
+            Dpi.applyLegacyDialogFont(form)
             form.Text <- "Offline Activation"
             let label =
                 let l = Label()

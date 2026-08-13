@@ -232,5 +232,39 @@ namespace Bemo
             try { DestroyIcon(hIcon); }
             catch (Exception) { }
         }
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr GetStockObject(int index);
+
+        private const int DEFAULT_GUI_FONT = 17;
+
+        /// <summary>
+        /// The UI font a DPI-unaware process would get.
+        ///
+        /// Once the process manifest declares DPI awareness, Windows hands it
+        /// 120-dpi (or whatever the scale is) metrics, and .NET follows: on a
+        /// 125% desktop Control.DefaultFont, SystemFonts.DefaultFont and the
+        /// DEFAULT_GUI_FONT stock object all grow from 9pt to 11.25pt. The
+        /// settings dialog is deliberately left DPI-unaware and laid out in
+        /// hard-coded 96-dpi pixels (250-px label column, 35-px rows), so the
+        /// enlarged font overflowed captions that used to fit - they wrapped
+        /// to a second line and the fixed row height then clipped them.
+        ///
+        /// Asking for the stock font from a DPI-unaware thread context gives
+        /// the 96-dpi LOGFONT back, i.e. exactly the font the dialog was
+        /// designed against.
+        ///
+        /// The context switch is NOT done here: Font.FromHfont converts the
+        /// LOGFONT's pixel height to points using the DPI in force when it
+        /// runs, so the handle and the conversion have to happen inside the
+        /// same unaware block. Callers wrap both in Dpi.withUnawareContext.
+        /// Returns IntPtr.Zero if the stock object is unavailable; the caller
+        /// then keeps the default font.
+        /// </summary>
+        public static IntPtr GetDefaultGuiFontHandle()
+        {
+            try { return GetStockObject(DEFAULT_GUI_FONT); }
+            catch (Exception) { return IntPtr.Zero; }
+        }
     }
 }
