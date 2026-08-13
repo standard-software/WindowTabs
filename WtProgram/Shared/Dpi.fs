@@ -214,6 +214,42 @@ module Dpi =
             DpiApi.RestoreThreadContext(previous)
             ScreenCache.refresh()
 
+    // The UI font the settings dialog was designed against.
+    //
+    // Declaring DPI awareness in the manifest made Windows hand the process
+    // scaled metrics, and .NET passes that on: on a 125% desktop every default
+    // font source - Control.DefaultFont, SystemFonts.DefaultFont, the
+    // DEFAULT_GUI_FONT stock object - reports 11.25pt where an unaware process
+    // sees 9pt. The dialog is deliberately kept DPI-unaware and its layout is
+    // hard-coded in 96-dpi pixels (a 250-px label column, 35-px rows), so the
+    // 25% larger text overflowed captions that used to fit: they wrapped onto
+    // a second line, which the fixed row height then cut off.
+    //
+    // Reading the stock font from a DPI-unaware thread context returns the
+    // 96-dpi LOGFONT, so the dialog gets its original font back. Computed once
+    // - the value cannot change without a restart, since it follows the
+    // process manifest rather than the current monitor.
+    let private legacyDialogFontCell =
+        lazy (
+            try
+                withUnawareContext <| fun() ->
+                    let handle = DpiApi.GetDefaultGuiFontHandle()
+                    if handle = IntPtr.Zero then None
+                    else
+                        // FromHfont does not take ownership of the stock object,
+                        // and the Font it returns must not outlive this scope,
+                        // so clone it into one this process owns.
+                        use borrowed = Font.FromHfont(handle)
+                        Some(new Font(borrowed, borrowed.Style))
+            with _ -> None)
+
+    /// Give `control` (normally a Form, whose children inherit it) the font a
+    /// DPI-unaware process would have used. No-op if it could not be read.
+    let applyLegacyDialogFont (control: Control) =
+        match legacyDialogFontCell.Force() with
+        | Some(font) -> try control.Font <- font with _ -> ()
+        | None -> ()
+
 // Application icons at an arbitrary physical size.
 //
 // A window publishes its icon in whatever sizes the app chose to ship, and

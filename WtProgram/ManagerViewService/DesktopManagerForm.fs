@@ -60,6 +60,10 @@ type DesktopManagerForm() =
 
     let form =
         let form = Form()
+        // Restore the 96-dpi UI font: the DPI manifest makes .NET report a
+        // 25%-larger default, which overflows this dialog's fixed 250-px label
+        // column. See Dpi.applyLegacyDialogFont.
+        Dpi.applyLegacyDialogFont(form)
         tabs.iter <| fun view ->
             let page = TabPage(view.title)
             let control = view.control

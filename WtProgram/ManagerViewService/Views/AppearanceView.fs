@@ -1177,6 +1177,9 @@ type AppearanceView() as this =
     // OK button is disabled until text is changed from current value
     let showEditThemeDialog (currentName: string) =
         use form = new Form()
+        // Child dialogs are separate Forms and do not inherit the parent's
+        // font, so each needs the 96-dpi font applied too.
+        Dpi.applyLegacyDialogFont(form)
         form.Text <- Localization.getString("EditThemeTitle")
         form.Size <- Size(440, 240)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1249,6 +1252,9 @@ type AppearanceView() as this =
     // Returns: Some(name, isOverwrite) if OK pressed, None if cancelled
     let showSaveAsDialog (title: string) =
         use form = new Form()
+        // Child dialogs are separate Forms and do not inherit the parent's
+        // font, so each needs the 96-dpi font applied too.
+        Dpi.applyLegacyDialogFont(form)
         form.Text <- title
         form.Size <- Size(440, 210)
         form.StartPosition <- FormStartPosition.CenterParent

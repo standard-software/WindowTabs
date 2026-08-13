@@ -489,6 +489,10 @@ module UIHelper =
         
     
 
+    // Content height that reproduces the historical fixed 35-px form row once
+    // the label's 8-px top and 5-px bottom margins are added.
+    let private rowContentHeightPx = 22
+
     let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) =
         let panel =
             let t = TableLayoutPanel()
@@ -499,8 +503,13 @@ module UIHelper =
             t.ColumnCount <- 2
             t.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, labelWidthPx)).ignore
             t.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
+            // AutoSize rather than a fixed 35 px: a caption that does not fit
+            // the label column wraps onto a second line, and a fixed row height
+            // cut the wrapped text off. Every label carries a minimum height
+            // that reproduces the old 35-px row, so single-line rows are
+            // unchanged and only the wrapping ones grow.
             List2([0..fields.length-1]).iter <| fun row ->
-                t.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
+                t.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
             t
 
         fields.enumerate.iter <| fun (i,(text, control:Control)) ->
@@ -508,6 +517,8 @@ module UIHelper =
             let label = label caption
             control.Dock <- DockStyle.Fill
             label.Margin <- Padding(0,8,0,5)
+            // 35 px row = 8 px top margin + 22 px content + 5 px bottom margin.
+            label.MinimumSize <- Size(0, rowContentHeightPx)
             panel.Controls.Add(label)
             panel.Controls.Add(control)
             panel.SetRow(label, i)
@@ -561,6 +572,9 @@ module UIHelper =
 
     let okCancelForm control =
         let form = Form()
+        // Child dialogs are separate Forms and do not inherit the parent's
+        // font, so each needs the 96-dpi font applied too.
+        Dpi.applyLegacyDialogFont(form)
         form.Padding <- Padding(12)
         
         let okButton = Button()
