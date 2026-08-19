@@ -1,6 +1,7 @@
 # WindowTabs Standard-Software Version
 
 ## version ss_2026.08.12_next3
+- Fixed a latent crash risk: fonts evicted from the render cache are no longer disposed while a control may still be using them
 
 ## version ss_2026.08.12_next2
 - The settings dialog is now per-monitor DPI aware: text is drawn sharp at the scale of the monitor it is on, and moving it to another monitor re-lays it out for that monitor's scale
