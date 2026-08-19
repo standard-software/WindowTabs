@@ -9,12 +9,23 @@ open Aga.Controls.Tree
 
 module ImgHelper =
     let imgFromIcon (icon:Icon) =
+        // The tree's row height follows the monitor scale, so the icon box
+        // does too. ScaledIcon re-extracts the requested size from the icon's
+        // own resource (icons usually carry 16/24/32/48), which is sharper
+        // than stretching the 16-px image - the same trick the tab strips use.
+        let size = SettingsDpi.px 16
         let img =
             try
-                icon.ToBitmap().img
+                // At 100% the icon goes through exactly the path it always
+                // did, so nothing on an unscaled monitor changes.
+                let source = if size = 16 then icon else ScaledIcon.at icon size
+                source.ToBitmap().img
             with _ ->
-                SystemIcons.Application.ToBitmap().img
-        img.resize(Sz(16,16)).bitmap :> Image
+                try
+                    icon.ToBitmap().img
+                with _ ->
+                    SystemIcons.Application.ToBitmap().img
+        img.resize(Sz(size,size)).bitmap :> Image
 
 
 type ExeNode(procPath) =
@@ -138,7 +149,9 @@ type NodeDeleteButton() =
         let path = this.Parent.GetPath(node)
         if path <> null && path.LastNode <> null then
             match path.LastNode with
-            | :? ExeNode as exeNode when not exeNode.isRunning -> Size(16, 16)
+            | :? ExeNode as exeNode when not exeNode.isRunning ->
+                let side = SettingsDpi.px 16
+                Size(side, side)
             | _ -> Size.Empty
         else
             Size.Empty
@@ -149,10 +162,11 @@ type NodeDeleteButton() =
             | :? ExeNode as exeNode when not exeNode.isRunning ->
                 let bounds = this.GetBounds(node, context)
                 let g = context.Graphics
-                use pen = new Pen(Color.Gray, 1.5f)
-                let x = bounds.X + 3
-                let y = bounds.Y + 3
-                let size = 9
+                // The cross is drawn by hand, so it has to be scaled by hand.
+                use pen = new Pen(Color.Gray, SettingsDpi.pxf 1.5f)
+                let x = bounds.X + SettingsDpi.px 3
+                let y = bounds.Y + SettingsDpi.px 3
+                let size = SettingsDpi.px 9
                 g.DrawLine(pen, x, y, x + size, y + size)
                 g.DrawLine(pen, x + size, y, x, y + size)
             | _ -> ()

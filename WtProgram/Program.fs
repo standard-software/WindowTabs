@@ -1409,12 +1409,21 @@ let main argv =
 
     // WinForms takes ONE process-wide DPI snapshot, the first time any Control
     // is constructed, and uses it for its legacy scaling decisions. Take that
-    // snapshot here, under a DPI-unaware context, so it reads the 96 dpi it
-    // always read before this change: the settings dialog is deliberately kept
-    // DPI-unaware (ManagerViewService) and must not have WinForms scale its
-    // contents a second time on top of the OS bitmap stretch. Everything
-    // WindowTabs draws itself is scaled explicitly (see the Dpi module), so
-    // nothing depends on this value.
+    // snapshot here, under a DPI-unaware context, so it reads 96 dpi.
+    //
+    // This line predates the settings dialog becoming DPI-aware and its reason
+    // has changed, but its value has not, and it is kept deliberately.
+    // WinForms' snapshot is a SYSTEM dpi (120 on this desktop, from the 125%
+    // primary monitor) and is the same number on every monitor. Letting it be
+    // anything but 96 would have WinForms silently pre-scale ToolStrip image
+    // sizes, owner-drawn item heights and the like by the wrong, non-per-
+    // monitor factor - on top of the explicit per-monitor scaling in
+    // SettingsDpi. Pinned at 96, WinForms' own scaling is a no-op everywhere
+    // and every device pixel in this process is decided by the Dpi /
+    // SettingsDpi modules, from the DPI of the monitor the window is on.
+    //
+    // Everything WindowTabs draws itself was already scaled explicitly, so the
+    // tab strips are unaffected either way.
     //
     // Placed AFTER EnableVisualStyles because that call has to happen before
     // the process creates any window handle, and this one does. Placed BEFORE

@@ -37,7 +37,6 @@ type LicenseView() as this =
         btn.Anchor <- AnchorStyles.Top ||| AnchorStyles.Right
         btn.Click.Add <| fun _ ->
             let form = Form()
-            Dpi.applyLegacyDialogFont(form)
             form.Text <- "Offline Activation"
             let label =
                 let l = Label()
@@ -71,6 +70,12 @@ type LicenseView() as this =
             form.Controls.Add(layout)
             form.StartPosition <- FormStartPosition.CenterParent
             form.Size <- Size(500, 500)
+            // Scale once everything above exists, like the other child
+            // dialogs. (This view is not currently in DesktopManagerForm's
+            // tab list, so the dialog is unreachable; it is kept consistent
+            // rather than left as the only place still reading a default
+            // font.)
+            SettingsDpi.applyToChildDialog form
             let result = form.ShowDialog(panel.Value.Value)
             if result = DialogResult.OK then
                 let bytes = System.Convert.FromBase64String(keyBox.Text);
