@@ -89,7 +89,7 @@ type ClosedTabInfo = {
 let normalizeClosedTabTitle (t: string) = t.Replace("● ", "")
 
 type Program() as this =
-    let version = "ss_2026.08.20"
+    let version = "ss_2026.08.12_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
