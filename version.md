@@ -1,12 +1,10 @@
 # WindowTabs Standard-Software Version
 
-## version ss_2026.08.12_next2
-- The settings dialog is now per-monitor DPI aware: text is drawn sharp at the scale of the monitor it is on, and moving it to another monitor re-lays it out for that monitor's scale
-- Fixed the dialog being clamped to the work area on a 175% display (it may now overlap the taskbar instead of showing scrollbars), check-box rows reserving far too much height, dark-mode check/radio glyphs leaving a bright sliver, and toolbar captions staying tiny on scaled displays
-
-## version ss_2026.08.12_next1
+## version ss_2026.08.20
 - Tab strips are now per-monitor DPI aware: on displays scaled above 100% they are drawn at native resolution instead of being bitmap-stretched by Windows, at the same apparent size as before
 - Tab geometry, fonts, icons, hit-testing and context menus all follow the scale of the monitor the strip sits on, so displays at different scales are correct at the same time
+- The settings dialog is now per-monitor DPI aware: text is drawn sharp at the scale of the monitor it is on, and moving it to another monitor re-lays it out for that monitor's scale
+- Fixed the dialog being clamped to the work area on a 175% display (it may now overlap the taskbar instead of showing scrollbars), check-box rows reserving far too much height, dark-mode check/radio glyphs leaving a bright sliver, and toolbar captions staying tiny on scaled displays
 
 ## version ss_2026.08.12
 - Added 4 language files: Turkish, Polish, Vietnamese, Indonesian
