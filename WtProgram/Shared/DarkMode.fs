@@ -466,13 +466,10 @@ module DarkMode =
                 dgv.RowHeadersDefaultCellStyle.BackColor <- darkSurface
                 dgv.RowHeadersDefaultCellStyle.ForeColor <- darkText
                 dgv.EnableHeadersVisualStyles <- false
-            | :? Panel ->
-                control.BackColor <- darkSurface
-                control.ForeColor <- darkText
-            | :? TableLayoutPanel ->
-                control.BackColor <- darkSurface
-                control.ForeColor <- darkText
             | _ ->
+                // Also covers Panel and TableLayoutPanel, which used to have
+                // their own (identical, and for TableLayoutPanel unreachable -
+                // it derives from Panel) branches here.
                 control.BackColor <- darkSurface
                 control.ForeColor <- darkText
         with _ -> ()
