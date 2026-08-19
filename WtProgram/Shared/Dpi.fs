@@ -135,6 +135,18 @@ module Dpi =
         new Threading.ThreadLocal<Collections.Generic.Dictionary<string * float32 * FontStyle, Font>>(
             fun () -> Collections.Generic.Dictionary<string * float32 * FontStyle, Font>())
 
+    // Fonts evicted from the cache when it overflows. They are NOT disposed:
+    // fonts handed out by makeFont are assigned to live controls (Form.Font,
+    // ToolStrip.Font, the TreeViewAdv fonts), and WinForms keeps using such a
+    // Font long after the assignment - disposing an evicted one tore the HFONT
+    // out from under whatever control still held it and left GDI+ to throw or
+    // draw nothing on the next repaint. Retiring them here keeps them alive
+    // for the rest of the process; an overflow is a once-per-pathological-
+    // configuration event, so this holds a few dozen small objects at worst.
+    let private retiredFonts =
+        new Threading.ThreadLocal<Collections.Generic.List<Font>>(
+            fun () -> Collections.Generic.List<Font>())
+
     let private makeFont (family: string, pixelSize: float32, style: FontStyle) =
         // GraphicsUnit.Pixel, not Point. GDI+ converts a point size with
         // size * dpi / 72 using the DPI of the DESTINATION surface, and
@@ -152,8 +164,10 @@ module Dpi =
         | true, font -> font
         | _ ->
             if cache.Count >= fontCacheLimit then
+                // See retiredFonts: never Dispose - a cached Font may still be
+                // in use as some control's Font.
                 for kv in cache do
-                    try kv.Value.Dispose() with _ -> ()
+                    retiredFonts.Value.Add(kv.Value)
                 cache.Clear()
             let font = new Font(family, pixelSize, style, GraphicsUnit.Pixel)
             cache.[key] <- font
