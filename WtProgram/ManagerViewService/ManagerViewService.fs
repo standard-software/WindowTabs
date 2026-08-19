@@ -20,37 +20,31 @@ type ManagerViewService() =
             true
         | None -> false
 
-    // The settings dialog is legacy WinForms: no AutoScaleMode is set anywhere,
-    // control sizes are hard-coded 96-dpi pixels, and the tree / tab / hotkey
-    // controls were all laid out for a DPI-unaware process. Now that the
-    // process is Per-Monitor-V2 aware, building it on an aware thread would
-    // draw its text at the monitor DPI inside 96-dpi sized controls - clipped
-    // labels and overlapping columns.
+    // The settings dialog used to be built inside Dpi.withUnawareContext,
+    // which made Windows lay it out in 96-dpi units and bitmap-stretch the
+    // whole window on a scaled monitor. Sizes stayed consistent that way, at
+    // the price of the blur this version removes.
     //
-    // Building it under a DPI-unaware thread context keeps that window unaware
-    // for its whole lifetime, so Windows scales it exactly as it did before
-    // this change: identical appearance, and identical (virtualized)
-    // coordinates for the workspace save/restore that lives inside it, so
-    // workspaces saved by earlier versions still restore correctly. Child
-    // dialogs opened from the form inherit the context, because Windows
-    // restores a window's own awareness while dispatching its messages.
+    // It is now built on the process's ordinary Per-Monitor-V2 thread and
+    // scaled explicitly by SettingsDpi (Shared/Dpi.fs), so it renders on the
+    // monitor's own pixel grid. The two failures the old comment warned about
+    // - clipped labels, overlapping columns - come from scaling the FONT
+    // without scaling the layout; SettingsDpi scales both by the same factor,
+    // plus the metrics WinForms' own scaling walk cannot reach (the TreeViewAdv
+    // font and geometry, ToolStrip image sizes, owner-drawn item heights).
     //
-    // This is a deliberate, scoped decision: the settings dialog stays as
-    // blurry (or as sharp) on a scaled monitor as it has always been. Making
-    // it DPI-native is a separate piece of work on a legacy layout, and doing
-    // it here would risk the regression above for no gain on the tab strips,
-    // which are what this change is about.
-    let showUnaware f = Dpi.withUnawareContext f
-
+    // The one thing that must NOT move to the aware coordinate space is the
+    // workspace save / restore, whose rectangles are persisted to settings.json
+    // and have to stay comparable with what earlier versions wrote. That is now
+    // a two-call unaware island inside WorkspaceModel rather than a
+    // dialog-wide one - see WorkspaceModel.createWorkspace / restoreWorkspace.
     interface IManagerView with
         member x.show() =
             if not (activateExistingIfAny()) then
-                showUnaware <| fun() ->
-                    let form = new DesktopManagerForm()
-                    form.show()
+                let form = new DesktopManagerForm()
+                form.show()
 
         member x.show(view) =
             if not (activateExistingIfAny()) then
-                showUnaware <| fun() ->
-                    let form = new DesktopManagerForm()
-                    form.showView(view)
+                let form = new DesktopManagerForm()
+                form.showView(view)

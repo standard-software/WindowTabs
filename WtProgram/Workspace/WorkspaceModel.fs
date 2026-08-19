@@ -33,7 +33,9 @@ type WorkspaceWindowTitleMatchType =
 
 type WorkspaceWindow() as this = 
     inherit Dynamic()
-    let _icon = Services.openImage("window.png")
+    // 16-px PNG, drawn by NodeStateIcon at its natural size. The tree's rows
+    // grow with the monitor scale, so the icon has to as well.
+    let _icon = SettingsDpi.scaledImage(Services.openImage("window.png"))
     let removedEvent = Event<_>()
     let data = ModelObject()
 
@@ -173,7 +175,7 @@ and
     let removedEvent = Event<_>()
     [<DefaultValue>] val mutable name : string
     let mutable _groups  = System.Collections.Generic.List<Dynamic>()
-    let _icon = Services.openImage("workspace.png")
+    let _icon = SettingsDpi.scaledImage(Services.openImage("workspace.png"))
     
     member this.addGroup(group) =
         group.cast<IWorkspaceNode>().removed.Add <| fun()-> this.removeGroup(group)
@@ -287,9 +289,13 @@ type WorkspaceModel() as this =
             let innerZorder = Map2(windowsInZorder.enumerate.map(fun(innerZorder, hwnd) -> hwnd, innerZorder))
             let wsGroup = WorkspaceGroup(
                 name = sprintf "Group %d" (i + 1),
+                // Read in the DPI-unaware coordinate space - see the comment
+                // on restoreWorkspace below. GetWindowPlacement answers in the
+                // caller's space, and this rectangle goes straight into
+                // settings.json, so it has to keep meaning what it always did.
                 placement = (
                     let hwnd = windowsInZorder.head
-                    os.windowFromHwnd(hwnd).placement)
+                    Dpi.withUnawareContext <| fun() -> os.windowFromHwnd(hwnd).placement)
             )
             group.windows.enumerate.iter <| fun (j, hwnd) ->
                 let window = os.windowFromHwnd(hwnd)
@@ -308,6 +314,29 @@ type WorkspaceModel() as this =
         groups.iter(ws.addGroup)
         ws
 
+    // Workspace rectangles are the one part of the settings dialog that must
+    // NOT follow it into the DPI-aware coordinate space.
+    //
+    // A workspace stores the GetWindowPlacement rectangle of each group's top
+    // window in settings.json. Both GetWindowPlacement and SetWindowPlacement
+    // answer in the coordinate space of the CALLING THREAD, and every one of
+    // those calls used to run on the settings dialog's thread, which was
+    // DPI-unaware for its whole lifetime. So every workspace on every user's
+    // machine is stored in virtualized coordinates.
+    //
+    // Making the dialog aware would silently change what those numbers mean: a
+    // workspace saved by an older version would restore its windows to a
+    // different place and size, and a workspace saved by this version would not
+    // restore correctly on an older one. The file format is unversioned, so
+    // there is nothing to tell the two apart by either.
+    //
+    // Keeping just these two API calls on an unaware thread context keeps the
+    // stored numbers in exactly the space they have always been in, in both
+    // directions, with no migration and no schema version - the calls are made
+    // under the same thread context as before, so Windows performs the same
+    // conversion it performed before. Nothing else needs to move: the window
+    // matching, the group construction and the tab strips all work in real
+    // device pixels, which is what the rest of the process already does.
     member private this.restoreWorkspace(workspace:Workspace) =
         let windowResolver = WindowResolver()
       
@@ -325,7 +354,8 @@ type WorkspaceModel() as this =
             
             windows.iter removeWindow
             windows.iter <| fun hwnd -> WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_RESTORE).ignore
-            windows.iter <| fun hwnd -> os.windowFromHwnd(hwnd).setPlacement(groupInfo?placement)
+            Dpi.withUnawareContext <| fun() ->
+                windows.iter <| fun hwnd -> os.windowFromHwnd(hwnd).setPlacement(groupInfo?placement)
             os.setZorder(windows)
 
             let group = Services.desktop.createGroup(false)
@@ -372,6 +402,11 @@ type WorkspaceModel() as this =
             form.Height <- editInfo?height
             form.StartPosition <- FormStartPosition.CenterParent
             form.Text <- editInfo?title
+            // Scale the 96-dpi design size just assigned above, before the
+            // dark theme so the theming pass sees final control sizes.
+            // CenterParent puts this on the settings dialog's monitor, which
+            // is the scale applyToChildDialog uses.
+            SettingsDpi.applyToChildDialog form
             // Apply dark mode if the user enabled "Settings Dialog Dark Mode"
             // on the View tab. Same pattern as the Save / Edit theme dialogs.
             let darkOn =

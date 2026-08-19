@@ -431,13 +431,20 @@ type NotifyIconPlugin() as this =
                         form.Controls.Add(okBtn)
                         form.AcceptButton <- okBtn
                         form.CancelButton <- okBtn
+                        // Opened from the tray menu with the settings dialog
+                        // already closed, so the monitor is taken from the
+                        // pointer rather than from a parent window. The Load
+                        // handler below runs afterwards and reads the scale
+                        // this establishes.
+                        SettingsDpi.applyAtCursor form
                         form.Load.Add(fun _ ->
                             // Size the form around the label so multi-byte
                             // strings (Japanese / Chinese) fit comfortably.
-                            let cw = max (label.Right + 30) 360
-                            let ch = label.Bottom + 30 + okBtn.Height + 30
+                            let margin = SettingsDpi.px 30
+                            let cw = max (label.Right + margin) (SettingsDpi.px 360)
+                            let ch = label.Bottom + margin + okBtn.Height + margin
                             form.ClientSize <- System.Drawing.Size(cw, ch)
-                            okBtn.Location <- System.Drawing.Point((cw - okBtn.Width) / 2, label.Bottom + 30))
+                            okBtn.Location <- System.Drawing.Point((cw - okBtn.Width) / 2, label.Bottom + margin))
                         let darkOn =
                             try
                                 match Services.settings.root.getBool("EnableDarkMode") with

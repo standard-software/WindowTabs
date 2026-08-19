@@ -166,8 +166,9 @@ type Mon(hMonitor:IntPtr) as this=
     // Nearest monitor - never None for a real desktop. Preferred over
     // Screen.FromPoint in DPI-aware code paths: this is a live MonitorFromPoint
     // query, while Screen.AllScreens is a process-wide WinForms cache that can
-    // be stale or (because the settings dialog is deliberately DPI-unaware)
-    // filled with virtualized rectangles instead of device pixels.
+    // be stale or (because the workspace placement calls still run on a
+    // DPI-unaware thread context) filled with virtualized rectangles instead
+    // of device pixels.
     static member nearestFromPoint(pt:Pt) =
         let hMonitor = WinUserApi.MonitorFromPoint(pt.POINT, MonitorFlags.MONITOR_DEFAULTTONEAREST)
         Mon.fromHMonitor hMonitor

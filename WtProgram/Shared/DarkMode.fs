@@ -240,17 +240,64 @@ module DarkMode =
                 cb.ForeColor <- darkText
                 // FlatStyle.Flat lets FlatAppearance colors take effect, but
                 // the underlying glyph rendering can still leak system grey
-                // through. Attach a Paint handler that overpaints the 13x13
-                // box area with pure black + grey border + light check glyph
-                // AFTER the system paint, guaranteeing the desired look.
+                // through. Attach a Paint handler that overpaints the box area
+                // with pure black + grey border + light check glyph AFTER the
+                // system paint, guaranteeing the desired look. The box is 13 x
+                // 13 at 100% and grows with the monitor scale - WinForms' own
+                // glyph does not, so this overpaint is also what keeps the
+                // check box in proportion with the text beside it.
                 cb.FlatStyle <- FlatStyle.Flat
                 cb.FlatAppearance.CheckedBackColor <- darkSurface
                 cb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 cb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
                 cb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
+                // Make room for a glyph bigger than the 13 px WinForms lays
+                // out. A left Padding moves the caption AND WinForms' own
+                // glyph right by that many pixels and widens an AutoSize
+                // button by the same amount - both measured - so reserving
+                // (scaled - 13) px there is what buys the space. Assigned
+                // absolutely, not accumulated: this walk runs twice per
+                // dialog (before Show and again from
+                // applyDarkThemeBranch15ToForm), and SettingsDpi registers
+                // the control so a monitor change recomputes the reservation
+                // rather than letting Control.Scale multiply a number that is
+                // not proportional to the scale. Every check box and radio
+                // button in the settings views is built with Padding.Empty,
+                // so Padding.Left IS the reservation, which is also what lets
+                // the Paint handler derive the box size from it.
+                SettingsDpi.applyGlyphPadding cb
                 cb.Paint.Add(fun e ->
                     let g = e.Graphics
-                    let boxSize = 13
+                    let boxSize = 13 + cb.Padding.Left
+                    // WinForms drew its own glyph before this handler runs,
+                    // and while the LAYOUT reserves a constant 13 px for it,
+                    // the flat-style PAINT sizes it as (int)(11 * DpiX / 96)
+                    // px starting at x = Padding.Left (CheckBoxFlatAdapter.
+                    // Layout via GetDpiScaleRatio, which falls back to the
+                    // Graphics DPI in this process). On a scaled monitor that
+                    // glyph runs past the box drawn below and its right edge
+                    // survived as a bright sliver. Erasing x = 0 .. Padding.
+                    // Left + native covers it whole.
+                    //
+                    // The caption is not at risk, and not by luck. The very
+                    // same Layout() call places the text from the same
+                    // `native`, so the two move together. Column-scanned on a
+                    // replica painted at DpiX = 96 * scale (checked and
+                    // unchecked, both glyphs):
+                    //
+                    //   scale   1.0  1.25  1.5  1.75  2.0  2.5
+                    //   glyph ends at Padding.Left + native - 1, always
+                    //   caption ink starts this far past the erased column:
+                    //           +3    +5   +5    +6   +6   +7
+                    //
+                    // The gap GROWS with the scale, so a clamp meant to
+                    // protect the caption above 175% would only start leaving
+                    // the sliver back (at 200% it would leave 2 px, at 250%
+                    // 7 px). Verified 100% - 250%; beyond that the relation is
+                    // still monotone but was not measured.
+                    let native = int (11.0 * float g.DpiX / 96.0)
+                    use wipe = new SolidBrush(cb.BackColor)
+                    g.FillRectangle(wipe, Rectangle(0, 0, cb.Padding.Left + native + 1, cb.Height))
                     let boxY = (cb.Height - boxSize) / 2
                     let boxRect = Rectangle(0, boxY, boxSize, boxSize)
                     // Fill the box with the parent surface tone so the box
@@ -261,18 +308,22 @@ module DarkMode =
                     g.FillRectangle(bg, boxRect)
                     use border = new Pen(Color.FromArgb(120, 120, 120))
                     g.DrawRectangle(border, boxRect)
+                    // The tick was drawn against a 13-px box, so every offset
+                    // and the pen width are ratios of it rather than constants.
+                    let ratio = float boxSize / 13.0
+                    let at (v: int) = int (Math.Round(float v * ratio, MidpointRounding.AwayFromZero))
                     if cb.Checked then
-                        use checkPen = new Pen(darkText, 2.0f)
+                        use checkPen = new Pen(darkText, float32 (2.0 * ratio))
                         checkPen.StartCap <- System.Drawing.Drawing2D.LineCap.Round
                         checkPen.EndCap <- System.Drawing.Drawing2D.LineCap.Round
                         g.DrawLines(checkPen, [|
-                            Point(boxRect.X + 3, boxRect.Y + 6)
-                            Point(boxRect.X + 5, boxRect.Y + 9)
-                            Point(boxRect.X + 10, boxRect.Y + 3)
+                            Point(boxRect.X + at 3, boxRect.Y + at 6)
+                            Point(boxRect.X + at 5, boxRect.Y + at 9)
+                            Point(boxRect.X + at 10, boxRect.Y + at 3)
                         |])
                     elif cb.CheckState = CheckState.Indeterminate then
                         use fillBrush = new SolidBrush(darkText)
-                        g.FillRectangle(fillBrush, Rectangle(boxRect.X + 3, boxRect.Y + 5, boxRect.Width - 6, 3)))
+                        g.FillRectangle(fillBrush, Rectangle(boxRect.X + at 3, boxRect.Y + at 5, boxRect.Width - at 6, max 1 (at 3))))
             | :? RadioButton as rb ->
                 rb.BackColor <- darkSurface
                 rb.ForeColor <- darkText
@@ -281,9 +332,28 @@ module DarkMode =
                 rb.FlatAppearance.BorderColor <- Color.FromArgb(120, 120, 120)
                 rb.FlatAppearance.MouseOverBackColor <- Color.FromArgb(60, 60, 60)
                 rb.FlatAppearance.MouseDownBackColor <- Color.FromArgb(60, 60, 60)
+                // Same reservation as the CheckBox above, and it matters more
+                // here: every radio button in the settings views carries a
+                // caption, so an enlarged circle with no padding would be
+                // drawn straight over its first characters.
+                SettingsDpi.applyGlyphPadding rb
                 rb.Paint.Add(fun e ->
                     let g = e.Graphics
-                    let circleSize = 13
+                    let circleSize = 13 + rb.Padding.Left
+                    // Erase the native flat glyph first, exactly like the
+                    // CheckBox above. RadioButtonFlatAdapter draws its ring
+                    // (int)(12 * DpiX / 96) px wide from x = Padding.Left, so
+                    // the right of the ring survived outside the circle drawn
+                    // below on any scaled monitor. The caption clearance was
+                    // scanned on the same replica and behaves identically -
+                    // +3 px at 100% widening to +7 px at 250% - which matters
+                    // more here than for the CheckBox, because these are the
+                    // controls in the settings views that actually carry a
+                    // caption (the check boxes come from UIHelper.BoolEditor
+                    // and their text lives in the label column instead).
+                    let native = int (12.0 * float g.DpiX / 96.0)
+                    use wipe = new SolidBrush(rb.BackColor)
+                    g.FillRectangle(wipe, Rectangle(0, 0, rb.Padding.Left + native + 1, rb.Height))
                     let circleY = (rb.Height - circleSize) / 2
                     let circleRect = Rectangle(0, circleY, circleSize, circleSize)
                     g.SmoothingMode <- System.Drawing.Drawing2D.SmoothingMode.AntiAlias
@@ -294,7 +364,8 @@ module DarkMode =
                     use border = new Pen(Color.FromArgb(120, 120, 120))
                     g.DrawEllipse(border, circleRect)
                     if rb.Checked then
-                        let dotInset = 4
+                        // 4 px inside a 13-px circle; kept as that ratio.
+                        let dotInset = max 1 (int (Math.Round(4.0 * float circleSize / 13.0, MidpointRounding.AwayFromZero)))
                         let dotRect = Rectangle(circleRect.X + dotInset, circleRect.Y + dotInset, circleRect.Width - dotInset * 2, circleRect.Height - dotInset * 2)
                         use dot = new SolidBrush(darkText)
                         g.FillEllipse(dot, dotRect))
@@ -739,7 +810,13 @@ module DarkMode =
                         // Default _columnHeaderHeight in Aga is 20; widen to a
                         // safety value that comfortably covers any reasonable
                         // font so the entire system-drawn header is hidden.
-                        let columnHeaderHeight = max 24 (tva.Font.Height + 8)
+                        // SettingsDpi computes the same number for Aga's own
+                        // layout - the header height has no setter, so it
+                        // writes the private field - which is what keeps this
+                        // overpaint from spilling onto the first row once the
+                        // font is scaled. At 100% it is exactly the
+                        // `max 24 (Font.Height + 8)` it has always been.
+                        let columnHeaderHeight = SettingsDpi.treeHeaderHeight tva
                         let headerRect = Rectangle(0, 0, cr.Width, columnHeaderHeight)
                         g.FillRectangle(bg, headerRect)
                         // Draw a subtle bottom rule for the header
@@ -748,6 +825,7 @@ module DarkMode =
                         // Column titles + per-column divider lines on the right
                         // edge of each column header.
                         let mutable x = -tva.OffsetX
+                        let headerPad = SettingsDpi.px 5
                         use textBrush = new SolidBrush(darkText)
                         use dividerPen = new Pen(Color.FromArgb(80, 80, 80))
                         use format = new StringFormat()
@@ -756,7 +834,7 @@ module DarkMode =
                         format.FormatFlags <- StringFormatFlags.NoWrap
                         for col in tva.Columns do
                             if col.IsVisible then
-                                let r = RectangleF(float32 (x + 5), 0.0f, float32 (col.Width - 10), float32 (columnHeaderHeight - 1))
+                                let r = RectangleF(float32 (x + headerPad), 0.0f, float32 (col.Width - headerPad * 2), float32 (columnHeaderHeight - 1))
                                 format.Alignment <-
                                     match col.TextAlign with
                                     | HorizontalAlignment.Right -> StringAlignment.Far
@@ -834,12 +912,18 @@ module DarkMode =
     let drawDarkArrow (g: Graphics) (rect: Rectangle) (down: bool) =
         let cx = rect.X + rect.Width / 2
         let cy = rect.Y + rect.Height / 2
-        let w = 4
+        // Every caller of this is inside the settings dialog (the dark
+        // ComboBox, the NumericUpDown spinner and DropdownButton), so the
+        // chevron follows the dialog's scale. At 100% these are the original
+        // 4 / 2 / 3.
+        let w = SettingsDpi.px 4
+        let near = SettingsDpi.px 2
+        let far = SettingsDpi.px 3
         let pts =
             if down then
-                [| Point(cx - w, cy - 2); Point(cx + w, cy - 2); Point(cx, cy + 3) |]
+                [| Point(cx - w, cy - near); Point(cx + w, cy - near); Point(cx, cy + far) |]
             else
-                [| Point(cx - w, cy + 2); Point(cx + w, cy + 2); Point(cx, cy - 3) |]
+                [| Point(cx - w, cy + near); Point(cx + w, cy + near); Point(cx, cy - far) |]
         use brush = new SolidBrush(darkText)
         g.FillPolygon(brush, pts)
 
@@ -1124,11 +1208,20 @@ module DarkMode =
 // CheckBox dark style instead of the system-themed white square.
 type DarkNodeCheckBox() =
     inherit Aga.Controls.Tree.NodeControls.NodeCheckBox()
+
+    override this.MeasureSize(_node: Aga.Controls.Tree.TreeNodeAdv, _context: Aga.Controls.Tree.DrawContext) =
+        let size = SettingsDpi.checkBoxSize()
+        System.Drawing.Size(size, size)
+
     override this.Draw(node: Aga.Controls.Tree.TreeNodeAdv, context: Aga.Controls.Tree.DrawContext) =
         let bounds = this.GetBounds(node, context)
         let state = this.GetCheckState(node)
         let g = context.Graphics
-        let imgSize = Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
+        let imgSize = SettingsDpi.checkBoxSize()
+        // Every offset below was drawn for a 13-px box; carry them across at
+        // the same ratio so the tick keeps its proportions.
+        let unit = float imgSize / float Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
+        let at (v: int) = int (System.Math.Round(float v * unit, System.MidpointRounding.AwayFromZero))
         let rect = System.Drawing.Rectangle(bounds.X, bounds.Y, imgSize, imgSize)
         // Box background — slightly lighter grey when checked, near-black
         // otherwise. Matches the user's preferred "grey box with a check"
@@ -1145,24 +1238,61 @@ type DarkNodeCheckBox() =
         // Check / indeterminate glyph in light text color.
         match state with
         | System.Windows.Forms.CheckState.Checked ->
-            use checkPen = new System.Drawing.Pen(DarkMode.darkText, 2.0f)
+            use checkPen = new System.Drawing.Pen(DarkMode.darkText, 2.0f * float32 unit)
             checkPen.StartCap <- System.Drawing.Drawing2D.LineCap.Round
             checkPen.EndCap <- System.Drawing.Drawing2D.LineCap.Round
             g.DrawLines(checkPen, [|
-                System.Drawing.Point(rect.X + 3, rect.Y + 6)
-                System.Drawing.Point(rect.X + 5, rect.Y + 9)
-                System.Drawing.Point(rect.X + 10, rect.Y + 3)
+                System.Drawing.Point(rect.X + at 3, rect.Y + at 6)
+                System.Drawing.Point(rect.X + at 5, rect.Y + at 9)
+                System.Drawing.Point(rect.X + at 10, rect.Y + at 3)
             |])
         | System.Windows.Forms.CheckState.Indeterminate ->
             use fillBrush = new System.Drawing.SolidBrush(DarkMode.darkText)
-            g.FillRectangle(fillBrush, System.Drawing.Rectangle(rect.X + 3, rect.Y + 5, rect.Width - 6, 3))
+            g.FillRectangle(fillBrush,
+                System.Drawing.Rectangle(rect.X + at 3, rect.Y + at 5, rect.Width - (at 3) * 2, max 1 (at 3)))
         | _ -> ()
 
+// The light-mode counterpart. Aga's stock NodeCheckBox hands the const 13-px
+// ImageSize straight to the visual-style renderer, so without this the tree
+// check boxes would stay 13 px however tall the scaled rows get - the one
+// place in the dialog where the dark and light paths would have disagreed.
+// DrawBackground stretches the theme part to whatever rectangle it is given,
+// so drawing the same element into a scaled rectangle is all that is needed.
+//
+// At 100% the size is unchanged and Draw defers to the base class, so an
+// unscaled monitor goes through exactly the code path it always did.
+type ScaledNodeCheckBox() =
+    inherit Aga.Controls.Tree.NodeControls.NodeCheckBox()
+
+    override this.MeasureSize(_node: Aga.Controls.Tree.TreeNodeAdv, _context: Aga.Controls.Tree.DrawContext) =
+        let size = SettingsDpi.checkBoxSize()
+        System.Drawing.Size(size, size)
+
+    override this.Draw(node: Aga.Controls.Tree.TreeNodeAdv, context: Aga.Controls.Tree.DrawContext) =
+        let size = SettingsDpi.checkBoxSize()
+        if size = Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
+           || not System.Windows.Forms.Application.RenderWithVisualStyles then
+            base.Draw(node, context)
+        else
+            let bounds = this.GetBounds(node, context)
+            let element =
+                match this.GetCheckState(node) with
+                | System.Windows.Forms.CheckState.Indeterminate ->
+                    System.Windows.Forms.VisualStyles.VisualStyleElement.Button.CheckBox.MixedNormal
+                | System.Windows.Forms.CheckState.Checked ->
+                    System.Windows.Forms.VisualStyles.VisualStyleElement.Button.CheckBox.CheckedNormal
+                | _ ->
+                    System.Windows.Forms.VisualStyles.VisualStyleElement.Button.CheckBox.UncheckedNormal
+            let renderer = System.Windows.Forms.VisualStyles.VisualStyleRenderer(element)
+            renderer.DrawBackground(context.Graphics,
+                System.Drawing.Rectangle(bounds.X, bounds.Y, size, size))
+
 module DarkModeFactory =
-    /// Create a NodeCheckBox — DarkNodeCheckBox if dark mode is on,
-    /// the stock NodeCheckBox otherwise.
+    /// Create a NodeCheckBox - DarkNodeCheckBox if dark mode is on, the
+    /// DPI-scaling light variant otherwise. Both follow the settings scale;
+    /// both are identical to the stock control at 100%.
     let makeNodeCheckBox () : Aga.Controls.Tree.NodeControls.NodeCheckBox =
         if DarkMode.darkModeEnabled then
             DarkNodeCheckBox() :> Aga.Controls.Tree.NodeControls.NodeCheckBox
         else
-            Aga.Controls.Tree.NodeControls.NodeCheckBox()
+            ScaledNodeCheckBox() :> Aga.Controls.Tree.NodeControls.NodeCheckBox

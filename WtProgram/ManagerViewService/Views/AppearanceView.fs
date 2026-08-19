@@ -151,8 +151,17 @@ type AppearanceView() as this =
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- upperRowCount
         p.ColumnCount <- 3
+        // AutoSize rather than a fixed 35 px, for the same reason
+        // UIHelper.buildForm is: a caption that does not fit the label column
+        // wraps onto a second line, and a fixed row height cut the wrapped
+        // text off. Three captions here do overflow 250 px at the design font
+        // - "Indent Normal" and "Indent Flipped" in French and Portuguese,
+        // and "DarkMode" in French (302 px) and Portuguese (297 px) - so this
+        // panel needs the same treatment. Every label in column 0 carries a
+        // minimum height that reproduces the old 35-px row, so single-line
+        // rows are unchanged and only the wrapping ones grow.
         List2([0..upperRowCount - 1]).iter <| fun _ ->
-            p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
+            p.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
         // Match BehaviorView's UIHelper.form column width (250 px) so the
         // longest translated labels still stay on a single line.
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // Label
@@ -198,6 +207,13 @@ type AppearanceView() as this =
         | :? Color as c -> sprintf "#%06X" (c.ToArgb() &&& 0xFFFFFF)
         | _ -> value.ToString()
 
+    // Content height that reproduces the historical fixed 35-px upperPanel row
+    // once a label's own top and bottom margins are added. The rows are
+    // AutoSize now, so without this a row would shrink to its tallest cell
+    // (the reset Button, 24 px + 10 px of margin) and every 100% layout would
+    // move. Scaled with everything else: Control.Scale multiplies MinimumSize.
+    let rowMinimumHeight (topMargin: int) (bottomMargin: int) = 35 - topMargin - bottomMargin
+
     // Helper to create and place an int property editor at a specific row in upperPanel
     let createIntEditorAt (prop: AppearanceProperty) (row: int) =
         let label =
@@ -207,6 +223,7 @@ type AppearanceView() as this =
             label.TextAlign <- ContentAlignment.MiddleLeft
             label.Anchor <- AnchorStyles.Left
             label.Margin <- Padding(0,5,0,5)
+            label.MinimumSize <- Size(0, rowMinimumHeight 5 5)
             label
         let editor = IntEditor() :> IPropEditor
 
@@ -262,6 +279,7 @@ type AppearanceView() as this =
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Anchor <- AnchorStyles.Left
         label.Margin <- Padding(0,5,0,5)
+        label.MinimumSize <- Size(0, rowMinimumHeight 5 5)
         upperPanel.Controls.Add(label)
         upperPanel.SetRow(label, pinnedWidthRow)
         upperPanel.SetColumn(label, 0)
@@ -277,10 +295,25 @@ type AppearanceView() as this =
         tbl.RowCount <- 1
         tbl.Dock <- DockStyle.Fill
         tbl.Margin <- Padding(0,5,0,5)
+        // This is the ONLY cell in upperPanel whose content is a nested
+        // container rather than a single control, and that is what makes
+        // AutoSize on it mandatory. A TableLayoutPanel measuring an AutoSize
+        // ROW asks a child that is itself AutoSize for its preferred size, but
+        // takes a non-AutoSize child's CURRENT Size - and a Panel that has
+        // never been laid out is still at its 200 x 100 default. The row was
+        // therefore 100 px + 10 px of margin = 110 px instead of 35 px, which
+        // is what pushed the spinner above the radio buttons and stretched the
+        // Dock=Fill reset button into a tall grey box. Measured: rows go
+        // 35,35,110,35,35,35,35 -> 35,35,35,35,35,35,35 at 100% with these two
+        // lines plus the AutoSize row style below.
+        tbl.AutoSize <- true
+        tbl.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         tbl.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore   // Icon-only radio
         tbl.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore   // Specify radio
         tbl.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore  // NumericUpDown (fill)
-        tbl.RowStyles.Add(RowStyle(SizeType.Percent, 100.0f)).ignore
+        // Percent here would ask the panel to fill a height it is no longer
+        // being given, leaving it with no intrinsic height to report upwards.
+        tbl.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
 
         pinnedWidthIconOnlyRadio.Text <- Localization.getString("PinnedWidthIconOnly")
         pinnedWidthIconOnlyRadio.AutoSize <- true
@@ -444,6 +477,7 @@ type AppearanceView() as this =
         label.Text <- Localization.getString("DarkMode")
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Margin <- Padding(0,8,0,5)
+        label.MinimumSize <- Size(0, rowMinimumHeight 8 5)
         upperPanel.Controls.Add(label)
         upperPanel.SetRow(label, darkModeRow)
         upperPanel.SetColumn(label, 0)
@@ -452,6 +486,20 @@ type AppearanceView() as this =
     let darkModeCheckbox =
         let checkbox = settingsCheckboxBool "EnableDarkMode" false
         checkbox.Margin <- Padding(0,5,0,5)
+        // Every other control in the settings views either fills its cell
+        // (Dock), stretches with it (Anchor Left|Right) or sizes itself to its
+        // text (AutoSize). This one does none of those - a bare CheckBox with
+        // no caption - so it is the single control in the dialog whose width
+        // is whatever it happened to be when someone last wrote its Bounds.
+        // Control.Scale writes Bounds on everything it walks, so if the panel
+        // has not been laid out yet the 1-px width a not-yet-sized cell
+        // produced gets frozen in and the user sees a 1-px grey line instead
+        // of a check box. SettingsDpi.applyScale now lays the window out
+        // first, which fixes the cause; pinning the design size as a floor
+        // makes the control immune to it happening again. Control.Scale
+        // multiplies MinimumSize like every other 96-dpi design number, so
+        // this scales with the rest and 100% is untouched.
+        checkbox.MinimumSize <- checkbox.Size
         upperPanel.Controls.Add(checkbox)
         upperPanel.SetRow(checkbox, darkModeRow)
         upperPanel.SetColumn(checkbox, 1)
@@ -877,7 +925,11 @@ type AppearanceView() as this =
     // Set up ComboBox measure event - all items have same height
     do
         colorThemeComboBox.MeasureItem.Add <| fun e ->
-            e.ItemHeight <- 20
+            // Owner-draw item heights are outside Bounds, so Control.Scale
+            // never sees them. The ComboBox's own ItemHeight above is scaled
+            // by SettingsDpi's fixups from the 20 it is built with; this
+            // handler computes the same number from the current scale.
+            e.ItemHeight <- SettingsDpi.px 20
 
     // Helper to check if separator should be drawn below an item
     let shouldDrawSeparatorBelow (index: int) =
@@ -1177,9 +1229,6 @@ type AppearanceView() as this =
     // OK button is disabled until text is changed from current value
     let showEditThemeDialog (currentName: string) =
         use form = new Form()
-        // Child dialogs are separate Forms and do not inherit the parent's
-        // font, so each needs the 96-dpi font applied too.
-        Dpi.applyLegacyDialogFont(form)
         form.Text <- Localization.getString("EditThemeTitle")
         form.Size <- Size(440, 240)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1229,6 +1278,13 @@ type AppearanceView() as this =
         form.AcceptButton <- okBtn
         form.CancelButton <- cancelBtn
 
+        // Scale the 96-dpi layout above for the monitor the parent dialog is
+        // on (CenterParent puts this dialog there), before the dark theme so
+        // the theming pass sees final control sizes. Everything here is
+        // absolute Location / Size, which is exactly what Control.Scale
+        // handles.
+        SettingsDpi.applyToChildDialog form
+
         // Inherit dark mode from the parent settings dialog when the user
         // has the "Settings Dialog Dark Mode" toggle on.
         if isDarkModeEnabled() then
@@ -1252,9 +1308,6 @@ type AppearanceView() as this =
     // Returns: Some(name, isOverwrite) if OK pressed, None if cancelled
     let showSaveAsDialog (title: string) =
         use form = new Form()
-        // Child dialogs are separate Forms and do not inherit the parent's
-        // font, so each needs the 96-dpi font applied too.
-        Dpi.applyLegacyDialogFont(form)
         form.Text <- title
         form.Size <- Size(440, 210)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1304,6 +1357,9 @@ type AppearanceView() as this =
         form.Controls.Add(cancelBtn)
         form.AcceptButton <- okBtn
         form.CancelButton <- cancelBtn
+
+        // See showEditThemeDialog: scale for the parent's monitor first.
+        SettingsDpi.applyToChildDialog form
 
         // Inherit dark mode from the parent settings dialog.
         if isDarkModeEnabled() then

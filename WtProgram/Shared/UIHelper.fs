@@ -147,6 +147,16 @@ type ColorEditor() as this =
         panel.Dock <- DockStyle.Fill  // Fill parent cell
         panel.Padding <- Padding(0)
         panel.Margin <- Padding(0)
+        // Same contract the pinned-tab-width panel needs: a nested container
+        // that cannot answer "how tall do you want to be" gets measured at its
+        // 200 x 100 Panel default the moment its row stops being a fixed
+        // height. AppearanceView's colour grid deliberately keeps its rows at
+        // Absolute 35 px (no caption in that grid overflows the label column
+        // in any of the sixteen languages), so today this changes nothing -
+        // measured identical bounds at 100 / 125 / 150 / 175%. It is here so
+        // that making those rows AutoSize later cannot reintroduce the bug.
+        panel.AutoSize <- true
+        panel.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         panel.Controls.Add(chooserButton)
         panel.Controls.Add(textBox)
         panel.SetRow(chooserButton, 0)
@@ -440,6 +450,16 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
         container.SetRow(dropdownBtn, 0)
         container.SetColumn(dropdownBtn, 1)
 
+        // The popup is a top-level window, not a child of the dialog, so it
+        // does not inherit the scaled font the way `container` does. Give it
+        // the same one, or its items would be laid out for the system DPI on
+        // every monitor. Left alone at 100% so an unscaled monitor keeps the
+        // system menu font exactly as before.
+        if SettingsDpi.current() <> 1.0 then
+            match SettingsDpi.font (SettingsDpi.current()) with
+            | Some(f) -> (try menu.Font <- f with _ -> ())
+            | None -> ()
+
         // Apply dark renderer to the popup menu when the static flag is on so
         // the clipboard/dropdown menus match the rest of the dialog.
         if DropdownButton.UseDarkMode then
@@ -490,7 +510,11 @@ module UIHelper =
     
 
     // Content height that reproduces the historical fixed 35-px form row once
-    // the label's 8-px top and 5-px bottom margins are added.
+    // the label's 8-px top and 5-px bottom margins are added. A 96-dpi design
+    // number like every other one here: Control.Scale multiplies MinimumSize
+    // and Margin along with the rest of the layout, so the row is 35 px at
+    // 100%, 61 px at 175%, and a wrapped caption adds a whole scaled line at
+    // either.
     let private rowContentHeightPx = 22
 
     let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) =
@@ -570,11 +594,12 @@ module UIHelper =
             t.ColumnStyles.Add(ColumnStyle()).ignore
         t  
 
+    // Builds the frame only; the caller sizes the form and then hands it to
+    // SettingsDpi.applyToChildDialog, which is what puts the scaled font on
+    // it. Doing it here instead would scale the design size the caller has
+    // not assigned yet. See WorkspaceModel.edit.
     let okCancelForm control =
         let form = Form()
-        // Child dialogs are separate Forms and do not inherit the parent's
-        // font, so each needs the 96-dpi font applied too.
-        Dpi.applyLegacyDialogFont(form)
         form.Padding <- Padding(12)
         
         let okButton = Button()
