@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.08.12_next3**
+Latest version: **ss_2026.08.21**
 
 See [version.md](version.md) for details.
 
@@ -310,7 +310,7 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 > **Substantially improved in ss_jp_2026.06.22:** Earlier versions had incomplete tab-strip DPI support — at non-integer DPI scales, tab rendering and hit-test areas were offset from the visible tabs. This version finally addresses it properly.
 >
-> **Sharp rendering since ss_2026.08.12_next1 / next2:** tab strips and the settings dialog were previously bitmap-stretched by Windows on scaled displays and looked blurry; they are now drawn at each monitor's native resolution.
+> **Sharp rendering since ss_2026.08.21:** tab strips and the settings dialog were previously bitmap-stretched by Windows on scaled displays and looked blurry; they are now drawn at each monitor's native resolution.
 
 ### Virtual Desktop Support
 
