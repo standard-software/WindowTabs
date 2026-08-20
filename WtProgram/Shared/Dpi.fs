@@ -141,8 +141,11 @@ module Dpi =
     // Font long after the assignment - disposing an evicted one tore the HFONT
     // out from under whatever control still held it and left GDI+ to throw or
     // draw nothing on the next repaint. Retiring them here keeps them alive
-    // for the rest of the process; an overflow is a once-per-pathological-
-    // configuration event, so this holds a few dozen small objects at worst.
+    // for the rest of the process. The list can keep growing for as long as
+    // the process keeps producing new (family, size, style) combinations -
+    // there is no upper bound in principle - but reaching one overflow takes
+    // 32 distinct combinations on one thread, so in any normal configuration
+    // it stays empty or holds a few dozen small objects.
     let private retiredFonts =
         new Threading.ThreadLocal<Collections.Generic.List<Font>>(
             fun () -> Collections.Generic.List<Font>())
