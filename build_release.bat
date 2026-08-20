@@ -65,6 +65,19 @@ if %EXE_SIZE% LSS 5000000 (
     exit /b 1
 )
 echo   ILRepack merge verified successfully.
+
+:: The merged exe must keep the Win32 manifest that declares per-monitor DPI
+:: awareness. Losing it (e.g. an ILRepack change dropping Win32 resources)
+:: would silently ship a blurry, OS-stretched build. findstr cannot be used
+:: here: it misses matches inside binary files (verified), so search the raw
+:: bytes with PowerShell instead.
+powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('WtProgram\bin\Release\WindowTabs.exe'); if([Text.Encoding]::ASCII.GetString($b).Contains('PerMonitorV2')){exit 0}else{exit 1}"
+if errorlevel 1 (
+    echo ERROR: PerMonitorV2 manifest not found in WindowTabs.exe.
+    echo        The DPI-awareness manifest was lost during build or ILRepack.
+    exit /b 1
+)
+echo   PerMonitorV2 manifest verified.
 echo.
 
 :: ----------------------------------------
