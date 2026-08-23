@@ -846,6 +846,18 @@ type Program() as this =
         | Some(info) ->
             pendingClosedTabRestores.map(fun m -> m.remove hwnd)
             let isSavedGroup = try group.hwnd = info.groupHwnd with _ -> false
+            // The former group no longer exists (e.g. the whole group was
+            // absent at startup and its members are reopening one by one, so
+            // the cache entries still carry the dead sentinel). Point the
+            // remaining entries of that group at the group this window
+            // actually landed in, so the siblings reassemble there instead of
+            // each spawning a group of its own.
+            if not isSavedGroup then
+                let landed = (try group.hwnd with _ -> IntPtr.Zero)
+                if landed <> IntPtr.Zero then
+                    closedTabCache.map(fun l ->
+                        l |> List.map (fun e ->
+                            if e.groupHwnd = info.groupHwnd then { e with groupHwnd = landed } else e))
             let restoredPairs = restoredFromMap.value
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -976,6 +988,17 @@ type Program() as this =
                         let title = (try window.text with _ -> "")
                         if title <> "" then
                             windowObj.setString("windowTitle", normalizeClosedTabTitle title)
+                        // The rectangle disambiguates two windows of the same
+                        // application with the same title (two terminals both
+                        // called "Claude1"): exe + title alone assigned their
+                        // per-window state first-come-first-served, which put
+                        // one window's rename onto the other. Most windows
+                        // reopen where they were, so at restore the nearest
+                        // saved rectangle picks the right twin.
+                        try
+                            let b = window.bounds
+                            windowObj.setString("rect", sprintf "%d,%d,%d,%d" b.x b.y b.width b.height)
+                        with _ -> ()
                         // Save renamed tab name if exists
                         match windowNameOverride.value.tryFind(hwnd) with
                         | Some(Some(name)) ->
@@ -1041,13 +1064,20 @@ type Program() as this =
                 // alone cannot do: reject a REUSED hwnd (after a reboot the
                 // OS hands the same values to unrelated windows) and find a
                 // window again when every hwnd has changed (the reboot case).
-                let currentIdent = System.Collections.Generic.Dictionary<int64, string * string>()
+                let currentIdent = System.Collections.Generic.Dictionary<int64, string * string * (float * float) option>()
                 currentWindows.iter <| fun w ->
                     let exe = (try w.pid.processPath with _ -> "")
                     let title = (try normalizeClosedTabTitle w.text with _ -> "")
-                    currentIdent.[w.hwnd.ToInt64()] <- (exe, title)
+                    let center =
+                        try
+                            let b = w.bounds
+                            Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
+                        with _ -> None
+                    currentIdent.[w.hwnd.ToInt64()] <- (exe, title, center)
                 let currentIdentList =
-                    [ for kv in currentIdent -> kv.Key, fst kv.Value, snd kv.Value ]
+                    [ for kv in currentIdent ->
+                        let (exe, title, center) = kv.Value
+                        kv.Key, exe, title, center ]
 
                 // An hwnd match is trusted only if the process still agrees
                 // (entries saved before exePath existed are trusted as
@@ -1059,7 +1089,7 @@ type Program() as this =
                     (match exePath with
                      | Some(exe) when exe <> "" ->
                          (match currentIdent.TryGetValue(h) with
-                          | true, (curExe, _) -> String.Equals(exe, curExe, StringComparison.OrdinalIgnoreCase)
+                          | true, (curExe, _, _) -> String.Equals(exe, curExe, StringComparison.OrdinalIgnoreCase)
                           | _ -> false)
                      | _ -> true)
                 let hwndReserved = System.Collections.Generic.HashSet<int64>()
@@ -1091,19 +1121,36 @@ type Program() as this =
                 // path + normalized title, for the Windows-restart case where
                 // every hwnd is new. Exact match only - restoring nothing is
                 // better than restoring onto the wrong window.
-                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) =
+                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) (savedCenter: (float * float) option) =
                     let h = savedHwnd.ToInt64()
                     if hwndReserved.Contains(h) && taken.Add(h) then Some(savedHwnd)
                     else
                         match exePath, title with
                         | Some(exe), Some(t) when exe <> "" && t <> "" ->
-                            currentIdentList
-                            |> List.tryFind (fun (ch, cExe, cTitle) ->
-                                hwndReserved.Contains(ch).not &&
-                                taken.Contains(ch).not &&
-                                String.Equals(cExe, exe, StringComparison.OrdinalIgnoreCase) &&
-                                cTitle = t)
-                            |> Option.map (fun (ch, _, _) ->
+                            let candidates =
+                                currentIdentList
+                                |> List.filter (fun (ch, cExe, cTitle, _) ->
+                                    hwndReserved.Contains(ch).not &&
+                                    taken.Contains(ch).not &&
+                                    String.Equals(cExe, exe, StringComparison.OrdinalIgnoreCase) &&
+                                    cTitle = t)
+                            let pick =
+                                match candidates, savedCenter with
+                                | [], _ -> None
+                                // Two or more windows share exe AND title (two
+                                // terminals both called "Claude1"): the one
+                                // nearest the saved rectangle is the right
+                                // twin, since windows reopen where they were.
+                                | (_ :: _ :: _), Some(sx, sy) ->
+                                    candidates
+                                    |> List.minBy (fun (_, _, _, c) ->
+                                        match c with
+                                        | Some(cx, cy) -> (cx - sx) * (cx - sx) + (cy - sy) * (cy - sy)
+                                        | None -> infinity)
+                                    |> Some
+                                | (first :: _), _ -> Some(first)
+                            pick
+                            |> Option.map (fun (ch, _, _, _) ->
                                 taken.Add(ch) |> ignore
                                 IntPtr(ch))
                         | _ -> None
@@ -1145,24 +1192,39 @@ type Program() as this =
                                             | Some("TopLeft") | Some("Left") -> Some(TopLeft)
                                             | Some("TopRight") | Some("Right") -> Some(TopRight)
                                             | _ -> None
+                                        let savedCenter =
+                                            obj.getString("rect")
+                                            |> Option.bind (fun s ->
+                                                match s.Split(',') with
+                                                | [| xs; ys; ws; hs |] ->
+                                                    match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
+                                                    | (true, x), (true, y), (true, w), (true, h) ->
+                                                        Some(float x + float w / 2.0, float y + float h / 2.0)
+                                                    | _ -> None
+                                                | _ -> None)
                                         (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
-                                         obj.getString("exePath"), obj.getString("windowTitle")))
+                                         obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
                                 | _ -> None)
                             |> List.ofSeq
 
                         // Resolve each saved window to a live one (saved order
                         // kept). The resolved hwnd - not the saved one - is
                         // what the group and the global per-window maps get.
-                        let matchedWindows =
+                        let resolvedList =
                             savedWindowsList
-                            |> List.choose (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title) ->
-                                resolveWindow hwnd exePath title
-                                |> Option.map (fun live -> (live, renamed, isPinned, fill, under, border, align)))
+                            |> List.map (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title, center) ->
+                                (hwnd, renamed, isPinned, fill, under, border, align, exePath, title,
+                                 resolveWindow hwnd exePath title center))
+                        let matchedWindows =
+                            resolvedList
+                            |> List.choose (fun (savedHwnd, renamed, isPinned, fill, under, border, align, _, _, live) ->
+                                live |> Option.map (fun l -> (l, savedHwnd, renamed, isPinned, fill, under, border, align)))
 
                         // Create group with matched windows (preserving saved order)
-                        if matchedWindows.Length >= 1 then
+                        let createdGroup =
+                          if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, renamedTabName, isPinned, fillColor, underlineColor, borderColor, tabAlign) ->
+                            matchedWindows |> List.iter (fun (hwnd, savedHwnd, renamedTabName, isPinned, fillColor, underlineColor, borderColor, tabAlign) ->
                                 // Restore to global maps BEFORE addWindow to avoid race condition
                                 // (addWindow is async on group thread, which reads from globals)
                                 match renamedTabName with
@@ -1192,6 +1254,12 @@ type Program() as this =
                                 | Some(a) ->
                                     windowAlignment.set(windowAlignment.value.add hwnd a)
                                 | None -> ()
+                                // Identity-matched window: remember new -> old
+                                // hwnd, so a sibling restored later can find
+                                // this tab in its close-time order snapshot
+                                // (closedTabTargetIdx resolves through this map).
+                                if hwnd <> savedHwnd then
+                                    restoredFromMap.map(fun m -> m.add hwnd savedHwnd)
                                 group.addWindow(hwnd, false)
                             )
                             // Restore per-group tab position if saved
@@ -1204,6 +1272,53 @@ type Program() as this =
                             | Some(v) ->
                                 group.snapTabHeightMargin <- v
                             | None -> ()  // Use global default (already applied during group creation)
+                            Some(group)
+                          else None
+
+                        // Boot-order independence: windows of this group that
+                        // are not open yet (their application starts after
+                        // WindowTabs) are seeded into the closed-tab cache, so
+                        // the moment such a window appears the closed-tab
+                        // restore machinery puts it into its group - whichever
+                        // of WindowTabs and the application won the boot race.
+                        // closedHwnd carries the old (dead) hwnd purely as a
+                        // unique token; the order snapshot is the saved order
+                        // in old hwnds, which closedTabTargetIdx resolves
+                        // through restoredFromMap.
+                        let savedOrderOldHwnds =
+                            resolvedList |> List.map (fun (savedHwnd, _, _, _, _, _, _, _, _, _) -> savedHwnd)
+                        let seedGroupHwnd =
+                            match createdGroup with
+                            | Some(g) -> (try g.hwnd with _ -> IntPtr.Zero)
+                            // Whole group absent: use the first old hwnd as a
+                            // dead sentinel. When the first sibling lands in a
+                            // real group, addWindowToGroup repoints the
+                            // remaining entries at that group.
+                            | None -> (match savedOrderOldHwnds with h :: _ -> h | [] -> IntPtr.Zero)
+                        if seedGroupHwnd <> IntPtr.Zero then
+                            resolvedList
+                            |> List.iteri (fun idx entry ->
+                                match entry with
+                                | (savedHwnd, renamed, isPinned, fill, under, border, align, Some(exe), Some(title), None)
+                                    when exe <> "" && title <> "" ->
+                                    if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
+                                        let info = {
+                                            exePath = exe
+                                            windowTitle = title
+                                            renamedTabName = renamed
+                                            isPinned = isPinned
+                                            fillColor = fill
+                                            underlineColor = under
+                                            borderColor = border
+                                            tabAlign = align
+                                            groupHwnd = seedGroupHwnd
+                                            tabIndex = idx
+                                            closedHwnd = savedHwnd
+                                            closedAt = DateTime.Now
+                                            orderSnapshot = savedOrderOldHwnds
+                                        }
+                                        closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
+                                | _ -> ())
 
                 isRestoringTabGroups.set(false)
                 // Do NOT clear saved data here - keep it for watchdog restart scenarios
