@@ -46,7 +46,22 @@ if ($Phase -eq 'pre') {
 else {
     $extract = Join-Path $env:TEMP ("WtMsiVerify_" + [Guid]::NewGuid().ToString('N'))
     $msiFull = (Resolve-Path $Msi).Path
-    $proc = Start-Process msiexec -ArgumentList "/a `"$msiFull`" /qn TARGETDIR=`"$extract`"" -Wait -PassThru
+    # The repo lives inside Dropbox, and right after the build the fresh MSI
+    # is often still locked for upload - msiexec then fails with exit 1620
+    # ("package could not be opened"). Copy the MSI into TEMP first, retrying
+    # while the lock lasts, and extract the copy instead of the original.
+    $msiTemp = Join-Path $env:TEMP ("WtMsiVerify_" + [Guid]::NewGuid().ToString('N') + ".msi")
+    $copied = $false
+    for ($i = 0; $i -lt 10; $i++) {
+        try { Copy-Item $msiFull $msiTemp -Force -ErrorAction Stop; $copied = $true; break }
+        catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $copied) {
+        Write-Host "ERROR: could not read the MSI (still locked after 20 s - Dropbox sync?)"
+        exit 1
+    }
+    $proc = Start-Process msiexec -ArgumentList "/a `"$msiTemp`" /qn TARGETDIR=`"$extract`"" -Wait -PassThru
+    Remove-Item $msiTemp -Force -ErrorAction SilentlyContinue
     if ($proc.ExitCode -ne 0) {
         Write-Host "ERROR: administrative extract of the MSI failed (msiexec exit $($proc.ExitCode))"
         exit 1
