@@ -87,7 +87,7 @@ echo.
 ::  ss_2026.07.16 MSI to ship without the 6 newly added languages.)
 :: ----------------------------------------
 echo Verifying installer file list against WtSetup.wxs...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File build_release_verify.ps1 -Phase pre
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File verify_release.ps1 -Phase pre
 if errorlevel 1 (
     echo ERROR: WtSetup.wxs is out of sync with the build output. See above.
     exit /b 1
@@ -204,7 +204,7 @@ echo.
 :: Verify MSI contents (extract and compare against build output)
 :: ----------------------------------------
 echo Verifying MSI contents...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File build_release_verify.ps1 -Phase post
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File verify_release.ps1 -Phase post
 if errorlevel 1 (
     echo ERROR: the built MSI does not contain the expected files. See above.
     exit /b 1
