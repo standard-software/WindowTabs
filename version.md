@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.24_next1
+
 ## version ss_2026.08.24
 - Fixed the settings dialog's Behavior-tab rows growing to nearly double height (forcing a scrollbar) on some machines
   - Windows fixes one session-wide "system DPI" from the scale of the primary display at sign-in
