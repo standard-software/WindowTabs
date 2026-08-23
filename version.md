@@ -1,6 +1,13 @@
 # WindowTabs Standard-Software Version
 
+**Language:** [Japanese/日本語](version_Japanese.md)
+
 ## version ss_2026.08.21_next1
+- Fixed the settings dialog's Behavior-tab rows growing to nearly double height (forcing a scrollbar) on some machines
+  - Windows fixes one session-wide "system DPI" from the scale of the primary display at sign-in
+  - Cause: with a system DPI above 96, WinForms pre-scales control metrics on its own before the dialog captures them as its 96-dpi design values
+  - Fix: the design metrics are snapshotted right after construction, the first layout runs with the design font, and the design is re-asserted after the window is shown, so the capture can no longer be polluted whatever the system DPI is
+- Release build script: verifies that the merged exe still carries the PerMonitorV2 DPI-awareness manifest
 
 ## version ss_2026.08.21
 - Tab strips are now per-monitor DPI aware: on displays scaled above 100% they are drawn at native resolution instead of being bitmap-stretched by Windows, at the same apparent size as before

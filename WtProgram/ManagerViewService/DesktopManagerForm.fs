@@ -191,6 +191,14 @@ type DesktopManagerForm() =
         // from OnLayout and handle creation, and the missing layout pass is
         // what turned the dark-mode check box into a 1-px line at 125% and
         // above. See SettingsDpi.settleLayout for the measurements.
+        // Snapshot every control's layout constraints as the 96-dpi design
+        // NOW - the whole tree was just built from constants and nothing has
+        // laid it out, created a handle or scaled it yet. On a machine that
+        // signed in on a scaled primary monitor, WinForms runs scaling walks
+        // of its own later; a snapshot taken after them read the multiplied
+        // values as "design" and every later re-assertion doubled them (the
+        // 106-px rows reported from the 175%-primary laptop).
+        SettingsDpi.captureLayoutDesigns form
         SettingsDpi.applyScale form 1.0 openScale
         // Place the window by hand instead of leaving it to CenterScreen.
         //
@@ -268,10 +276,15 @@ type DesktopManagerForm() =
             form.Show()
             form.CreateControl()
             DarkMode.applyDarkThemeBranch15ToForm form true
+            // Handle creation may have run a WinForms scaling walk on a
+            // scaled-system-DPI machine; put the design metrics back before
+            // the window becomes visible.
+            SettingsDpi.reassertAfterShow form
             form.Refresh()
             form.Opacity <- 1.0
         else
             form.Show()
+            SettingsDpi.reassertAfterShow form
         form.Activate()
 
     member this.show() =

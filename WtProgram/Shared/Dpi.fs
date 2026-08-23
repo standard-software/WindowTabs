@@ -869,6 +869,15 @@ module SettingsDpi =
     /// whose primary monitor is at 125%.
     let applyScale (form: Form) (fromScale: float) (toScale: float) =
         currentScale <- toScale
+        // On the first pass, lay the tree out with the DESIGN font before
+        // anything is measured or captured: on a machine whose session signed
+        // in on a scaled primary monitor, Control.DefaultFont arrives already
+        // system-DPI-scaled, and a layout taken with that font would be
+        // captured below as if it were the 96-dpi design.
+        if fromScale = 1.0 then
+            match font 1.0 with
+            | Some(f) -> (try form.Font <- f with _ -> ())
+            | None -> ()
         // Before anything else: give every control the size the 96-dpi design
         // says it has, so Control.Scale multiplies real numbers rather than
         // freezing in the ones a never-laid-out panel happens to hold.
@@ -911,6 +920,23 @@ module SettingsDpi =
     let applyGlyphPadding (control: Control) =
         glyphPadded.GetValue(control, fun _ -> null) |> ignore
         try control.Padding <- glyphPaddingAt currentScale with _ -> ()
+
+    /// Snapshot the layout constraints of every control under `form` as its
+    /// 96-dpi design values, at the end of the window's CONSTRUCTION - before
+    /// any layout pass, handle creation or scaling walk has had a chance to
+    /// touch them - so the snapshot cannot be polluted no matter what the
+    /// machine's system DPI makes WinForms do later. Idempotent: applyScale's
+    /// own capture then no-ops for these controls.
+    let captureLayoutDesigns (form: Form) =
+        try captureControlLayout (form :> Control) with _ -> ()
+
+    /// Re-assert the design-derived metrics at the current scale, after Show.
+    /// Handle creation is the one moment WinForms is known to run scaling
+    /// walks of its own on some system-DPI configurations; if it multiplied
+    /// the constraints, this puts the design numbers back.
+    let reassertAfterShow (form: Form) =
+        try reassertCellDesigns (form :> Control) currentScale with _ -> ()
+        try applyControlLayout (form :> Control) currentScale with _ -> ()
 
     /// Lay a child dialog of the settings window out at the scale the parent
     /// is using. Child dialogs open CenterParent, so that is by construction
