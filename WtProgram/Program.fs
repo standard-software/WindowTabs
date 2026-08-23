@@ -200,6 +200,12 @@ type Program() as this =
     // Carries a matched ClosedTabInfo from tryClosedTabRestore to the
     // positioning step at the end of addWindowToGroup
     let pendingClosedTabRestores = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // Seeded closed-tab entries reference their restored group by a sentinel
+    // token (the group's first saved old hwnd), not by the group's strip
+    // hwnd: at restore time the strip window is created asynchronously on
+    // the group thread and reading IGroup.hwnd from the main thread right
+    // after createGroup is unreliable. The token maps to the live group here.
+    let seededGroupMap = Cell.create(Map2() : Map2<IntPtr, IGroup>)
     // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
     // relative placement can locate already-restored siblings in an order
     // snapshot taken before they closed
@@ -464,6 +470,23 @@ type Program() as this =
             | _ -> ()
         with _ -> ()
 
+    // Resolve the group a ClosedTabInfo refers to: normally by strip hwnd,
+    // and for seeded entries via the sentinel-token map (see seededGroupMap).
+    // The mapped group is verified still present before it is trusted.
+    member private this.findGroupForClosedInfo (info: ClosedTabInfo) =
+        match this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false)) with
+        | Some(g) -> Some(g)
+        | None ->
+            seededGroupMap.value.tryFind(info.groupHwnd)
+            |> Option.bind (fun g ->
+                if this.desktop.groups.any(fun x -> obj.ReferenceEquals(x, g)) then Some(g) else None)
+
+    member private this.isInfoGroup (g: IGroup) (info: ClosedTabInfo) =
+        (try g.hwnd = info.groupHwnd with _ -> false) ||
+        (match seededGroupMap.value.tryFind(info.groupHwnd) with
+         | Some(sg) -> obj.ReferenceEquals(sg, g)
+         | None -> false)
+
     // Take (and consume) the most recently recorded closed-tab entry that
     // matches exe path + window title exactly (after title normalization).
     // Exact match only: restoring nothing is better than restoring onto the
@@ -530,7 +553,7 @@ type Program() as this =
             restoredFromMap.map(fun m -> m.add hwnd info.closedHwnd)
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
-            match this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false)) with
+            match this.findGroupForClosedInfo info with
             | Some(g) -> Some(Some(g))
             | None -> None  // former group is gone: state is restored, grouping falls through
         | None -> None
@@ -580,7 +603,7 @@ type Program() as this =
                     match closedTabCache.value |> List.tryFind (fun i -> i.exePath = exePath && i.windowTitle = normTitle) with
                     | Some(info) ->
                         let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
-                        let savedGroup = this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false))
+                        let savedGroup = this.findGroupForClosedInfo info
                         match currentGroup, savedGroup with
                         | Some(cur), Some(saved) when (try cur.hwnd <> saved.hwnd with _ -> false) ->
                             // The tab sits in the wrong group (e.g. VSCode's "Welcome"
@@ -603,7 +626,7 @@ type Program() as this =
                             let restoredPairs = restoredFromMap.value
                             match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
                             | Some(g) ->
-                                let isSavedGroup = try g.hwnd = info.groupHwnd with _ -> false
+                                let isSavedGroup = this.isInfoGroup g info
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
                                     gi.invokeGroup <| fun() ->
@@ -845,7 +868,7 @@ type Program() as this =
         match pendingClosedTabRestores.value.tryFind(hwnd) with
         | Some(info) ->
             pendingClosedTabRestores.map(fun m -> m.remove hwnd)
-            let isSavedGroup = try group.hwnd = info.groupHwnd with _ -> false
+            let isSavedGroup = this.isInfoGroup group info
             // The former group no longer exists (e.g. the whole group was
             // absent at startup and its members are reopening one by one, so
             // the cache entries still carry the dead sentinel). Point the
@@ -1287,14 +1310,19 @@ type Program() as this =
                         // through restoredFromMap.
                         let savedOrderOldHwnds =
                             resolvedList |> List.map (fun (savedHwnd, _, _, _, _, _, _, _, _, _) -> savedHwnd)
+                        // The token is always the first saved old hwnd - a
+                        // sentinel, never a live strip hwnd, because the strip
+                        // of a group created moments ago does not reliably
+                        // have one yet. When part of the group was restored,
+                        // the token maps to the live group object; when the
+                        // whole group was absent, the first sibling to land
+                        // repoints the remaining entries (addWindowToGroup).
                         let seedGroupHwnd =
-                            match createdGroup with
-                            | Some(g) -> (try g.hwnd with _ -> IntPtr.Zero)
-                            // Whole group absent: use the first old hwnd as a
-                            // dead sentinel. When the first sibling lands in a
-                            // real group, addWindowToGroup repoints the
-                            // remaining entries at that group.
-                            | None -> (match savedOrderOldHwnds with h :: _ -> h | [] -> IntPtr.Zero)
+                            match savedOrderOldHwnds with h :: _ -> h | [] -> IntPtr.Zero
+                        (match createdGroup with
+                         | Some(g) when seedGroupHwnd <> IntPtr.Zero ->
+                            seededGroupMap.map(fun m -> m.add seedGroupHwnd g)
+                         | _ -> ())
                         if seedGroupHwnd <> IntPtr.Zero then
                             resolvedList
                             |> List.iteri (fun idx entry ->
