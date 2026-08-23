@@ -163,6 +163,14 @@ type Program() as this =
     let lastPing = Cell.create(DateTime.MinValue)
     let notifiedOfUpgrade = Cell.create(false)
     let inShutdown = Cell.create(false)
+    // Windows logoff / restart in progress (WM_QUERYENDSESSION, surfaced as
+    // SystemEvents.SessionEnding). From that moment other applications close
+    // one after another, each HSHELL_WINDOWDESTROYED shrinks the groups, and a
+    // periodic-save tick that fires during the teardown would overwrite
+    // SavedTabGroupsForRestart with the half-emptied state - which is exactly
+    // the state the next boot would then "restore". One immediate save while
+    // every window is still alive, then the saved snapshot is frozen.
+    let inSessionEnd = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
     // Case C: hwnds recently placed into a group via the multi-select
@@ -262,10 +270,21 @@ type Program() as this =
         // by which time the desktop and groups are fully initialized.
         periodicSaveTimer.Tick.Add <| fun _ ->
             try
-                if inShutdown.value.not then
+                if inShutdown.value.not && inSessionEnd.value.not then
                     this.saveTabGroupsToSettings()
             with _ -> ()
         periodicSaveTimer.Start()
+        // See inSessionEnd. SystemEvents raises this on the main thread (the
+        // Invoker arranges for its broadcast window to live there), so the
+        // desktop state can be read directly. The save runs while the other
+        // applications' windows still exist; everything after it is frozen.
+        Microsoft.Win32.SystemEvents.SessionEnding.Add <| fun _ ->
+            try
+                if inSessionEnd.value.not then
+                    inSessionEnd.set(true)
+                    periodicSaveTimer.Stop()
+                    this.saveTabGroupsToSettings()
+            with _ -> ()
         titleSyncTimer.Tick.Add <| fun _ ->
             try
                 if inShutdown.value.not && isDisabledCell.value.not then
@@ -944,6 +963,19 @@ type Program() as this =
                         let windowObj = JObject()
                         // Save hwnd for group restoration
                         windowObj.setInt64("hwnd", hwnd.ToInt64())
+                        // Also save the window's identity. An hwnd is only
+                        // valid within one OS session, so after a Windows
+                        // restart the hwnd matches nothing (and can even
+                        // collide with an unrelated new window that reuses
+                        // the value) - the exe path + normalized title are
+                        // what the restore falls back to, and what it uses
+                        // to distrust a reused hwnd.
+                        let exePath = (try window.pid.processPath with _ -> "")
+                        if exePath <> "" then
+                            windowObj.setString("exePath", exePath)
+                        let title = (try window.text with _ -> "")
+                        if title <> "" then
+                            windowObj.setString("windowTitle", normalizeClosedTabTitle title)
                         // Save renamed tab name if exists
                         match windowNameOverride.value.tryFind(hwnd) with
                         | Some(Some(name)) ->
@@ -1005,6 +1037,77 @@ type Program() as this =
                 // Build a set of current window hwnds for fast lookup
                 let currentHwnds = currentWindows.map(fun w -> w.hwnd.ToInt64()).list |> Set.ofList
 
+                // Identity of every live window, for the two things an hwnd
+                // alone cannot do: reject a REUSED hwnd (after a reboot the
+                // OS hands the same values to unrelated windows) and find a
+                // window again when every hwnd has changed (the reboot case).
+                let currentIdent = System.Collections.Generic.Dictionary<int64, string * string>()
+                currentWindows.iter <| fun w ->
+                    let exe = (try w.pid.processPath with _ -> "")
+                    let title = (try normalizeClosedTabTitle w.text with _ -> "")
+                    currentIdent.[w.hwnd.ToInt64()] <- (exe, title)
+                let currentIdentList =
+                    [ for kv in currentIdent -> kv.Key, fst kv.Value, snd kv.Value ]
+
+                // An hwnd match is trusted only if the process still agrees
+                // (entries saved before exePath existed are trusted as
+                // before). Reserve every trusted hwnd up front, so the
+                // identity fallback below can never steal a window that a
+                // later group still matches by hwnd.
+                let savedHwndTrusted (h: int64) (exePath: string option) =
+                    currentHwnds.Contains(h) &&
+                    (match exePath with
+                     | Some(exe) when exe <> "" ->
+                         (match currentIdent.TryGetValue(h) with
+                          | true, (curExe, _) -> String.Equals(exe, curExe, StringComparison.OrdinalIgnoreCase)
+                          | _ -> false)
+                     | _ -> true)
+                let hwndReserved = System.Collections.Generic.HashSet<int64>()
+                for groupToken in groupsArray do
+                    let arr =
+                        match groupToken with
+                        | :? JObject as g ->
+                            (match g.getValueCI("windows") with
+                             | Some(:? JArray as a) -> a
+                             | _ -> JArray())
+                        | :? JArray as a -> a
+                        | _ -> JArray()
+                    for t in arr do
+                        match t with
+                        | :? JObject as o ->
+                            match o.getIntPtr("hwnd") with
+                            | Some(h) when savedHwndTrusted (h.ToInt64()) (o.getString("exePath")) ->
+                                hwndReserved.Add(h.ToInt64()) |> ignore
+                            | _ -> ()
+                        | _ -> ()
+
+                // Live windows already handed to a restored group, by either
+                // path. Each one is consumed at most once.
+                let taken = System.Collections.Generic.HashSet<int64>()
+
+                // Resolve one saved window to a live hwnd. First choice: the
+                // saved hwnd itself (WindowTabs restarted within the same OS
+                // session - the watchdog and manual restarts). Fallback: exe
+                // path + normalized title, for the Windows-restart case where
+                // every hwnd is new. Exact match only - restoring nothing is
+                // better than restoring onto the wrong window.
+                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) =
+                    let h = savedHwnd.ToInt64()
+                    if hwndReserved.Contains(h) && taken.Add(h) then Some(savedHwnd)
+                    else
+                        match exePath, title with
+                        | Some(exe), Some(t) when exe <> "" && t <> "" ->
+                            currentIdentList
+                            |> List.tryFind (fun (ch, cExe, cTitle) ->
+                                hwndReserved.Contains(ch).not &&
+                                taken.Contains(ch).not &&
+                                String.Equals(cExe, exe, StringComparison.OrdinalIgnoreCase) &&
+                                cTitle = t)
+                            |> Option.map (fun (ch, _, _) ->
+                                taken.Add(ch) |> ignore
+                                IntPtr(ch))
+                        | _ -> None
+
                 // For each saved group, find windows by hwnd and recreate the group
                 // Supports both old format (JArray of windows) and new format (JObject with windows + tabPosition)
                 for groupToken in groupsArray do
@@ -1042,14 +1145,19 @@ type Program() as this =
                                             | Some("TopLeft") | Some("Left") -> Some(TopLeft)
                                             | Some("TopRight") | Some("Right") -> Some(TopRight)
                                             | _ -> None
-                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign))
+                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
+                                         obj.getString("exePath"), obj.getString("windowTitle")))
                                 | _ -> None)
                             |> List.ofSeq
 
-                        // Filter to only windows that still exist
+                        // Resolve each saved window to a live one (saved order
+                        // kept). The resolved hwnd - not the saved one - is
+                        // what the group and the global per-window maps get.
                         let matchedWindows =
                             savedWindowsList
-                            |> List.filter (fun (hwnd, _, _, _, _, _, _) -> currentHwnds.Contains(hwnd.ToInt64()))
+                            |> List.choose (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title) ->
+                                resolveWindow hwnd exePath title
+                                |> Option.map (fun live -> (live, renamed, isPinned, fill, under, border, align)))
 
                         // Create group with matched windows (preserving saved order)
                         if matchedWindows.Length >= 1 then
