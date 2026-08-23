@@ -21,6 +21,12 @@ type Settings(isStandAlone) as this =
     let mutable cachedSettingsString = None
     let mutable cachedSettingsRec = None
     let mutable hasExistingSettings = false
+    // One safety copy of the settings file per process, taken the first time
+    // this process overwrites it. On 2026-08-24 a freshly started build wrote
+    // pure defaults over the user's settings; whatever causes such a write,
+    // the pre-launch content must stay recoverable. Auto backups follow the
+    // pattern <file>.bak.<stamp> and only the 10 newest are kept.
+    let mutable backedUpThisProcess = false
     let settingChangedEvent = Event<string* obj>()
     let valueCache = Dictionary<string, obj>()
 
@@ -53,7 +59,16 @@ type Settings(isStandAlone) as this =
                     try
                         if this.fileExists then Some(File.ReadAllText(this.path)) else None
                     with
-                    | _ -> None  // Return None if file reading fails
+                    | ex ->
+                        // A read failure here is how a later save comes to
+                        // write DEFAULTS over the user's real settings, so it
+                        // is never silent: the exception is recorded next to
+                        // the settings file before None is returned.
+                        (try
+                            File.AppendAllText(this.path + ".read_error.log",
+                                sprintf "%s read failed: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")) ex + Environment.NewLine)
+                         with _ -> ())
+                        None
             cachedSettingsString
 
         and set(newSettings : string option) =
@@ -70,6 +85,19 @@ type Settings(isStandAlone) as this =
                     // Atomic write: write the new content to a sibling temp file,
                     // then move it over the target. Survives force-quit mid-write
                     // without corrupting the existing settings file.
+                    // Before the first overwrite of an existing file in
+                    // this process: keep a timestamped copy of what is being
+                    // replaced (see backedUpThisProcess above).
+                    if File.Exists(this.path) && not backedUpThisProcess then
+                        backedUpThisProcess <- true
+                        try
+                            File.Copy(this.path, this.path + ".bak." + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true)
+                            let old =
+                                Directory.GetFiles(settingsDir, Path.GetFileName(this.path) + ".bak.*")
+                                |> Array.sortDescending
+                            if old.Length > 10 then
+                                old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
+                        with _ -> ()
                     let tempPath = this.path + ".tmp"
                     File.WriteAllText(tempPath, newContent)
                     if File.Exists(this.path) then
