@@ -3,6 +3,11 @@
 **Language:** [Japanese/日本語](version_Japanese.md)
 
 ## version ss_2026.08.24_next1
+- The settings file is now protected against being wiped
+  - A write that would replace a large settings file with an empty-looking one is refused and logged, so a single bad write can no longer take every setting with it
+  - A backup is made before the first overwrite of each session, and again whenever the file shrinks sharply (`WindowTabsSettings.txt.bak.<timestamp>`, the ten newest kept)
+  - Reading the settings file now retries briefly while another instance still holds it - during a restart handover, for instance - instead of quietly starting from defaults
+  - Every fall back to empty settings is written to `WindowTabsSettings.txt.read_error.log`, so a silent loss leaves a trace
 
 ## version ss_2026.08.24
 - Fixed the settings dialog's Behavior-tab rows growing to nearly double height (forcing a scrollbar) on some machines
