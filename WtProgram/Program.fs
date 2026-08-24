@@ -280,16 +280,19 @@ type Program() as this =
                     this.saveTabGroupsToSettings()
             with _ -> ()
         periodicSaveTimer.Start()
-        // See inSessionEnd. SystemEvents raises this on the main thread (the
-        // Invoker arranges for its broadcast window to live there), so the
-        // desktop state can be read directly. The save runs while the other
-        // applications' windows still exist; everything after it is frozen.
+        // See inSessionEnd. On the shutdown / logoff notification the saved
+        // tab groups are FROZEN, not saved: the periodic snapshot is at most
+        // 10 s old and was taken in normal operation, which makes it safe by
+        // construction - while a save taken here could capture a teardown
+        // already in progress (an application that dismantles itself the
+        // moment it is queried, or a forced shutdown that skips the query
+        // phase). Losing the last few seconds of changes is the accepted
+        // price. WindowTabs' own exit (tray menu) still saves normally.
         Microsoft.Win32.SystemEvents.SessionEnding.Add <| fun _ ->
             try
                 if inSessionEnd.value.not then
                     inSessionEnd.set(true)
                     periodicSaveTimer.Stop()
-                    this.saveTabGroupsToSettings()
             with _ -> ()
         titleSyncTimer.Tick.Add <| fun _ ->
             try
