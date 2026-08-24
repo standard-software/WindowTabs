@@ -1181,57 +1181,108 @@ type Program() as this =
                                 IntPtr(ch))
                         | _ -> None
 
-                // For each saved group, find windows by hwnd and recreate the group
-                // Supports both old format (JArray of windows) and new format (JObject with windows + tabPosition)
-                for groupToken in groupsArray do
-                    let windowsArray, savedTabPosition, savedSnapMargin =
-                        match groupToken with
-                        | :? JObject as groupObj ->
-                            // New format: { windows: [...], tabPosition: "TopLeft", snapTabHeightMargin: true }
-                            let windows =
-                                match groupObj.getValueCI("windows") with
-                                | Some(:? JArray as arr) -> arr
-                                | _ -> JArray()
-                            let tabPos = groupObj.getString("tabPosition")
-                            let snapMargin = groupObj.getBool("snapTabHeightMargin")
-                            windows, tabPos, snapMargin
-                        | :? JArray as arr ->
-                            // Old format: direct array of window objects
-                            arr, None, None
-                        | _ -> JArray(), None, None
+                // Parse every group up front. The twin merge below reaches
+                // ACROSS groups, so parsing inside the restore loop is too
+                // late. Supports both old format (JArray of windows) and new
+                // format (JObject with windows + tabPosition).
+                let parsedGroups =
+                    [ for groupToken in groupsArray do
+                        let windowsArray, savedTabPosition, savedSnapMargin =
+                            match groupToken with
+                            | :? JObject as groupObj ->
+                                let windows =
+                                    match groupObj.getValueCI("windows") with
+                                    | Some(:? JArray as arr) -> arr
+                                    | _ -> JArray()
+                                windows, groupObj.getString("tabPosition"), groupObj.getBool("snapTabHeightMargin")
+                            | :? JArray as arr -> arr, None, None
+                            | _ -> JArray(), None, None
+                        if windowsArray.Count > 0 then
+                            let entries =
+                                windowsArray
+                                |> Seq.choose (fun t ->
+                                    match t with
+                                    | :? JObject as obj ->
+                                        obj.getIntPtr("hwnd")
+                                        |> Option.map (fun hwnd ->
+                                            let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
+                                            let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
+                                            let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
+                                            let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
+                                            let tabAlign =
+                                                match obj.getString("tabAlignment") with
+                                                | Some("TopLeft") | Some("Left") -> Some(TopLeft)
+                                                | Some("TopRight") | Some("Right") -> Some(TopRight)
+                                                | _ -> None
+                                            let savedCenter =
+                                                obj.getString("rect")
+                                                |> Option.bind (fun s ->
+                                                    match s.Split(',') with
+                                                    | [| xs; ys; ws; hs |] ->
+                                                        match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
+                                                        | (true, x), (true, y), (true, w), (true, h) ->
+                                                            Some(float x + float w / 2.0, float y + float h / 2.0)
+                                                        | _ -> None
+                                                    | _ -> None)
+                                            (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
+                                             obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
+                                    | _ -> None)
+                                |> List.ofSeq
+                            if entries.IsEmpty.not then
+                                yield (ResizeArray(entries), savedTabPosition, savedSnapMargin) ]
 
-                    if windowsArray.Count > 0 then
-                        // Collect saved window info (hwnd, optional renamedTabName, isPinned, fillColor)
-                        let savedWindowsList =
-                            windowsArray
-                            |> Seq.choose (fun t ->
-                                match t with
-                                | :? JObject as obj ->
-                                    obj.getIntPtr("hwnd")
-                                    |> Option.map (fun hwnd ->
-                                        let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
-                                        let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
-                                        let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
-                                        let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
-                                        let tabAlign =
-                                            match obj.getString("tabAlignment") with
-                                            | Some("TopLeft") | Some("Left") -> Some(TopLeft)
-                                            | Some("TopRight") | Some("Right") -> Some(TopRight)
-                                            | _ -> None
-                                        let savedCenter =
-                                            obj.getString("rect")
-                                            |> Option.bind (fun s ->
-                                                match s.Split(',') with
-                                                | [| xs; ys; ws; hs |] ->
-                                                    match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
-                                                    | (true, x), (true, y), (true, w), (true, h) ->
-                                                        Some(float x + float w / 2.0, float y + float h / 2.0)
-                                                    | _ -> None
-                                                | _ -> None)
-                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
-                                         obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
-                                | _ -> None)
-                            |> List.ofSeq
+                // Indistinguishable twins. Two or more saved entries sharing
+                // exe path and title - and not already settled by a trusted
+                // hwnd - cannot be told apart after a restart, and neither
+                // can their per-window state: restoring a rename or a pin
+                // onto the wrong twin is worse than not restoring it. They
+                // are merged into ONE identity: every twin entry moves,
+                // stripped of rename / pin / colors / alignment, into the
+                // group of the FIRST twin. Membership in that one group is
+                // correct whichever real window each entry ends up matching.
+                let twinKey (exe: string option) (title: string option) =
+                    match exe, title with
+                    | Some(e), Some(t) when e <> "" && t <> "" -> Some(e.ToLowerInvariant() + "|" + t)
+                    | _ -> None
+                let keyCounts = System.Collections.Generic.Dictionary<string, int>()
+                for (entries, _, _) in parsedGroups do
+                    for (h, _, _, _, _, _, _, exe, title, _) in entries do
+                        if hwndReserved.Contains(h.ToInt64()).not then
+                            match twinKey exe title with
+                            | Some(k) ->
+                                keyCounts.[k] <- (match keyCounts.TryGetValue(k) with
+                                                  | true, c -> c + 1
+                                                  | _ -> 1)
+                            | None -> ()
+                let homeOfKey = System.Collections.Generic.Dictionary<string, ResizeArray<IntPtr * string option * bool * Color option * Color option * Color option * TabAlign option * string option * string option * (float * float) option>>()
+                for (entries, _, _) in parsedGroups do
+                    for e in List.ofSeq entries do
+                        let (h, _, _, _, _, _, _, exe, title, center) = e
+                        let isTwin =
+                            hwndReserved.Contains(h.ToInt64()).not &&
+                            (match twinKey exe title with
+                             | Some(k) -> (match keyCounts.TryGetValue(k) with
+                                           | true, c -> c >= 2
+                                           | _ -> false)
+                             | None -> false)
+                        if isTwin then
+                            let k = (twinKey exe title).Value
+                            let stripped = (h, None, false, None, None, None, None, exe, title, center)
+                            let idx = entries.IndexOf(e)
+                            match homeOfKey.TryGetValue(k) with
+                            | true, home when obj.ReferenceEquals(home, entries).not ->
+                                if idx >= 0 then entries.RemoveAt(idx)
+                                home.Add(stripped)
+                            | true, _ ->
+                                if idx >= 0 then entries.[idx] <- stripped
+                            | _ ->
+                                homeOfKey.[k] <- entries
+                                if idx >= 0 then entries.[idx] <- stripped
+
+                // For each saved group, find windows by hwnd and recreate the group
+                for (groupEntries, savedTabPosition, savedSnapMargin) in parsedGroups do
+                    let savedWindowsList = List.ofSeq groupEntries
+                    if savedWindowsList.IsEmpty.not then
 
                         // Resolve each saved window to a live one (saved order
                         // kept). The resolved hwnd - not the saved one - is
