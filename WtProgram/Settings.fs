@@ -85,10 +85,16 @@ type Settings(isStandAlone) as this =
                     // Atomic write: write the new content to a sibling temp file,
                     // then move it over the target. Survives force-quit mid-write
                     // without corrupting the existing settings file.
-                    // Before the first overwrite of an existing file in
-                    // this process: keep a timestamped copy of what is being
-                    // replaced (see backedUpThisProcess above).
-                    if File.Exists(this.path) && not backedUpThisProcess then
+                    // Before overwriting an existing file: keep a timestamped copy the
+                    // first time this process writes, and EVERY time the new
+                    // content is under a third of what is on disk - a shrink
+                    // of that size is how both settings wipes looked
+                    // (2026-08-24 / 08-25), and the per-process-only backup
+                    // missed the second one because the long-running process
+                    // had already used up its single backup.
+                    let existingLen =
+                        if File.Exists(this.path) then (try (FileInfo(this.path)).Length with _ -> 0L) else 0L
+                    if existingLen > 0L && (not backedUpThisProcess || int64 newContent.Length * 3L < existingLen) then
                         backedUpThisProcess <- true
                         try
                             File.Copy(this.path, this.path + ".bak." + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true)
@@ -98,6 +104,18 @@ type Settings(isStandAlone) as this =
                             if old.Length > 10 then
                                 old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
                         with _ -> ()
+                    // Trace every write: timestamp, size, and the caller
+                    // stack. The 08-25 wipe was written by a healthy
+                    // long-running process from an in-memory state that had
+                    // somehow become the defaults - the next occurrence must
+                    // name the code path that did it.
+                    try
+                        File.AppendAllText(this.path + ".write_trace.log",
+                            sprintf "%s write %d bytes (disk had %d)%s%s%s"
+                                (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                                newContent.Length existingLen
+                                Environment.NewLine Environment.StackTrace (Environment.NewLine + Environment.NewLine))
+                    with _ -> ()
                     let tempPath = this.path + ".tmp"
                     File.WriteAllText(tempPath, newContent)
                     if File.Exists(this.path) then
