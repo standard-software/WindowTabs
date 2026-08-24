@@ -54,10 +54,20 @@ type Settings(isStandAlone) as this =
 
     member this.settingsString
         with get() = 
-            if cachedSettingsString.IsNone then 
-                cachedSettingsString <- 
+            if cachedSettingsString.IsNone then
+                cachedSettingsString <-
                     try
-                        if this.fileExists then Some(File.ReadAllText(this.path)) else None
+                        // Short retry on sharing violations: during a tray
+                        // restart the old process can still be inside its
+                        // final File.Replace when the new one reads, and one
+                        // failed read here is all it takes for the new
+                        // process to come up with defaults.
+                        let rec readRetry attempts =
+                            try File.ReadAllText(this.path)
+                            with :? IOException when attempts > 0 ->
+                                Threading.Thread.Sleep(100)
+                                readRetry (attempts - 1)
+                        if this.fileExists then Some(readRetry 5) else None
                     with
                     | ex ->
                         // A read failure here is how a later save comes to
@@ -104,6 +114,18 @@ type Settings(isStandAlone) as this =
                             if old.Length > 10 then
                                 old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
                         with _ -> ()
+                    // A save whose content is both far smaller than what is
+                    // on disk and carries an empty Version is the exact
+                    // signature of the 08-24 / 08-25 wipes (an in-memory
+                    // state decayed to the defaults) and never legitimate:
+                    // the write is REFUSED and recorded, and the file keeps
+                    // its last good content. The in-memory caches are left
+                    // alone too, so a healthy state formed later can still
+                    // save normally.
+                    let looksLikeWipe =
+                        existingLen > 0L &&
+                        int64 newContent.Length * 3L < existingLen &&
+                        newContent.Contains("\"Version\": \"\"")
                     // Trace every write: timestamp, size, and the caller
                     // stack. The 08-25 wipe was written by a healthy
                     // long-running process from an in-memory state that had
@@ -111,26 +133,38 @@ type Settings(isStandAlone) as this =
                     // name the code path that did it.
                     try
                         File.AppendAllText(this.path + ".write_trace.log",
-                            sprintf "%s write %d bytes (disk had %d)%s%s%s"
+                            sprintf "%s %s %d bytes (disk had %d)%s%s%s"
                                 (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                                (if looksLikeWipe then "REFUSED wipe-like write of" else "write")
                                 newContent.Length existingLen
                                 Environment.NewLine Environment.StackTrace (Environment.NewLine + Environment.NewLine))
                     with _ -> ()
-                    let tempPath = this.path + ".tmp"
-                    File.WriteAllText(tempPath, newContent)
-                    if File.Exists(this.path) then
-                        File.Replace(tempPath, this.path, null)
-                    else
-                        File.Move(tempPath, this.path)
-                    // Refresh in-memory caches with the freshly written content
-                    cachedSettingsString <- Some(newContent)
-                    cachedSettingsRec <- None
-                    valueCache.Clear()
+                    if looksLikeWipe.not then
+                        let tempPath = this.path + ".tmp"
+                        File.WriteAllText(tempPath, newContent)
+                        if File.Exists(this.path) then
+                            File.Replace(tempPath, this.path, null)
+                        else
+                            File.Move(tempPath, this.path)
+                        // Refresh in-memory caches with the freshly written content
+                        cachedSettingsString <- Some(newContent)
+                        cachedSettingsRec <- None
+                        valueCache.Clear()
             with
             | ex ->
                 // Log error but don't crash
                 System.Diagnostics.Debug.WriteLine(sprintf "Failed to save settings: %s" ex.Message)
             
+    // Falling back to an empty JObject is what turns a single swallowed
+    // exception into "the settings are the defaults" further up - the wipe
+    // signature seen on 08-24 / 08-25. The fallbacks stay (crashing here
+    // would be worse), but they are never silent any more.
+    member private this.logEmptyFallback (where: string) (ex: exn) =
+        try
+            File.AppendAllText(this.path + ".read_error.log",
+                sprintf "%s %s fell back to empty settings: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
+        with _ -> ()
+
     member this.settingsJson
         with get() =
             try
@@ -138,10 +172,14 @@ type Settings(isStandAlone) as this =
                     try
                         parseJsoncObject(s)
                     with
-                    | _ -> JObject()  // Return empty JObject if parsing fails
+                    | ex ->
+                        this.logEmptyFallback "settingsJson parse" ex
+                        JObject()  // Return empty JObject if parsing fails
                 ).def(JObject())
             with
-            | _ -> JObject()  // Return empty JObject if any error occurs
+            | ex ->
+                this.logEmptyFallback "settingsJson outer" ex
+                JObject()  // Return empty JObject if any error occurs
         and set(settingsJson:JObject) = this.settingsString <- Some(settingsJson.ToString())
 
     member this.defaultTabAppearance =
@@ -435,6 +473,7 @@ type Settings(isStandAlone) as this =
                         version = String.Empty
                         tabAppearance = this.defaultTabAppearance
                     }
+                    this.logEmptyFallback "settings record rebuild" ex
                     cachedSettingsRec <- Some(defaultSettings)
                     // Optionally log the error for debugging
                     System.Diagnostics.Debug.WriteLine(sprintf "Settings loading failed: %s" ex.Message)
