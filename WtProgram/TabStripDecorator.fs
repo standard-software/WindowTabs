@@ -695,8 +695,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     member private this.moveTabToGroup(hwnd: IntPtr, targetGroup: WindowGroup) =
         // Move tab to another group if it's a different group
@@ -856,8 +855,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     // ----- Multi-tab detach: shared core -----
     // Generic multi-tab detach. Takes an explicit list of hwnds (in visual
@@ -1250,8 +1248,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     member private this.detachTabToScreenSnap(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
@@ -1309,8 +1306,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     member private this.detachTabToSnapWithPercent(hwnd: IntPtr, snapDirection: string, percent: int) =
         // Snap with percentage: width/height based on display percentage
@@ -1342,8 +1338,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     member private this.detachTabToScreenSnapWithPercent(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         // Snap with percentage to another screen
@@ -1388,8 +1383,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             notifyDetached(hwnd)
 
         finally
-            (ThreadHelper.cancelablePostBack 200 <| fun() ->
-                Services.program.resumeTabMonitoring()) |> ignore
+            Services.program.resumeTabMonitoringAfter(200)
 
     member this.moveTabGroupToPosition(hwnd: IntPtr, position: Option<string>) =
         // Move the entire tab group to the specified position

@@ -3,6 +3,10 @@
 **Language:** [Japanese/日本語](version_Japanese.md)
 
 ## version ss_2026.08.24_next1
+- Fixed a state where tab drag and drop stopped working and newly opened windows stopped being tabbed, until WindowTabs was restarted
+  - Cause: ending a drag was not protected against failure. One failure while releasing the mouse capture, the timer or the preview window skipped the step that marks the drag as finished, and every later drag was then ignored while the window pass that tabs new windows never ran again
+  - The same standstill was reachable from a tab detach: the pause on window monitoring was lifted by a timer belonging to the tab group being detached from, so emptying that group could take the resume with it
+  - Fix: every way a drag can end now runs one guarded teardown that always finishes the drag, a new drag abandons any drag left behind, and a monitoring pause both belongs to its own operation and expires by itself
 - The settings file is now protected against being wiped
   - A write that would replace a large settings file with an empty-looking one is refused and logged, so a single bad write can no longer take every setting with it
   - A backup is made before the first overwrite of each session, and again whenever the file shrinks sharply (`WindowTabsSettings.txt.bak.<timestamp>`, the ten newest kept)

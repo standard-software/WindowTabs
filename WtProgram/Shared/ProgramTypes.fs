@@ -124,6 +124,7 @@ type IProgram =
     abstract member newVersion : IEvent<unit>
     abstract member suspendTabMonitoring : unit -> unit
     abstract member resumeTabMonitoring : unit -> unit
+    abstract member resumeTabMonitoringAfter : int -> unit
     abstract member llMouse : IEvent<int32 * IntPtr>
     abstract member isDisabled : bool
     abstract member setDisabled : bool -> unit
