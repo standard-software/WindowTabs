@@ -168,8 +168,8 @@ type Program() as this =
     // one after another, each HSHELL_WINDOWDESTROYED shrinks the groups, and a
     // periodic-save tick that fires during the teardown would overwrite
     // SavedTabGroupsForRestart with the half-emptied state - which is exactly
-    // the state the next boot would then "restore". One immediate save while
-    // every window is still alive, then the saved snapshot is frozen.
+    // the state the next boot would then "restore". The last periodic snapshot
+    // is frozen; it is at most ten seconds old and was taken before teardown.
     let inSessionEnd = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
@@ -1137,6 +1137,76 @@ type Program() as this =
                             | _ -> ()
                         | _ -> ()
 
+                // Identity matching after a Windows restart. Once every hwnd
+                // is new, exe path + title is all that is left, and it does not
+                // always identify one window: two terminals can both be titled
+                // "Claude1". The two ambiguous cases are not equally bad.
+                //   - The same identity in two DIFFERENT saved groups is not
+                //     restored at all. Picking one of them arbitrarily would
+                //     not be an uncertain restore, it would be a certain change
+                //     to the group structure.
+                //   - The same identity more than once inside ONE saved group
+                //     is restored. Whichever live window each entry ends up
+                //     matching, the resulting group membership is identical, so
+                //     it is right either way.
+                // Per-window state (rename, pin, colors, alignment) is applied
+                // only when the identity is unique on both sides: a rename
+                // landing on the wrong twin is worse than no rename at all.
+                // Same-session hwnd matches above remain authoritative and do
+                // not use this fallback.
+                let identityKey (exe: string) (title: string) =
+                    exe.ToLowerInvariant() + "\u001f" + title
+                let savedIdentityCounts = System.Collections.Generic.Dictionary<string, int>()
+                let savedIdentityGroup = System.Collections.Generic.Dictionary<string, int>()
+                let crossGroupIdentities = System.Collections.Generic.HashSet<string>()
+                let mutable savedGroupIndex = -1
+                for groupToken in groupsArray do
+                    savedGroupIndex <- savedGroupIndex + 1
+                    let arr =
+                        match groupToken with
+                        | :? JObject as g ->
+                            (match g.getValueCI("windows") with
+                             | Some(:? JArray as a) -> a
+                             | _ -> JArray())
+                        | :? JArray as a -> a
+                        | _ -> JArray()
+                    for token in arr do
+                        match token with
+                        | :? JObject as entry ->
+                            match entry.getIntPtr("hwnd"), entry.getString("exePath"), entry.getString("windowTitle") with
+                            | Some(h), Some(exe), Some(title)
+                                when exe <> "" && title <> "" && hwndReserved.Contains(h.ToInt64()).not ->
+                                let key = identityKey exe title
+                                savedIdentityCounts.[key] <-
+                                    (match savedIdentityCounts.TryGetValue(key) with
+                                     | true, count -> count + 1
+                                     | _ -> 1)
+                                match savedIdentityGroup.TryGetValue(key) with
+                                | true, g when g <> savedGroupIndex -> crossGroupIdentities.Add(key) |> ignore
+                                | true, _ -> ()
+                                | _ -> savedIdentityGroup.[key] <- savedGroupIndex
+                            | _ -> ()
+                        | _ -> ()
+                let liveIdentityCounts = System.Collections.Generic.Dictionary<string, int>()
+                for (_, exe, title, _) in currentIdentList do
+                    if exe <> "" && title <> "" then
+                        let key = identityKey exe title
+                        liveIdentityCounts.[key] <-
+                            (match liveIdentityCounts.TryGetValue(key) with
+                             | true, count -> count + 1
+                             | _ -> 1)
+                let isUniqueIdentity (exe: string) (title: string) =
+                    let key = identityKey exe title
+                    (match savedIdentityCounts.TryGetValue(key) with
+                     | true, 1 -> true
+                     | _ -> false) &&
+                    (match liveIdentityCounts.TryGetValue(key) with
+                     | true, 1 -> true
+                     | _ -> false)
+                // The identity appears in more than one saved group: refuse it.
+                let isCrossGroupIdentity (exe: string) (title: string) =
+                    crossGroupIdentities.Contains(identityKey exe title)
+
                 // Live windows already handed to a restored group, by either
                 // path. Each one is consumed at most once.
                 let taken = System.Collections.Generic.HashSet<int64>()
@@ -1152,7 +1222,7 @@ type Program() as this =
                     if hwndReserved.Contains(h) && taken.Add(h) then Some(savedHwnd)
                     else
                         match exePath, title with
-                        | Some(exe), Some(t) when exe <> "" && t <> "" ->
+                        | Some(exe), Some(t) when exe <> "" && t <> "" && not (isCrossGroupIdentity exe t) ->
                             let candidates =
                                 currentIdentList
                                 |> List.filter (fun (ch, cExe, cTitle, _) ->
@@ -1181,108 +1251,57 @@ type Program() as this =
                                 IntPtr(ch))
                         | _ -> None
 
-                // Parse every group up front. The twin merge below reaches
-                // ACROSS groups, so parsing inside the restore loop is too
-                // late. Supports both old format (JArray of windows) and new
-                // format (JObject with windows + tabPosition).
-                let parsedGroups =
-                    [ for groupToken in groupsArray do
-                        let windowsArray, savedTabPosition, savedSnapMargin =
-                            match groupToken with
-                            | :? JObject as groupObj ->
-                                let windows =
-                                    match groupObj.getValueCI("windows") with
-                                    | Some(:? JArray as arr) -> arr
-                                    | _ -> JArray()
-                                windows, groupObj.getString("tabPosition"), groupObj.getBool("snapTabHeightMargin")
-                            | :? JArray as arr -> arr, None, None
-                            | _ -> JArray(), None, None
-                        if windowsArray.Count > 0 then
-                            let entries =
-                                windowsArray
-                                |> Seq.choose (fun t ->
-                                    match t with
-                                    | :? JObject as obj ->
-                                        obj.getIntPtr("hwnd")
-                                        |> Option.map (fun hwnd ->
-                                            let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
-                                            let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
-                                            let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
-                                            let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
-                                            let tabAlign =
-                                                match obj.getString("tabAlignment") with
-                                                | Some("TopLeft") | Some("Left") -> Some(TopLeft)
-                                                | Some("TopRight") | Some("Right") -> Some(TopRight)
-                                                | _ -> None
-                                            let savedCenter =
-                                                obj.getString("rect")
-                                                |> Option.bind (fun s ->
-                                                    match s.Split(',') with
-                                                    | [| xs; ys; ws; hs |] ->
-                                                        match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
-                                                        | (true, x), (true, y), (true, w), (true, h) ->
-                                                            Some(float x + float w / 2.0, float y + float h / 2.0)
-                                                        | _ -> None
-                                                    | _ -> None)
-                                            (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
-                                             obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
-                                    | _ -> None)
-                                |> List.ofSeq
-                            if entries.IsEmpty.not then
-                                yield (ResizeArray(entries), savedTabPosition, savedSnapMargin) ]
-
-                // Indistinguishable twins. Two or more saved entries sharing
-                // exe path and title - and not already settled by a trusted
-                // hwnd - cannot be told apart after a restart, and neither
-                // can their per-window state: restoring a rename or a pin
-                // onto the wrong twin is worse than not restoring it. They
-                // are merged into ONE identity: every twin entry moves,
-                // stripped of rename / pin / colors / alignment, into the
-                // group of the FIRST twin. Membership in that one group is
-                // correct whichever real window each entry ends up matching.
-                let twinKey (exe: string option) (title: string option) =
-                    match exe, title with
-                    | Some(e), Some(t) when e <> "" && t <> "" -> Some(e.ToLowerInvariant() + "|" + t)
-                    | _ -> None
-                let keyCounts = System.Collections.Generic.Dictionary<string, int>()
-                for (entries, _, _) in parsedGroups do
-                    for (h, _, _, _, _, _, _, exe, title, _) in entries do
-                        if hwndReserved.Contains(h.ToInt64()).not then
-                            match twinKey exe title with
-                            | Some(k) ->
-                                keyCounts.[k] <- (match keyCounts.TryGetValue(k) with
-                                                  | true, c -> c + 1
-                                                  | _ -> 1)
-                            | None -> ()
-                let homeOfKey = System.Collections.Generic.Dictionary<string, ResizeArray<IntPtr * string option * bool * Color option * Color option * Color option * TabAlign option * string option * string option * (float * float) option>>()
-                for (entries, _, _) in parsedGroups do
-                    for e in List.ofSeq entries do
-                        let (h, _, _, _, _, _, _, exe, title, center) = e
-                        let isTwin =
-                            hwndReserved.Contains(h.ToInt64()).not &&
-                            (match twinKey exe title with
-                             | Some(k) -> (match keyCounts.TryGetValue(k) with
-                                           | true, c -> c >= 2
-                                           | _ -> false)
-                             | None -> false)
-                        if isTwin then
-                            let k = (twinKey exe title).Value
-                            let stripped = (h, None, false, None, None, None, None, exe, title, center)
-                            let idx = entries.IndexOf(e)
-                            match homeOfKey.TryGetValue(k) with
-                            | true, home when obj.ReferenceEquals(home, entries).not ->
-                                if idx >= 0 then entries.RemoveAt(idx)
-                                home.Add(stripped)
-                            | true, _ ->
-                                if idx >= 0 then entries.[idx] <- stripped
-                            | _ ->
-                                homeOfKey.[k] <- entries
-                                if idx >= 0 then entries.[idx] <- stripped
-
                 // For each saved group, find windows by hwnd and recreate the group
-                for (groupEntries, savedTabPosition, savedSnapMargin) in parsedGroups do
-                    let savedWindowsList = List.ofSeq groupEntries
-                    if savedWindowsList.IsEmpty.not then
+                // Supports both old format (JArray of windows) and new format (JObject with windows + tabPosition)
+                for groupToken in groupsArray do
+                    let windowsArray, savedTabPosition, savedSnapMargin =
+                        match groupToken with
+                        | :? JObject as groupObj ->
+                            // New format: { windows: [...], tabPosition: "TopLeft", snapTabHeightMargin: true }
+                            let windows =
+                                match groupObj.getValueCI("windows") with
+                                | Some(:? JArray as arr) -> arr
+                                | _ -> JArray()
+                            let tabPos = groupObj.getString("tabPosition")
+                            let snapMargin = groupObj.getBool("snapTabHeightMargin")
+                            windows, tabPos, snapMargin
+                        | :? JArray as arr ->
+                            // Old format: direct array of window objects
+                            arr, None, None
+                        | _ -> JArray(), None, None
+
+                    if windowsArray.Count > 0 then
+                        // Collect saved window info (hwnd, optional renamedTabName, isPinned, fillColor)
+                        let savedWindowsList =
+                            windowsArray
+                            |> Seq.choose (fun t ->
+                                match t with
+                                | :? JObject as obj ->
+                                    obj.getIntPtr("hwnd")
+                                    |> Option.map (fun hwnd ->
+                                        let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
+                                        let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
+                                        let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
+                                        let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
+                                        let tabAlign =
+                                            match obj.getString("tabAlignment") with
+                                            | Some("TopLeft") | Some("Left") -> Some(TopLeft)
+                                            | Some("TopRight") | Some("Right") -> Some(TopRight)
+                                            | _ -> None
+                                        let savedCenter =
+                                            obj.getString("rect")
+                                            |> Option.bind (fun s ->
+                                                match s.Split(',') with
+                                                | [| xs; ys; ws; hs |] ->
+                                                    match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
+                                                    | (true, x), (true, y), (true, w), (true, h) ->
+                                                        Some(float x + float w / 2.0, float y + float h / 2.0)
+                                                    | _ -> None
+                                                | _ -> None)
+                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
+                                         obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
+                                | _ -> None)
+                            |> List.ofSeq
 
                         // Resolve each saved window to a live one (saved order
                         // kept). The resolved hwnd - not the saved one - is
@@ -1294,8 +1313,22 @@ type Program() as this =
                                  resolveWindow hwnd exePath title center))
                         let matchedWindows =
                             resolvedList
-                            |> List.choose (fun (savedHwnd, renamed, isPinned, fill, under, border, align, _, _, live) ->
-                                live |> Option.map (fun l -> (l, savedHwnd, renamed, isPinned, fill, under, border, align)))
+                            |> List.choose (fun (savedHwnd, renamed, isPinned, fill, under, border, align, exePath, title, live) ->
+                                live |> Option.map (fun l ->
+                                    // A window matched by its own hwnd is the
+                                    // window that was saved - it keeps
+                                    // everything. A window matched by identity
+                                    // keeps its state only when that identity
+                                    // picks out exactly one saved and one live
+                                    // window; otherwise it is in the right
+                                    // group but may be the wrong twin.
+                                    let keepState =
+                                        l = savedHwnd ||
+                                        (match exePath, title with
+                                         | Some(exe), Some(t) -> isUniqueIdentity exe t
+                                         | _ -> false)
+                                    if keepState then (l, savedHwnd, renamed, isPinned, fill, under, border, align)
+                                    else (l, savedHwnd, None, false, None, None, None, None)))
 
                         // Create group with matched windows (preserving saved order)
                         let createdGroup =
@@ -1382,17 +1415,21 @@ type Program() as this =
                             |> List.iteri (fun idx entry ->
                                 match entry with
                                 | (savedHwnd, renamed, isPinned, fill, under, border, align, Some(exe), Some(title), None)
-                                    when exe <> "" && title <> "" ->
+                                    when exe <> "" && title <> "" && not (isCrossGroupIdentity exe title) ->
+                                    // Same rule as the direct match above: a
+                                    // seed for an ambiguous identity rejoins
+                                    // the right group but carries no state.
+                                    let unique = isUniqueIdentity exe title
                                     if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
                                         let info = {
                                             exePath = exe
                                             windowTitle = title
-                                            renamedTabName = renamed
-                                            isPinned = isPinned
-                                            fillColor = fill
-                                            underlineColor = under
-                                            borderColor = border
-                                            tabAlign = align
+                                            renamedTabName = (if unique then renamed else None)
+                                            isPinned = (unique && isPinned)
+                                            fillColor = (if unique then fill else None)
+                                            underlineColor = (if unique then under else None)
+                                            borderColor = (if unique then border else None)
+                                            tabAlign = (if unique then align else None)
                                             groupHwnd = seedGroupHwnd
                                             tabIndex = idx
                                             closedHwnd = savedHwnd
@@ -1446,8 +1483,12 @@ type Program() as this =
             // Stop the periodic save before the explicit final save, so we don't
             // race against an in-flight Tick during shutdown teardown.
             periodicSaveTimer.Stop()
-            // Save tab group configuration before shutdown
-            this.saveTabGroupsToSettings()
+            // A normal WindowTabs exit gets one final snapshot. During Windows
+            // logoff/restart, SessionEnding already froze the last known-good
+            // periodic snapshot; saving here could overwrite it after other
+            // applications have started tearing down their windows.
+            if inSessionEnd.value.not then
+                this.saveTabGroupsToSettings()
             inShutdown.set(true)
             this.desktop.groups.iter <| fun gi ->
                 gi.windows.iter <| fun window ->
@@ -1590,7 +1631,9 @@ type Program() as this =
         member x.llMouse = llMouseEvent.Publish
         member x.isDisabled = isDisabledCell.value
         member x.isShuttingDown = inShutdown.value
-        member x.saveTabGroupsBeforeExit() = this.saveTabGroupsToSettings()
+        member x.saveTabGroupsBeforeExit() =
+            if inSessionEnd.value.not then
+                this.saveTabGroupsToSettings()
         member x.setDisabled(value) =
             // Save disabled state to settings
             try
