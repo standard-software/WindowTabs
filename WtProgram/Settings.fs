@@ -126,19 +126,32 @@ type Settings(isStandAlone) as this =
                         existingLen > 0L &&
                         int64 newContent.Length * 3L < existingLen &&
                         newContent.Contains("\"Version\": \"\"")
-                    // Trace every write: timestamp, size, and the caller
-                    // stack. The 08-25 wipe was written by a healthy
-                    // long-running process from an in-memory state that had
-                    // somehow become the defaults - the next occurrence must
-                    // name the code path that did it.
+                    // DEBUG builds only: trace every write with the caller
+                    // stack, so the next wipe-like incident names the code
+                    // path that produced it. Not compiled into Release - it
+                    // grows with every settings change and end users have no
+                    // use for it. A REFUSED write is still recorded in
+                    // Release, through the read_error log below.
+#if DEBUG
                     try
-                        File.AppendAllText(this.path + ".write_trace.log",
+                        let tracePath = this.path + ".write_trace.log"
+                        if File.Exists(tracePath) && (FileInfo(tracePath)).Length > 5_000_000L then
+                            File.Delete(tracePath)
+                        File.AppendAllText(tracePath,
                             sprintf "%s %s %d bytes (disk had %d)%s%s%s"
                                 (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
                                 (if looksLikeWipe then "REFUSED wipe-like write of" else "write")
                                 newContent.Length existingLen
                                 Environment.NewLine Environment.StackTrace (Environment.NewLine + Environment.NewLine))
                     with _ -> ()
+#endif
+                    if looksLikeWipe then
+                        // Release builds have no write trace, but a refused
+                        // wipe must never be invisible there.
+                        (try
+                            File.AppendAllText(this.path + ".read_error.log",
+                                sprintf "%s REFUSED wipe-like settings write (%d bytes over %d on disk)" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) newContent.Length existingLen + Environment.NewLine)
+                         with _ -> ())
                     if looksLikeWipe.not then
                         let tempPath = this.path + ".tmp"
                         File.WriteAllText(tempPath, newContent)
