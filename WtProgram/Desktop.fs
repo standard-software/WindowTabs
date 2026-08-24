@@ -163,6 +163,7 @@ type Desktop(notify:IDesktopNotification) as this =
         member x.dragDrop((pt, data)) = invoker.asyncInvoke <| fun() ->
             let dragInfo = unbox<TabDragInfo>(data)
             let (Tab(hwnd)) = dragInfo.tab
+            DragTrace.log (sprintf "Desktop.dragDrop: hwnd=%X pt=%A selected=%d" (hwnd.ToInt64()) pt dragInfo.selectedHwnds.Length)
             let window = os.windowFromHwnd(hwnd)
             // Calculate window position from drop point
             // In preview image: click position is at imageOffset, window top-left is at (0, tabHeight - tabHeightOffset - 1)
