@@ -9,6 +9,7 @@
   - Fix: comments are now removed by a scanner that copies string literals out verbatim, so a URL, a "//" or a "/* */" inside a value is left untouched
   - A read that fails, or falls back to empty settings, now blocks every settings write until a read succeeds again: whatever breaks a read, it can no longer turn into a wipe
   - Refusing a wipe-like write no longer depends on the Version being empty - content that shrank to a third of the file and carries no Version at all is refused as well
+  - A settings file that can no longer be read is repaired instead of ignored: the newest backup that still parses and carries a version is adopted, and the file that could not be read is kept beside it as `WindowTabsSettings.txt.corrupt.<timestamp>`. Until that succeeds nothing is saved at all, and no value built while the file was unreadable is kept, so defaults can never be written back once the file reads cleanly again
 
 ## version ss_2026.08.24_next1
 - Fixed a state where tab drag and drop stopped working and newly opened windows stopped being tabbed, until WindowTabs was restarted
