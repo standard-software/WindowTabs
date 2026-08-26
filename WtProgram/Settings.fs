@@ -27,6 +27,11 @@ type Settings(isStandAlone) as this =
     // the pre-launch content must stay recoverable. Auto backups follow the
     // pattern <file>.bak.<stamp> and only the 10 newest are kept.
     let mutable backedUpThisProcess = false
+    // Latched when a read fails or a parse falls back to empty settings.
+    // While it is set every value the app holds is a default that came from
+    // nowhere, and saving from that state is exactly how the settings file
+    // gets wiped - so writes are refused until a read parses cleanly again.
+    let mutable settingsUntrusted = false
     let settingChangedEvent = Event<string* obj>()
     let valueCache = Dictionary<string, obj>()
 
@@ -73,7 +78,9 @@ type Settings(isStandAlone) as this =
                         // A read failure here is how a later save comes to
                         // write DEFAULTS over the user's real settings, so it
                         // is never silent: the exception is recorded next to
-                        // the settings file before None is returned.
+                        // the settings file before None is returned, and no
+                        // write is allowed until a read succeeds.
+                        settingsUntrusted <- true
                         (try
                             File.AppendAllText(this.path + ".read_error.log",
                                 sprintf "%s read failed: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")) ex + Environment.NewLine)
@@ -114,18 +121,34 @@ type Settings(isStandAlone) as this =
                             if old.Length > 10 then
                                 old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
                         with _ -> ()
-                    // A save whose content is both far smaller than what is
-                    // on disk and carries an empty Version is the exact
-                    // signature of the 08-24 / 08-25 wipes (an in-memory
-                    // state decayed to the defaults) and never legitimate:
-                    // the write is REFUSED and recorded, and the file keeps
-                    // its last good content. The in-memory caches are left
-                    // alone too, so a healthy state formed later can still
-                    // save normally.
-                    let looksLikeWipe =
-                        existingLen > 0L &&
-                        int64 newContent.Length * 3L < existingLen &&
-                        newContent.Contains("\"Version\": \"\"")
+                    // Two ways a write is refused, both meaning "this content
+                    // was not derived from the user's real settings":
+                    //  - the last read failed or fell back to empty settings.
+                    //    On 2026-08-26 a window title holding a URL broke the
+                    //    JSONC comment strip, and the empty state that came
+                    //    back was saved over 39 KB of settings.
+                    //  - the content shrank to a third of the file on disk
+                    //    AND carries no Version. Every legitimate save stamps
+                    //    the running build into Version, so an empty one
+                    //    (08-24 / 08-25) or a missing key (08-26) marks a
+                    //    state that never saw the user's file.
+                    // A refused write is recorded and the file keeps its last
+                    // good content. The in-memory caches are left alone too,
+                    // so a healthy state formed later can still save normally.
+                    let carriesVersion =
+                        let marker = "\"Version\": \""
+                        let i = newContent.IndexOf(marker)
+                        i >= 0 && i + marker.Length < newContent.Length &&
+                        newContent.[i + marker.Length] <> '"'
+                    let refusedReason =
+                        if settingsUntrusted then
+                            Some("settings had been read as empty")
+                        elif existingLen > 0L &&
+                             int64 newContent.Length * 3L < existingLen &&
+                             carriesVersion.not then
+                            Some("shrank to a third with no Version")
+                        else None
+                    let looksLikeWipe = refusedReason.IsSome
                     // DEBUG builds only: trace every write with the caller
                     // stack, so the next wipe-like incident names the code
                     // path that produced it. Not compiled into Release - it
@@ -140,7 +163,9 @@ type Settings(isStandAlone) as this =
                         File.AppendAllText(tracePath,
                             sprintf "%s %s %d bytes (disk had %d)%s%s%s"
                                 (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
-                                (if looksLikeWipe then "REFUSED wipe-like write of" else "write")
+                                (match refusedReason with
+                                 | Some(reason) -> sprintf "REFUSED (%s) write of" reason
+                                 | None -> "write")
                                 newContent.Length existingLen
                                 Environment.NewLine Environment.StackTrace (Environment.NewLine + Environment.NewLine))
                     with _ -> ()
@@ -150,7 +175,7 @@ type Settings(isStandAlone) as this =
                         // wipe must never be invisible there.
                         (try
                             File.AppendAllText(this.path + ".read_error.log",
-                                sprintf "%s REFUSED wipe-like settings write (%d bytes over %d on disk)" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) newContent.Length existingLen + Environment.NewLine)
+                                sprintf "%s REFUSED settings write (%s: %d bytes over %d on disk)" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) (refusedReason.def "") newContent.Length existingLen + Environment.NewLine)
                          with _ -> ())
                     if looksLikeWipe.not then
                         let tempPath = this.path + ".tmp"
@@ -173,6 +198,7 @@ type Settings(isStandAlone) as this =
     // signature seen on 08-24 / 08-25. The fallbacks stay (crashing here
     // would be worse), but they are never silent any more.
     member private this.logEmptyFallback (where: string) (ex: exn) =
+        settingsUntrusted <- true
         try
             File.AppendAllText(this.path + ".read_error.log",
                 sprintf "%s %s fell back to empty settings: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
@@ -183,7 +209,11 @@ type Settings(isStandAlone) as this =
             try
                 this.settingsString.map(fun s ->
                     try
-                        parseJsoncObject(s)
+                        let parsed = parseJsoncObject(s)
+                        // A clean read makes the in-memory state trustworthy
+                        // again, whatever went wrong before.
+                        settingsUntrusted <- false
+                        parsed
                     with
                     | ex ->
                         this.logEmptyFallback "settingsJson parse" ex
