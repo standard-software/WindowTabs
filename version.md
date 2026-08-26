@@ -2,25 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.08.24_next2
-- Fixed the settings file being emptied while WindowTabs was running
-  - Cause: comments were stripped from the settings file with a regular expression that did not know where a JSON string begins and ends. Any value holding a "//" - a renamed tab name carrying a URL, for instance - had everything from there to the end of the line cut out of it, which broke the JSON for the whole file
-  - The failed read fell back to empty settings, and the next periodic save wrote that empty state over the real file. Tab colors, tabbing targets, auto-grouping paths and the tab groups all vanished at once, with WindowTabs still running
-  - Fix: comments are now removed by a scanner that copies string literals out verbatim, so a URL, a "//" or a "/* */" inside a value is left untouched
-  - A read that fails, or falls back to empty settings, now blocks every settings write until a read succeeds again: whatever breaks a read, it can no longer turn into a wipe
-  - Refusing a wipe-like write no longer depends on the Version being empty - content that shrank to a third of the file and carries no Version at all is refused as well
-  - A settings file that can no longer be read is repaired instead of ignored: the newest backup that still parses and carries a version is adopted, and the file that could not be read is kept beside it as `WindowTabsSettings.txt.corrupt.<timestamp>`. Until that succeeds nothing is saved at all, and no value built while the file was unreadable is kept, so defaults can never be written back once the file reads cleanly again
-
-## version ss_2026.08.24_next1
-- Fixed a state where tab drag and drop stopped working and newly opened windows stopped being tabbed, until WindowTabs was restarted
-  - Cause: ending a drag was not protected against failure. One failure while releasing the mouse capture, the timer or the preview window skipped the step that marks the drag as finished, and every later drag was then ignored while the window pass that tabs new windows never ran again
-  - The same standstill was reachable from a tab detach: the pause on window monitoring was lifted by a timer belonging to the tab group being detached from, so emptying that group could take the resume with it
-  - Fix: every way a drag can end now runs one guarded teardown that always finishes the drag, a new drag abandons any drag left behind, and a monitoring pause both belongs to its own operation and expires by itself
-- The settings file is now protected against being wiped
-  - A write that would replace a large settings file with an empty-looking one is refused and logged, so a single bad write can no longer take every setting with it
-  - A backup is made before the first overwrite of each session, and again whenever the file shrinks sharply (`WindowTabsSettings.txt.bak.<timestamp>`, the ten newest kept)
-  - Reading the settings file now retries briefly while another instance still holds it - during a restart handover, for instance - instead of quietly starting from defaults
-  - Every fall back to empty settings is written to `WindowTabsSettings.txt.read_error.log`, so a silent loss leaves a trace
+## version ss_2026.08.28
+- Fixed the settings file being emptied while WindowTabs was running: a saved value holding a "//" - a renamed tab carrying a URL - was cut short by the JSONC comment strip, which broke the whole file and made the next save write defaults over it
+- A settings file that can no longer be read is now repaired from the newest sound backup, and the unreadable one is kept as `WindowTabsSettings.txt.corrupt.<timestamp>`
+- Until that succeeds nothing is saved at all, so a failed read can no longer come back as defaults written over real settings
+- The settings file is backed up before the first overwrite of each session and on any sharp shrink (`WindowTabsSettings.txt.bak.<timestamp>`, ten kept), and every read failure is recorded in `WindowTabsSettings.txt.read_error.log`
+- Fixed tab drag and drop stopping, and newly opened windows no longer being tabbed, until WindowTabs was restarted
 
 ## version ss_2026.08.24
 - Fixed the settings dialog's Behavior-tab rows growing to nearly double height (forcing a scrollbar) on some machines
