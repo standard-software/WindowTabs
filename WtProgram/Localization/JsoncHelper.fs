@@ -33,13 +33,23 @@ module JsoncHelper =
                     elif s = '"' then
                         inString <- false
             elif c = '/' && i + 1 < json.Length && json.[i + 1] = '/' then
-                // Line comment: dropped, but the newline is left in place so
-                // parse errors still name the original line number.
+                // Line comment: replaced by a space. The newline that ends it
+                // is left for the copy below, so a parse error still names the
+                // line it has in the original file.
                 while i < json.Length && json.[i] <> '\n' do i <- i + 1
+                sb.Append(' ') |> ignore
             elif c = '/' && i + 1 < json.Length && json.[i + 1] = '*' then
+                // Block comment: replaced by a space - dropping it outright
+                // would turn "1/* c */2" into "12" - followed by one newline
+                // per line it spanned, so everything after it keeps the line
+                // number it has in the original file.
+                let commentStart = i
                 i <- i + 2
                 while i + 1 < json.Length && not (json.[i] = '*' && json.[i + 1] = '/') do i <- i + 1
                 i <- if i + 1 < json.Length then i + 2 else json.Length
+                sb.Append(' ') |> ignore
+                for k in commentStart .. i - 1 do
+                    if json.[k] = '\n' then sb.Append('\n') |> ignore
             else
                 sb.Append(c) |> ignore
                 i <- i + 1
