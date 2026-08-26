@@ -2,6 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.24_next2
+- Fixed the settings file being emptied while WindowTabs was running
+  - Cause: comments were stripped from the settings file with a regular expression that did not know where a JSON string begins and ends. Any value holding a "//" - a renamed tab name carrying a URL, for instance - had everything from there to the end of the line cut out of it, which broke the JSON for the whole file
+  - The failed read fell back to empty settings, and the next periodic save wrote that empty state over the real file. Tab colors, tabbing targets, auto-grouping paths and the tab groups all vanished at once, with WindowTabs still running
+  - Fix: comments are now removed by a scanner that copies string literals out verbatim, so a URL, a "//" or a "/* */" inside a value is left untouched
+  - A read that fails, or falls back to empty settings, now blocks every settings write until a read succeeds again: whatever breaks a read, it can no longer turn into a wipe
+  - Refusing a wipe-like write no longer depends on the Version being empty - content that shrank to a third of the file and carries no Version at all is refused as well
+  - A settings file that can no longer be read is repaired instead of ignored: the newest backup that still parses and carries a version is adopted, and the file that could not be read is kept beside it as `WindowTabsSettings.txt.corrupt.<timestamp>`. Until that succeeds nothing is saved at all, and no value built while the file was unreadable is kept, so defaults can never be written back once the file reads cleanly again
+
 ## version ss_2026.08.24_next1
 - Fixed a state where tab drag and drop stopped working and newly opened windows stopped being tabbed, until WindowTabs was restarted
   - Cause: ending a drag was not protected against failure. One failure while releasing the mouse capture, the timer or the preview window skipped the step that marks the drag as finished, and every later drag was then ignored while the window pass that tabs new windows never ran again

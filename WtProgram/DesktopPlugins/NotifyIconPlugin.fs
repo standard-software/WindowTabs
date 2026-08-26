@@ -22,10 +22,45 @@ module Watchdog =
     // Use AutoResetEvent for more reliable signaling
     let private pingResponse = new AutoResetEvent(false)
 
+    // The watchdog is not expected to have anything left to catch. Showing
+    // that needs a record from real machines rather than from a debug run, so
+    // this log is compiled into RELEASE as well - it is the evidence for
+    // eventually deleting the watchdog altogether.
+    // It cannot grow: a run writes one line when the watchdog is armed and one
+    // when it stops, and a ping timeout always ends in a restart, so there is
+    // no repeating state to spam. The 1 MB guard is there only in case that
+    // assumption is ever wrong, and it keeps the overflow as watchdog.log.old
+    // instead of dropping it.
+    let private logPath =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "WindowTabs",
+            "watchdog.log")
+
+    let private log (message: string) =
+        try
+            let dir = Path.GetDirectoryName(logPath)
+            if not (Directory.Exists(dir)) then Directory.CreateDirectory(dir) |> ignore
+            if File.Exists(logPath) && (FileInfo(logPath)).Length > 1_000_000L then
+                File.Copy(logPath, logPath + ".old", true)
+                File.Delete(logPath)
+            File.AppendAllText(
+                logPath,
+                sprintf "%s [pid %d] %s%s"
+                    (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                    (Process.GetCurrentProcess().Id)
+                    message
+                    Environment.NewLine)
+        with _ -> ()
+
     let respondToPing() =
         pingResponse.Set() |> ignore
 
     let private trySaveAndRestart() =
+        // Written before anything else: the process is about to be replaced,
+        // and a restart nobody can account for afterwards is worse than the
+        // freeze it was meant to cure.
+        log "FIRED - the UI thread stopped answering; saving the tab groups and restarting"
         try
             // Try to save tab groups before restart
             let saveComplete = new ManualResetEvent(false)
@@ -81,6 +116,8 @@ module Watchdog =
                 else
                     // UI thread did not respond
                     consecutiveFailures <- consecutiveFailures + 1
+                    log (sprintf "ping timed out after %d ms (%d of %d before a restart)"
+                            freezeTimeout consecutiveFailures requiredConsecutiveFailures)
 
                     if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
                         // UI thread is frozen (confirmed by multiple consecutive failures), force restart
@@ -94,7 +131,7 @@ module Watchdog =
     let start() =
         // Don't start watchdog when debugger is attached (prevents false positives during debugging)
         if Debugger.IsAttached then
-            ()
+            log "not armed - a debugger is attached"
         elif watchdogThread.IsNone then
             // Capture UI thread's invoker (must be called from UI thread)
             uiThreadInvoker <- Some(InvokerService.invoker)
@@ -104,8 +141,11 @@ module Watchdog =
             thread.Name <- "WindowTabs Watchdog"
             thread.Start()
             watchdogThread <- Some(thread)
+            log (sprintf "armed - monitoring starts in 10 s, then a ping every %d ms with a %d ms timeout"
+                    checkInterval freezeTimeout)
 
     let stop() =
+        if watchdogThread.IsSome && not stopRequested then log "stopped"
         stopRequested <- true
         pingResponse.Set() |> ignore  // Unblock any waiting
 
