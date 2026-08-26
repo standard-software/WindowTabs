@@ -32,6 +32,15 @@ type Settings(isStandAlone) as this =
     // nowhere, and saving from that state is exactly how the settings file
     // gets wiped - so writes are refused until a read parses cleanly again.
     let mutable settingsUntrusted = false
+    // The backup scan below runs at most once per process: a settings file
+    // that no backup can replace would otherwise rescan the whole directory
+    // on every settings access.
+    let mutable recoveryAttempted = false
+    // One log line per kind of failure. Without the record cache to absorb
+    // them (see the settings getter) a fallback is reached on every settings
+    // access, and a log that repeats itself thousands of times buries the
+    // first occurrence - the only one that still explains the incident.
+    let loggedFallbacks = HashSet<string>()
     let settingChangedEvent = Event<string* obj>()
     let valueCache = Dictionary<string, obj>()
 
@@ -124,7 +133,7 @@ type Settings(isStandAlone) as this =
                     // Two ways a write is refused, both meaning "this content
                     // was not derived from the user's real settings":
                     //  - the last read failed or fell back to empty settings.
-                    //    On 2026-08-26 a window title holding a URL broke the
+                    //    On 2026-08-26 a saved value holding a URL broke the
                     //    JSONC comment strip, and the empty state that came
                     //    back was saved over 39 KB of settings.
                     //  - the content shrank to a third of the file on disk
@@ -135,6 +144,11 @@ type Settings(isStandAlone) as this =
                     // A refused write is recorded and the file keeps its last
                     // good content. The in-memory caches are left alone too,
                     // so a healthy state formed later can still save normally.
+                    // The marker follows how JObject.ToString() formats the
+                    // settings - two-space indent, ": " between key and value.
+                    // Should that ever change, the key stops being found and
+                    // every sharp shrink is refused instead of allowed: an
+                    // inconvenience, but on the side that keeps the file.
                     let carriesVersion =
                         let marker = "\"Version\": \""
                         let i = newContent.IndexOf(marker)
@@ -199,26 +213,81 @@ type Settings(isStandAlone) as this =
     // would be worse), but they are never silent any more.
     member private this.logEmptyFallback (where: string) (ex: exn) =
         settingsUntrusted <- true
-        try
-            File.AppendAllText(this.path + ".read_error.log",
-                sprintf "%s %s fell back to empty settings: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
-        with _ -> ()
+        if loggedFallbacks.Add(where) then
+            try
+                File.AppendAllText(this.path + ".read_error.log",
+                    sprintf "%s %s fell back to empty settings - no setting is saved until a backup is adopted or WindowTabs is restarted: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
+            with _ -> ()
+
+    // A settings file that no longer parses does not have to end as "the
+    // settings are the defaults". The backups taken before every sharp shrink
+    // hold the same settings from minutes earlier, so the newest one that
+    // parses AND carries a non-empty Version is adopted - the Version test is
+    // what skips a backup written from an already-decayed state, the way
+    // .bak.20260826_181345 was. The file that could not be read is kept as
+    // <file>.corrupt.<stamp> instead of being overwritten.
+    member private this.tryRecoverFromBackup() : JObject option =
+        if recoveryAttempted then None
+        else
+            recoveryAttempted <- true
+            try
+                let dir = Path.GetDirectoryName(this.path)
+                let name = Path.GetFileName(this.path)
+                Directory.GetFiles(dir, name + ".bak.*")
+                |> Array.sortDescending
+                |> Array.tryPick (fun backup ->
+                    try
+                        let text = File.ReadAllText(backup)
+                        let parsed = parseJsoncObject(text)
+                        match parsed.getString("Version") with
+                        | Some(version) when version <> "" ->
+                            let stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss")
+                            let kept = this.path + ".corrupt." + stamp
+                            if File.Exists(this.path) then File.Move(this.path, kept)
+                            File.Copy(backup, this.path, true)
+                            // File and derived state are replaced together, so
+                            // nothing built while the settings were unreadable
+                            // survives into the recovered process.
+                            cachedSettingsString <- Some(text)
+                            cachedSettingsRec <- None
+                            valueCache.Clear()
+                            settingsUntrusted <- false
+                            (try
+                                File.AppendAllText(this.path + ".read_error.log",
+                                    sprintf "%s RECOVERED the settings from %s (%d bytes, Version %s); the unreadable file is kept as %s"
+                                        (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                                        (Path.GetFileName(backup)) text.Length version (Path.GetFileName(kept))
+                                    + Environment.NewLine)
+                             with _ -> ())
+                            Some(parsed)
+                        | _ -> None
+                    with _ -> None)
+            with _ -> None
 
     member this.settingsJson
         with get() =
             try
-                this.settingsString.map(fun s ->
+                match this.settingsString with
+                | Some(s) ->
                     try
-                        let parsed = parseJsoncObject(s)
-                        // A clean read makes the in-memory state trustworthy
-                        // again, whatever went wrong before.
-                        settingsUntrusted <- false
-                        parsed
+                        parseJsoncObject(s)
                     with
                     | ex ->
+                        // A later parse succeeding is NOT enough to trust this
+                        // process again: by then a record made of pure defaults
+                        // may already have been built and handed out, and
+                        // saving it would write those defaults over a file that
+                        // reads perfectly well. Only a recovery, which swaps
+                        // the file and every cache together, lifts the latch.
                         this.logEmptyFallback "settingsJson parse" ex
-                        JObject()  // Return empty JObject if parsing fails
-                ).def(JObject())
+                        this.tryRecoverFromBackup().def(JObject())
+                | None ->
+                    // Nothing to parse: either there is no settings file yet -
+                    // a first run, with nothing to protect - or the read failed
+                    // and latched, and a backup may still hold what the file
+                    // will not give up.
+                    if this.fileExists then this.tryRecoverFromBackup().def(JObject())
+                    else JObject()
             with
             | ex ->
                 this.logEmptyFallback "settingsJson outer" ex
@@ -520,7 +589,13 @@ type Settings(isStandAlone) as this =
                     cachedSettingsRec <- Some(defaultSettings)
                     // Optionally log the error for debugging
                     System.Diagnostics.Debug.WriteLine(sprintf "Settings loading failed: %s" ex.Message)
-            cachedSettingsRec.Value
+            let loaded = cachedSettingsRec.Value
+            // A record built while the settings are untrusted is made of
+            // defaults. It is handed back - the app has to run on something -
+            // but never kept, so it cannot outlive the state that produced it
+            // and be written back once the file reads cleanly again.
+            if settingsUntrusted then cachedSettingsRec <- None
+            loaded
 
         and set(settings) =
             let settingsJson = this.settingsJson
@@ -574,7 +649,9 @@ type Settings(isStandAlone) as this =
             | None ->
                 let settings = x.settings
                 let value = Serialize.readField settings key
-                valueCache.Add(key, value)
+                // Same reason as the record cache: a value read out of the
+                // defaults must not outlive them.
+                if settingsUntrusted.not then valueCache.Add(key, value)
                 value
             | Some(value) -> value
 
