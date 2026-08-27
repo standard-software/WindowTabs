@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.08.28_next1
+
 ## version ss_2026.08.28
 - WindowTabs の起動中に設定ファイルが空になる不具合を修正: 値の中の "//"（URL を含むタブ名など）が JSONC のコメント除去で切り落とされてファイル全体が壊れ、次の保存で既定値が上書きしていた
 - 読み込めなくなった設定ファイルを、最も新しい正常なバックアップから自動修復するようにした。読めなかったファイルは `WindowTabsSettings.txt.corrupt.<日時>` として残す
