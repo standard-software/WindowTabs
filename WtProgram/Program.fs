@@ -76,12 +76,27 @@ type ClosedTabInfo = {
     tabIndex: int
     closedHwnd: IntPtr
     closedAt: DateTime
+    // True for an entry SEEDED by the startup restore (a saved window whose
+    // application has not started yet), false for a tab the user closed by
+    // hand. Only seeds are written back to the settings file, and only seeds
+    // may be matched by exe path alone: resurrecting a hand-closed tab, or
+    // handing an unrelated window to one, would both be wrong.
+    isRestoreSeed: bool
+    // Saved rectangle (x, y, width, height) of a seeded window. Kept so the
+    // twin disambiguation and the title-less fallback still have a position
+    // to compare against.
+    savedRect: (int * int * int * int) option
     // Full tab order (hwnds) of the group at close time. Restore placement is
     // computed RELATIVE to this snapshot (count of current tabs that came
     // before this one), which keeps surviving tabs in their original relative
     // position instead of being displaced by absolute-index insertion.
     orderSnapshot: IntPtr list
 }
+
+// Exe paths come from the same API on both sides, but the file system does
+// not distinguish case and neither should the comparison.
+let sameExePath (a: string) (b: string) =
+    String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
 
 // Titles are compared after removing VSCode's unsaved-changes marker
 // ("● "), so a document that closed clean and reopens dirty (or vice
@@ -467,6 +482,8 @@ type Program() as this =
                     tabIndex = tabIndex
                     closedHwnd = hwnd
                     closedAt = now
+                    isRestoreSeed = false
+                    savedRect = None
                     orderSnapshot = orderSnapshot
                 }
                 closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
@@ -494,16 +511,64 @@ type Program() as this =
     // matches exe path + window title exactly (after title normalization).
     // Exact match only: restoring nothing is better than restoring onto the
     // wrong window.
+    member private this.takeClosedTabAt(idx: int) =
+        let info = closedTabCache.value.[idx]
+        closedTabCache.map(fun l ->
+            l |> List.mapi (fun i v -> (i, v)) |> List.filter (fun (i, _) -> i <> idx) |> List.map snd)
+        info
+
     member private this.takeClosedTabMatch(exePath: string, windowTitle: string) =
         if exePath = "" || windowTitle = "" then None else
         let windowTitle = normalizeClosedTabTitle windowTitle
-        match closedTabCache.value |> List.tryFindIndex (fun i -> i.exePath = exePath && i.windowTitle = windowTitle) with
-        | Some(idx) ->
-            let info = closedTabCache.value.[idx]
-            closedTabCache.map(fun l ->
-                l |> List.mapi (fun i v -> (i, v)) |> List.filter (fun (i, _) -> i <> idx) |> List.map snd)
-            Some(info)
+        match closedTabCache.value |> List.tryFindIndex (fun i ->
+                sameExePath i.exePath exePath && i.windowTitle = windowTitle) with
+        | Some(idx) -> Some(this.takeClosedTabAt idx)
         | None -> None
+
+    // Fallback for a window whose title does not survive a restart. A
+    // browser's title is its active tab's, so Edge or Chrome comes back
+    // showing a different page and the exact match above finds nothing -
+    // which is how one window of a mixed group (Edge + LINE + Chrome) was
+    // left behind while the others reassembled. Only restore SEEDS are
+    // eligible, never a tab the user closed by hand, and only when the window
+    // reopened where it was: applications restore their own geometry, so a
+    // rectangle that no longer overlaps means this is a different window.
+    // With several candidates the nearest saved rectangle wins.
+    member private this.takeSeedMatchByExe(exePath: string, bounds: (int * int * int * int) option) =
+        if exePath = "" then None else
+        let centerOf (x, y, w, h) = (float x + float w / 2.0, float y + float h / 2.0)
+        let contains (x, y, w, h) (px, py) =
+            px >= float x && px <= float (x + w) && py >= float y && py <= float (y + h)
+        let overlaps (saved: int * int * int * int) =
+            match bounds with
+            | None -> true
+            | Some(live) -> contains saved (centerOf live) || contains live (centerOf saved)
+        let candidates =
+            closedTabCache.value
+            |> List.mapi (fun i e -> (i, e))
+            |> List.filter (fun (_, e) ->
+                e.isRestoreSeed &&
+                sameExePath e.exePath exePath &&
+                (match e.savedRect with
+                 | Some(r) -> overlaps r
+                 | None -> true))
+        match candidates with
+        | [] -> None
+        | _ ->
+            let idx =
+                match bounds with
+                | Some(live) ->
+                    let (lx, ly) = centerOf live
+                    candidates
+                    |> List.minBy (fun (_, e) ->
+                        match e.savedRect with
+                        | Some(r) ->
+                            let (sx, sy) = centerOf r
+                            (sx - lx) * (sx - lx) + (sy - ly) * (sy - ly)
+                        | None -> infinity)
+                    |> fst
+                | None -> candidates |> List.head |> fst
+            Some(this.takeClosedTabAt idx)
 
     // Relative placement for a restored tab: the target index is the number
     // of current tabs (excluding the restored one) that sat BEFORE it in the
@@ -537,7 +602,16 @@ type Program() as this =
         if closedTabCache.value.IsEmpty then None else
         let exePath = try window.pid.processPath with _ -> ""
         let windowTitle = try window.text with _ -> ""
-        match this.takeClosedTabMatch(exePath, windowTitle) with
+        let bounds =
+            try
+                let b = window.bounds
+                Some(b.x, b.y, b.width, b.height)
+            with _ -> None
+        let matched =
+            match this.takeClosedTabMatch(exePath, windowTitle) with
+            | Some(info) -> Some(info)
+            | None -> this.takeSeedMatchByExe(exePath, bounds)
+        match matched with
         | Some(info) ->
             let hwnd = window.hwnd
             // Restore state to the global maps before addWindow so the tab is
@@ -874,16 +948,20 @@ type Program() as this =
             let isSavedGroup = this.isInfoGroup group info
             // The former group no longer exists (e.g. the whole group was
             // absent at startup and its members are reopening one by one, so
-            // the cache entries still carry the dead sentinel). Point the
-            // remaining entries of that group at the group this window
-            // actually landed in, so the siblings reassemble there instead of
-            // each spawning a group of its own.
-            if not isSavedGroup then
-                let landed = (try group.hwnd with _ -> IntPtr.Zero)
-                if landed <> IntPtr.Zero then
-                    closedTabCache.map(fun l ->
-                        l |> List.map (fun e ->
-                            if e.groupHwnd = info.groupHwnd then { e with groupHwnd = landed } else e))
+            // the cache entries still carry the dead sentinel). Bind the
+            // sentinel to the group this window actually landed in, so the
+            // siblings reassemble there instead of each spawning a group of
+            // its own.
+            //
+            // What is registered is the group OBJECT, not its strip hwnd:
+            // TabStripDecorator is constructed asynchronously on the group
+            // thread, so a group created moments ago has no strip hwnd yet
+            // and reading it here throws. Keying on the hwnd therefore did
+            // nothing in exactly the case this exists for - a whole saved
+            // group absent at boot - and Edge, LINE and Chrome each ended up
+            // in a group of their own.
+            if not isSavedGroup && info.groupHwnd <> IntPtr.Zero then
+                seededGroupMap.map(fun m -> m.add info.groupHwnd group)
             let restoredPairs = restoredFromMap.value
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -983,10 +1061,52 @@ type Program() as this =
 
     // Save tab group configuration to settings file for restoration on next startup
     // Uses hwnd only for matching - simpler and more reliable
+    // One saved window that has not opened yet, as it goes back into the
+    // settings file.
+    member private this.seedToJson(e: ClosedTabInfo) =
+        let o = JObject()
+        o.setInt64("hwnd", e.closedHwnd.ToInt64())
+        o.setString("exePath", e.exePath)
+        o.setString("windowTitle", e.windowTitle)
+        (match e.savedRect with
+         | Some(x, y, w, h) -> o.setString("rect", sprintf "%d,%d,%d,%d" x y w h)
+         | None -> ())
+        (match e.renamedTabName with
+         | Some(name) -> o.setString("renamedTabName", name)
+         | None -> ())
+        if e.isPinned then o.setBool("isPinned", true)
+        (match e.fillColor with
+         | Some(c) -> o.setString("tabFillColor", colorToRRGGBBAA c)
+         | None -> ())
+        (match e.underlineColor with
+         | Some(c) -> o.setString("tabUnderlineColor", colorToRRGGBBAA c)
+         | None -> ())
+        (match e.borderColor with
+         | Some(c) -> o.setString("tabBorderColor", colorToRRGGBBAA c)
+         | None -> ())
+        (match e.tabAlign with
+         | Some(a) ->
+            o.setString("tabAlignment", (match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"))
+         | None -> ())
+        o
+
     member this.saveTabGroupsToSettings() =
         try
             let json = settingsManager.settingsJson
             let groupsArray = JArray()
+            // Saved windows whose application has not started yet are held in
+            // memory as restore seeds, and nothing else remembers them. The
+            // periodic save fires 10 s after boot - long before applications
+            // that are not in Startup come up - so without writing the seeds
+            // back it would replace the file's record of those groups with
+            // whatever happens to be running, which right after a restart is
+            // nothing. A WindowTabs restart, or a second reboot, would then
+            // have lost the groups for good.
+            let pendingSeeds =
+                closedTabCache.value
+                |> List.filter (fun e -> e.isRestoreSeed)
+                |> List.sortBy (fun e -> e.tabIndex)
+            let claimedSeeds = System.Collections.Generic.HashSet<IntPtr>()
             this.desktop.groups.iter <| fun gi ->
                 let windowsArray = JArray()
                 // Save in the strip's real on-screen order (the visualOrder
@@ -1052,6 +1172,18 @@ type Program() as this =
                             windowObj.setString("tabAlignment", alignStr)
                         | None -> ()
                         windowsArray.Add(windowObj)
+                // Seeds of a group that has partly reassembled here are
+                // saved with it, at the index they held in the saved order.
+                pendingSeeds |> List.iter (fun e ->
+                    if claimedSeeds.Contains(e.closedHwnd).not then
+                        match this.findGroupForClosedInfo e with
+                        | Some(g) when obj.ReferenceEquals(g, gi) ->
+                            claimedSeeds.Add(e.closedHwnd) |> ignore
+                            let at =
+                                if e.tabIndex >= 0 && e.tabIndex < windowsArray.Count
+                                then e.tabIndex else windowsArray.Count
+                            windowsArray.Insert(at, this.seedToJson e)
+                        | _ -> ())
                 if windowsArray.Count > 0 then
                     let groupObj = JObject()
                     groupObj.addOrUpdate("windows", windowsArray)
@@ -1060,6 +1192,18 @@ type Program() as this =
                     // Save per-group snap tab height margin
                     groupObj.setBool("snapTabHeightMargin", gi.snapTabHeightMargin)
                     groupsArray.Add(groupObj)
+            // A group where nothing has opened yet keeps a group of its own,
+            // held together by the sentinel token it was seeded under.
+            pendingSeeds
+            |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not)
+            |> List.groupBy (fun e -> e.groupHwnd)
+            |> List.iter (fun (_, entries) ->
+                let windowsArray = JArray()
+                entries |> List.iter (fun e -> windowsArray.Add(this.seedToJson e))
+                if windowsArray.Count > 0 then
+                    let groupObj = JObject()
+                    groupObj.addOrUpdate("windows", windowsArray)
+                    groupsArray.Add(groupObj))
             json.addOrUpdate("SavedTabGroupsForRestart", groupsArray)
             settingsManager.settingsJson <- json
         with
@@ -1217,7 +1361,7 @@ type Program() as this =
                 // path + normalized title, for the Windows-restart case where
                 // every hwnd is new. Exact match only - restoring nothing is
                 // better than restoring onto the wrong window.
-                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) (savedCenter: (float * float) option) =
+                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) (savedRect: (int * int * int * int) option) =
                     let h = savedHwnd.ToInt64()
                     if hwndReserved.Contains(h) && taken.Add(h) then Some(savedHwnd)
                     else
@@ -1230,6 +1374,10 @@ type Program() as this =
                                     taken.Contains(ch).not &&
                                     String.Equals(cExe, exe, StringComparison.OrdinalIgnoreCase) &&
                                     cTitle = t)
+                            let savedCenter =
+                                savedRect
+                                |> Option.map (fun (x, y, w, h) ->
+                                    (float x + float w / 2.0, float y + float h / 2.0))
                             let pick =
                                 match candidates, savedCenter with
                                 | [], _ -> None
@@ -1288,29 +1436,35 @@ type Program() as this =
                                             | Some("TopLeft") | Some("Left") -> Some(TopLeft)
                                             | Some("TopRight") | Some("Right") -> Some(TopRight)
                                             | _ -> None
-                                        let savedCenter =
+                                        let savedRect =
                                             obj.getString("rect")
                                             |> Option.bind (fun s ->
                                                 match s.Split(',') with
                                                 | [| xs; ys; ws; hs |] ->
                                                     match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
-                                                    | (true, x), (true, y), (true, w), (true, h) ->
-                                                        Some(float x + float w / 2.0, float y + float h / 2.0)
+                                                    | (true, x), (true, y), (true, w), (true, h) -> Some(x, y, w, h)
                                                     | _ -> None
                                                 | _ -> None)
                                         (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
-                                         obj.getString("exePath"), obj.getString("windowTitle"), savedCenter))
+                                         obj.getString("exePath"), obj.getString("windowTitle"), savedRect))
                                 | _ -> None)
                             |> List.ofSeq
+
+                        // Saved rectangle per old hwnd, for the seeds below:
+                        // a seed that outlives a WindowTabs restart has to
+                        // carry its position, or the twin disambiguation and
+                        // the title-less fallback lose their reference point.
+                        let savedRectByHwnd = System.Collections.Generic.Dictionary<IntPtr, (int * int * int * int) option>()
+                        savedWindowsList |> List.iter (fun (h, _, _, _, _, _, _, _, _, r) -> savedRectByHwnd.[h] <- r)
 
                         // Resolve each saved window to a live one (saved order
                         // kept). The resolved hwnd - not the saved one - is
                         // what the group and the global per-window maps get.
                         let resolvedList =
                             savedWindowsList
-                            |> List.map (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title, center) ->
+                            |> List.map (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title, rect) ->
                                 (hwnd, renamed, isPinned, fill, under, border, align, exePath, title,
-                                 resolveWindow hwnd exePath title center))
+                                 resolveWindow hwnd exePath title rect))
                         let matchedWindows =
                             resolvedList
                             |> List.choose (fun (savedHwnd, renamed, isPinned, fill, under, border, align, exePath, title, live) ->
@@ -1434,6 +1588,11 @@ type Program() as this =
                                             tabIndex = idx
                                             closedHwnd = savedHwnd
                                             closedAt = DateTime.Now
+                                            isRestoreSeed = true
+                                            savedRect =
+                                                (match savedRectByHwnd.TryGetValue(savedHwnd) with
+                                                 | true, r -> r
+                                                 | _ -> None)
                                             orderSnapshot = savedOrderOldHwnds
                                         }
                                         closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
