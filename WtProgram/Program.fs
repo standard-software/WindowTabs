@@ -855,7 +855,13 @@ type Program() as this =
                                             info.fillColor |> Option.iter (fun c -> wg.ts.setTabFillColor(tab, Some(c)))
                                             info.underlineColor |> Option.iter (fun c -> wg.ts.setTabUnderlineColor(tab, Some(c)))
                                             info.borderColor |> Option.iter (fun c -> wg.ts.setTabBorderColor(tab, Some(c)))
-                                            info.tabAlign |> Option.iter (fun a -> wg.ts.setTabAlign(tab, a))
+                                            // Through the group, not the strip: wg.setTabAlign
+                                            // also writes the global map the settings file is
+                                            // saved from. The strip-only call left that map
+                                            // holding the alignment this window had inherited
+                                            // when it was auto-grouped, so the tab looked right
+                                            // but came back right-aligned after the NEXT restart.
+                                            info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
                                             if isSavedGroup then
                                                 let currentTabs = wg.ts.visualOrder
                                                 let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredPairs)
