@@ -208,6 +208,19 @@ type Program() as this =
     // window reappears. In-memory only — a WindowTabs restart clears it.
     let closedTabCache = Cell.create<ClosedTabInfo list>([])
     let closedTabCacheLimit = 500
+    // When each window was first seen, so a match by exe path alone can be
+    // held back until the window's title has settled.
+    let windowFirstSeen = Cell.create(Map2() : Map2<IntPtr, int64>)
+    // An application shows a transient title for the first moments of its
+    // life: Windows Terminal starts on the shell's own name before the
+    // session's, VSCode on "Welcome" before the workspace. Claiming a saved
+    // entry by exe path alone during that time hands it - and with it a
+    // position in the group - to whichever same-exe window happened to
+    // appear first. After a restart a group of four terminals came back in
+    // the right slots with the wrong window in each. The fallback therefore
+    // waits for the title, unless it is the only candidate and there is
+    // nothing to take from anyone else.
+    let seedFallbackGraceMs = 20000L
     // Live snapshot of (exePath, windowTitle) per grouped hwnd, so the info
     // is still available when the closed tab is recorded after its window
     // has already been destroyed
@@ -534,7 +547,7 @@ type Program() as this =
     // reopened where it was: applications restore their own geometry, so a
     // rectangle that no longer overlaps means this is a different window.
     // With several candidates the nearest saved rectangle wins.
-    member private this.takeSeedMatchByExe(exePath: string, bounds: (int * int * int * int) option) =
+    member private this.findSeedByExe(exePath: string, bounds: (int * int * int * int) option) =
         if exePath = "" then None else
         let centerOf (x, y, w, h) = (float x + float w / 2.0, float y + float h / 2.0)
         let contains (x, y, w, h) (px, py) =
@@ -568,7 +581,23 @@ type Program() as this =
                         | None -> infinity)
                     |> fst
                 | None -> candidates |> List.head |> fst
-            Some(this.takeClosedTabAt idx)
+            Some(idx, List.length candidates)
+
+    // Whether this window may claim a saved entry by exe path alone yet. One
+    // candidate is unambiguous and needs no wait; several mean the title is
+    // the only thing that can tell them apart, so the window has to have been
+    // around long enough for its own title to have settled.
+    member private this.seedFallbackAllowed(hwnd: IntPtr, candidateCount: int) =
+        candidateCount <= 1 ||
+        (match windowFirstSeen.value.tryFind(hwnd) with
+         | Some(seenAt) -> monotonic.ElapsedMilliseconds - seenAt >= seedFallbackGraceMs
+         | None -> false)
+
+    // Consume one specific cache entry (the one a peek settled on).
+    member private this.takeClosedTabEntry(info: ClosedTabInfo) =
+        match closedTabCache.value |> List.tryFindIndex (fun e -> obj.ReferenceEquals(e, info)) with
+        | Some(idx) -> Some(this.takeClosedTabAt idx)
+        | None -> None
 
     // Relative placement for a restored tab: the target index is the number
     // of current tabs (excluding the restored one) that sat BEFORE it in the
@@ -610,7 +639,11 @@ type Program() as this =
         let matched =
             match this.takeClosedTabMatch(exePath, windowTitle) with
             | Some(info) -> Some(info)
-            | None -> this.takeSeedMatchByExe(exePath, bounds)
+            | None ->
+                match this.findSeedByExe(exePath, bounds) with
+                | Some(idx, count) when this.seedFallbackAllowed(window.hwnd, count) ->
+                    Some(this.takeClosedTabAt idx)
+                | _ -> None
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
@@ -646,6 +679,12 @@ type Program() as this =
     // Called from updateAppWindows and the 1s titleSyncTimer.
     member this.syncWindowTitles() =
         try
+            // While saved windows are still waiting to open, every grouped
+            // window is offered to the late restore on each pass, not only
+            // when its title changes: a window whose title never becomes the
+            // saved one has no other moment at which it could rejoin its
+            // group once the grace period is over.
+            let hasSeeds = closedTabCache.value |> List.exists (fun e -> e.isRestoreSeed)
             this.desktop.groups.iter <| fun gi ->
                 gi.windows.iter <| fun hwnd ->
                     match windowInfoCache.value.tryFind(hwnd) with
@@ -657,6 +696,8 @@ type Program() as this =
                                 windowInfoCache.map(fun m -> m.add hwnd (exePath, newTitle))
                                 if newTitle <> "" then
                                     this.tryLateClosedTabRestore(hwnd, exePath, newTitle)
+                            elif hasSeeds && exePath <> "" then
+                                this.tryLateClosedTabRestore(hwnd, exePath, newTitle)
                     | None ->
                         let window = os.windowFromHwnd(hwnd)
                         if window.isWindow then
@@ -677,7 +718,24 @@ type Program() as this =
                 if closedTabCache.value.IsEmpty.not && isPristine then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
-                    match closedTabCache.value |> List.tryFind (fun i -> i.exePath = exePath && i.windowTitle = normTitle) with
+                    let bounds =
+                        try
+                            let b = os.windowFromHwnd(hwnd).bounds
+                            Some(b.x, b.y, b.width, b.height)
+                        with _ -> None
+                    let peeked =
+                        match closedTabCache.value |> List.tryFind (fun i -> sameExePath i.exePath exePath && i.windowTitle = normTitle) with
+                        | Some(info) -> Some(info)
+                        | None ->
+                            // The title never became the saved one (a browser
+                            // reopened on a different page): once the grace
+                            // period has passed, exe path alone is enough to
+                            // put the window back with its group.
+                            match this.findSeedByExe(exePath, bounds) with
+                            | Some(idx, count) when this.seedFallbackAllowed(hwnd, count) ->
+                                Some(closedTabCache.value.[idx])
+                            | _ -> None
+                    match peeked with
                     | Some(info) ->
                         let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
                         let savedGroup = this.findGroupForClosedInfo info
@@ -692,7 +750,7 @@ type Program() as this =
                             cur.removeWindow(hwnd)
                             this.scheduleUpdateAppWindows()
                         | _ ->
-                        match this.takeClosedTabMatch(exePath, windowTitle) with
+                        match this.takeClosedTabEntry(info) with
                         | Some(info) ->
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
@@ -766,6 +824,8 @@ type Program() as this =
             window.pid.isCurrentProcess.not &&
             this.isAppWindowStyle(window)
             then
+            if windowFirstSeen.value.tryFind(hwnd).IsNone then
+                windowFirstSeen.map(fun m -> m.add hwnd monotonic.ElapsedMilliseconds)
             let registerEvent evt =
                 window.setWinEventHook evt (fun() -> this.receive(WinEvent(hwnd, evt)))
             let hooks = List2([WinEvent.EVENT_OBJECT_SHOW;WinEvent.EVENT_OBJECT_HIDE]).map(registerEvent)
