@@ -3,6 +3,10 @@
 **Language:** [Japanese/日本語](version_Japanese.md)
 
 ## version ss_2026.08.28_next1
+- Tab groups now survive a Windows restart: each saved window carries its exe path and title, so the restore finds the reopened windows even though every hwnd changed
+- Windows a restart can no longer tell apart (same application, same title) are restored together into the group they shared; the same title spread across two groups is not restored by identity at all, because guessing there would certainly change the group structure rather than merely risk it
+- Rename, pin, colors and alignment are applied only when the exe path and title pick out exactly one saved and one live window - on a twin they are left off rather than possibly attached to the wrong window
+- On logoff or restart the saved tab groups are frozen as of the shutdown notification, so applications closing during the shutdown can no longer overwrite them with a half-emptied state
 
 ## version ss_2026.08.28
 - Fixed the settings file being emptied while WindowTabs was running: a saved value holding a "//" - a renamed tab carrying a URL - was cut short by the JSONC comment strip, which broke the whole file and made the next save write defaults over it
