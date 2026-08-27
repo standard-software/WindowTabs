@@ -11,7 +11,10 @@ module DragTrace =
     let mutable private writes = 0
 #endif
 
-    let log (s: string) =
+    // Takes a thunk, not a string. An argument is evaluated before the call,
+    // so taking the message itself left every sprintf at every call site
+    // running in release builds with only the file write compiled out.
+    let log (f: unit -> string) =
 #if DEBUG
         try
             let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
@@ -23,11 +26,11 @@ module DragTrace =
                     let previous = path + ".1"
                     try IO.File.Delete(previous) with _ -> ()
                     try IO.File.Move(path, previous) with _ -> ()
-            let line = sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) Threading.Thread.CurrentThread.ManagedThreadId s
+            let line = sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) Threading.Thread.CurrentThread.ManagedThreadId (f())
             IO.File.AppendAllText(path, line)
         with _ -> ()
 #else
-        ignore s
+        ignore f
 #endif
 
     // Short caller list for pinpointing which of the many suspend/resume call
@@ -67,7 +70,7 @@ type DragDetectingState(info:DragDetectingStateInfo) as this =
     interface IDragState with
         member this.mouseMove(ptScreen) =
             if ptScreen.distance(info.initialPt) > dragStartDistance then
-                DragTrace.log (sprintf "detect: threshold passed at %A" ptScreen)
+                DragTrace.log (fun () -> sprintf "detect: threshold passed at %A" ptScreen)
                 info.onBegin()
         member this.dispose() = ()
 
@@ -168,15 +171,15 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
     // capture, the watchdog timer, the capture window and the animation window
     // before handing the slot back.
     member this.abort() =
-        DragTrace.log (sprintf "[d%d] abort: abandoning drag" dragId)
+        DragTrace.log (fun () -> sprintf "[d%d] abort: abandoning drag" dragId)
         this.finish(ptScreenCell.value, false)
 
     member private this.finish(ptScreen, dropAllowed) =
         if hasEnded.not then
             hasEnded <- true
-            DragTrace.log (sprintf "[d%d] captureEnded: state=%s pt=%A drop=%b" dragId (match dragStateCell.value with Some s -> s.GetType().Name | None -> "none") ptScreen dropAllowed)
+            DragTrace.log (fun () -> sprintf "[d%d] captureEnded: state=%s pt=%A drop=%b" dragId (match dragStateCell.value with Some s -> s.GetType().Name | None -> "none") ptScreen dropAllowed)
             let step name f =
-                try f() with ex -> DragTrace.log (sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
+                try f() with ex -> DragTrace.log (fun () -> sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
             let state = dragStateCell.value
             step "releaseCapture" <| fun() -> this.captureWindow.releaseCapture()
             step "disposeCaptureWindow" <| fun() -> (captureWindowCell.value.Value :?> IDisposable).Dispose()
@@ -213,7 +216,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 // has set one): still hand the slot back.
                 notifyTargets()
                 step "onCancel" info.onCancel
-            DragTrace.log (sprintf "[d%d] captureEnded: done" dragId)
+            DragTrace.log (fun () -> sprintf "[d%d] captureEnded: done" dragId)
 
     member this.wndProc (msg:Win32Message) =
         let ptScreen() =
@@ -225,23 +228,23 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         | WindowMessages.WM_MOUSEMOVE ->
             if moveCount < 3 then
                 moveCount <- moveCount + 1
-                DragTrace.log (sprintf "[d%d] wndProc: WM_MOUSEMOVE #%d at %A" dragId moveCount (ptScreen()))
+                DragTrace.log (fun () -> sprintf "[d%d] wndProc: WM_MOUSEMOVE #%d at %A" dragId moveCount (ptScreen()))
             // Also check physical mouse button state during mouse move
             // This catches the case where mouse was released but no up event was received
             if not (isLeftMouseButtonDown()) then
-                DragTrace.log (sprintf "[d%d] wndProc: button up during move" dragId)
+                DragTrace.log (fun () -> sprintf "[d%d] wndProc: button up during move" dragId)
                 this.captureEnded(ptScreen())
             else
                 dragStateCell.value.Value.mouseMove(ptScreen())
         | WindowMessages.WM_MOUSELEAVE
         | WindowMessages.WM_LBUTTONUP ->
-            DragTrace.log (sprintf "[d%d] wndProc: msg %d" dragId msg.msg)
+            DragTrace.log (fun () -> sprintf "[d%d] wndProc: msg %d" dragId msg.msg)
             this.captureEnded(ptScreen())
         | _ -> ()
         msg.def()
 
     member this.dragFloat() =
-        DragTrace.log (sprintf "[d%d] dragFloat" dragId)
+        DragTrace.log (fun () -> sprintf "[d%d] dragFloat" dragId)
         this.setNextState <| DragFloatingState({
             targets = info.targets
             imageOffset = info.imageOffset.mulf(dragScale, dragScale)
@@ -255,7 +258,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         let targetWindow = os.windowFromHwnd(targetHwnd)
         let ptTarget = targetWindow.ptToClient(ptScreen)
         let accepted = target.dragEnter info.data ptTarget
-        DragTrace.log (sprintf "[d%d] dragEnter: target=%X initial=%b accepted=%b" dragId (targetHwnd.ToInt64()) isInitial accepted)
+        DragTrace.log (fun () -> sprintf "[d%d] dragEnter: target=%X initial=%b accepted=%b" dragId (targetHwnd.ToInt64()) isInitial accepted)
         if accepted then
             this.setNextState <| DragCapturedState({
                 target = target
@@ -293,18 +296,18 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         if captureWindowCell.value.IsSome then failwith "already started"
         captureWindowCell.set(Some(os.createWindow this.wndProc 0 0))
         this.captureWindow.setCapture()
-        DragTrace.log (sprintf "[d%d] start: captureHwnd=%X hasCapture=%b lbuttonDown=%b fgHwnd=%X fgThread=%d myThread=%d" dragId
-                            (this.captureWindow.hwnd.ToInt64()) this.captureWindow.hasCapture (isLeftMouseButtonDown())
-                            (WinUserApi.GetForegroundWindow().ToInt64())
-                            (Win32Helper.GetWindowThreadId(WinUserApi.GetForegroundWindow()))
-                            (Win32Helper.GetWindowThreadId(this.captureWindow.hwnd)))
+        DragTrace.log (fun () -> sprintf "[d%d] start: captureHwnd=%X hasCapture=%b lbuttonDown=%b fgHwnd=%X fgThread=%d myThread=%d" dragId
+                                      (this.captureWindow.hwnd.ToInt64()) this.captureWindow.hasCapture (isLeftMouseButtonDown())
+                                      (WinUserApi.GetForegroundWindow().ToInt64())
+                                      (Win32Helper.GetWindowThreadId(WinUserApi.GetForegroundWindow()))
+                                      (Win32Helper.GetWindowThreadId(this.captureWindow.hwnd)))
         // Use shorter interval (50ms) for more responsive mouse button state detection
         timer.Interval <- 50
         timer.Tick.Add <| fun _ ->
             // Check if capture is lost OR if mouse button is physically released
             // This handles the case where mouse up event is missed (e.g., released outside tab area)
             if this.captureWindow.hasCapture.not || not (isLeftMouseButtonDown()) then
-                DragTrace.log (sprintf "[d%d] timer: hasCapture=%b lbuttonDown=%b" dragId this.captureWindow.hasCapture (isLeftMouseButtonDown()))
+                DragTrace.log (fun () -> sprintf "[d%d] timer: hasCapture=%b lbuttonDown=%b" dragId this.captureWindow.hasCapture (isLeftMouseButtonDown()))
                 this.captureEnded(ptScreenCell.value)
         timer.Start()
         this.dragDetect()
@@ -330,7 +333,7 @@ type DragDropController(parent:IDragDropParent) =
         member x.beginDrag((initialHwnd, image, imageOffset, initialPt, data)) = withLock <| fun() ->
             nextDragId <- nextDragId + 1
             let dragId = nextDragId
-            DragTrace.log (sprintf "[d%d] beginDrag: strip=%X pt=%A busy=%b" dragId (initialHwnd.ToInt64()) initialPt dragActionCell.value.IsSome)
+            DragTrace.log (fun () -> sprintf "[d%d] beginDrag: strip=%X pt=%A busy=%b" dragId (initialHwnd.ToInt64()) initialPt dragActionCell.value.IsSome)
             // A new mouse-down on a tab means the previous drag is over,
             // whatever state its own teardown left behind. Abandon it properly
             // - mouse capture, watchdog timer, capture window and animation

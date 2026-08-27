@@ -355,7 +355,7 @@ type Program() as this =
             | ShellEvent.HSHELL_WINDOWCREATED ->
                 if shellTraceCount < 60 then
                     shellTraceCount <- shellTraceCount + 1
-                    DragTrace.log (sprintf "shell: WINDOWCREATED hwnd=%X" (hwnd.ToInt64()))
+                    DragTrace.log (fun () -> sprintf "shell: WINDOWCREATED hwnd=%X" (hwnd.ToInt64()))
                 this.receive(ShellEvent(hwnd, shellEvent))
             | ShellEvent.HSHELL_WINDOWDESTROYED -> this.receive(ShellEvent(hwnd, shellEvent))
             | ShellEvent.HSHELL_WINDOWACTIVATED
@@ -421,7 +421,7 @@ type Program() as this =
     member private this.expireStaleTabMonitoringSuspension() =
         if isTabMonitoringSuspendedCell.value &&
            monotonic.ElapsedMilliseconds - tabMonitoringSuspendedMs > tabMonitoringSuspendMaxMs then
-            DragTrace.log "tabMonitoring: suspension expired, auto-resuming"
+            DragTrace.log (fun () -> "tabMonitoring: suspension expired, auto-resuming")
             isTabMonitoringSuspendedCell.set(false)
 
     member this.updateRunAtStartup(value)=
@@ -944,8 +944,8 @@ type Program() as this =
         if updateTraceCount < 60 || this.desktop.isDragging || this.isTabMonitoringSuspended then
             updateTraceCount <- updateTraceCount + 1
             if updateTraceCount <= 200 then
-                DragTrace.log (sprintf "updateAppWindows #%d: isDragging=%b suspended=%b disabled=%b shutdown=%b restorePending=%b"
-                                    updateTraceCount this.desktop.isDragging this.isTabMonitoringSuspended isDisabledCell.value inShutdown.value needsRestoreOnStartup.value)
+                DragTrace.log (fun () -> sprintf "updateAppWindows #%d: isDragging=%b suspended=%b disabled=%b shutdown=%b restorePending=%b"
+                                              updateTraceCount this.desktop.isDragging this.isTabMonitoringSuspended isDisabledCell.value inShutdown.value needsRestoreOnStartup.value)
         if this.desktop.isDragging.not then
             // If restoration is needed on startup, do it first before auto-grouping
             if needsRestoreOnStartup.value then
@@ -986,7 +986,7 @@ type Program() as this =
         if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window) && this.isInGroup(window.hwnd).not then
             if groupTraceCount < 60 then
                 groupTraceCount <- groupTraceCount + 1
-                DragTrace.log (sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
+                DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
             this.addWindowToGroup(window)
 
     member this.destroyEmptyGroups() =
@@ -1057,7 +1057,7 @@ type Program() as this =
             | Some(group) -> (group, false)
             | None -> (Services.desktop.createGroup(false), true)
         let isDropped = isDroppedAndAwaitingGrouping.value.contains(hwnd)
-        DragTrace.log (sprintf "addWindowToGroup: hwnd=%X dropped=%b newGroup=%b" (hwnd.ToInt64()) isDropped isNewGroup)
+        DragTrace.log (fun () -> sprintf "addWindowToGroup: hwnd=%X dropped=%b newGroup=%b" (hwnd.ToInt64()) isDropped isNewGroup)
         //need to add this now so we don't end up creating another group for it while waiting for the WgnWindowAdded notification
         isDroppedAndAwaitingGrouping.map(fun s -> s.remove hwnd)
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
@@ -1931,7 +1931,7 @@ type Program() as this =
         member x.isFirstRun = isFirstRun
         member x.refresh() = this.refresh()
         member x.suspendTabMonitoring() = 
-            DragTrace.log (sprintf "suspendTabMonitoring (already=%b)\r\n%s" isTabMonitoringSuspendedCell.value (DragTrace.callers 6))
+            DragTrace.log (fun () -> sprintf "suspendTabMonitoring (already=%b)\r\n%s" isTabMonitoringSuspendedCell.value (DragTrace.callers 6))
             this.isTabMonitoringSuspended <- true
 
         member x.resumeTabMonitoringAfter(delayMs) =
@@ -1948,13 +1948,13 @@ type Program() as this =
                     // own resume is the one that has to end it.
                     if tabMonitoringSuspendGeneration = generation then
                         this.isTabMonitoringSuspended <- false
-                        DragTrace.log "resumeTabMonitoring (delayed)"
+                        DragTrace.log (fun () -> "resumeTabMonitoring (delayed)")
                         this.refresh()
                     else
-                        DragTrace.log "resumeTabMonitoring (delayed, superseded)") |> ignore
+                        DragTrace.log (fun () -> "resumeTabMonitoring (delayed, superseded)")) |> ignore
 
         member x.resumeTabMonitoring() = 
-            DragTrace.log "resumeTabMonitoring"
+            DragTrace.log (fun () -> "resumeTabMonitoring")
             this.isTabMonitoringSuspended <- false
             this.refresh()
 
@@ -2238,7 +2238,7 @@ type Program() as this =
 
     interface IDesktopNotification with
         member x.dragDrop(hwnd) =
-            DragTrace.log (sprintf "Program.dragDrop: hwnd=%X" (hwnd.ToInt64()))
+            DragTrace.log (fun () -> sprintf "Program.dragDrop: hwnd=%X" (hwnd.ToInt64()))
             isDroppedAndAwaitingGrouping.map <| fun s -> s.add hwnd
 
         member x.dragEnd() = 
