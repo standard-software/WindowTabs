@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.28_next1
+
 ## version ss_2026.08.28
 - Fixed the settings file being emptied while WindowTabs was running: a saved value holding a "//" - a renamed tab carrying a URL - was cut short by the JSONC comment strip, which broke the whole file and made the next save write defaults over it
 - A settings file that can no longer be read is now repaired from the newest sound backup, and the unreadable one is kept as `WindowTabsSettings.txt.corrupt.<timestamp>`
