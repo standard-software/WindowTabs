@@ -117,6 +117,27 @@ let withoutTabState (info: ClosedTabInfo) =
 // versa) still matches.
 let normalizeClosedTabTitle (t: string) = t.Replace("● ", "")
 
+// Debug-only trace of the session restore: which saved entry each window
+// claimed, by which route, and where it was placed. Truncated at each start.
+module RestoreTrace =
+    let private path =
+        IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "WindowTabs", "restore_trace.log")
+    let mutable private started = false
+    let log (s: string) =
+#if DEBUG
+        try
+            if not started then
+                started <- true
+                try IO.File.WriteAllText(path, "") with _ -> ()
+            IO.File.AppendAllText(path,
+                sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) s)
+        with _ -> ()
+#else
+        ignore s
+#endif
+
 type Program() as this =
     let version = "ss_2026.08.28_next1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
@@ -235,6 +256,15 @@ type Program() as this =
     // waits for the title, unless it is the only candidate and there is
     // nothing to take from anyone else.
     let seedFallbackGraceMs = 20000L
+    // Windows that have already taken a saved entry, either by matching one
+    // at startup or by claiming one afterwards. A window takes at most one.
+    // While saved windows are still waiting to open, the title sync offers
+    // every grouped window to the late restore, and a window that was put
+    // back in its place at startup is as eligible as any other: one already
+    // restored to slot 0 went on to claim the leftover entry of a sibling
+    // that never reopened, and moved itself to that sibling's slot. The
+    // group's own windows shuffled themselves out of order that way.
+    let restoreClaimed = Cell.create(Set2<IntPtr>())
     // Live snapshot of (exePath, windowTitle) per grouped hwnd, so the info
     // is still available when the closed tab is recorded after its window
     // has already been destroyed
@@ -650,7 +680,7 @@ type Program() as this =
     // appears, restore its tab state and put it back into its former group.
     // Runs before category/exe auto-grouping in findGroupForWindow.
     member this.tryClosedTabRestore(window:Window) =
-        if closedTabCache.value.IsEmpty then None else
+        if closedTabCache.value.IsEmpty || restoreClaimed.value.contains(window.hwnd) then None else
         let exePath = try window.pid.processPath with _ -> ""
         let windowTitle = try window.text with _ -> ""
         let bounds =
@@ -667,9 +697,16 @@ type Program() as this =
                     let info = this.takeClosedTabAt idx
                     Some(if count > 1 then withoutTabState info else info)
                 | _ -> None
+        (match matched with
+         | Some(i) -> RestoreTrace.log (sprintf "claim(early) hwnd=%X token=%X rank=%d align=%A pin=%b title=%s"
+                                            (window.hwnd.ToInt64()) (i.groupHwnd.ToInt64()) i.tabIndex i.tabAlign i.isPinned windowTitle)
+         | None ->
+            if closedTabCache.value |> List.exists (fun e -> e.isRestoreSeed && sameExePath e.exePath exePath) then
+                RestoreTrace.log (sprintf "claim(early) hwnd=%X NONE title=%s" (window.hwnd.ToInt64()) windowTitle))
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
+            restoreClaimed.map(fun s -> s.add hwnd)
             // Restore state to the global maps before addWindow so the tab is
             // created with the saved name/colors/pin/alignment (same pattern
             // as restoreTabGroupsFromSettings)
@@ -738,7 +775,8 @@ type Program() as this =
                     windowFillColor.value.tryFind(hwnd).IsNone &&
                     windowUnderlineColor.value.tryFind(hwnd).IsNone &&
                     windowBorderColor.value.tryFind(hwnd).IsNone
-                if closedTabCache.value.IsEmpty.not && isPristine then
+                if closedTabCache.value.IsEmpty.not && isPristine &&
+                   restoreClaimed.value.contains(hwnd).not then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -758,6 +796,10 @@ type Program() as this =
                             | Some(idx, count) when this.seedFallbackAllowed(hwnd, count) ->
                                 Some(closedTabCache.value.[idx], count > 1)
                             | _ -> None
+                    (match peeked with
+                     | Some(i, amb) -> RestoreTrace.log (sprintf "claim(late) hwnd=%X token=%X rank=%d amb=%b title=%s"
+                                                            (hwnd.ToInt64()) (i.groupHwnd.ToInt64()) i.tabIndex amb windowTitle)
+                     | None -> ())
                     match peeked with
                     | Some(info, ambiguous) ->
                         let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
@@ -770,11 +812,13 @@ type Program() as this =
                             // pipeline re-add it: with the title now matching,
                             // tryClosedTabRestore performs the full group +
                             // position + state restore and consumes the entry.
+                            RestoreTrace.log (sprintf "  late hwnd=%X DETACH (wrong group)" (hwnd.ToInt64()))
                             cur.removeWindow(hwnd)
                             this.scheduleUpdateAppWindows()
                         | _ ->
                         match this.takeClosedTabEntry(info) with
                         | Some(entry) ->
+                            restoreClaimed.map(fun s -> s.add hwnd)
                             let info = if ambiguous then withoutTabState entry else entry
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
@@ -819,6 +863,11 @@ type Program() as this =
                                                 | Some(curIdx) when curIdx <> targetIdx ->
                                                     wg.ts.moveTab(tab, targetIdx)
                                                 | _ -> ()
+                                                RestoreTrace.log (sprintf "  place(late) hwnd=%X rank=%d target=%d after=%s"
+                                                                        (hwnd.ToInt64()) info.tabIndex targetIdx
+                                                                        (wg.ts.visualOrder.list |> List.map (fun (Tab h) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
+                                            else
+                                                RestoreTrace.log (sprintf "  place(late) hwnd=%X SKIPPED (not saved group)" (hwnd.ToInt64()))
                                             // Enforce the saved pin state AFTER the move:
                                             // moveTab applies smart-pin, which can flip the
                                             // pin state depending on the tab's neighbors.
@@ -1076,6 +1125,11 @@ type Program() as this =
                             | Some(curIdx) when curIdx <> targetIdx ->
                                 wg.ts.moveTab(newTab, targetIdx)
                             | _ -> ()
+                            RestoreTrace.log (sprintf "  place(early) hwnd=%X rank=%d target=%d after=%s"
+                                                    (hwnd.ToInt64()) info.tabIndex targetIdx
+                                                    (wg.ts.visualOrder.list |> List.map (fun (Tab h) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
+                        else
+                            RestoreTrace.log (sprintf "  place(early) hwnd=%X SKIPPED (not saved group)" (hwnd.ToInt64()))
                         // Enforce the saved pin state AFTER the move: moveTab
                         // applies smart-pin, which can flip the pin state
                         // depending on the restored tab's neighbors.
@@ -1116,6 +1170,8 @@ type Program() as this =
                     this.recordClosedTab(hwnd, g)
                     g.removeWindow(hwnd)
                 windowInfoCache.map(fun m -> m.remove hwnd)
+                windowFirstSeen.map(fun m -> m.remove hwnd)
+                restoreClaimed.map(fun s -> s.remove hwnd)
                 this.destroyEmptyGroups()
                 this.exitIfNeeded()
                 skipFullUpdate <- true
@@ -1600,6 +1656,8 @@ type Program() as this =
                                     else (l, savedHwnd, None, false, None, None, None, None)))
 
                         // Create group with matched windows (preserving saved order)
+                        matchedWindows |> List.iteri (fun i (h, sh, _, _, _, _, _, _) ->
+                            RestoreTrace.log (sprintf "  matched[%d] hwnd=%X saved=%X" i (h.ToInt64()) (sh.ToInt64())))
                         let createdGroup =
                           if matchedWindows.Length >= 1 then
                             let group = Services.desktop.createGroup(false)
@@ -1639,6 +1697,7 @@ type Program() as this =
                                 // (closedTabTargetIdx resolves through this map).
                                 if hwnd <> savedHwnd then
                                     restoredFromMap.map(fun m -> m.add hwnd savedHwnd)
+                                restoreClaimed.map(fun s -> s.add hwnd)
                                 group.addWindow(hwnd, false)
                             )
                             // Restore per-group tab position if saved
@@ -1675,6 +1734,10 @@ type Program() as this =
                         // repoints the remaining entries (addWindowToGroup).
                         let seedGroupHwnd =
                             match savedOrderOldHwnds with h :: _ -> h | [] -> IntPtr.Zero
+                        RestoreTrace.log (sprintf "group token=%X created=%b order=%s"
+                                                (seedGroupHwnd.ToInt64())
+                                                (createdGroup.IsSome)
+                                                (savedOrderOldHwnds |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
                         (match createdGroup with
                          | Some(g) when seedGroupHwnd <> IntPtr.Zero ->
                             seededGroupMap.map(fun m -> m.add seedGroupHwnd g)
@@ -1711,6 +1774,8 @@ type Program() as this =
                                                  | _ -> None)
                                             orderSnapshot = savedOrderOldHwnds
                                         }
+                                        RestoreTrace.log (sprintf "  seed rank=%d token=%X unique=%b align=%A pin=%b title=%s"
+                                                                idx (savedHwnd.ToInt64()) unique align isPinned title)
                                         closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
                                 | _ -> ())
 
