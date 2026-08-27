@@ -86,11 +86,11 @@ type ClosedTabInfo = {
     // twin disambiguation and the title-less fallback still have a position
     // to compare against.
     savedRect: (int * int * int * int) option
-    // When this window was first found closed at a startup restore. Seeds
-    // outlive restarts by being written back to the settings file, so without
-    // a date of their own their age would reset at every start and a window
-    // never opened again would hold its place for ever. None for a tab the
-    // user closed by hand, which is never written to the file at all.
+    // When this entry began waiting: the startup restore found the window
+    // closed, or the user closed the tab. Entries outlive restarts by being
+    // written back to the settings file, so without a date of their own their
+    // age would reset at every start and one whose window is never opened
+    // again would hold its place for ever.
     seedSince: DateTime option
     // Full tab order (hwnds) of the group at close time. Restore placement is
     // computed RELATIVE to this snapshot (count of current tabs that came
@@ -269,6 +269,15 @@ type Program() as this =
     // to rebuild by hand, while keeping one too long costs an unseen line in
     // the settings file. The asymmetry is why this is generous.
     let seedMaxAgeDays = 30.0
+    // The same for a tab the user closed by hand, which is kept as well so
+    // that closing a tab and opening the window again days later still puts
+    // it back where it was. Shorter, because the two say different things: an
+    // unopened window is "not yet", a closed tab is "not now". Eight days
+    // carries a Sunday's work through to the next Sunday.
+    let closedTabMaxAgeDays = 8.0
+    // How many closed tabs are written out. The cache holds hundreds and the
+    // file is rewritten every ten seconds, so only the newest few go in.
+    let closedTabSaveLimit = 50
     // Windows that have already taken a saved entry, either by matching one
     // at startup or by claiming one afterwards. A window takes at most one.
     // While saved windows are still waiting to open, the title sync offers
@@ -554,7 +563,7 @@ type Program() as this =
                     closedAt = now
                     isRestoreSeed = false
                     savedRect = None
-                    seedSince = None
+                    seedSince = Some(now)
                     orderSnapshot = orderSnapshot
                 }
                 closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
@@ -1264,6 +1273,12 @@ type Program() as this =
             o.setString("tabAlignment", (match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"))
          | None -> ())
         o.setString("seedSince", (e.seedSince |> Option.defaultValue DateTime.Now).ToString("o"))
+        // Read back as a tab the user closed, not as a window still waiting to
+        // start: only an exact title match may claim one of these. Without the
+        // mark they would return as seeds and become eligible for the match by
+        // application alone, and a newly opened browser window could be pulled
+        // into a group the user had closed a week earlier.
+        if e.isRestoreSeed.not then o.setBool("closedByUser", true)
         o
 
     member this.saveTabGroupsToSettings() =
@@ -1278,9 +1293,16 @@ type Program() as this =
             // whatever happens to be running, which right after a restart is
             // nothing. A WindowTabs restart, or a second reboot, would then
             // have lost the groups for good.
+            let saveNow = DateTime.Now
+            let notExpired (e: ClosedTabInfo) =
+                let since = e.seedSince |> Option.defaultValue saveNow
+                let limit = if e.isRestoreSeed then seedMaxAgeDays else closedTabMaxAgeDays
+                (saveNow - since).TotalDays <= limit
             let pendingSeeds =
-                closedTabCache.value
-                |> List.filter (fun e -> e.isRestoreSeed)
+                (closedTabCache.value |> List.filter (fun e -> e.isRestoreSeed && notExpired e))
+                @ (closedTabCache.value
+                   |> List.filter (fun e -> e.isRestoreSeed.not && notExpired e)
+                   |> List.truncate closedTabSaveLimit)
                 |> List.sortBy (fun e -> e.tabIndex)
             let claimedSeeds = System.Collections.Generic.HashSet<IntPtr>()
             this.desktop.groups.iter <| fun gi ->
@@ -1369,9 +1391,13 @@ type Program() as this =
                     groupObj.setBool("snapTabHeightMargin", gi.snapTabHeightMargin)
                     groupsArray.Add(groupObj)
             // A group where nothing has opened yet keeps a group of its own,
-            // held together by the sentinel token it was seeded under.
+            // held together by the sentinel token it was seeded under. Tabs
+            // the user closed are not kept this way: emptying a group is the
+            // plainest way of saying it is finished with, so once its last tab
+            // is closed the group goes rather than waiting to be resurrected
+            // by whichever of its windows is opened next.
             pendingSeeds
-            |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not)
+            |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not && e.isRestoreSeed)
             |> List.groupBy (fun e -> e.groupHwnd)
             |> List.iter (fun (_, entries) ->
                 let windowsArray = JArray()
@@ -1654,15 +1680,19 @@ type Program() as this =
                         // that was running at the last save has none, and starts
                         // its wait now.
                         let seedSinceByHwnd = System.Collections.Generic.Dictionary<IntPtr, DateTime>()
+                        let closedByUserHwnds = System.Collections.Generic.HashSet<IntPtr>()
                         for token in windowsArray do
                             match token with
                             | :? JObject as obj ->
-                                match obj.getIntPtr("hwnd"), obj.getString("seedSince") with
-                                | Some(h), Some(s) ->
+                                (match obj.getIntPtr("hwnd"), obj.getString("seedSince") with
+                                 | Some(h), Some(s) ->
                                     match DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) with
                                     | true, d -> seedSinceByHwnd.[h] <- d
                                     | _ -> ()
-                                | _ -> ()
+                                 | _ -> ())
+                                (match obj.getIntPtr("hwnd"), obj.getBool("closedByUser") with
+                                 | Some(h), Some(true) -> closedByUserHwnds.Add(h) |> ignore
+                                 | _ -> ())
                             | _ -> ()
 
                         // Resolve each saved window to a live one (saved order
@@ -1795,12 +1825,13 @@ type Program() as this =
                                         | true, d -> d
                                         | _ -> DateTime.Now
                                     let waitedDays = (DateTime.Now - waitingSince).TotalDays
-                                    if waitedDays > seedMaxAgeDays then
+                                    let byUser = closedByUserHwnds.Contains(savedHwnd)
+                                    if waitedDays > (if byUser then closedTabMaxAgeDays else seedMaxAgeDays) then
                                         // Not seeded and so not written back
                                         // either: the entry leaves the settings
                                         // file on this save.
-                                        RestoreTrace.log (sprintf "  seed rank=%d token=%X DROPPED after %.0f days title=%s"
-                                                                idx (savedHwnd.ToInt64()) waitedDays title)
+                                        RestoreTrace.log (sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
+                                                                (if byUser then "closed" else "seed") idx (savedHwnd.ToInt64()) waitedDays title)
                                     elif closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
                                         let info = {
                                             exePath = exe
@@ -1815,7 +1846,7 @@ type Program() as this =
                                             tabIndex = idx
                                             closedHwnd = savedHwnd
                                             closedAt = DateTime.Now
-                                            isRestoreSeed = true
+                                            isRestoreSeed = not byUser
                                             savedRect =
                                                 (match savedRectByHwnd.TryGetValue(savedHwnd) with
                                                  | true, r -> r
@@ -1823,8 +1854,8 @@ type Program() as this =
                                             seedSince = Some(waitingSince)
                                             orderSnapshot = savedOrderOldHwnds
                                         }
-                                        RestoreTrace.log (sprintf "  seed rank=%d token=%X unique=%b align=%A pin=%b title=%s"
-                                                                idx (savedHwnd.ToInt64()) unique align isPinned title)
+                                        RestoreTrace.log (sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b title=%s"
+                                                                (if byUser then "closed" else "seed") idx (savedHwnd.ToInt64()) unique align isPinned title)
                                         closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
                                 | _ -> ())
 
