@@ -1337,6 +1337,11 @@ type Program() as this =
                 (closedTabCache.value |> List.filter (fun e -> e.isRestoreSeed && notExpired e))
                 @ (closedTabCache.value
                    |> List.filter (fun e -> e.isRestoreSeed.not && notExpired e)
+                   // By date, not by position: entries read back from the file
+                   // are pushed onto the cache in the order the groups are
+                   // walked, so after a restart the head of the list has
+                   // nothing to do with which of them are the newest.
+                   |> List.sortByDescending (fun e -> e.seedSince |> Option.defaultValue DateTime.MinValue)
                    |> List.truncate closedTabSaveLimit)
                 |> List.sortBy (fun e -> e.tabIndex)
             let claimedSeeds = System.Collections.Generic.HashSet<IntPtr>()
@@ -1521,7 +1526,16 @@ type Program() as this =
                         match t with
                         | :? JObject as o ->
                             match o.getIntPtr("hwnd") with
-                            | Some(h) when savedHwndTrusted (h.ToInt64()) (o.getString("exePath")) ->
+                            // A tab the user closed is matched on its title and
+                            // nothing else. Its saved handle belongs to a window
+                            // that no longer exists, and now that the entry
+                            // lives in the file for eight days Windows has time
+                            // to hand that number to something else: reserving
+                            // it would let an unrelated window of the same
+                            // application take the closed tab's name, colours
+                            // and pin without its title ever being looked at.
+                            | Some(h) when savedHwndTrusted (h.ToInt64()) (o.getString("exePath")) &&
+                                           o.getBool("closedByUser") <> Some(true) ->
                                 hwndReserved.Add(h.ToInt64()) |> ignore
                             | _ -> ()
                         | _ -> ()
