@@ -86,6 +86,12 @@ type ClosedTabInfo = {
     // twin disambiguation and the title-less fallback still have a position
     // to compare against.
     savedRect: (int * int * int * int) option
+    // When this window was first found closed at a startup restore. Seeds
+    // outlive restarts by being written back to the settings file, so without
+    // a date of their own their age would reset at every start and a window
+    // never opened again would hold its place for ever. None for a tab the
+    // user closed by hand, which is never written to the file at all.
+    seedSince: DateTime option
     // Full tab order (hwnds) of the group at close time. Restore placement is
     // computed RELATIVE to this snapshot (count of current tabs that came
     // before this one), which keeps surviving tabs in their original relative
@@ -256,6 +262,13 @@ type Program() as this =
     // waits for the title, unless it is the only candidate and there is
     // nothing to take from anyone else.
     let seedFallbackGraceMs = 20000L
+    // How long a saved window that has not reopened keeps its place in its
+    // group. It has to outlast the way applications are actually used - a
+    // machine left over a holiday, a project not opened for a fortnight -
+    // because dropping an entry too early costs the user a group they have
+    // to rebuild by hand, while keeping one too long costs an unseen line in
+    // the settings file. The asymmetry is why this is generous.
+    let seedMaxAgeDays = 30.0
     // Windows that have already taken a saved entry, either by matching one
     // at startup or by claiming one afterwards. A window takes at most one.
     // While saved windows are still waiting to open, the title sync offers
@@ -541,6 +554,7 @@ type Program() as this =
                     closedAt = now
                     isRestoreSeed = false
                     savedRect = None
+                    seedSince = None
                     orderSnapshot = orderSnapshot
                 }
                 closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
@@ -1249,6 +1263,7 @@ type Program() as this =
          | Some(a) ->
             o.setString("tabAlignment", (match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"))
          | None -> ())
+        o.setString("seedSince", (e.seedSince |> Option.defaultValue DateTime.Now).ToString("o"))
         o
 
     member this.saveTabGroupsToSettings() =
@@ -1634,6 +1649,22 @@ type Program() as this =
                         let savedRectByHwnd = System.Collections.Generic.Dictionary<IntPtr, (int * int * int * int) option>()
                         savedWindowsList |> List.iter (fun (h, _, _, _, _, _, _, _, _, r) -> savedRectByHwnd.[h] <- r)
 
+                        // Since when an entry has been waiting for its window.
+                        // Only entries written back as seeds carry it; a window
+                        // that was running at the last save has none, and starts
+                        // its wait now.
+                        let seedSinceByHwnd = System.Collections.Generic.Dictionary<IntPtr, DateTime>()
+                        for token in windowsArray do
+                            match token with
+                            | :? JObject as obj ->
+                                match obj.getIntPtr("hwnd"), obj.getString("seedSince") with
+                                | Some(h), Some(s) ->
+                                    match DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) with
+                                    | true, d -> seedSinceByHwnd.[h] <- d
+                                    | _ -> ()
+                                | _ -> ()
+                            | _ -> ()
+
                         // Resolve each saved window to a live one (saved order
                         // kept). The resolved hwnd - not the saved one - is
                         // what the group and the global per-window maps get.
@@ -1759,7 +1790,18 @@ type Program() as this =
                                     // seed for an ambiguous identity rejoins
                                     // the right group but carries no state.
                                     let unique = isUniqueSavedIdentity exe title
-                                    if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
+                                    let waitingSince =
+                                        match seedSinceByHwnd.TryGetValue(savedHwnd) with
+                                        | true, d -> d
+                                        | _ -> DateTime.Now
+                                    let waitedDays = (DateTime.Now - waitingSince).TotalDays
+                                    if waitedDays > seedMaxAgeDays then
+                                        // Not seeded and so not written back
+                                        // either: the entry leaves the settings
+                                        // file on this save.
+                                        RestoreTrace.log (sprintf "  seed rank=%d token=%X DROPPED after %.0f days title=%s"
+                                                                idx (savedHwnd.ToInt64()) waitedDays title)
+                                    elif closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
                                         let info = {
                                             exePath = exe
                                             windowTitle = title
@@ -1778,6 +1820,7 @@ type Program() as this =
                                                 (match savedRectByHwnd.TryGetValue(savedHwnd) with
                                                  | true, r -> r
                                                  | _ -> None)
+                                            seedSince = Some(waitingSince)
                                             orderSnapshot = savedOrderOldHwnds
                                         }
                                         RestoreTrace.log (sprintf "  seed rank=%d token=%X unique=%b align=%A pin=%b title=%s"
