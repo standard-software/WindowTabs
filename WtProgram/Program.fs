@@ -98,6 +98,20 @@ type ClosedTabInfo = {
 let sameExePath (a: string) (b: string) =
     String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
 
+// The same entry without its per-tab state. Used when a saved entry is
+// claimed by application alone and more than one entry could have been the
+// right one: the window still rejoins its group at its saved position, but
+// wearing a name or a colour that may belong to its twin would be worse than
+// wearing none.
+let withoutTabState (info: ClosedTabInfo) =
+    { info with
+        renamedTabName = None
+        isPinned = false
+        fillColor = None
+        underlineColor = None
+        borderColor = None
+        tabAlign = None }
+
 // Titles are compared after removing VSCode's unsaved-changes marker
 // ("● "), so a document that closed clean and reopens dirty (or vice
 // versa) still matches.
@@ -556,6 +570,14 @@ type Program() as this =
             match bounds with
             | None -> true
             | Some(live) -> contains saved (centerOf live) || contains live (centerOf saved)
+        // A window minimized when the state was saved was recorded at the
+        // off-screen position Windows parks minimized windows at (-32000).
+        // That is not where the window lives, so it says nothing about which
+        // live window this is: treat it as no position at all rather than let
+        // it rule every candidate out.
+        let usableRect (r: int * int * int * int) =
+            let (x, y, _, _) = r
+            x > -30000 && y > -30000
         let candidates =
             closedTabCache.value
             |> List.mapi (fun i e -> (i, e))
@@ -563,8 +585,8 @@ type Program() as this =
                 e.isRestoreSeed &&
                 sameExePath e.exePath exePath &&
                 (match e.savedRect with
-                 | Some(r) -> overlaps r
-                 | None -> true))
+                 | Some(r) when usableRect r -> overlaps r
+                 | _ -> true))
         match candidates with
         | [] -> None
         | _ ->
@@ -575,10 +597,10 @@ type Program() as this =
                     candidates
                     |> List.minBy (fun (_, e) ->
                         match e.savedRect with
-                        | Some(r) ->
+                        | Some(r) when usableRect r ->
                             let (sx, sy) = centerOf r
                             (sx - lx) * (sx - lx) + (sy - ly) * (sy - ly)
-                        | None -> infinity)
+                        | _ -> infinity)
                     |> fst
                 | None -> candidates |> List.head |> fst
             Some(idx, List.length candidates)
@@ -642,7 +664,8 @@ type Program() as this =
             | None ->
                 match this.findSeedByExe(exePath, bounds) with
                 | Some(idx, count) when this.seedFallbackAllowed(window.hwnd, count) ->
-                    Some(this.takeClosedTabAt idx)
+                    let info = this.takeClosedTabAt idx
+                    Some(if count > 1 then withoutTabState info else info)
                 | _ -> None
         match matched with
         | Some(info) ->
@@ -725,7 +748,7 @@ type Program() as this =
                         with _ -> None
                     let peeked =
                         match closedTabCache.value |> List.tryFind (fun i -> sameExePath i.exePath exePath && i.windowTitle = normTitle) with
-                        | Some(info) -> Some(info)
+                        | Some(info) -> Some(info, false)
                         | None ->
                             // The title never became the saved one (a browser
                             // reopened on a different page): once the grace
@@ -733,10 +756,10 @@ type Program() as this =
                             // put the window back with its group.
                             match this.findSeedByExe(exePath, bounds) with
                             | Some(idx, count) when this.seedFallbackAllowed(hwnd, count) ->
-                                Some(closedTabCache.value.[idx])
+                                Some(closedTabCache.value.[idx], count > 1)
                             | _ -> None
                     match peeked with
-                    | Some(info) ->
+                    | Some(info, ambiguous) ->
                         let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
                         let savedGroup = this.findGroupForClosedInfo info
                         match currentGroup, savedGroup with
@@ -751,7 +774,8 @@ type Program() as this =
                             this.scheduleUpdateAppWindows()
                         | _ ->
                         match this.takeClosedTabEntry(info) with
-                        | Some(info) ->
+                        | Some(entry) ->
+                            let info = if ambiguous then withoutTabState entry else entry
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
                             info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
@@ -761,7 +785,22 @@ type Program() as this =
                             let restoredPairs = restoredFromMap.value
                             match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
                             | Some(g) ->
-                                let isSavedGroup = this.isInfoGroup g info
+                                // A window whose title had not settled when it
+                                // appeared was auto-grouped before its saved
+                                // entry could be claimed, so the entry's group
+                                // token was never bound to a live group. Bind
+                                // it now, to the group this window landed in:
+                                // without it neither this tab nor any sibling
+                                // that follows is ever put back in its saved
+                                // place, and a group whose windows all start
+                                // late comes back in the order they happened to
+                                // open in.
+                                let mutable isSavedGroup = this.isInfoGroup g info
+                                if not isSavedGroup && info.isRestoreSeed &&
+                                   info.groupHwnd <> IntPtr.Zero &&
+                                   seededGroupMap.value.tryFind(info.groupHwnd).IsNone then
+                                    seededGroupMap.map(fun m -> m.add info.groupHwnd g)
+                                    isSavedGroup <- true
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
                                     gi.invokeGroup <| fun() ->
@@ -1410,6 +1449,22 @@ type Program() as this =
                 // The identity appears in more than one saved group: refuse it.
                 let isCrossGroupIdentity (exe: string) (title: string) =
                     crossGroupIdentities.Contains(identityKey exe title)
+                // Uniqueness on the saved side alone. A seed is created for a
+                // window whose application has not started yet, so there is
+                // nothing of it to count on the live side: after an OS restart
+                // - the very case seeds exist for - the live half of
+                // isUniqueIdentity is empty for every one of them, and asking
+                // for it made every window come back stripped of its name, its
+                // pin, its colours and its left/right alignment. What can be
+                // known now is that no other saved window shares the identity;
+                // the live side is answered later, when the seed is claimed:
+                // an exact title match is definitive, and a claim by
+                // application alone drops the state unless it was the only
+                // candidate.
+                let isUniqueSavedIdentity (exe: string) (title: string) =
+                    match savedIdentityCounts.TryGetValue(identityKey exe title) with
+                    | true, 1 -> true
+                    | _ -> false
 
                 // Live windows already handed to a restored group, by either
                 // path. Each one is consumed at most once.
@@ -1630,10 +1685,11 @@ type Program() as this =
                                 match entry with
                                 | (savedHwnd, renamed, isPinned, fill, under, border, align, Some(exe), Some(title), None)
                                     when exe <> "" && title <> "" && not (isCrossGroupIdentity exe title) ->
-                                    // Same rule as the direct match above: a
+                                    // Same rule as the direct match above,
+                                    // but answered on the saved side only: a
                                     // seed for an ambiguous identity rejoins
                                     // the right group but carries no state.
-                                    let unique = isUniqueIdentity exe title
+                                    let unique = isUniqueSavedIdentity exe title
                                     if closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
                                         let info = {
                                             exePath = exe
