@@ -892,9 +892,12 @@ type Program() as this =
                                 let mutable isSavedGroup = this.isInfoGroup g info
                                 if not isSavedGroup && info.isRestoreSeed &&
                                    info.groupHwnd <> IntPtr.Zero &&
-                                   seededGroupMap.value.tryFind(info.groupHwnd).IsNone then
+                                   (this.findGroupForClosedInfo info).IsNone then
                                     seededGroupMap.map(fun m -> m.add info.groupHwnd g)
-                                    this.applySeededGroupSettings(info.groupHwnd, g)
+                                    // The window is already in a group with
+                                    // others by the time this runs, so the
+                                    // saved group's settings are not imposed
+                                    // here - only the grouping is recovered.
                                     isSavedGroup <- true
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
@@ -1165,15 +1168,24 @@ type Program() as this =
             // nothing in exactly the case this exists for - a whole saved
             // group absent at boot - and Edge, LINE and Chrome each ended up
             // in a group of their own.
-            // Only when the token is not bound yet, as in the late pass: a
-            // token already pointing at a group means this window landed
-            // somewhere else, and repointing it would send every sibling still
-            // to come after it.
+            // Only when the token has no LIVE group, as in the late pass. A
+            // token pointing at a group that still exists means this window
+            // landed somewhere else, and repointing it would send every
+            // sibling still to come after it. A token pointing at a group that
+            // has since been destroyed - the first window of a saved group
+            // opened and was closed again before its siblings started - has to
+            // be repointed, or the rest of the group would never reassemble:
+            // findGroupForClosedInfo refuses the dead group, and a bare lookup
+            // would still find the key and refuse to bind a live one.
             if not isSavedGroup && info.isRestoreSeed &&
                info.groupHwnd <> IntPtr.Zero &&
-               seededGroupMap.value.tryFind(info.groupHwnd).IsNone then
+               (this.findGroupForClosedInfo info).IsNone then
                 seededGroupMap.map(fun m -> m.add info.groupHwnd group)
-                this.applySeededGroupSettings(info.groupHwnd, group)
+                // Only onto a group made for this window. Where the window
+                // joined a group that was already there, that group is some
+                // other windows' and its tab position is theirs to keep.
+                if isNewGroup then
+                    this.applySeededGroupSettings(info.groupHwnd, group)
             let restoredPairs = restoredFromMap.value
             match group :> obj with
             | :? GroupInfo as gi ->
