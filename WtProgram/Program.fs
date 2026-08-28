@@ -552,6 +552,13 @@ type Program() as this =
                 let burstAnchor =
                     closedTabCache.value
                     |> List.filter (fun e ->
+                        // A burst is made of tabs closed just now, all of them
+                        // holding their strip's real handle. An entry from the
+                        // settings file holds a token instead, which is a
+                        // window handle too and could carry this strip's
+                        // number: the last place where the two were still told
+                        // apart by value alone.
+                        e.groupIsSentinel.not &&
                         e.groupHwnd = groupHwnd &&
                         (now - e.closedAt).TotalSeconds < 5.0 &&
                         not (List.isEmpty e.orderSnapshot))
