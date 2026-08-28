@@ -144,8 +144,8 @@ type Settings(isStandAlone) as this =
                     //    the running build into Version, so an empty one
                     //    (08-24 / 08-25) or a missing key (08-26) marks a
                     //    state that never saw the user's file.
-                    // A refused write is recorded and the file keeps its last
-                    // good content. The in-memory caches are left alone too,
+                    // A refused write leaves the file its last good content;
+                    // in a debug build it is also recorded. The in-memory caches are left alone too,
                     // so a healthy state formed later can still save normally.
                     // The marker follows how JObject.ToString() formats the
                     // settings - two-space indent, ": " between key and value.
@@ -169,14 +169,20 @@ type Settings(isStandAlone) as this =
                     // DEBUG builds only: trace every write with the caller
                     // stack, so the next wipe-like incident names the code
                     // path that produced it. Not compiled into Release - it
-                    // grows with every settings change and end users have no
-                    // use for it. A REFUSED write is still recorded in
-                    // Release, through the read_error log below.
+                    // grows with every settings change, and a release build
+                    // writes no log at all.
+                    // At the cap the previous file is kept as .1, the way the
+                    // other traces are: this is the only record of how a wipe
+                    // came about, it fills in a few days of ordinary use, and
+                    // deleting it outright threw away the whole history
+                    // rather than the oldest of it.
 #if DEBUG
                     try
                         let tracePath = this.path + ".write_trace.log"
                         if File.Exists(tracePath) && (FileInfo(tracePath)).Length > 5_000_000L then
-                            File.Delete(tracePath)
+                            let previous = tracePath + ".1"
+                            (try File.Delete(previous) with _ -> ())
+                            (try File.Move(tracePath, previous) with _ -> ())
                         File.AppendAllText(tracePath,
                             sprintf "%s %s %d bytes (disk had %d)%s%s%s"
                                 (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))

@@ -26,9 +26,10 @@ module Watchdog =
     // watchdog had nothing left to catch, but a released copy runs on machines
     // whose logs are never read: it would leave a file in everyone's AppData,
     // written on every single run, that nobody looks at. The one machine where
-    // the question is actually asked runs a debug build. A settings file that
-    // cannot be read is still recorded in Release, through read_error.log -
-    // that one costs nothing until something has gone wrong.
+    // the question is actually asked runs a debug build, and a release build
+    // now writes no log of any kind. What guards the settings file there is
+    // the refusal to save over it and the recovery from a backup, neither of
+    // which needs a log to work.
     // It cannot grow: a run writes one line when the watchdog is armed and one
     // when it stops, and a ping timeout always ends in a restart, so there is
     // no repeating state to spam. The 1 MB guard is there only in case that
