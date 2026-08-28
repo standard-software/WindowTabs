@@ -60,6 +60,22 @@ let parseColorRRGGBBAA (s: string) : Color option =
 let colorToRRGGBBAA (c: Color) : string =
     sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
 
+// Which group a closed-tab entry belongs to. Both cases carry a window
+// handle and neither can be told from the other by value, which is the whole
+// reason they are separate cases: a saved token is the first window handle of
+// a group as it was written to the settings file, and Windows is free to hand
+// that same number to a live tab strip days later. Matching on the case makes
+// the two impossible to compare by mistake - it had been got wrong twice.
+type GroupRef =
+    // The real handle of a tab strip that exists now.
+    | LiveStrip of IntPtr
+    // A token standing for a saved group, resolved only through seededGroupMap.
+    | SavedToken of IntPtr
+
+// The handle either case carries, for keying and for tracing. Never for
+// deciding which group an entry belongs to - match on the case for that.
+let groupRefHandle = function LiveStrip(h) | SavedToken(h) -> h
+
 // State snapshot of a tab whose window was closed while WindowTabs runs,
 // used to restore the tab (state + group + position) when the same app
 // window (same exe path + window title) reappears.
@@ -72,16 +88,7 @@ type ClosedTabInfo = {
     underlineColor: Color option
     borderColor: Color option
     tabAlign: TabAlign option
-    groupHwnd: IntPtr
-    // Whether groupHwnd is a sentinel token rather than a live tab strip's
-    // handle. Entries built from the settings file carry the first saved
-    // window handle of their group as a token, which resolves only through
-    // seededGroupMap; entries recorded while running carry their strip's real
-    // handle. Both are window handles and cannot be told apart by value, so
-    // comparing a token against live groups could pick out an unrelated group
-    // that Windows had given the same number - a risk that grew when entries
-    // started living in the file for days rather than for one session.
-    groupIsSentinel: bool
+    groupRef: GroupRef
     tabIndex: int
     closedHwnd: IntPtr
     closedAt: DateTime
@@ -552,14 +559,11 @@ type Program() as this =
                 let burstAnchor =
                     closedTabCache.value
                     |> List.filter (fun e ->
-                        // A burst is made of tabs closed just now, all of them
-                        // holding their strip's real handle. An entry from the
-                        // settings file holds a token instead, which is a
-                        // window handle too and could carry this strip's
-                        // number: the last place where the two were still told
-                        // apart by value alone.
-                        e.groupIsSentinel.not &&
-                        e.groupHwnd = groupHwnd &&
+                        // A burst is made of tabs closed just now, all of
+                        // them holding their strip's real handle.
+                        (match e.groupRef with
+                         | LiveStrip(h) -> h = groupHwnd
+                         | SavedToken(_) -> false) &&
                         (now - e.closedAt).TotalSeconds < 5.0 &&
                         not (List.isEmpty e.orderSnapshot))
                     |> List.tryLast
@@ -583,8 +587,7 @@ type Program() as this =
                     underlineColor = windowUnderlineColor.value.tryFind(hwnd)
                     borderColor = windowBorderColor.value.tryFind(hwnd)
                     tabAlign = windowAlignment.value.tryFind(hwnd)
-                    groupHwnd = groupHwnd
-                    groupIsSentinel = false
+                    groupRef = LiveStrip(groupHwnd)
                     tabIndex = tabIndex
                     closedHwnd = hwnd
                     closedAt = now
@@ -601,12 +604,13 @@ type Program() as this =
     // and for seeded entries via the sentinel-token map (see seededGroupMap).
     // The mapped group is verified still present before it is trusted.
     member private this.findGroupForClosedInfo (info: ClosedTabInfo) =
-        if info.groupIsSentinel then
-            seededGroupMap.value.tryFind(info.groupHwnd)
+        match info.groupRef with
+        | SavedToken(token) ->
+            seededGroupMap.value.tryFind(token)
             |> Option.bind (fun g ->
                 if this.desktop.groups.any(fun x -> obj.ReferenceEquals(x, g)) then Some(g) else None)
-        else
-            this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false))
+        | LiveStrip(strip) ->
+            this.desktop.groups.tryFind(fun g -> (try g.hwnd = strip with _ -> false))
 
     // Hand a live group the settings of the saved group whose token has just
     // been bound to it.
@@ -618,12 +622,12 @@ type Program() as this =
         | None -> ()
 
     member private this.isInfoGroup (g: IGroup) (info: ClosedTabInfo) =
-        if info.groupIsSentinel then
-            match seededGroupMap.value.tryFind(info.groupHwnd) with
-            | Some(sg) -> obj.ReferenceEquals(sg, g)
-            | None -> false
-        else
-            (try g.hwnd = info.groupHwnd with _ -> false)
+        match info.groupRef with
+        | SavedToken(token) ->
+            (match seededGroupMap.value.tryFind(token) with
+             | Some(sg) -> obj.ReferenceEquals(sg, g)
+             | None -> false)
+        | LiveStrip(strip) -> (try g.hwnd = strip with _ -> false)
 
     // Take (and consume) the most recently recorded closed-tab entry that
     // matches exe path + window title exactly (after title normalization).
@@ -768,7 +772,7 @@ type Program() as this =
                 | _ -> None
         (match matched with
          | Some(i) -> RestoreTrace.log (fun () -> sprintf "claim(early) hwnd=%X token=%X rank=%d align=%A pin=%b title=%s"
-                                                      (window.hwnd.ToInt64()) (i.groupHwnd.ToInt64()) i.tabIndex i.tabAlign i.isPinned windowTitle)
+                                                      (window.hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex i.tabAlign i.isPinned windowTitle)
          | None ->
             if closedTabCache.value |> List.exists (fun e -> e.isRestoreSeed && sameExePath e.exePath exePath) then
                 RestoreTrace.log (fun () -> sprintf "claim(early) hwnd=%X NONE title=%s" (window.hwnd.ToInt64()) windowTitle))
@@ -867,7 +871,7 @@ type Program() as this =
                             | _ -> None
                     (match peeked with
                      | Some(i, amb) -> RestoreTrace.log (fun () -> sprintf "claim(late) hwnd=%X token=%X rank=%d amb=%b title=%s"
-                                                                      (hwnd.ToInt64()) (i.groupHwnd.ToInt64()) i.tabIndex amb windowTitle)
+                                                                      (hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex amb windowTitle)
                      | None -> ())
                     match peeked with
                     | Some(info, ambiguous) ->
@@ -909,10 +913,12 @@ type Program() as this =
                                 // late comes back in the order they happened to
                                 // open in.
                                 let mutable isSavedGroup = this.isInfoGroup g info
-                                if not isSavedGroup && info.isRestoreSeed &&
-                                   info.groupHwnd <> IntPtr.Zero &&
-                                   (this.findGroupForClosedInfo info).IsNone then
-                                    seededGroupMap.map(fun m -> m.add info.groupHwnd g)
+                                match info.groupRef with
+                                | SavedToken(token) when
+                                        not isSavedGroup && info.isRestoreSeed &&
+                                        token <> IntPtr.Zero &&
+                                        (this.findGroupForClosedInfo info).IsNone ->
+                                    seededGroupMap.map(fun m -> m.add token g)
                                     // As in the early pass, only onto a group
                                     // that is this window's alone. A window
                                     // auto-grouped on its own before its title
@@ -922,8 +928,9 @@ type Program() as this =
                                     // siblings arriving later find the group
                                     // no longer new and cannot mend it either.
                                     if g.windows.count = 1 then
-                                        this.applySeededGroupSettings(info.groupHwnd, g)
+                                        this.applySeededGroupSettings(token, g)
                                     isSavedGroup <- true
+                                | _ -> ()
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
                                     gi.invokeGroup <| fun() ->
@@ -1202,15 +1209,18 @@ type Program() as this =
             // be repointed, or the rest of the group would never reassemble:
             // findGroupForClosedInfo refuses the dead group, and a bare lookup
             // would still find the key and refuse to bind a live one.
-            if not isSavedGroup && info.isRestoreSeed &&
-               info.groupHwnd <> IntPtr.Zero &&
-               (this.findGroupForClosedInfo info).IsNone then
-                seededGroupMap.map(fun m -> m.add info.groupHwnd group)
+            (match info.groupRef with
+             | SavedToken(token) when
+                    not isSavedGroup && info.isRestoreSeed &&
+                    token <> IntPtr.Zero &&
+                    (this.findGroupForClosedInfo info).IsNone ->
+                seededGroupMap.map(fun m -> m.add token group)
                 // Only onto a group made for this window. Where the window
                 // joined a group that was already there, that group is some
                 // other windows' and its tab position is theirs to keep.
                 if isNewGroup then
-                    this.applySeededGroupSettings(info.groupHwnd, group)
+                    this.applySeededGroupSettings(token, group)
+             | _ -> ())
             let restoredPairs = restoredFromMap.value
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -1475,7 +1485,7 @@ type Program() as this =
             // by whichever of its windows is opened next.
             pendingSeeds
             |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not && e.isRestoreSeed)
-            |> List.groupBy (fun e -> e.groupHwnd)
+            |> List.groupBy (fun e -> groupRefHandle e.groupRef)
             |> List.iter (fun (token, entries) ->
                 let windowsArray = JArray()
                 entries |> List.iter (fun e -> windowsArray.Add(this.seedToJson e))
@@ -1938,8 +1948,7 @@ type Program() as this =
                                             underlineColor = (if unique then under else None)
                                             borderColor = (if unique then border else None)
                                             tabAlign = (if unique then align else None)
-                                            groupHwnd = seedGroupHwnd
-                                            groupIsSentinel = true
+                                            groupRef = SavedToken(seedGroupHwnd)
                                             tabIndex = idx
                                             closedHwnd = savedHwnd
                                             closedAt = DateTime.Now
