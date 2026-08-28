@@ -85,15 +85,18 @@ type Settings(isStandAlone) as this =
                     with
                     | ex ->
                         // A read failure here is how a later save comes to
-                        // write DEFAULTS over the user's real settings, so it
-                        // is never silent: the exception is recorded next to
-                        // the settings file before None is returned, and no
-                        // write is allowed until a read succeeds.
+                        // write DEFAULTS over the user's real settings. What
+                        // prevents that is the latch below, not the record:
+                        // no write is allowed until a read succeeds. The
+                        // record is for the machine where the fault is being
+                        // looked into, which runs a debug build.
                         settingsUntrusted <- true
+#if DEBUG
                         (try
                             File.AppendAllText(this.path + ".read_error.log",
                                 sprintf "%s read failed: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")) ex + Environment.NewLine)
                          with _ -> ())
+#endif
                         None
             cachedSettingsString
 
@@ -184,13 +187,16 @@ type Settings(isStandAlone) as this =
                                 Environment.NewLine Environment.StackTrace (Environment.NewLine + Environment.NewLine))
                     with _ -> ()
 #endif
+#if DEBUG
                     if looksLikeWipe then
-                        // Release builds have no write trace, but a refused
-                        // wipe must never be invisible there.
                         (try
                             File.AppendAllText(this.path + ".read_error.log",
                                 sprintf "%s REFUSED settings write (%s: %d bytes over %d on disk)" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) (refusedReason.def "") newContent.Length existingLen + Environment.NewLine)
                          with _ -> ())
+#endif
+                    // The refusal itself is what protects the file, and it
+                    // happens in either build; only the note of it is written
+                    // where someone is going to read it.
                     if looksLikeWipe.not then
                         let tempPath = this.path + ".tmp"
                         File.WriteAllText(tempPath, newContent)
@@ -210,14 +216,20 @@ type Settings(isStandAlone) as this =
     // Falling back to an empty JObject is what turns a single swallowed
     // exception into "the settings are the defaults" further up - the wipe
     // signature seen on 08-24 / 08-25. The fallbacks stay (crashing here
-    // would be worse), but they are never silent any more.
+    // would be worse); what stops them reaching the file is the latch, which
+    // is set in either build.
     member private this.logEmptyFallback (where: string) (ex: exn) =
         settingsUntrusted <- true
+#if DEBUG
         if loggedFallbacks.Add(where) then
             try
                 File.AppendAllText(this.path + ".read_error.log",
                     sprintf "%s %s fell back to empty settings - no setting is saved until a backup is adopted or WindowTabs is restarted: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
             with _ -> ()
+#else
+        ignore where
+        ignore ex
+#endif
 
     // A settings file that no longer parses does not have to end as "the
     // settings are the defaults". The backups taken before every sharp shrink
@@ -252,6 +264,7 @@ type Settings(isStandAlone) as this =
                             cachedSettingsRec <- None
                             valueCache.Clear()
                             settingsUntrusted <- false
+#if DEBUG
                             (try
                                 File.AppendAllText(this.path + ".read_error.log",
                                     sprintf "%s RECOVERED the settings from %s (%d bytes, Version %s); the unreadable file is kept as %s"
@@ -259,6 +272,7 @@ type Settings(isStandAlone) as this =
                                         (Path.GetFileName(backup)) text.Length version (Path.GetFileName(kept))
                                     + Environment.NewLine)
                              with _ -> ())
+#endif
                             Some(parsed)
                         | _ -> None
                     with _ -> None)
