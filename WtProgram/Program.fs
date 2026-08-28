@@ -73,6 +73,15 @@ type ClosedTabInfo = {
     borderColor: Color option
     tabAlign: TabAlign option
     groupHwnd: IntPtr
+    // Whether groupHwnd is a sentinel token rather than a live tab strip's
+    // handle. Entries built from the settings file carry the first saved
+    // window handle of their group as a token, which resolves only through
+    // seededGroupMap; entries recorded while running carry their strip's real
+    // handle. Both are window handles and cannot be told apart by value, so
+    // comparing a token against live groups could pick out an unrelated group
+    // that Windows had given the same number - a risk that grew when entries
+    // started living in the file for days rather than for one session.
+    groupIsSentinel: bool
     tabIndex: int
     closedHwnd: IntPtr
     closedAt: DateTime
@@ -568,6 +577,7 @@ type Program() as this =
                     borderColor = windowBorderColor.value.tryFind(hwnd)
                     tabAlign = windowAlignment.value.tryFind(hwnd)
                     groupHwnd = groupHwnd
+                    groupIsSentinel = false
                     tabIndex = tabIndex
                     closedHwnd = hwnd
                     closedAt = now
@@ -584,12 +594,12 @@ type Program() as this =
     // and for seeded entries via the sentinel-token map (see seededGroupMap).
     // The mapped group is verified still present before it is trusted.
     member private this.findGroupForClosedInfo (info: ClosedTabInfo) =
-        match this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false)) with
-        | Some(g) -> Some(g)
-        | None ->
+        if info.groupIsSentinel then
             seededGroupMap.value.tryFind(info.groupHwnd)
             |> Option.bind (fun g ->
                 if this.desktop.groups.any(fun x -> obj.ReferenceEquals(x, g)) then Some(g) else None)
+        else
+            this.desktop.groups.tryFind(fun g -> (try g.hwnd = info.groupHwnd with _ -> false))
 
     // Hand a live group the settings of the saved group whose token has just
     // been bound to it.
@@ -601,10 +611,12 @@ type Program() as this =
         | None -> ()
 
     member private this.isInfoGroup (g: IGroup) (info: ClosedTabInfo) =
-        (try g.hwnd = info.groupHwnd with _ -> false) ||
-        (match seededGroupMap.value.tryFind(info.groupHwnd) with
-         | Some(sg) -> obj.ReferenceEquals(sg, g)
-         | None -> false)
+        if info.groupIsSentinel then
+            match seededGroupMap.value.tryFind(info.groupHwnd) with
+            | Some(sg) -> obj.ReferenceEquals(sg, g)
+            | None -> false
+        else
+            (try g.hwnd = info.groupHwnd with _ -> false)
 
     // Take (and consume) the most recently recorded closed-tab entry that
     // matches exe path + window title exactly (after title normalization).
@@ -894,10 +906,16 @@ type Program() as this =
                                    info.groupHwnd <> IntPtr.Zero &&
                                    (this.findGroupForClosedInfo info).IsNone then
                                     seededGroupMap.map(fun m -> m.add info.groupHwnd g)
-                                    // The window is already in a group with
-                                    // others by the time this runs, so the
-                                    // saved group's settings are not imposed
-                                    // here - only the grouping is recovered.
+                                    // As in the early pass, only onto a group
+                                    // that is this window's alone. A window
+                                    // auto-grouped on its own before its title
+                                    // settled reaches its saved group only
+                                    // here, and refusing every group outright
+                                    // left it on the default side for good -
+                                    // siblings arriving later find the group
+                                    // no longer new and cannot mend it either.
+                                    if g.windows.count = 1 then
+                                        this.applySeededGroupSettings(info.groupHwnd, g)
                                     isSavedGroup <- true
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
@@ -1914,6 +1932,7 @@ type Program() as this =
                                             borderColor = (if unique then border else None)
                                             tabAlign = (if unique then align else None)
                                             groupHwnd = seedGroupHwnd
+                                            groupIsSentinel = true
                                             tabIndex = idx
                                             closedHwnd = savedHwnd
                                             closedAt = DateTime.Now
