@@ -22,22 +22,31 @@ module Watchdog =
     // Use AutoResetEvent for more reliable signaling
     let private pingResponse = new AutoResetEvent(false)
 
-    // The watchdog is not expected to have anything left to catch. Showing
-    // that needs a record from real machines rather than from a debug run, so
-    // this log is compiled into RELEASE as well - it is the evidence for
-    // eventually deleting the watchdog altogether.
+    // Debug builds only. This began as evidence from real machines that the
+    // watchdog had nothing left to catch, but a released copy runs on machines
+    // whose logs are never read: it would leave a file in everyone's AppData,
+    // written on every single run, that nobody looks at. The one machine where
+    // the question is actually asked runs a debug build. A settings file that
+    // cannot be read is still recorded in Release, through read_error.log -
+    // that one costs nothing until something has gone wrong.
     // It cannot grow: a run writes one line when the watchdog is armed and one
     // when it stops, and a ping timeout always ends in a restart, so there is
     // no repeating state to spam. The 1 MB guard is there only in case that
     // assumption is ever wrong, and it keeps the overflow as watchdog.log.old
     // instead of dropping it.
+#if DEBUG
     let private logPath =
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "WindowTabs",
             "watchdog.log")
+#endif
 
-    let private log (message: string) =
+    // Takes a thunk so that nothing is built outside Debug: an argument would
+    // be evaluated before the call, leaving the message assembled and thrown
+    // away on every run of a released build.
+    let private log (message: unit -> string) =
+#if DEBUG
         try
             let dir = Path.GetDirectoryName(logPath)
             if not (Directory.Exists(dir)) then Directory.CreateDirectory(dir) |> ignore
@@ -49,9 +58,12 @@ module Watchdog =
                 sprintf "%s [pid %d] %s%s"
                     (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
                     (Process.GetCurrentProcess().Id)
-                    message
+                    (message())
                     Environment.NewLine)
         with _ -> ()
+#else
+        ignore message
+#endif
 
     let respondToPing() =
         pingResponse.Set() |> ignore
@@ -60,7 +72,7 @@ module Watchdog =
         // Written before anything else: the process is about to be replaced,
         // and a restart nobody can account for afterwards is worse than the
         // freeze it was meant to cure.
-        log "FIRED - the UI thread stopped answering; saving the tab groups and restarting"
+        log (fun () -> "FIRED - the UI thread stopped answering; saving the tab groups and restarting")
         try
             // Try to save tab groups before restart
             let saveComplete = new ManualResetEvent(false)
@@ -116,8 +128,8 @@ module Watchdog =
                 else
                     // UI thread did not respond
                     consecutiveFailures <- consecutiveFailures + 1
-                    log (sprintf "ping timed out after %d ms (%d of %d before a restart)"
-                            freezeTimeout consecutiveFailures requiredConsecutiveFailures)
+                    log (fun () -> sprintf "ping timed out after %d ms (%d of %d before a restart)"
+                                        freezeTimeout consecutiveFailures requiredConsecutiveFailures)
 
                     if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
                         // UI thread is frozen (confirmed by multiple consecutive failures), force restart
@@ -131,7 +143,7 @@ module Watchdog =
     let start() =
         // Don't start watchdog when debugger is attached (prevents false positives during debugging)
         if Debugger.IsAttached then
-            log "not armed - a debugger is attached"
+            log (fun () -> "not armed - a debugger is attached")
         elif watchdogThread.IsNone then
             // Capture UI thread's invoker (must be called from UI thread)
             uiThreadInvoker <- Some(InvokerService.invoker)
@@ -141,11 +153,11 @@ module Watchdog =
             thread.Name <- "WindowTabs Watchdog"
             thread.Start()
             watchdogThread <- Some(thread)
-            log (sprintf "armed - monitoring starts in 10 s, then a ping every %d ms with a %d ms timeout"
-                    checkInterval freezeTimeout)
+            log (fun () -> sprintf "armed - monitoring starts in 10 s, then a ping every %d ms with a %d ms timeout"
+                                checkInterval freezeTimeout)
 
     let stop() =
-        if watchdogThread.IsSome && not stopRequested then log "stopped"
+        if watchdogThread.IsSome && not stopRequested then log (fun () -> "stopped")
         stopRequested <- true
         pingResponse.Set() |> ignore  // Unblock any waiting
 
