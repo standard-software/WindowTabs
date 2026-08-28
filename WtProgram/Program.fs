@@ -331,7 +331,15 @@ type Program() as this =
     // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
     // relative placement can locate already-restored siblings in an order
     // snapshot taken before they closed
-    let restoredFromMap = Cell.create(Map2() : Map2<IntPtr, IntPtr>)
+    // New hwnd -> the old one it was restored from. Not a Cell: a Cell may
+    // only be read from the thread that owns it, so the placement running on a
+    // group thread had to be handed a copy taken when the tab was claimed.
+    // Claiming and placing are seconds apart, and every sibling claimed in
+    // between was missing from that copy - so a tab counted fewer tabs before
+    // it than there were and landed too far left, displacing the one already
+    // in that place. A concurrent dictionary can be read where it is needed,
+    // as it stands at that moment.
+    let restoredFromMap = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>()
     // Temporary storage for tab group configuration (used during disable/enable)
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
@@ -732,7 +740,7 @@ type Program() as this =
     // already-restored siblings via restoredFromMap. Tabs unknown to the
     // snapshot (opened after the close) are treated as coming after. Runs on
     // the group thread; reads only the arguments.
-    member private this.closedTabTargetIdx(currentTabs: List2<Tab>, selfTab: Tab, info: ClosedTabInfo, restoredPairs: Map2<IntPtr, IntPtr>) =
+    member private this.closedTabTargetIdx(currentTabs: List2<Tab>, selfTab: Tab, info: ClosedTabInfo, restoredPairs: System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>) =
         match info.orderSnapshot |> List.tryFindIndex ((=) info.closedHwnd) with
         | Some(rank) ->
             let originalPos (t: Tab) =
@@ -740,7 +748,9 @@ type Program() as this =
                 match info.orderSnapshot |> List.tryFindIndex ((=) h) with
                 | Some(i) -> Some(i)
                 | None ->
-                    restoredPairs.tryFind(h)
+                    (match restoredPairs.TryGetValue(h) with
+                     | true, oldH -> Some(oldH)
+                     | _ -> None)
                     |> Option.bind (fun oldH -> info.orderSnapshot |> List.tryFindIndex ((=) oldH))
             currentTabs.list
             |> List.filter (fun t -> t <> selfTab)
@@ -795,7 +805,7 @@ type Program() as this =
             info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
             // Remember old->new hwnd so siblings restored later can locate this
             // tab in their close-time order snapshot
-            restoredFromMap.map(fun m -> m.add hwnd info.closedHwnd)
+            restoredFromMap.[hwnd] <- info.closedHwnd
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
             match this.findGroupForClosedInfo info with
@@ -900,8 +910,7 @@ type Program() as this =
                             info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
                             if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
                             info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
-                            restoredFromMap.map(fun m -> m.add hwnd info.closedHwnd)
-                            let restoredPairs = restoredFromMap.value
+                            restoredFromMap.[hwnd] <- info.closedHwnd
                             match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
                             | Some(g) ->
                                 // A window whose title had not settled when it
@@ -952,7 +961,7 @@ type Program() as this =
                                             info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
                                             if isSavedGroup then
                                                 let currentTabs = wg.ts.visualOrder
-                                                let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredPairs)
+                                                let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredFromMap)
                                                 match currentTabs.tryFindIndex((=) tab) with
                                                 | Some(curIdx) when curIdx <> targetIdx ->
                                                     wg.ts.moveTab(tab, targetIdx)
@@ -1223,7 +1232,6 @@ type Program() as this =
                 if isNewGroup then
                     this.applySeededGroupSettings(token, group)
              | _ -> ())
-            let restoredPairs = restoredFromMap.value
             match group :> obj with
             | :? GroupInfo as gi ->
                 gi.invokeGroup <| fun() ->
@@ -1233,7 +1241,7 @@ type Program() as this =
                         info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
                         if isSavedGroup then
                             let currentTabs = wg.ts.visualOrder
-                            let targetIdx = this.closedTabTargetIdx(currentTabs, newTab, info, restoredPairs)
+                            let targetIdx = this.closedTabTargetIdx(currentTabs, newTab, info, restoredFromMap)
                             match currentTabs.tryFindIndex((=) newTab) with
                             | Some(curIdx) when curIdx <> targetIdx ->
                                 wg.ts.moveTab(newTab, targetIdx)
@@ -1879,7 +1887,7 @@ type Program() as this =
                                 // this tab in its close-time order snapshot
                                 // (closedTabTargetIdx resolves through this map).
                                 if hwnd <> savedHwnd then
-                                    restoredFromMap.map(fun m -> m.add hwnd savedHwnd)
+                                    restoredFromMap.[hwnd] <- savedHwnd
                                 restoreClaimed.map(fun s -> s.add hwnd)
                                 group.addWindow(hwnd, false)
                             )
