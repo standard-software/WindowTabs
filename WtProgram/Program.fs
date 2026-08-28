@@ -1485,8 +1485,18 @@ type Program() as this =
             // by whichever of its windows is opened next.
             pendingSeeds
             |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not && e.isRestoreSeed)
-            |> List.groupBy (fun e -> groupRefHandle e.groupRef)
-            |> List.iter (fun (token, entries) ->
+            // By the reference itself, not the handle inside it: grouping on
+            // the bare number would put a token and a strip handle that
+            // happened to share it into one group. The filter above admits
+            // only saved entries today, so this changes nothing - it keeps the
+            // guarantee in the type rather than in the filter above it.
+            |> List.groupBy (fun e -> e.groupRef)
+            |> List.iter (fun (gref, entries) ->
+                // Only a saved group is written this way, and only a saved
+                // group has settings held against its token.
+                match gref with
+                | LiveStrip(_) -> ()
+                | SavedToken(token) ->
                 let windowsArray = JArray()
                 entries |> List.iter (fun e -> windowsArray.Add(this.seedToJson e))
                 if windowsArray.Count > 0 then
