@@ -44,21 +44,26 @@ type ProgramVersion(parts:List2<int>)=
     member this.isNewerThan(v2:ProgramVersion) =
         this.compare(v2) > 0
 
-// Parse RRGGBBAA hex string to Color
+// Parse RRGGBBAA hex string to Color. The text half of the conversion is in
+// SavedTabState.Rgba, next to the record that carries it, so that the byte
+// order the file is written in and the byte order it is read in are one piece
+// of code and can be checked without starting WindowTabs.
 let parseColorRRGGBBAA (s: string) : Color option =
-    if s.Length = 8 then
-        try
-            let r = Convert.ToInt32(s.Substring(0, 2), 16)
-            let g = Convert.ToInt32(s.Substring(2, 2), 16)
-            let b = Convert.ToInt32(s.Substring(4, 2), 16)
-            let a = Convert.ToInt32(s.Substring(6, 2), 16)
-            Some(Color.FromArgb(a, r, g, b))
-        with _ -> None
-    else None
+    SavedTabState.Rgba.parse s
+    |> Option.map (fun (r, g, b, a) -> Color.FromArgb(int a, int r, int g, int b))
 
 // Convert Color to RRGGBBAA hex string
 let colorToRRGGBBAA (c: Color) : string =
-    sprintf "%02X%02X%02X%02X" (int c.R) (int c.G) (int c.B) (int c.A)
+    SavedTabState.Rgba.format (c.R, c.G, c.B, c.A)
+
+// TabAlign as the settings file knows it, and back. Two cases each way, so
+// that SavedTabState can stay free of System.Drawing and be loadable by a
+// script (see the note at the head of that file).
+let savedAlignOfTabAlign =
+    function TopLeft -> SavedTabState.AlignLeft | TopRight -> SavedTabState.AlignRight
+
+let tabAlignOfSavedAlign =
+    function SavedTabState.AlignLeft -> TopLeft | SavedTabState.AlignRight -> TopRight
 
 // Which group a closed-tab entry belongs to. Both cases carry a window
 // handle and neither can be told from the other by value, which is the whole
@@ -113,6 +118,14 @@ type ClosedTabInfo = {
     // before this one), which keeps surviving tabs in their original relative
     // position instead of being displaced by absolute-index insertion.
     orderSnapshot: IntPtr list
+    // Whether the name and colours on this entry are known to belong to
+    // whichever window claims it. False for an entry read back from the
+    // settings file whose application and title are shared with another saved
+    // window: the two cannot be told apart, so neither may wear the other's
+    // name. The state is still CARRIED - it is written back to the file
+    // unchanged, and an entry that is never claimed loses nothing - it is only
+    // held back from being put on a live window (see applicableState).
+    stateIsCertain: bool
 }
 
 // Exe paths come from the same API on both sides, but the file system does
@@ -120,19 +133,50 @@ type ClosedTabInfo = {
 let sameExePath (a: string) (b: string) =
     String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
 
-// The same entry without its per-tab state. Used when a saved entry is
-// claimed by application alone and more than one entry could have been the
-// right one: the window still rejoins its group at its saved position, but
-// wearing a name or a colour that may belong to its twin would be worse than
-// wearing none.
-let withoutTabState (info: ClosedTabInfo) =
+// The same entry without the part of its state that names a particular
+// window. Used when more than one saved entry could have been the right one:
+// the window still rejoins its group at its saved position, but wearing a name
+// or a colour that may belong to its twin would be worse than wearing none.
+//
+// Alignment and pin are NOT dropped, although they were, and dropping them is
+// what made a jumbled group get worse at every restart instead of better.
+// They are not decoration, they are the position: TabStrip.visualZoneOf reads
+// the pair to decide which of the strip's four bands the tab is drawn in, and
+// a saved order can only be honoured inside a band. Keeping the position is
+// the one thing this function already promised to do, so keeping these two is
+// what that promise meant.
+//
+// It costs nothing to keep them, either. An identity that appears in more than
+// one saved group is refused outright (isCrossGroupIdentity), so the entries a
+// claim cannot choose between all belong to ONE group, and each of them
+// carries that group with it. Whichever way round the twins end up, the group
+// gets back exactly the set of (place, alignment, pin) it was saved with -
+// only possibly with two indistinguishable windows exchanged, which is the
+// trade already accepted for the place.
+//
+// Dropping them, by contrast, is not neutral: nothing else ever restores an
+// alignment. The tab falls back on whatever the group it was auto-grouped into
+// happened to be using, that inherited value is written to the global map, the
+// next save records it in place of the real one, and the value the user chose
+// is gone from the settings file for good. That is the difference between the
+// two halves of the state here - a name that is not applied is merely missing
+// for now, an alignment that is not applied is destroyed.
+let withoutIdentityState (info: ClosedTabInfo) =
     { info with
         renamedTabName = None
-        isPinned = false
         fillColor = None
         underlineColor = None
-        borderColor = None
-        tabAlign = None }
+        borderColor = None }
+
+// The entry as it may be APPLIED to the window that has claimed it. The entry
+// itself always keeps everything that was saved, so that one which is never
+// claimed is written back to the settings file whole; only what is put on a
+// live window is held back. `claimIsCertain` is what the claim itself could
+// tell (an exact title match against a single candidate), `info.stateIsCertain`
+// what was already known when the entry was created (no other saved window
+// shares its application and title).
+let applicableState (claimIsCertain: bool) (info: ClosedTabInfo) =
+    if claimIsCertain && info.stateIsCertain then info else withoutIdentityState info
 
 // Titles are compared after removing VSCode's unsaved-changes marker
 // ("● "), so a document that closed clean and reopens dirty (or vice
@@ -605,6 +649,9 @@ type Program() as this =
                     savedRect = None
                     seedSince = Some(now)
                     orderSnapshot = orderSnapshot
+                    // Taken from the window itself as it closed, so it is that
+                    // window's state and nobody else's.
+                    stateIsCertain = true
                 }
                 closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
             | _ -> ()
@@ -761,6 +808,77 @@ type Program() as this =
             let count = currentTabs.list.Length
             if info.tabIndex >= 0 && info.tabIndex < count then info.tabIndex else count
 
+    // Put the saved pin state back on a restored tab. Runs on the group thread.
+    //
+    // Pin is half of the tab's band on the strip and the ordering below sorts
+    // within bands, so this has to have happened before any order is worked
+    // out - a tab still carrying the pin state that auto-grouping happened to
+    // give it would be sorted into the wrong half of the strip and the saved
+    // order would come out wrong for every tab in that band, not just this one.
+    // It has to happen again after anything that runs the strip's smart-pin
+    // rule, which is moveTab and nothing else; setVisualOrder deliberately
+    // leaves pin alone.
+    member private this.enforcePin(wg: WindowGroup, hwnd: IntPtr, info: ClosedTabInfo) =
+        let tab = Tab(hwnd)
+        if info.isPinned && not (wg.ts.isPinned(tab)) then wg.pinTab(hwnd)
+        elif not info.isPinned && wg.ts.isPinned(tab) then wg.unpinTab(hwnd)
+
+    // Put a whole group back into the order one of its members was saved in.
+    // Runs on the group thread; the only shared state it reads is
+    // restoredFromMap, which is a concurrent dictionary for that reason.
+    //
+    // The whole group, not only the tab that has just arrived, and that is the
+    // point of it. The tab that CREATES a group is never placed by itself: at
+    // that moment it is the only tab there is, the group is not yet known to be
+    // the saved one, and until now nothing ever came back to it - so a group
+    // whose windows all start after WindowTabs came back with its first window
+    // wherever it happened to land and the rest arranged around it, which is
+    // exactly the reported fault. Recomputing the entire order at every arrival
+    // also makes the result independent of the sequence the windows start in,
+    // which is what matters when an application starts half an hour late.
+    //
+    // Nothing puts this on a timer: it runs only when a tab that belongs to the
+    // saved order arrives. Once the group's saved windows have all arrived (or
+    // their entries have expired) there is no arrival left to trigger it, so it
+    // cannot come back later and undo what the user has done since.
+    //
+    // The arithmetic itself is in TabOrder, where it can be run without
+    // starting WindowTabs; here it is only fed the strip's live values.
+    member private this.applySavedOrder(wg: WindowGroup, savedOrder: IntPtr list) =
+        if List.isEmpty savedOrder then () else
+        let current = wg.ts.visualOrder.list
+        let placed =
+            current |> List.map (fun (Tab(h) as t) -> TabOrder.placed h (wg.ts.visualZoneOf(t)))
+        let oldHandleOf (h: IntPtr) =
+            match restoredFromMap.TryGetValue(h) with
+            | true, oldHwnd -> Some(oldHwnd)
+            | _ -> None
+        let desired = TabOrder.restoreOrder savedOrder oldHandleOf placed
+        if desired <> (current |> List.map (fun (Tab(h)) -> h)) then
+            wg.ts.setVisualOrder(desired |> List.map Tab)
+
+    // The placement half of a closed-tab restore, shared by the early claim
+    // (addWindowToGroup) and the late one (tryLateClosedTabRestore) so that the
+    // two can never drift apart. Runs on the group thread, after the caller has
+    // applied the saved alignment and pin.
+    member private this.restorePlacement(wg: WindowGroup, hwnd: IntPtr, info: ClosedTabInfo) =
+        let tab = Tab(hwnd)
+        // An entry whose own handle is missing from its order snapshot - a tab
+        // closed at a moment when its group's order could not be read - has
+        // nothing to go on but the absolute index it was recorded at. Use that
+        // first; the group pass below then leaves the tab exactly where this
+        // put it, because a tab the snapshot does not know keeps the neighbour
+        // it currently follows.
+        if (info.orderSnapshot |> List.tryFindIndex ((=) info.closedHwnd)).IsNone then
+            let currentTabs = wg.ts.visualOrder
+            let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredFromMap)
+            match currentTabs.tryFindIndex((=) tab) with
+            | Some(curIdx) when curIdx <> targetIdx -> wg.ts.moveTab(tab, targetIdx)
+            | _ -> ()
+            // moveTab is the one call here that applies smart-pin.
+            this.enforcePin(wg, hwnd, info)
+        this.applySavedOrder(wg, info.orderSnapshot)
+
     // Closed-tab restore: when a window matching a recorded closed tab
     // appears, restore its tab state and put it back into its former group.
     // Runs before category/exe auto-grouping in findGroupForWindow.
@@ -775,12 +893,12 @@ type Program() as this =
             with _ -> None
         let matched =
             match this.takeClosedTabMatch(exePath, windowTitle) with
-            | Some(info) -> Some(info)
+            | Some(info) -> Some(applicableState true info)
             | None ->
                 match this.findSeedByExe(exePath, bounds) with
                 | Some(idx, count) when this.seedFallbackAllowed(window.hwnd, count) ->
                     let info = this.takeClosedTabAt idx
-                    Some(if count > 1 then withoutTabState info else info)
+                    Some(applicableState (count <= 1) info)
                 | _ -> None
         (match matched with
          | Some(i) -> RestoreTrace.log (fun () -> sprintf "claim(early) hwnd=%X token=%X rank=%d align=%A pin=%b title=%s"
@@ -904,7 +1022,7 @@ type Program() as this =
                         match this.takeClosedTabEntry(info) with
                         | Some(entry) ->
                             restoreClaimed.map(fun s -> s.add hwnd)
-                            let info = if ambiguous then withoutTabState entry else entry
+                            let info = applicableState (not ambiguous) entry
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
                             info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
@@ -959,25 +1077,23 @@ type Program() as this =
                                             // when it was auto-grouped, so the tab looked right
                                             // but came back right-aligned after the NEXT restart.
                                             info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
+                                            // Alignment and pin first, always,
+                                            // whether or not this is the saved
+                                            // group: together they are the
+                                            // tab's band, the ordering below
+                                            // sorts within bands, and a tab
+                                            // that landed outside its saved
+                                            // group is not ordered at all but
+                                            // still keeps what it was saved
+                                            // with.
+                                            this.enforcePin(wg, hwnd, info)
                                             if isSavedGroup then
-                                                let currentTabs = wg.ts.visualOrder
-                                                let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredFromMap)
-                                                match currentTabs.tryFindIndex((=) tab) with
-                                                | Some(curIdx) when curIdx <> targetIdx ->
-                                                    wg.ts.moveTab(tab, targetIdx)
-                                                | _ -> ()
-                                                RestoreTrace.log (fun () -> sprintf "  place(late) hwnd=%X rank=%d target=%d after=%s"
-                                                                                  (hwnd.ToInt64()) info.tabIndex targetIdx
+                                                this.restorePlacement(wg, hwnd, info)
+                                                RestoreTrace.log (fun () -> sprintf "  place(late) hwnd=%X rank=%d order=%s"
+                                                                                  (hwnd.ToInt64()) info.tabIndex
                                                                                   (wg.ts.visualOrder.list |> List.map (fun (Tab h) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
                                             else
                                                 RestoreTrace.log (fun () -> sprintf "  place(late) hwnd=%X SKIPPED (not saved group)" (hwnd.ToInt64()))
-                                            // Enforce the saved pin state AFTER the move:
-                                            // moveTab applies smart-pin, which can flip the
-                                            // pin state depending on the tab's neighbors.
-                                            if info.isPinned && not (wg.ts.isPinned(tab)) then
-                                                wg.pinTab(hwnd)
-                                            elif not info.isPinned && wg.ts.isPinned(tab) then
-                                                wg.unpinTab(hwnd)
                                         with _ -> ()
                                 | _ -> ()
                             | None -> ()
@@ -1196,7 +1312,7 @@ type Program() as this =
         match pendingClosedTabRestores.value.tryFind(hwnd) with
         | Some(info) ->
             pendingClosedTabRestores.map(fun m -> m.remove hwnd)
-            let isSavedGroup = this.isInfoGroup group info
+            let mutable isSavedGroup = this.isInfoGroup group info
             // The former group no longer exists (e.g. the whole group was
             // absent at startup and its members are reopening one by one, so
             // the cache entries still carry the dead sentinel). Bind the
@@ -1231,6 +1347,14 @@ type Program() as this =
                 // other windows' and its tab position is theirs to keep.
                 if isNewGroup then
                     this.applySeededGroupSettings(token, group)
+                // This IS now the saved group, as it is on the late path. It
+                // was read before the binding above, so it said false, and the
+                // window that created its group was left unplaced for ever
+                // after - the reported fault. Ordering it is safe even when it
+                // has joined some other windows' group: TabOrder moves nothing
+                // it does not recognise from the saved order, so tabs that were
+                // already there keep the neighbours they have.
+                isSavedGroup <- true
              | _ -> ())
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -1239,25 +1363,19 @@ type Program() as this =
                         let wg = gi.group
                         let newTab = Tab(hwnd)
                         info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
+                        // Alignment and pin first, always, whether or not this
+                        // is the saved group: together they are the tab's band,
+                        // the ordering below sorts within bands, and a tab that
+                        // landed outside its saved group is not ordered at all
+                        // but still keeps what it was saved with.
+                        this.enforcePin(wg, hwnd, info)
                         if isSavedGroup then
-                            let currentTabs = wg.ts.visualOrder
-                            let targetIdx = this.closedTabTargetIdx(currentTabs, newTab, info, restoredFromMap)
-                            match currentTabs.tryFindIndex((=) newTab) with
-                            | Some(curIdx) when curIdx <> targetIdx ->
-                                wg.ts.moveTab(newTab, targetIdx)
-                            | _ -> ()
-                            RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X rank=%d target=%d after=%s"
-                                                              (hwnd.ToInt64()) info.tabIndex targetIdx
+                            this.restorePlacement(wg, hwnd, info)
+                            RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X rank=%d order=%s"
+                                                              (hwnd.ToInt64()) info.tabIndex
                                                               (wg.ts.visualOrder.list |> List.map (fun (Tab h) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
                         else
                             RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X SKIPPED (not saved group)" (hwnd.ToInt64()))
-                        // Enforce the saved pin state AFTER the move: moveTab
-                        // applies smart-pin, which can flip the pin state
-                        // depending on the restored tab's neighbors.
-                        if info.isPinned && not (wg.ts.isPinned(newTab)) then
-                            wg.pinTab(hwnd)
-                        elif not info.isPinned && wg.ts.isPinned(newTab) then
-                            wg.unpinTab(hwnd)
                     with _ -> ()
             | _ -> ()
         | None -> ()
@@ -1335,48 +1453,90 @@ type Program() as this =
 
     member this.refresh() = this.receive(Timer)
 
-    // Save tab group configuration to settings file for restoration on next startup
-    // Uses hwnd only for matching - simpler and more reliable
+    // Save tab group configuration to settings file for restoration on next
+    // startup.
+    //
+    // WHAT goes into the file - which groups, in which order, with the windows
+    // that have not opened yet spliced back in at the index they held - is
+    // decided in SavedSession, and this reads the values out of the desktop
+    // and the global per-window maps to hand over. The split is not tidiness.
+    // That composition is where a saved order can be taken from the wrong list
+    // or an entry aged out by the wrong rule, and while it stood in the middle
+    // of this method it could not be run at all without a screen full of
+    // windows; over there a script drives it and reads back what was written.
+
     // One saved window that has not opened yet, as it goes back into the
     // settings file.
-    member private this.seedToJson(e: ClosedTabInfo) =
-        let o = JObject()
-        o.setInt64("hwnd", e.closedHwnd.ToInt64())
-        o.setString("exePath", e.exePath)
-        o.setString("windowTitle", e.windowTitle)
-        (match e.savedRect with
-         | Some(x, y, w, h) -> o.setString("rect", sprintf "%d,%d,%d,%d" x y w h)
-         | None -> ())
-        (match e.renamedTabName with
-         | Some(name) -> o.setString("renamedTabName", name)
-         | None -> ())
-        if e.isPinned then o.setBool("isPinned", true)
-        (match e.fillColor with
-         | Some(c) -> o.setString("tabFillColor", colorToRRGGBBAA c)
-         | None -> ())
-        (match e.underlineColor with
-         | Some(c) -> o.setString("tabUnderlineColor", colorToRRGGBBAA c)
-         | None -> ())
-        (match e.borderColor with
-         | Some(c) -> o.setString("tabBorderColor", colorToRRGGBBAA c)
-         | None -> ())
-        (match e.tabAlign with
-         | Some(a) ->
-            o.setString("tabAlignment", (match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"))
-         | None -> ())
-        o.setString("seedSince", (e.seedSince |> Option.defaultValue DateTime.Now).ToString("o"))
-        // Read back as a tab the user closed, not as a window still waiting to
-        // start: only an exact title match may claim one of these. Without the
-        // mark they would return as seeds and become eligible for the match by
-        // application alone, and a newly opened browser window could be pulled
-        // into a group the user had closed a week earlier.
-        if e.isRestoreSeed.not then o.setBool("closedByUser", true)
-        o
+    member private this.savedTabOfSeed(e: ClosedTabInfo) =
+        { SavedTabState.ofHwnd e.closedHwnd with
+            exePath = Some(e.exePath)
+            windowTitle = Some(e.windowTitle)
+            rect = e.savedRect
+            renamedTabName = e.renamedTabName
+            isPinned = e.isPinned
+            fillColor = e.fillColor |> Option.map colorToRRGGBBAA
+            underlineColor = e.underlineColor |> Option.map colorToRRGGBBAA
+            borderColor = e.borderColor |> Option.map colorToRRGGBBAA
+            align = e.tabAlign |> Option.map savedAlignOfTabAlign
+            seedSince = Some(e.seedSince |> Option.defaultValue DateTime.Now)
+            // Read back as a tab the user closed, not as a window still
+            // waiting to start: only an exact title match may claim one of
+            // these. Without the mark they would return as seeds and become
+            // eligible for the match by application alone, and a newly
+            // opened browser window could be pulled into a group the user
+            // had closed a week earlier.
+            closedByUser = e.isRestoreSeed.not }
+
+    // One live window as the file records it, and None for a handle that is no
+    // longer a window - the one thing here that cannot be decided without
+    // asking Windows, which is why the save takes this as a function.
+    member private this.savedTabOfWindow(hwnd: IntPtr) =
+        let window = os.windowFromHwnd(hwnd)
+        if window.isWindow.not then None else
+        // The window's identity goes in as well as its handle. A handle is
+        // only valid within one OS session, so after a Windows restart it
+        // matches nothing (and can even collide with an unrelated new window
+        // that reuses the value) - the exe path + normalized title are what
+        // the restore falls back to, and what it uses to distrust a reused
+        // handle.
+        let exePath = (try window.pid.processPath with _ -> "")
+        let title = (try window.text with _ -> "")
+        // The rectangle tells apart two windows of the same application with
+        // the same title (two terminals both called "Claude1"): exe + title
+        // alone assigned their per-window state first-come-first-served, which
+        // put one window's rename onto the other. Most windows reopen where
+        // they were, so at restore the saved rectangles pick the right twins.
+        let rect =
+            try
+                let b = window.bounds
+                Some(b.x, b.y, b.width, b.height)
+            with _ -> None
+        // Written through the same record a not-yet-started window is written
+        // through (savedTabOfSeed), so the two cannot disagree about a key or
+        // a format.
+        Some { SavedTabState.ofHwnd hwnd with
+                 exePath = (if exePath <> "" then Some(exePath) else None)
+                 windowTitle = (if title <> "" then Some(normalizeClosedTabTitle title) else None)
+                 rect = rect
+                 renamedTabName = windowNameOverride.value.tryFind(hwnd) |> Option.bind id
+                 isPinned = windowPinned.value.contains(hwnd)
+                 fillColor = windowFillColor.value.tryFind(hwnd) |> Option.map colorToRRGGBBAA
+                 underlineColor = windowUnderlineColor.value.tryFind(hwnd) |> Option.map colorToRRGGBBAA
+                 borderColor = windowBorderColor.value.tryFind(hwnd) |> Option.map colorToRRGGBBAA
+                 // From the global map, not from the strip. The absence of a
+                 // value is meaningful: it says "whichever side this group is
+                 // set to", so writing the strip's effective alignment instead
+                 // would nail every tab to a side and the group's own
+                 // tabPosition setting would stop moving them. What must not
+                 // happen is a value going missing from the map, and that is
+                 // dealt with where it was lost - at the restore
+                 // (SavedSession.plan) - not by papering over it here.
+                 align = windowAlignment.value.tryFind(hwnd) |> Option.map savedAlignOfTabAlign }
 
     member this.saveTabGroupsToSettings() =
         try
             let json = settingsManager.settingsJson
-            let groupsArray = JArray()
+            let saveNow = DateTime.Now
             // Saved windows whose application has not started yet are held in
             // memory as restore seeds, and nothing else remembers them. The
             // periodic save fires 10 s after boot - long before applications
@@ -1385,150 +1545,99 @@ type Program() as this =
             // whatever happens to be running, which right after a restart is
             // nothing. A WindowTabs restart, or a second reboot, would then
             // have lost the groups for good.
-            let saveNow = DateTime.Now
-            let notExpired (e: ClosedTabInfo) =
-                let since = e.seedSince |> Option.defaultValue saveNow
-                let limit = if e.isRestoreSeed then seedMaxAgeDays else closedTabMaxAgeDays
-                (saveNow - since).TotalDays <= limit
+            let pending =
+                closedTabCache.value
+                |> List.map (fun e ->
+                    e, { SavedSession.tab = this.savedTabOfSeed e
+                         SavedSession.rank = e.tabIndex
+                         SavedSession.isRestoreSeed = e.isRestoreSeed })
+            let infoOf = System.Collections.Generic.Dictionary<IntPtr, ClosedTabInfo>()
+            pending |> List.iter (fun (info, p) -> infoOf.[p.tab.hwnd] <- info)
             let pendingSeeds =
-                (closedTabCache.value |> List.filter (fun e -> e.isRestoreSeed && notExpired e))
-                @ (closedTabCache.value
-                   |> List.filter (fun e -> e.isRestoreSeed.not && notExpired e)
-                   // By date, not by position: entries read back from the file
-                   // are pushed onto the cache in the order the groups are
-                   // walked, so after a restart the head of the list has
-                   // nothing to do with which of them are the newest.
-                   |> List.sortByDescending (fun e -> e.seedSince |> Option.defaultValue DateTime.MinValue)
-                   |> List.truncate closedTabSaveLimit)
-                |> List.sortBy (fun e -> e.tabIndex)
+                SavedSession.seedsToSave saveNow seedMaxAgeDays closedTabMaxAgeDays
+                                         closedTabSaveLimit (pending |> List.map snd)
             let claimedSeeds = System.Collections.Generic.HashSet<IntPtr>()
-            this.desktop.groups.iter <| fun gi ->
-                let windowsArray = JArray()
-                // Save in the strip's real on-screen order (the visualOrder
-                // mirror goes stale after pin/unpin normalization). Windows
-                // not yet present in the strip snapshot (added moments ago,
-                // strip add still pending) are appended so none are lost.
-                let snapshotOrder = gi.visualOrderThreadSafe
-                let order = snapshotOrder.appendList(gi.visualOrder.where(fun h -> snapshotOrder.contains((=) h).not))
-                order.iter <| fun hwnd ->
-                    let window = os.windowFromHwnd(hwnd)
-                    if window.isWindow then
-                        let windowObj = JObject()
-                        // Save hwnd for group restoration
-                        windowObj.setInt64("hwnd", hwnd.ToInt64())
-                        // Also save the window's identity. An hwnd is only
-                        // valid within one OS session, so after a Windows
-                        // restart the hwnd matches nothing (and can even
-                        // collide with an unrelated new window that reuses
-                        // the value) - the exe path + normalized title are
-                        // what the restore falls back to, and what it uses
-                        // to distrust a reused hwnd.
-                        let exePath = (try window.pid.processPath with _ -> "")
-                        if exePath <> "" then
-                            windowObj.setString("exePath", exePath)
-                        let title = (try window.text with _ -> "")
-                        if title <> "" then
-                            windowObj.setString("windowTitle", normalizeClosedTabTitle title)
-                        // The rectangle disambiguates two windows of the same
-                        // application with the same title (two terminals both
-                        // called "Claude1"): exe + title alone assigned their
-                        // per-window state first-come-first-served, which put
-                        // one window's rename onto the other. Most windows
-                        // reopen where they were, so at restore the nearest
-                        // saved rectangle picks the right twin.
-                        try
-                            let b = window.bounds
-                            windowObj.setString("rect", sprintf "%d,%d,%d,%d" b.x b.y b.width b.height)
-                        with _ -> ()
-                        // Save renamed tab name if exists
-                        match windowNameOverride.value.tryFind(hwnd) with
-                        | Some(Some(name)) ->
-                            windowObj.setString("renamedTabName", name)
-                        | _ -> ()
-                        // Save pinned state from global
-                        if windowPinned.value.contains(hwnd) then
-                            windowObj.setBool("isPinned", true)
-                        // Save tab fill color from global
-                        match windowFillColor.value.tryFind(hwnd) with
-                        | Some(c) -> windowObj.setString("tabFillColor", colorToRRGGBBAA c)
-                        | None -> ()
-                        // Save tab underline color from global
-                        match windowUnderlineColor.value.tryFind(hwnd) with
-                        | Some(c) -> windowObj.setString("tabUnderlineColor", colorToRRGGBBAA c)
-                        | None -> ()
-                        // Save tab border color from global
-                        match windowBorderColor.value.tryFind(hwnd) with
-                        | Some(c) -> windowObj.setString("tabBorderColor", colorToRRGGBBAA c)
-                        | None -> ()
-                        // Save per-tab alignment from global
-                        match windowAlignment.value.tryFind(hwnd) with
-                        | Some(a) ->
-                            let alignStr = match a with TopLeft -> "TopLeft" | TopRight -> "TopRight"
-                            windowObj.setString("tabAlignment", alignStr)
-                        | None -> ()
-                        windowsArray.Add(windowObj)
-                // Seeds of a group that has partly reassembled here are
-                // saved with it, at the index they held in the saved order.
-                pendingSeeds |> List.iter (fun e ->
-                    if claimedSeeds.Contains(e.closedHwnd).not then
-                        match this.findGroupForClosedInfo e with
-                        | Some(g) when obj.ReferenceEquals(g, gi) ->
-                            claimedSeeds.Add(e.closedHwnd) |> ignore
-                            let at =
-                                if e.tabIndex >= 0 && e.tabIndex < windowsArray.Count
-                                then e.tabIndex else windowsArray.Count
-                            windowsArray.Insert(at, this.seedToJson e)
-                        | _ -> ())
-                if windowsArray.Count > 0 then
-                    let groupObj = JObject()
-                    groupObj.addOrUpdate("windows", windowsArray)
-                    // Save per-group tab position
-                    groupObj.setString("tabPosition", gi.perGroupTabPositionValue)
-                    // Save per-group snap tab height margin
-                    groupObj.setBool("snapTabHeightMargin", gi.snapTabHeightMargin)
-                    groupsArray.Add(groupObj)
+            let liveGroups =
+                this.desktop.groups.list
+                |> List.map (fun gi ->
+                    // Seeds of a group that has partly reassembled here are
+                    // saved with it. Which group an entry belongs to is a
+                    // question about the live desktop, so it is answered here
+                    // and the answer handed over.
+                    let seeds =
+                        pendingSeeds
+                        |> List.filter (fun p ->
+                            claimedSeeds.Contains(p.tab.hwnd).not &&
+                            (match this.findGroupForClosedInfo infoOf.[p.tab.hwnd] with
+                             | Some(g) when obj.ReferenceEquals(g, gi) ->
+                                claimedSeeds.Add(p.tab.hwnd) |> ignore
+                                true
+                             | _ -> false))
+                    // Both orders, because neither is complete on its own: the
+                    // strip snapshot is the real on-screen order but does not
+                    // yet hold a window added moments ago, and the mirror goes
+                    // stale after a pin/unpin normalization.
+                    let group : SavedSession.GroupToSave =
+                        { stripOrder = gi.visualOrderThreadSafe.list
+                          mirrorOrder = gi.visualOrder.list
+                          seeds = seeds
+                          tabPosition = Some(gi.perGroupTabPositionValue)
+                          snapMargin = Some(gi.snapTabHeightMargin) }
+                    group)
             // A group where nothing has opened yet keeps a group of its own,
             // held together by the sentinel token it was seeded under. Tabs
             // the user closed are not kept this way: emptying a group is the
             // plainest way of saying it is finished with, so once its last tab
             // is closed the group goes rather than waiting to be resurrected
             // by whichever of its windows is opened next.
-            pendingSeeds
-            |> List.filter (fun e -> claimedSeeds.Contains(e.closedHwnd).not && e.isRestoreSeed)
-            // By the reference itself, not the handle inside it: grouping on
-            // the bare number would put a token and a strip handle that
-            // happened to share it into one group. The filter above admits
-            // only saved entries today, so this changes nothing - it keeps the
-            // guarantee in the type rather than in the filter above it.
-            |> List.groupBy (fun e -> e.groupRef)
-            |> List.iter (fun (gref, entries) ->
-                // Only a saved group is written this way, and only a saved
-                // group has settings held against its token.
-                match gref with
-                | LiveStrip(_) -> ()
-                | SavedToken(token) ->
-                let windowsArray = JArray()
-                entries |> List.iter (fun e -> windowsArray.Add(this.seedToJson e))
-                if windowsArray.Count > 0 then
-                    let groupObj = JObject()
-                    groupObj.addOrUpdate("windows", windowsArray)
-                    // The group's own settings go with it. Read from the live
-                    // group above, they have no live group to be read from
-                    // here, and a second restart would have lost them.
-                    (match seededGroupSettings.value.tryFind(token) with
-                     | Some(pos, margin) ->
-                        pos |> Option.iter (fun p -> groupObj.setString("tabPosition", p))
-                        margin |> Option.iter (fun m -> groupObj.setBool("snapTabHeightMargin", m))
-                     | None -> ())
-                    groupsArray.Add(groupObj))
-            json.addOrUpdate("SavedTabGroupsForRestart", groupsArray)
+            let waitingGroups =
+                pendingSeeds
+                |> List.filter (fun p -> claimedSeeds.Contains(p.tab.hwnd).not && p.isRestoreSeed)
+                // By the reference itself, not the handle inside it: grouping
+                // on the bare number would put a token and a strip handle that
+                // happened to share it into one group. The filter above admits
+                // only saved entries today, so this changes nothing - it keeps
+                // the guarantee in the type rather than in the filter above it.
+                |> List.groupBy (fun p -> infoOf.[p.tab.hwnd].groupRef)
+                |> List.choose (fun (gref, entries) ->
+                    // Only a saved group is written this way, and only a saved
+                    // group has settings held against its token.
+                    match gref with
+                    | LiveStrip(_) -> None
+                    | SavedToken(token) ->
+                        // The group's own settings go with it. Read from the
+                        // live group above, they have no live group to be read
+                        // from here, and a second restart would have lost them.
+                        let pos, margin =
+                            match seededGroupSettings.value.tryFind(token) with
+                            | Some(p, m) -> p, m
+                            | None -> None, None
+                        let group : SavedSession.GroupToSave =
+                            { stripOrder = []
+                              mirrorOrder = []
+                              seeds = entries
+                              tabPosition = pos
+                              snapMargin = margin }
+                        Some(group))
+            json.addOrUpdate("SavedTabGroupsForRestart",
+                             SavedSession.write this.savedTabOfWindow (liveGroups @ waitingGroups))
             settingsManager.settingsJson <- json
         with
         | _ -> ()
 
-    // Restore tab groups from settings file on startup
-    // Uses hwnd only for matching - simpler and more reliable
-    // Includes windows on other virtual desktops (cloaked windows) for full restoration
+    // Restore tab groups from settings file on startup.
+    //
+    // WHICH saved tab comes back as which live window, and what may be put on
+    // it once it is there, is decided in SavedSession.plan. This gathers the
+    // windows that are on screen and then carries the plan out. Same reason as
+    // the save: the matching is the part that goes wrong invisibly - a window
+    // takes its twin's name, or comes back without the alignment it was saved
+    // with and is drawn at the wrong end of the strip - and while it was
+    // written in the middle of this method there was no way to run it at all
+    // without a desktop full of windows.
+    //
+    // Includes windows on other virtual desktops (cloaked windows) for full
+    // restoration.
     member this.restoreTabGroupsFromSettings() =
         try
             let json = settingsManager.settingsJson
@@ -1544,446 +1653,152 @@ type Program() as this =
                     this.isAppWindowStyle(w) &&
                     Services.filter.getIsTabbingEnabledForProcess(w.pid.processPath))
 
-                // Build a set of current window hwnds for fast lookup
-                let currentHwnds = currentWindows.map(fun w -> w.hwnd.ToInt64()).list |> Set.ofList
+                // The identity of every live window, for the two things a
+                // handle alone cannot do: reject a REUSED handle (after a
+                // reboot the OS hands the same values to unrelated windows)
+                // and find a window again when every handle has changed (the
+                // reboot case). The centre of the rectangle is what tells two
+                // windows apart when even the identity cannot.
+                let live =
+                    currentWindows.list
+                    |> List.map (fun w ->
+                        { SavedSession.handle = w.hwnd
+                          SavedSession.exePath = (try w.pid.processPath with _ -> "")
+                          SavedSession.title = (try normalizeClosedTabTitle w.text with _ -> "")
+                          SavedSession.center =
+                            (try
+                                let b = w.bounds
+                                Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
+                             with _ -> None) })
 
-                // Identity of every live window, for the two things an hwnd
-                // alone cannot do: reject a REUSED hwnd (after a reboot the
-                // OS hands the same values to unrelated windows) and find a
-                // window again when every hwnd has changed (the reboot case).
-                let currentIdent = System.Collections.Generic.Dictionary<int64, string * string * (float * float) option>()
-                currentWindows.iter <| fun w ->
-                    let exe = (try w.pid.processPath with _ -> "")
-                    let title = (try normalizeClosedTabTitle w.text with _ -> "")
-                    let center =
-                        try
-                            let b = w.bounds
-                            Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
-                        with _ -> None
-                    currentIdent.[w.hwnd.ToInt64()] <- (exe, title, center)
-                let currentIdentList =
-                    [ for kv in currentIdent ->
-                        let (exe, title, center) = kv.Value
-                        kv.Key, exe, title, center ]
+                let planned =
+                    SavedSession.plan DateTime.Now seedMaxAgeDays closedTabMaxAgeDays
+                                      (SavedSession.read groupsArray) live
 
-                // An hwnd match is trusted only if the process still agrees
-                // (entries saved before exePath existed are trusted as
-                // before). Reserve every trusted hwnd up front, so the
-                // identity fallback below can never steal a window that a
-                // later group still matches by hwnd.
-                let savedHwndTrusted (h: int64) (exePath: string option) =
-                    currentHwnds.Contains(h) &&
-                    (match exePath with
-                     | Some(exe) when exe <> "" ->
-                         (match currentIdent.TryGetValue(h) with
-                          | true, (curExe, _, _) -> String.Equals(exe, curExe, StringComparison.OrdinalIgnoreCase)
-                          | _ -> false)
-                     | _ -> true)
-                let hwndReserved = System.Collections.Generic.HashSet<int64>()
-                for groupToken in groupsArray do
-                    let arr =
-                        match groupToken with
-                        | :? JObject as g ->
-                            (match g.getValueCI("windows") with
-                             | Some(:? JArray as a) -> a
-                             | _ -> JArray())
-                        | :? JArray as a -> a
-                        | _ -> JArray()
-                    for t in arr do
-                        match t with
-                        | :? JObject as o ->
-                            match o.getIntPtr("hwnd") with
-                            // A tab the user closed is matched on its title and
-                            // nothing else. Its saved handle belongs to a window
-                            // that no longer exists, and now that the entry
-                            // lives in the file for eight days Windows has time
-                            // to hand that number to something else: reserving
-                            // it would let an unrelated window of the same
-                            // application take the closed tab's name, colours
-                            // and pin without its title ever being looked at.
-                            | Some(h) when savedHwndTrusted (h.ToInt64()) (o.getString("exePath")) &&
-                                           o.getBool("closedByUser") <> Some(true) ->
-                                hwndReserved.Add(h.ToInt64()) |> ignore
-                            | _ -> ()
-                        | _ -> ()
+                for g in planned do
+                    let matched = g.tabs |> List.filter (fun t -> t.live.IsSome)
+                    matched |> List.iteri (fun i t ->
+                        RestoreTrace.log (fun () -> sprintf "  matched[%d] hwnd=%X saved=%X"
+                                                            i (t.live.Value.ToInt64()) (t.saved.hwnd.ToInt64())))
+                    // Create the group with the matched windows, in saved order.
+                    let createdGroup =
+                        if matched.IsEmpty then None else
+                        let group = Services.desktop.createGroup(false)
+                        matched |> List.iter (fun t ->
+                            let hwnd = t.live.Value
+                            // What the plan allows onto this window: always
+                            // the alignment and the pin, the name and the
+                            // colours only when they cannot have belonged to
+                            // another window.
+                            let e = t.applied
+                            // Restore to global maps BEFORE addWindow to avoid race condition
+                            // (addWindow is async on group thread, which reads from globals)
+                            e.renamedTabName |> Option.iter (fun name ->
+                                windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name))))
+                            e.fillColor |> Option.bind parseColorRRGGBBAA
+                            |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
+                            e.underlineColor |> Option.bind parseColorRRGGBBAA
+                            |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
+                            e.borderColor |> Option.bind parseColorRRGGBBAA
+                            |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
+                            if e.isPinned then
+                                windowPinned.set(windowPinned.value.add hwnd)
+                            e.align |> Option.iter (fun a ->
+                                windowAlignment.set(windowAlignment.value.add hwnd (tabAlignOfSavedAlign a)))
+                            // Identity-matched window: remember new -> old
+                            // handle, so a sibling restored later can find
+                            // this tab in its close-time order snapshot
+                            // (the order arithmetic resolves through this map).
+                            if hwnd <> t.saved.hwnd then
+                                restoredFromMap.[hwnd] <- t.saved.hwnd
+                            restoreClaimed.map(fun s -> s.add hwnd)
+                            group.addWindow(hwnd, false))
+                        // The group's own settings, or the global default
+                        // already applied at creation when it has none.
+                        g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
+                        g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
+                        Some(group)
 
-                // Identity matching after a Windows restart. Once every hwnd
-                // is new, exe path + title is all that is left, and it does not
-                // always identify one window: two terminals can both be titled
-                // "Claude1". The two ambiguous cases are not equally bad.
-                //   - The same identity in two DIFFERENT saved groups is not
-                //     restored at all. Picking one of them arbitrarily would
-                //     not be an uncertain restore, it would be a certain change
-                //     to the group structure.
-                //   - The same identity more than once inside ONE saved group
-                //     is restored. Whichever live window each entry ends up
-                //     matching, the resulting group membership is identical, so
-                //     it is right either way.
-                // Per-window state (rename, pin, colors, alignment) is applied
-                // only when the identity is unique on both sides: a rename
-                // landing on the wrong twin is worse than no rename at all.
-                // Same-session hwnd matches above remain authoritative and do
-                // not use this fallback.
-                let identityKey (exe: string) (title: string) =
-                    exe.ToLowerInvariant() + "\u001f" + title
-                let savedIdentityCounts = System.Collections.Generic.Dictionary<string, int>()
-                let savedIdentityGroup = System.Collections.Generic.Dictionary<string, int>()
-                let crossGroupIdentities = System.Collections.Generic.HashSet<string>()
-                let mutable savedGroupIndex = -1
-                for groupToken in groupsArray do
-                    savedGroupIndex <- savedGroupIndex + 1
-                    let arr =
-                        match groupToken with
-                        | :? JObject as g ->
-                            (match g.getValueCI("windows") with
-                             | Some(:? JArray as a) -> a
-                             | _ -> JArray())
-                        | :? JArray as a -> a
-                        | _ -> JArray()
-                    for token in arr do
-                        match token with
-                        | :? JObject as entry ->
-                            match entry.getIntPtr("hwnd"), entry.getString("exePath"), entry.getString("windowTitle") with
-                            | Some(h), Some(exe), Some(title)
-                                when exe <> "" && title <> "" && hwndReserved.Contains(h.ToInt64()).not ->
-                                let key = identityKey exe title
-                                savedIdentityCounts.[key] <-
-                                    (match savedIdentityCounts.TryGetValue(key) with
-                                     | true, count -> count + 1
-                                     | _ -> 1)
-                                match savedIdentityGroup.TryGetValue(key) with
-                                | true, g when g <> savedGroupIndex -> crossGroupIdentities.Add(key) |> ignore
-                                | true, _ -> ()
-                                | _ -> savedIdentityGroup.[key] <- savedGroupIndex
-                            | _ -> ()
-                        | _ -> ()
-                let liveIdentityCounts = System.Collections.Generic.Dictionary<string, int>()
-                for (_, exe, title, _) in currentIdentList do
-                    if exe <> "" && title <> "" then
-                        let key = identityKey exe title
-                        liveIdentityCounts.[key] <-
-                            (match liveIdentityCounts.TryGetValue(key) with
-                             | true, count -> count + 1
-                             | _ -> 1)
-                let isUniqueIdentity (exe: string) (title: string) =
-                    let key = identityKey exe title
-                    (match savedIdentityCounts.TryGetValue(key) with
-                     | true, 1 -> true
-                     | _ -> false) &&
-                    (match liveIdentityCounts.TryGetValue(key) with
-                     | true, 1 -> true
-                     | _ -> false)
-                // The identity appears in more than one saved group: refuse it.
-                let isCrossGroupIdentity (exe: string) (title: string) =
-                    crossGroupIdentities.Contains(identityKey exe title)
-                // Uniqueness on the saved side alone. A seed is created for a
-                // window whose application has not started yet, so there is
-                // nothing of it to count on the live side: after an OS restart
-                // - the very case seeds exist for - the live half of
-                // isUniqueIdentity is empty for every one of them, and asking
-                // for it made every window come back stripped of its name, its
-                // pin, its colours and its left/right alignment. What can be
-                // known now is that no other saved window shares the identity;
-                // the live side is answered later, when the seed is claimed:
-                // an exact title match is definitive, and a claim by
-                // application alone drops the state unless it was the only
-                // candidate.
-                let isUniqueSavedIdentity (exe: string) (title: string) =
-                    match savedIdentityCounts.TryGetValue(identityKey exe title) with
-                    | true, 1 -> true
-                    | _ -> false
-
-                // Live windows already handed to a restored group, by either
-                // path. Each one is consumed at most once.
-                let taken = System.Collections.Generic.HashSet<int64>()
-
-                // Resolve one saved window to a live hwnd. First choice: the
-                // saved hwnd itself (WindowTabs restarted within the same OS
-                // session - the watchdog and manual restarts). Fallback: exe
-                // path + normalized title, for the Windows-restart case where
-                // every hwnd is new. Exact match only - restoring nothing is
-                // better than restoring onto the wrong window.
-                let resolveWindow (savedHwnd: IntPtr) (exePath: string option) (title: string option) (savedRect: (int * int * int * int) option) =
-                    let h = savedHwnd.ToInt64()
-                    if hwndReserved.Contains(h) && taken.Add(h) then Some(savedHwnd)
-                    else
-                        match exePath, title with
-                        | Some(exe), Some(t) when exe <> "" && t <> "" && not (isCrossGroupIdentity exe t) ->
-                            let candidates =
-                                currentIdentList
-                                |> List.filter (fun (ch, cExe, cTitle, _) ->
-                                    hwndReserved.Contains(ch).not &&
-                                    taken.Contains(ch).not &&
-                                    String.Equals(cExe, exe, StringComparison.OrdinalIgnoreCase) &&
-                                    cTitle = t)
-                            let savedCenter =
-                                savedRect
-                                |> Option.map (fun (x, y, w, h) ->
-                                    (float x + float w / 2.0, float y + float h / 2.0))
-                            let pick =
-                                match candidates, savedCenter with
-                                | [], _ -> None
-                                // Two or more windows share exe AND title (two
-                                // terminals both called "Claude1"): the one
-                                // nearest the saved rectangle is the right
-                                // twin, since windows reopen where they were.
-                                | (_ :: _ :: _), Some(sx, sy) ->
-                                    candidates
-                                    |> List.minBy (fun (_, _, _, c) ->
-                                        match c with
-                                        | Some(cx, cy) -> (cx - sx) * (cx - sx) + (cy - sy) * (cy - sy)
-                                        | None -> infinity)
-                                    |> Some
-                                | (first :: _), _ -> Some(first)
-                            pick
-                            |> Option.map (fun (ch, _, _, _) ->
-                                taken.Add(ch) |> ignore
-                                IntPtr(ch))
-                        | _ -> None
-
-                // For each saved group, find windows by hwnd and recreate the group
-                // Supports both old format (JArray of windows) and new format (JObject with windows + tabPosition)
-                for groupToken in groupsArray do
-                    let windowsArray, savedTabPosition, savedSnapMargin =
-                        match groupToken with
-                        | :? JObject as groupObj ->
-                            // New format: { windows: [...], tabPosition: "TopLeft", snapTabHeightMargin: true }
-                            let windows =
-                                match groupObj.getValueCI("windows") with
-                                | Some(:? JArray as arr) -> arr
-                                | _ -> JArray()
-                            let tabPos = groupObj.getString("tabPosition")
-                            let snapMargin = groupObj.getBool("snapTabHeightMargin")
-                            windows, tabPos, snapMargin
-                        | :? JArray as arr ->
-                            // Old format: direct array of window objects
-                            arr, None, None
-                        | _ -> JArray(), None, None
-
-                    if windowsArray.Count > 0 then
-                        // Collect saved window info (hwnd, optional renamedTabName, isPinned, fillColor)
-                        let savedWindowsList =
-                            windowsArray
-                            |> Seq.choose (fun t ->
-                                match t with
-                                | :? JObject as obj ->
-                                    obj.getIntPtr("hwnd")
-                                    |> Option.map (fun hwnd ->
-                                        let isPinned = obj.getBool("isPinned") |> Option.defaultValue false
-                                        let fillColor = obj.getString("tabFillColor") |> Option.bind parseColorRRGGBBAA
-                                        let underlineColor = obj.getString("tabUnderlineColor") |> Option.bind parseColorRRGGBBAA
-                                        let borderColor = obj.getString("tabBorderColor") |> Option.bind parseColorRRGGBBAA
-                                        let tabAlign =
-                                            match obj.getString("tabAlignment") with
-                                            | Some("TopLeft") | Some("Left") -> Some(TopLeft)
-                                            | Some("TopRight") | Some("Right") -> Some(TopRight)
-                                            | _ -> None
-                                        let savedRect =
-                                            obj.getString("rect")
-                                            |> Option.bind (fun s ->
-                                                match s.Split(',') with
-                                                | [| xs; ys; ws; hs |] ->
-                                                    match Int32.TryParse xs, Int32.TryParse ys, Int32.TryParse ws, Int32.TryParse hs with
-                                                    | (true, x), (true, y), (true, w), (true, h) -> Some(x, y, w, h)
-                                                    | _ -> None
-                                                | _ -> None)
-                                        (hwnd, obj.getString("renamedTabName"), isPinned, fillColor, underlineColor, borderColor, tabAlign,
-                                         obj.getString("exePath"), obj.getString("windowTitle"), savedRect))
-                                | _ -> None)
-                            |> List.ofSeq
-
-                        // Saved rectangle per old hwnd, for the seeds below:
-                        // a seed that outlives a WindowTabs restart has to
-                        // carry its position, or the twin disambiguation and
-                        // the title-less fallback lose their reference point.
-                        let savedRectByHwnd = System.Collections.Generic.Dictionary<IntPtr, (int * int * int * int) option>()
-                        savedWindowsList |> List.iter (fun (h, _, _, _, _, _, _, _, _, r) -> savedRectByHwnd.[h] <- r)
-
-                        // Since when an entry has been waiting for its window.
-                        // Only entries written back as seeds carry it; a window
-                        // that was running at the last save has none, and starts
-                        // its wait now.
-                        let seedSinceByHwnd = System.Collections.Generic.Dictionary<IntPtr, DateTime>()
-                        let closedByUserHwnds = System.Collections.Generic.HashSet<IntPtr>()
-                        for token in windowsArray do
-                            match token with
-                            | :? JObject as obj ->
-                                (match obj.getIntPtr("hwnd"), obj.getString("seedSince") with
-                                 | Some(h), Some(s) ->
-                                    match DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind) with
-                                    | true, d -> seedSinceByHwnd.[h] <- d
-                                    | _ -> ()
-                                 | _ -> ())
-                                (match obj.getIntPtr("hwnd"), obj.getBool("closedByUser") with
-                                 | Some(h), Some(true) -> closedByUserHwnds.Add(h) |> ignore
-                                 | _ -> ())
-                            | _ -> ()
-
-                        // Resolve each saved window to a live one (saved order
-                        // kept). The resolved hwnd - not the saved one - is
-                        // what the group and the global per-window maps get.
-                        let resolvedList =
-                            savedWindowsList
-                            |> List.map (fun (hwnd, renamed, isPinned, fill, under, border, align, exePath, title, rect) ->
-                                (hwnd, renamed, isPinned, fill, under, border, align, exePath, title,
-                                 resolveWindow hwnd exePath title rect))
-                        let matchedWindows =
-                            resolvedList
-                            |> List.choose (fun (savedHwnd, renamed, isPinned, fill, under, border, align, exePath, title, live) ->
-                                live |> Option.map (fun l ->
-                                    // A window matched by its own hwnd is the
-                                    // window that was saved - it keeps
-                                    // everything. A window matched by identity
-                                    // keeps its state only when that identity
-                                    // picks out exactly one saved and one live
-                                    // window; otherwise it is in the right
-                                    // group but may be the wrong twin.
-                                    let keepState =
-                                        l = savedHwnd ||
-                                        (match exePath, title with
-                                         | Some(exe), Some(t) -> isUniqueIdentity exe t
-                                         | _ -> false)
-                                    if keepState then (l, savedHwnd, renamed, isPinned, fill, under, border, align)
-                                    else (l, savedHwnd, None, false, None, None, None, None)))
-
-                        // Create group with matched windows (preserving saved order)
-                        matchedWindows |> List.iteri (fun i (h, sh, _, _, _, _, _, _) ->
-                            RestoreTrace.log (fun () -> sprintf "  matched[%d] hwnd=%X saved=%X" i (h.ToInt64()) (sh.ToInt64())))
-                        let createdGroup =
-                          if matchedWindows.Length >= 1 then
-                            let group = Services.desktop.createGroup(false)
-                            matchedWindows |> List.iter (fun (hwnd, savedHwnd, renamedTabName, isPinned, fillColor, underlineColor, borderColor, tabAlign) ->
-                                // Restore to global maps BEFORE addWindow to avoid race condition
-                                // (addWindow is async on group thread, which reads from globals)
-                                match renamedTabName with
-                                | Some(name) ->
-                                    windowNameOverride.set(windowNameOverride.value.add hwnd (Some(name)))
-                                | None -> ()
-                                // Restore fill color to global
-                                match fillColor with
-                                | Some(c) ->
-                                    windowFillColor.set(windowFillColor.value.add hwnd c)
-                                | None -> ()
-                                // Restore underline color to global
-                                match underlineColor with
-                                | Some(c) ->
-                                    windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c)
-                                | None -> ()
-                                // Restore border color to global
-                                match borderColor with
-                                | Some(c) ->
-                                    windowBorderColor.set(windowBorderColor.value.add hwnd c)
-                                | None -> ()
-                                // Restore pinned state to global
-                                if isPinned then
-                                    windowPinned.set(windowPinned.value.add hwnd)
-                                // Restore per-tab alignment to global
-                                match tabAlign with
-                                | Some(a) ->
-                                    windowAlignment.set(windowAlignment.value.add hwnd a)
-                                | None -> ()
-                                // Identity-matched window: remember new -> old
-                                // hwnd, so a sibling restored later can find
-                                // this tab in its close-time order snapshot
-                                // (closedTabTargetIdx resolves through this map).
-                                if hwnd <> savedHwnd then
-                                    restoredFromMap.[hwnd] <- savedHwnd
-                                restoreClaimed.map(fun s -> s.add hwnd)
-                                group.addWindow(hwnd, false)
-                            )
-                            // Restore per-group tab position if saved
-                            match savedTabPosition with
-                            | Some(pos) ->
-                                group.perGroupTabPositionValue <- pos
-                            | None -> ()  // Use global default (already applied during group creation)
-                            // Restore per-group snap tab height margin if saved
-                            match savedSnapMargin with
-                            | Some(v) ->
-                                group.snapTabHeightMargin <- v
-                            | None -> ()  // Use global default (already applied during group creation)
-                            Some(group)
-                          else None
-
+                    RestoreTrace.log (fun () -> sprintf "group token=%X created=%b order=%s"
+                                                        (g.token.ToInt64())
+                                                        (createdGroup.IsSome)
+                                                        (g.savedOrder |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
+                    if g.token <> IntPtr.Zero then
+                        seededGroupSettings.map(fun m -> m.add g.token (g.tabPosition, g.snapMargin))
+                        (match createdGroup with
+                         | Some(grp) -> seededGroupMap.map(fun m -> m.add g.token grp)
+                         | None -> ())
                         // Boot-order independence: windows of this group that
                         // are not open yet (their application starts after
                         // WindowTabs) are seeded into the closed-tab cache, so
                         // the moment such a window appears the closed-tab
                         // restore machinery puts it into its group - whichever
                         // of WindowTabs and the application won the boot race.
-                        // closedHwnd carries the old (dead) hwnd purely as a
+                        // closedHwnd carries the old (dead) handle purely as a
                         // unique token; the order snapshot is the saved order
-                        // in old hwnds, which closedTabTargetIdx resolves
-                        // through restoredFromMap.
-                        let savedOrderOldHwnds =
-                            resolvedList |> List.map (fun (savedHwnd, _, _, _, _, _, _, _, _, _) -> savedHwnd)
-                        // The token is always the first saved old hwnd - a
-                        // sentinel, never a live strip hwnd, because the strip
-                        // of a group created moments ago does not reliably
-                        // have one yet. When part of the group was restored,
-                        // the token maps to the live group object; when the
-                        // whole group was absent, the first sibling to land
-                        // repoints the remaining entries (addWindowToGroup).
-                        let seedGroupHwnd =
-                            match savedOrderOldHwnds with h :: _ -> h | [] -> IntPtr.Zero
-                        RestoreTrace.log (fun () -> sprintf "group token=%X created=%b order=%s"
-                                                          (seedGroupHwnd.ToInt64())
-                                                          (createdGroup.IsSome)
-                                                          (savedOrderOldHwnds |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
-                        if seedGroupHwnd <> IntPtr.Zero then
-                            seededGroupSettings.map(fun m -> m.add seedGroupHwnd (savedTabPosition, savedSnapMargin))
-                        (match createdGroup with
-                         | Some(g) when seedGroupHwnd <> IntPtr.Zero ->
-                            seededGroupMap.map(fun m -> m.add seedGroupHwnd g)
-                         | _ -> ())
-                        if seedGroupHwnd <> IntPtr.Zero then
-                            resolvedList
-                            |> List.iteri (fun idx entry ->
-                                match entry with
-                                | (savedHwnd, renamed, isPinned, fill, under, border, align, Some(exe), Some(title), None)
-                                    when exe <> "" && title <> "" && not (isCrossGroupIdentity exe title) ->
-                                    // Same rule as the direct match above,
-                                    // but answered on the saved side only: a
-                                    // seed for an ambiguous identity rejoins
-                                    // the right group but carries no state.
-                                    let unique = isUniqueSavedIdentity exe title
-                                    let waitingSince =
-                                        match seedSinceByHwnd.TryGetValue(savedHwnd) with
-                                        | true, d -> d
-                                        | _ -> DateTime.Now
-                                    let waitedDays = (DateTime.Now - waitingSince).TotalDays
-                                    let byUser = closedByUserHwnds.Contains(savedHwnd)
-                                    if waitedDays > (if byUser then closedTabMaxAgeDays else seedMaxAgeDays) then
-                                        // Not seeded and so not written back
-                                        // either: the entry leaves the settings
-                                        // file on this save.
-                                        RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
-                                                                          (if byUser then "closed" else "seed") idx (savedHwnd.ToInt64()) waitedDays title)
-                                    elif closedTabCache.value |> List.exists (fun e -> e.closedHwnd = savedHwnd) |> not then
-                                        let info = {
-                                            exePath = exe
-                                            windowTitle = title
-                                            renamedTabName = (if unique then renamed else None)
-                                            isPinned = (unique && isPinned)
-                                            fillColor = (if unique then fill else None)
-                                            underlineColor = (if unique then under else None)
-                                            borderColor = (if unique then border else None)
-                                            tabAlign = (if unique then align else None)
-                                            groupRef = SavedToken(seedGroupHwnd)
-                                            tabIndex = idx
-                                            closedHwnd = savedHwnd
-                                            closedAt = DateTime.Now
-                                            isRestoreSeed = not byUser
-                                            savedRect =
-                                                (match savedRectByHwnd.TryGetValue(savedHwnd) with
-                                                 | true, r -> r
-                                                 | _ -> None)
-                                            seedSince = Some(waitingSince)
-                                            orderSnapshot = savedOrderOldHwnds
-                                        }
-                                        RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b title=%s"
-                                                                          (if byUser then "closed" else "seed") idx (savedHwnd.ToInt64()) unique align isPinned title)
-                                        closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
-                                | _ -> ())
+                        // in old handles, which the arrival resolves through
+                        // restoredFromMap.
+                        g.tabs |> List.iter (fun t ->
+                            let e = t.saved
+                            let byUser = e.closedByUser
+                            let title = e.windowTitle |> Option.defaultValue ""
+                            match t.outcome with
+                            | SavedSession.Expired ->
+                                // Not seeded and so not written back either:
+                                // the entry leaves the settings file on the
+                                // next save.
+                                RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
+                                                                    (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
+                                                                    (DateTime.Now - t.waitingSince).TotalDays title)
+                            | SavedSession.Waiting ->
+                                if closedTabCache.value |> List.exists (fun c -> c.closedHwnd = e.hwnd) |> not then
+                                    // Through the same record the save writes
+                                    // the entry back from, so that what is put
+                                    // into the cache here and what leaves it at
+                                    // the next save are one description and not
+                                    // two that have to be kept in step by hand.
+                                    let p = SavedSession.pendingOfPlanned t
+                                    let info = {
+                                        exePath = p.tab.exePath |> Option.defaultValue ""
+                                        windowTitle = title
+                                        // Everything the file held, whether or
+                                        // not it may be applied. What is
+                                        // dropped here is dropped for good: the
+                                        // entry is written back from these
+                                        // fields at the next save, so an entry
+                                        // created without its alignment takes
+                                        // the alignment out of the settings
+                                        // file even if its window never opens
+                                        // at all. Whether the name and the
+                                        // colours may be put on the window that
+                                        // claims it is carried separately, in
+                                        // stateIsCertain.
+                                        renamedTabName = p.tab.renamedTabName
+                                        isPinned = p.tab.isPinned
+                                        fillColor = p.tab.fillColor |> Option.bind parseColorRRGGBBAA
+                                        underlineColor = p.tab.underlineColor |> Option.bind parseColorRRGGBBAA
+                                        borderColor = p.tab.borderColor |> Option.bind parseColorRRGGBBAA
+                                        tabAlign = p.tab.align |> Option.map tabAlignOfSavedAlign
+                                        groupRef = SavedToken(g.token)
+                                        tabIndex = p.rank
+                                        closedHwnd = p.tab.hwnd
+                                        closedAt = DateTime.Now
+                                        isRestoreSeed = p.isRestoreSeed
+                                        // A seed that outlives a WindowTabs
+                                        // restart has to carry its position, or
+                                        // the twin disambiguation and the
+                                        // title-less fallback lose their
+                                        // reference point.
+                                        savedRect = p.tab.rect
+                                        seedSince = p.tab.seedSince
+                                        orderSnapshot = g.savedOrder
+                                        stateIsCertain = t.stateIsCertain
+                                    }
+                                    RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b title=%s"
+                                                                        (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
+                                                                        t.stateIsCertain e.align e.isPinned title)
+                                    closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
+                            | _ -> ())
 
                 isRestoringTabGroups.set(false)
                 // Do NOT clear saved data here - keep it for watchdog restart scenarios

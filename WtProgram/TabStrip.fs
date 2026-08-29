@@ -733,14 +733,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Canonical visual zone for a tab: left-pinned (0), left-unpinned (1),
     // right-pinned (2), right-unpinned (3). The stored visualOrder list is kept
     // sorted by this zone so that it exactly matches the on-screen left-to-right order.
-    member private this.visualZoneOf(tab) =
-        let align = this.getTabAlign(tab)
-        let pinned = pinnedTabsCell.value.contains(tab)
-        match align, pinned with
-        | TopLeft, true -> 0
-        | TopLeft, false -> 1
-        | TopRight, true -> 2
-        | TopRight, false -> 3
+    // Public, and deferring to TabOrder.zoneOf, because the session restore has
+    // to compute an order that already agrees with the zones (see
+    // setVisualOrder): a caller that guessed at them would have its list
+    // quietly re-sorted by the normalize below, and a check run against a
+    // second copy of the rule would not be checking this one.
+    member this.visualZoneOf(tab) =
+        TabOrder.zoneOf (this.getTabAlign(tab) = TopLeft) (pinnedTabsCell.value.contains(tab))
 
     // Re-sort the stored list into canonical visual order while preserving the
     // relative order within each zone (stable sort).
@@ -749,6 +748,44 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let sorted = current |> List.sortBy this.visualZoneOf
         if sorted <> current then
             visualOrderCell.set(List2(sorted))
+
+    // Put the whole strip into the given left-to-right order in one step.
+    //
+    // moveTab cannot express this. It takes ONE tab and an index into the
+    // whole list, and normalizeVisualOrder then re-sorts by zone, so an index
+    // that would carry the tab across a zone boundary is silently undone -
+    // which is why reordering a group a tab at a time did nothing whatever
+    // when the group's tabs were not all aligned the same way. Here the caller
+    // has already worked out the complete order zone by zone, so the normalize
+    // only confirms it.
+    //
+    // Alignment and pin state are left alone: this is a reorder, not a move.
+    // In particular the smart-pin rule of moveTabs must NOT run - a restore is
+    // putting the saved pin state back, not deriving a new one from whichever
+    // neighbours the restore happens to have produced so far.
+    member this.setVisualOrder(desired: Tab list) =
+        let before = visualOrderCell.value.list
+        let present = Set.ofList before
+        let kept = desired |> List.filter present.Contains |> List.distinct
+        // A tab the caller left out keeps its place, at the end, rather than
+        // disappearing from the strip's own list.
+        let keptSet = Set.ofList kept
+        let missing = before |> List.filter (fun t -> not (keptSet.Contains t))
+        Cell.beginUpdate()
+        visualOrderCell.set(List2(kept @ missing))
+        this.normalizeVisualOrder()
+        Cell.endUpdate()
+        let after = visualOrderCell.value.list
+        if after <> before then
+            // The same notification a move sends: the taskbar plugin and the
+            // group's own mirror of the order both listen for it. Only the
+            // positions that actually changed are announced, each with its
+            // final index and in ascending order, which is what the mirror's
+            // one-at-a-time move needs to arrive at the same list.
+            after |> List.iteri (fun i t ->
+                if (before |> List.tryItem i) <> Some(t) then
+                    monitor.tabMoved(t, i)
+                    tabMovedEvent.Trigger(t, i))
 
     member this.pinTab(tab) =
         if not (pinnedTabsCell.value.contains(tab)) then
