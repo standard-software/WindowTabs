@@ -1219,6 +1219,25 @@ type Program() as this =
             ])
         handlers.tryPick(fun f -> f(window)).def(None)
 
+    // The alignment the saved entries still waiting for this application all
+    // agree on. At startup a group is put together by ordinary grouping
+    // seconds before the restore reaches it: the first window in takes the
+    // global default, every joiner copies the tab before it, and the restore
+    // then corrects only the tabs it can identify by title - leaving any
+    // window still showing a generic name (Excel before a workbook loads,
+    // VSCode showing the container rather than the folder) on the wrong side
+    // of the strip, where it is conspicuous. The entries know which side the
+    // group was on before anything opened, so a window that cannot be
+    // identified yet starts there instead of on the default side.
+    member private this.savedAlignFor(exePath: string) =
+        if exePath = "" then None else
+        match closedTabCache.value
+              |> List.filter (fun e -> e.isRestoreSeed && sameExePath e.exePath exePath)
+              |> List.map (fun e -> e.tabAlign) with
+        | [] -> None
+        | first :: rest when rest |> List.forall ((=) first) -> first
+        | _ -> None
+
     member this.addWindowToGroup(window:Window) =
         let hwnd = window.hwnd
         // Snapshot exe path + title now; recordClosedTab needs them after the
@@ -1275,6 +1294,9 @@ type Program() as this =
             // ends up in the same zone as the existing tabs it would otherwise
             // stay at its original index inside that zone instead of landing at
             // the visual end.
+            // While saved entries for this application are still waiting, they
+            // decide the side instead: see savedAlignFor.
+            let savedAlign = this.savedAlignFor(try window.pid.processPath with _ -> "")
             if not isNewGroup then
                 match group :> obj with
                 | :? GroupInfo as gi ->
@@ -1285,10 +1307,18 @@ type Program() as this =
                         match others.list |> List.tryLast with
                         | Some(lastTab) ->
                             let lastAlign = wg.ts.getTabAlign(lastTab)
-                            wg.setTabAlign(hwnd, lastAlign)
+                            wg.setTabAlign(hwnd, defaultArg savedAlign lastAlign)
                             let endIndex = wg.ts.visualOrder.list.Length
                             wg.ts.moveTab(newTab, endIndex)
                         | None -> ()
+                | _ -> ()
+            else
+                // The window that forms the group has no tab to copy from, and
+                // the global default is what put a whole group on the wrong
+                // side at startup.
+                match savedAlign, (group :> obj) with
+                | Some(a), (:? GroupInfo as gi) ->
+                    gi.invokeGroup <| fun() -> gi.group.setTabAlign(hwnd, a)
                 | _ -> ()
         // For auto-grouping, position new tab next to same-exe tabs
         if invokerHwnd = IntPtr.Zero && not isNewGroup && not isDropped then
