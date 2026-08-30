@@ -352,7 +352,13 @@ type Program() as this =
     // restored to slot 0 went on to claim the leftover entry of a sibling
     // that never reopened, and moved itself to that sibling's slot. The
     // group's own windows shuffled themselves out of order that way.
-    let restoreClaimed = Cell.create(Set2<IntPtr>())
+    // What each window is currently holding. A window may claim again when its
+    // title changes to match another entry exactly: Visual Studio opens under
+    // its own name, takes the entry saved under that name, then loads a project
+    // and its real title arrives. Refusing the second claim left it unpinned in
+    // the wrong place for good. The entry it was holding goes back to the cache
+    // so the window it really belongs to can still have it.
+    let claimedEntry = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
     // Live snapshot of (exePath, windowTitle) per grouped hwnd, so the info
     // is still available when the closed tab is recorded after its window
     // has already been destroyed
@@ -700,9 +706,16 @@ type Program() as this =
         // destroy notification that never arrives would leave a handle in it
         // for Windows to hand to another window, which would then be refused
         // a restore it was entitled to.
-        if closedTabCache.value.IsEmpty then
-            restoreClaimed.set(Set2<IntPtr>())
         info
+
+    // Note what this window now holds, handing back whatever it held before.
+    member private this.recordClaim(hwnd: IntPtr, info: ClosedTabInfo) =
+        (match claimedEntry.value.tryFind(hwnd) with
+         | Some(previous) when not (obj.ReferenceEquals(previous, info)) ->
+            if closedTabCache.value |> List.exists (fun e -> obj.ReferenceEquals(e, previous)) |> not then
+                closedTabCache.map(fun l -> previous :: l |> List.truncate closedTabCacheLimit)
+         | _ -> ())
+        claimedEntry.map(fun m -> m.add hwnd info)
 
     member private this.takeClosedTabMatch(exePath: string, windowTitle: string) =
         if exePath = "" || windowTitle = "" then None else
@@ -895,7 +908,7 @@ type Program() as this =
     // appears, restore its tab state and put it back into its former group.
     // Runs before category/exe auto-grouping in findGroupForWindow.
     member this.tryClosedTabRestore(window:Window) =
-        if closedTabCache.value.IsEmpty || restoreClaimed.value.contains(window.hwnd) then None else
+        if closedTabCache.value.IsEmpty then None else
         let exePath = try window.pid.processPath with _ -> ""
         let windowTitle = try window.text with _ -> ""
         let bounds =
@@ -927,7 +940,7 @@ type Program() as this =
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
-            restoreClaimed.map(fun s -> s.add hwnd)
+            this.recordClaim(hwnd, info)
             // Restore state to the global maps before addWindow so the tab is
             // created with the saved name/colors/pin/alignment (same pattern
             // as restoreTabGroupsFromSettings)
@@ -996,8 +1009,7 @@ type Program() as this =
                     windowFillColor.value.tryFind(hwnd).IsNone &&
                     windowUnderlineColor.value.tryFind(hwnd).IsNone &&
                     windowBorderColor.value.tryFind(hwnd).IsNone
-                if closedTabCache.value.IsEmpty.not && isPristine &&
-                   restoreClaimed.value.contains(hwnd).not then
+                if closedTabCache.value.IsEmpty.not && isPristine then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -1032,7 +1044,7 @@ type Program() as this =
                         | _ ->
                         match this.takeClosedTabEntry(info) with
                         | Some(entry) ->
-                            restoreClaimed.map(fun s -> s.add hwnd)
+                            this.recordClaim(hwnd, entry)
                             let info = applicableState (not ambiguous) entry
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
@@ -1451,7 +1463,7 @@ type Program() as this =
                     g.removeWindow(hwnd)
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
-                restoreClaimed.map(fun s -> s.remove hwnd)
+                claimedEntry.map(fun m -> m.remove hwnd)
                 this.destroyEmptyGroups()
                 this.exitIfNeeded()
                 skipFullUpdate <- true
@@ -1752,7 +1764,6 @@ type Program() as this =
                             // (the order arithmetic resolves through this map).
                             if hwnd <> t.saved.hwnd then
                                 restoredFromMap.[hwnd] <- t.saved.hwnd
-                            restoreClaimed.map(fun s -> s.add hwnd)
                             group.addWindow(hwnd, false))
                         // The group's own settings, or the global default
                         // already applied at creation when it has none.
