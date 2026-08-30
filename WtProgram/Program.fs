@@ -183,6 +183,29 @@ let applicableState (claimIsCertain: bool) (info: ClosedTabInfo) =
 // versa) still matches.
 let normalizeClosedTabTitle (t: string) = t.Replace("● ", "")
 
+// Where one window is going while the pass that follows a grouping setting's
+// off-to-on edge is being applied.
+//
+// The window is taken out of its group and NOTHING else is done to it. This
+// entry is the answer findGroupForWindow gives when the ordinary pass picks
+// the window up again a moment later, so the whole of addWindowToGroup runs
+// for it - the alignment inherited from the group it joins, the place beside
+// its own application's tabs, a closed tab's saved state - exactly as it does
+// for a window that has just opened. That is what "treated as if it had just
+// opened" has to mean if it is to mean anything: the same code, not the same
+// intention.
+//
+// group is None for a set of windows that has no group to join and has to make
+// one. Whichever of them arrives first makes it and setId points the rest at
+// what it made; there is no other way round, because the removals complete on
+// the groups' own threads and the order they come back in is not ours to
+// choose.
+type PendingRegroup = {
+    group: IGroup option
+    setId: int
+    at: DateTime
+}
+
 // Debug-only trace of the session restore: which saved entry each window
 // claimed, by which route, and where it was placed. Truncated at each start.
 module RestoreTrace =
@@ -211,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.08.28_next1"
+    let version = "ss_2026.08.28_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -310,6 +333,24 @@ type Program() as this =
     let pendingStandaloneLaunches = Cell.create(Map2<string, (IntPtr -> unit) * DateTime>())
     // Carry a standalone launch's postAction from tryStandaloneLaunch to addWindowToGroup, keyed by new window hwnd
     let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
+    // Destinations decided by a grouping setting's off-to-on edge, and by
+    // nothing else. Every entry is put here by regroupNow and consumed by the
+    // ordinary window pass; there is no other producer, which is what keeps a
+    // tab the user detached by hand from ever being drawn back in.
+    let pendingRegroups = Cell.create(Map2<IntPtr, PendingRegroup>())
+    // An entry whose window never comes back - it was closed while the removal
+    // was in flight, or it stopped being groupable - is dropped rather than
+    // kept for ever. Long enough that a slow group thread is not mistaken for
+    // a lost window.
+    let pendingRegroupMaxSeconds = 30.0
+    // A regroup asked for while the desktop is busy is held, not thrown away:
+    // isTabMonitoringSuspended is routinely still set for a few hundred
+    // milliseconds after a drag, and a click that produced nothing at all,
+    // with no way to see why, is the worst of the possible answers. Held only
+    // briefly, though - two seconds keeps the movement tied to the click that
+    // asked for it, which is the whole of requirement 5.
+    let regroupRetryMs = 500
+    let regroupRetries = 4
     // Closed-tab restore: state + position of tabs whose windows were closed
     // while WindowTabs runs, matched by exe path + window title when the app
     // window reappears. In-memory only — a WindowTabs restart clears it.
@@ -565,31 +606,91 @@ type Program() as this =
             else check (i + 1)
         check 1
 
+    // getCategoryEnabled reparses the settings file on every call, and asking
+    // for a category means asking it up to ten times, so a pass that looks at
+    // every window on screen has to ask once per application rather than once
+    // per window. One lookup per pass; nothing is cached across passes, so a
+    // category ticked while the dialog is open is seen immediately.
+    member private this.categoryLookup() =
+        let cache = Dictionary<string, int>()
+        fun (procPath: string) ->
+            if procPath = "" then 0 else
+            match cache.TryGetValue(procPath) with
+            | true, category -> category
+            | _ ->
+                let category = this.getCategoryForProcess(procPath)
+                cache.[procPath] <- category
+                category
+
+    // Every group on screen, described in the plain values Regroup.chooseGroup
+    // reasons about. The group itself is the id, so the answer that comes back
+    // is the group to join.
+    member private this.groupViews(categoryOf: string -> int) =
+        let hwndZorders = this.hwndZorders()
+        this.desktop.groups.list |> List.map (fun g ->
+            let procPaths =
+                g.windows.list |> List.map (fun hwnd ->
+                    try os.windowFromHwnd(hwnd).pid.processPath with _ -> "")
+            { Regroup.GroupView.id = g
+              Regroup.GroupView.procPaths = procPaths
+              Regroup.GroupView.categories = procPaths |> List.map categoryOf
+              Regroup.GroupView.count = g.windows.count
+              Regroup.GroupView.rank =
+                g.windows.list
+                |> List.fold (fun best hwnd -> min best (hwndZorders.tryFind(hwnd).def(Int32.MaxValue))) Int32.MaxValue })
+
+    // The rule that greets a newly opened window. Its body now lives in
+    // Regroup.chooseGroup, which the setting-change pass calls as well, so
+    // there is exactly one copy of it: "the same rule as a new window" is held
+    // by the call, not by two pieces of code being kept in step by hand.
     member this.tryAutoGroup(window:Window) =
-        if (this :> IProgram).getAutoGroupingEnabled(window.pid.processPath) then
-            let hwndZorders = this.hwndZorders()
-            let groups = this.desktop.groups
-            let groups =
-                match this.cast<IProgram>().tabLimit with
-                | Some(tabLimit) -> groups.where(fun g -> g.windows.count < tabLimit)
-                | None -> groups
-            let groups = groups.where(fun g-> g.windows.count > 0).sortBy(fun g -> g.windows.map(fun hwnd -> hwndZorders.tryFind(hwnd).def(Int32.MaxValue)).minBy(id))
-
-            // Get the category for the current window
-            let windowCategory = this.getCategoryForProcess(window.pid.processPath)
-
-            let group =
-                if windowCategory > 0 then
-                    // Category-based grouping: find a group with any window in the same category
-                    groups.tryFind(fun g ->
-                        g.windows.tryFind(fun hwnd ->
-                            let otherProcPath = os.windowFromHwnd(hwnd).pid.processPath
-                            this.getCategoryForProcess(otherProcPath) = windowCategory).IsSome)
-                else
-                    // No category: use traditional same-process grouping
-                    groups.tryFind(fun g -> g.windows.map(fun hwnd -> os.windowFromHwnd(hwnd).pid.processPath).contains((=) window.pid.processPath))
-            Some(group)
+        let procPath = window.pid.processPath
+        if (this :> IProgram).getAutoGroupingEnabled(procPath) then
+            let categoryOf = this.categoryLookup()
+            let views = this.groupViews(categoryOf)
+            Some(Regroup.chooseGroup (this.cast<IProgram>().tabLimit) procPath (categoryOf procPath) views)
         else None
+
+    // The destination a setting change decided for this window, if it is one
+    // of the windows that change is moving. Answering Some(None) means "make a
+    // group": that window is the first of a set that has nowhere to go, and
+    // completeRegroup below points the rest of the set at what it makes.
+    member this.tryRegroup(window:Window) =
+        match pendingRegroups.value.tryFind(window.hwnd) with
+        | Some(pending) when (DateTime.Now - pending.at).TotalSeconds >= pendingRegroupMaxSeconds ->
+            pendingRegroups.map(fun m -> m.remove window.hwnd)
+            None
+        | Some(pending) ->
+            match pending.group with
+            | Some(group) when this.desktop.groups.any(fun g -> obj.ReferenceEquals(g, group)) ->
+                Some(Some(group))
+            | Some(_) ->
+                // The destination went away between the decision and the
+                // arrival. Fall through to the ordinary rule rather than
+                // inventing an answer.
+                pendingRegroups.map(fun m -> m.remove window.hwnd)
+                None
+            | None -> Some(None)
+        | None -> None
+
+    // Called from addWindowToGroup once the window is in a group, to retire its
+    // entry and - for a set that had to make a group - to tell the rest of the
+    // set which group that turned out to be.
+    member private this.completeRegroup(hwnd: IntPtr, group: IGroup, isNewGroup: bool) =
+        match pendingRegroups.value.tryFind(hwnd) with
+        | Some(pending) ->
+            pendingRegroups.map(fun m -> m.remove hwnd)
+            // Only a group made for this window speaks for the set. If some
+            // other handler claimed the window first - the user dropped it
+            // somewhere while the removal was still in flight - that is a
+            // decision about that one window, and the rest of the set should
+            // not be dragged along behind it. They are left unbound, so the
+            // next of them to arrive makes their group instead.
+            if pending.group.IsNone && isNewGroup then
+                pendingRegroups.map(fun m ->
+                    Map2(m.items.map(fun (h, p) ->
+                        h, (if p.group.IsNone && p.setId = pending.setId then { p with group = Some(group) } else p))))
+        | None -> ()
 
     // Record a closed window's tab state + position so the tab can be
     // restored if the same app window (same exe path + window title)
@@ -1174,6 +1275,127 @@ type Program() as this =
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
             this.addWindowToGroup(window)
 
+    // Group one application's windows again as though each of them had just
+    // opened. Reached ONLY from a grouping setting going off to on - never
+    // from the periodic pass, because a tab the user dragged out by hand would
+    // then be dragged back in at the next tick, and keeping it out is the one
+    // existing behaviour this feature must not cost.
+    //
+    // stillWanted is the setting that asked for this, read again at the moment
+    // the pass actually runs: the request may wait a moment (below), and a box
+    // that has been unticked in the meantime is not asking for anything.
+    member this.regroupProcessWindows(procPath: string, stillWanted: unit -> bool) =
+        // An empty path names no application, and would match every window
+        // whose own path could not be read.
+        //
+        // Nothing here is allowed to reach the settings dialog as an
+        // exception: the box has already been ticked and the setting already
+        // saved, so a failure to rearrange what is on screen must not look to
+        // the user like the setting itself failing.
+        try
+            if procPath <> "" then
+                this.regroupWhenIdle(procPath, stillWanted, regroupRetries)
+        with ex ->
+            DragTrace.log (fun () -> sprintf "regroup: %s failed - %s" procPath (ex.Message))
+
+    // Wait rather than discard. isTabMonitoringSuspended is routinely still
+    // set for a few hundred milliseconds after a drag - resumeTabMonitoringAfter
+    // uses 200-300ms - so a tick made just after detaching a tab by hand would
+    // otherwise do nothing at all, silently. Held for at most four half-second
+    // attempts; past that the click and the movement would no longer look to
+    // the user like one thing, and the setting is saved either way, so every
+    // window opened from now on is grouped as asked.
+    member private this.regroupWhenIdle(procPath: string, stillWanted: unit -> bool, attemptsLeft: int) =
+        if inShutdown.value || inSessionEnd.value || isDisabledCell.value then
+            DragTrace.log (fun () -> sprintf "regroup: abandoned for %s (shutdown=%b sessionEnd=%b disabled=%b)"
+                                             procPath inShutdown.value inSessionEnd.value isDisabledCell.value)
+        elif this.desktop.isDragging || this.isTabMonitoringSuspended ||
+             needsRestoreOnStartup.value || isRestoringTabGroups.value then
+            if attemptsLeft > 0 then
+                DragTrace.log (fun () -> sprintf "regroup: %s waiting (dragging=%b suspended=%b restoring=%b) attemptsLeft=%d"
+                                                 procPath this.desktop.isDragging this.isTabMonitoringSuspended
+                                                 (isRestoringTabGroups.value || needsRestoreOnStartup.value) attemptsLeft)
+                ThreadHelper.cancelablePostBack regroupRetryMs (fun() ->
+                    this.regroupWhenIdle(procPath, stillWanted, attemptsLeft - 1)) |> ignore
+            else
+                DragTrace.log (fun () -> sprintf "regroup: %s gave up waiting" procPath)
+        elif (try stillWanted() with _ -> false) then
+            this.regroupNow(procPath)
+
+    // What has to change is worked out first, as arithmetic over plain values
+    // (Regroup.plan), and only then applied. Deciding and acting window by
+    // window cannot work here: every removal is a post to a group's own thread,
+    // so a window taken out of its group is still listed in it for a while, and
+    // a decision taken against that stale picture would put the second window
+    // into the first one's old group and the third into the second's.
+    //
+    // Applying is only ever "leave your group, and here is where you are
+    // going". The joining itself is left to the ordinary pass, which is both
+    // simpler and the point: addWindowToGroup is where a tab inherits its new
+    // group's alignment, lands beside its own application's tabs and gets a
+    // closed tab's saved state back, and a regrouped window has as much right
+    // to all of that as a window that has just opened.
+    member private this.regroupNow(procPath: string) =
+        let categoryOf = this.categoryLookup()
+        let hwndZorders = this.hwndZorders()
+        let groups = this.desktop.groups.list |> Array.ofList
+        // A window belongs to this pass when it is the changed application's
+        // AND the ordinary pass would be willing to group it. Same predicate as
+        // ensureWindowIsGrouped, deliberately: "treated as if it had just
+        // opened" is worth nothing if the two disagree about which windows can
+        // be grouped at all. Windows on another virtual desktop are therefore
+        // left alone here exactly as they are left alone there.
+        let isTarget (hwnd: IntPtr) (windowProcPath: string) =
+            windowProcPath = procPath &&
+            (try
+                let window = os.windowFromHwnd(hwnd)
+                window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window)
+             with _ -> false)
+        let seen = HashSet<IntPtr>()
+        let views = ResizeArray<Regroup.WindowView>()
+        let addView (hwnd: IntPtr) (group: int option) =
+            if seen.Add(hwnd) then
+                let windowProcPath = try os.windowFromHwnd(hwnd).pid.processPath with _ -> ""
+                views.Add
+                    { Regroup.WindowView.hwnd = hwnd
+                      Regroup.WindowView.procPath = windowProcPath
+                      Regroup.WindowView.category = categoryOf windowProcPath
+                      Regroup.WindowView.zorder = hwndZorders.tryFind(hwnd).def(Int32.MaxValue)
+                      Regroup.WindowView.group = group
+                      Regroup.WindowView.isTarget = isTarget hwnd windowProcPath }
+        groups |> Array.iteri (fun i g -> g.windows.iter (fun hwnd -> addView hwnd (Some i)))
+        // Windows of this application that are in no group yet. The ordinary
+        // pass would pick them up a moment later anyway, but including them
+        // here is what lets them share the one group the rest are gathering in
+        // instead of arriving after it has been settled.
+        os.windowsInZorder.iter <| fun window ->
+            if seen.Contains(window.hwnd).not &&
+               (try window.pid.processPath = procPath with _ -> false) then
+                addView window.hwnd None
+
+        let moves = Regroup.plan (this.cast<IProgram>().tabLimit) (List.ofSeq views)
+        DragTrace.log (fun () -> sprintf "regroup: %s windows=%d moves=%d" procPath views.Count (List.length moves))
+        if moves.IsEmpty.not then
+            // A window being fitted into a strip is briefly off-screen, and
+            // off-screen fails isTabbableWindow - the same reason the
+            // multi-select drag-detach path needs this.
+            this.cast<IProgram>().markRecentlyPlaced(moves |> List.map (fun m -> m.hwnd))
+            let now = DateTime.Now
+            moves |> List.iter (fun move ->
+                let pending =
+                    match move.destination with
+                    | Regroup.Existing(index) -> { group = Some(groups.[index]); setId = -1; at = now }
+                    | Regroup.Fresh(n) -> { group = None; setId = n; at = now }
+                pendingRegroups.map(fun m -> m.add move.hwnd pending)
+                move.source |> Option.iter (fun index -> groups.[index].removeWindow(move.hwnd)))
+            // A window that was in no group has no removal to wait for, so
+            // nothing else would wake the pass up for it. (Where there IS a
+            // removal, the group's own removed event schedules a pass with the
+            // window already gone from the group - see the groupRemoved
+            // subscription - which is what makes the ordinary path pick these
+            // up in the first place.)
+            this.scheduleUpdateAppWindows()
+
     member this.destroyEmptyGroups() =
         this.desktop.groups.iter <| fun gi ->
         if gi.windows.isEmpty && launcher.isLaunching(gi).not then
@@ -1223,6 +1445,7 @@ type Program() as this =
     member this.findGroupForWindow(window:Window) =
         let handlers = List2([
             this.tryDropped
+            this.tryRegroup
             launcher.findGroup
             this.tryStandaloneLaunch
             this.tryNewWindowLaunch
@@ -1260,6 +1483,10 @@ type Program() as this =
             match this.findGroupForWindow(window) with
             | Some(group) -> (group, false)
             | None -> (Services.desktop.createGroup(false), true)
+        // Retire this window's setting-change entry, and where the group was
+        // just made for it, hand the group to the rest of the set so they join
+        // it instead of each making one of their own.
+        this.completeRegroup(hwnd, group, isNewGroup)
         let isDropped = isDroppedAndAwaitingGrouping.value.contains(hwnd)
         DragTrace.log (fun () -> sprintf "addWindowToGroup: hwnd=%X dropped=%b newGroup=%b" (hwnd.ToInt64()) isDropped isNewGroup)
         //need to add this now so we don't end up creating another group for it while waiting for the WgnWindowAdded notification
@@ -1464,6 +1691,9 @@ type Program() as this =
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
                 claimedEntry.map(fun m -> m.remove hwnd)
+                // A window closed between leaving its group and rejoining one
+                // never arrives to retire its own entry.
+                pendingRegroups.map(fun m -> m.remove hwnd)
                 this.destroyEmptyGroups()
                 this.exitIfNeeded()
                 skipFullUpdate <- true
@@ -1970,16 +2200,36 @@ type Program() as this =
         member x.getAutoGroupingEnabled procPath =
             settingsManager.settings.autoGroupingPaths.contains(procPath)
 
+        // Off to on regroups the application's windows; on to off deliberately
+        // does nothing, so a group the user has built up is not torn apart by
+        // unticking a box.
+        //
+        // The setting is written BEFORE the regroup: the regroup asks these
+        // same getters what the application is grouped by, and must be told the
+        // new answer.
+        //
+        // What stood here was a tabbing off/on toggle with the comment "toggle
+        // tabbing for the process to force regrouping". It was the right idea -
+        // disabling tabbing makes removeUntabableWindows let the windows go,
+        // re-enabling it makes ensureWindowIsGrouped pick them up - and it
+        // worked when it was written. It stopped working when the two refresh()
+        // calls became debounced: refresh is receive(Timer) is
+        // scheduleUpdateAppWindows, which now only re-arms a 50ms timer, so the
+        // two collapse into one pass that runs after tabbing is back on and the
+        // releasing pass never runs at all. That is the whole of why ticking
+        // the box changed nothing. It is not revived here because it cannot
+        // serve categories (they do not touch tabbing at all), because it
+        // destroys and rebuilds a group even when the windows were already
+        // together, and because it forces tabbing ON as a side effect.
         member x.setAutoGroupingEnabled procPath enabled =
-            if enabled then
-                this.saveSettingsAndUpdateAppWindows <| fun s -> { s with autoGroupingPaths = s.autoGroupingPaths.add procPath }
-               //toggle tabbing for the process to force regrouping
-                Services.filter.setIsTabbingEnabledForProcess procPath false
-                this.refresh()
-                Services.filter.setIsTabbingEnabledForProcess procPath true
-                this.refresh()
-            else
-                this.saveSettingsAndUpdateAppWindows <| fun s -> { s with autoGroupingPaths = s.autoGroupingPaths.remove procPath }
+            let wasEnabled = (x :> IProgram).getAutoGroupingEnabled(procPath)
+            this.saveSettingsAndUpdateAppWindows <| fun s ->
+                { s with
+                    autoGroupingPaths =
+                        if enabled then s.autoGroupingPaths.add procPath
+                        else s.autoGroupingPaths.remove procPath }
+            if enabled && wasEnabled.not then
+                this.regroupProcessWindows(procPath, fun () -> (x :> IProgram).getAutoGroupingEnabled(procPath))
 
         member x.getCategoryEnabled (procPath, categoryNum) =
             let settingsJson = settingsManager.settingsJson
@@ -1987,7 +2237,13 @@ type Program() as this =
             let paths = settingsJson.getStringArray(categoryKey).def(List2())
             paths.contains((=) procPath)
 
+        // The auto-grouping setting is not consulted here. The dialog only
+        // shows the category boxes for an application whose auto-grouping is
+        // already on, so the combination cannot be reached by clicking; making
+        // the code ask anyway would add a condition that no click can produce
+        // and that would have to be kept in step with the dialog for ever.
         member x.setCategoryEnabled procPath categoryNum enabled =
+            let wasEnabled = (x :> IProgram).getCategoryEnabled(procPath, categoryNum)
             let settingsJson = settingsManager.settingsJson
             let categoryKey = sprintf "Category%dPaths" categoryNum
             let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
@@ -1996,6 +2252,8 @@ type Program() as this =
                 else paths.remove procPath
             settingsJson.setStringArray(categoryKey, newPaths.items)
             settingsManager.settingsJson <- settingsJson
+            if enabled && wasEnabled.not then
+                this.regroupProcessWindows(procPath, fun () -> (x :> IProgram).getCategoryEnabled(procPath, categoryNum))
 
         member x.tabAppearanceInfo = 
             settingsManager.settings.tabAppearance

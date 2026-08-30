@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.28_next2
+- Turning on Auto Grouping or a Category in the Programs tab now also gathers the windows that are already open, which used to wait for the next window to be opened
+  - The windows go through the same path a newly opened one takes, so they are grouped by the same rule and a window that had been pulled out of its tabs joins the others
+  - A tab pulled out by hand while the setting is already on stays out - only switching the setting on does this
+
 ## version ss_2026.08.28_next1
 - Tab groups now come back after a Windows restart or a logoff
   - Windows are found again by their application and title, so a group returns however late its applications start
