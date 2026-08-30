@@ -133,6 +133,9 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Drawing.fs" />
     <Compile Include="Shared/Sprite.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
+    <Compile Include="Shared/TabOrder.fs" />
+    <Compile Include="Shared/SavedTabState.fs" />
+    <Compile Include="Shared/SavedSession.fs" />
     <Compile Include="Shared/Dpi.fs" />
     <Compile Include="Shared/Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />
