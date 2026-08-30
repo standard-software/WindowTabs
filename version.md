@@ -5,8 +5,8 @@
 ## version ss_2026.08.28_next1
 - Tab groups now survive a Windows restart: each saved window carries its application and its title, so the restore finds the reopened windows although every window handle has changed
 - A group comes back even when its applications start long after WindowTabs does, which is the normal case for anything not in Startup. Even when none of them has started, the first window to appear forms the group and the rest join it in their saved order
-- A window whose title did not survive the restart is found by its application and the position it reopened at. Where several windows of one application cannot be told apart that way, their entries wait for the titles to settle, so each window returns to its own place rather than a neighbour's
-- The name, pin, colours and left/right alignment of a tab come back with its window, where before they were dropped for every application that had not started yet
+- A window is put back only where its application AND its title match what was saved. An application that starts under a name of its own - Excel before a workbook has loaded, Visual Studio before a project - waits under that name and takes its place, its colours and its pin the moment its real title arrives, however much later. It no longer takes a place that was not its own, which used to leave the window it belonged to with nothing to come back to
+- The name, pin, colours and left/right alignment of a tab come back with its window, where before they were dropped for every application that had not started yet. A window still showing a generic name also starts on the side of the strip its group was saved on, rather than on the default side where it would be left behind once the others had moved
 - An entry for a window that has not reopened is kept in the settings file: thirty days for one that has not started, eight for a tab closed by hand, which now returns to its group and its place even after a restart. Emptying a group still ends it
 - On logoff or restart the saved tab groups are frozen as of the shutdown notification, so applications closing during the shutdown can no longer overwrite them with a half-emptied state
 
