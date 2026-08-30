@@ -903,15 +903,21 @@ type Program() as this =
                 let b = window.bounds
                 Some(b.x, b.y, b.width, b.height)
             with _ -> None
+        // An entry is claimed on an exact application and title, and on
+        // nothing else. Claiming by application alone was meant for a window
+        // whose title does not survive a restart - a browser reopening on
+        // another page - but there is no way to tell that window from any
+        // other of the same application, and being the last candidate left is
+        // not the same as being the right one. A second terminal called
+        // "PowerShell ver 7 pwsh.exe" took the last free entry in its group,
+        // which belonged to a window called "WindowTabs1"; the entry was
+        // consumed, and when that window did appear there was nothing left for
+        // it. Restoring nothing is better: entries are kept for thirty days,
+        // so a window whose title comes back gets its place back with it.
         let matched =
             match this.takeClosedTabMatch(exePath, windowTitle) with
             | Some(info) -> Some(applicableState true info)
-            | None ->
-                match this.findSeedByExe(exePath, bounds) with
-                | Some(idx, count) when this.seedFallbackAllowed(window.hwnd, count) ->
-                    let info = this.takeClosedTabAt idx
-                    Some(applicableState (count <= 1) info)
-                | _ -> None
+            | None -> None
         (match matched with
          | Some(i) -> RestoreTrace.log (fun () -> sprintf "claim(early) hwnd=%X token=%X rank=%d align=%A pin=%b title=%s"
                                                       (window.hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex i.tabAlign i.isPinned windowTitle)
@@ -1002,15 +1008,8 @@ type Program() as this =
                     let peeked =
                         match closedTabCache.value |> List.tryFind (fun i -> sameExePath i.exePath exePath && i.windowTitle = normTitle) with
                         | Some(info) -> Some(info, false)
-                        | None ->
-                            // The title never became the saved one (a browser
-                            // reopened on a different page): once the grace
-                            // period has passed, exe path alone is enough to
-                            // put the window back with its group.
-                            match this.findSeedByExe(exePath, bounds) with
-                            | Some(idx, count) when this.seedFallbackAllowed(hwnd, count) ->
-                                Some(closedTabCache.value.[idx], count > 1)
-                            | _ -> None
+                        // Exact title only here as well - see tryClosedTabRestore.
+                        | None -> None
                     (match peeked with
                      | Some(i, amb) -> RestoreTrace.log (fun () -> sprintf "claim(late) hwnd=%X token=%X rank=%d amb=%b title=%s"
                                                                       (hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex amb windowTitle)
