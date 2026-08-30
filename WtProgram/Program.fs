@@ -766,11 +766,23 @@ type Program() as this =
             Some(idx, List.length candidates)
 
     // Whether this window may claim a saved entry by exe path alone yet. One
-    // candidate is unambiguous and needs no wait; several mean the title is
-    // the only thing that can tell them apart, so the window has to have been
-    // around long enough for its own title to have settled.
+    // candidate is the only one it could be. Where several entries share the
+    // application there is nothing to choose between them, and waiting for the
+    // title to settle is not a way of choosing: an application that starts on
+    // a name of its own - Excel before a workbook is loaded, VSCode showing
+    // the container rather than the folder - still has that name when the wait
+    // is over. Claiming then took an entry at random, put the window in its
+    // place, and consumed the record, so the window that really belonged there
+    // had nothing left to come back to. Two VSCode windows lost their
+    // underline that way, and an Excel window took the other workbook's slot.
+    //
+    // So an entry is claimed by application alone only when it cannot be
+    // mistaken, and the window waits until then. Nothing is lost by waiting:
+    // the entry stays, the late pass runs while entries remain, and the moment
+    // the real title appears the exact match restores the place, the colours
+    // and the name together.
     member private this.seedFallbackAllowed(hwnd: IntPtr, candidateCount: int) =
-        candidateCount <= 1 ||
+        candidateCount <= 1 &&
         (match windowFirstSeen.value.tryFind(hwnd) with
          | Some(seenAt) -> monotonic.ElapsedMilliseconds - seenAt >= seedFallbackGraceMs
          | None -> false)
