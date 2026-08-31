@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.31_next1
+
 ## version ss_2026.08.31
 - This version marks the day every Japanese person remembers from their school days: the last of the summer holiday, spent wrestling with a mountain of homework.
 - Tab groups now come back after a Windows restart or a logoff
