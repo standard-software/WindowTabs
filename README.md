@@ -350,6 +350,10 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 - WindowTabs preserves your tab group configuration across restarts and when disabled.
 - State is saved every 10 seconds, so it survives a force-quit (Task Manager kill, crash, power loss) as well.
+- Groups also come back after a Windows restart or a logoff, when every window has been closed and reopened with a handle of its own. Windows are recognised again by their application and their title.
+- A tab's name, pin, colours, left/right alignment and its place in the group come back with its window.
+- A window whose title has not settled yet - Excel before a workbook has loaded, say - takes its place once its real title appears.
+- What was saved for a window that has not been reopened is kept for thirty days; for a tab closed by hand, eight.
 
 ### Watchdog Auto-Restart
 
@@ -370,6 +374,7 @@ Configure programs to use tabs and auto-grouping.
   - Programs in the same category are automatically grouped together regardless of the executable
   - For example, assign Word, Excel, PowerPoint, etc. to the same category to auto-group Office apps together
   - Category columns are only visible when Auto Grouping is enabled for a program
+- Switching Auto Grouping or a Category **on** also gathers the windows that are already open, as though each of them had just been opened. A tab pulled out by hand while the setting was already on stays out.
 - **Show all settings**: Checkbox to display settings for programs not currently running
 - **Delete button [x]**: Remove settings for non-running processes
 
