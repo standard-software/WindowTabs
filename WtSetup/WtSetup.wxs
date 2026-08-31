@@ -4,7 +4,7 @@
    <Product Id="*"
             Name="WindowTabs"
             Language="1033"
-            Version="26.08.31.1"
+            Version="26.08.31.2"
             Manufacturer="Satoshi Yamamoto (standard-software)"
             UpgradeCode="6763D234-BCFA-4172-8190-756DEE9CF2B1">
 
@@ -49,6 +49,15 @@
                <!-- Language folder -->
                <Directory Id="LanguageFolder" Name="Language">
                   <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes">
+                     <!-- Clear the folder before the new defaults are laid down.
+                          MSI leaves a file it did not write untouched, so a
+                          user-edited language file would otherwise survive an
+                          upgrade and hide the new strings. The copy made by
+                          the installer-backup-modified step is what preserves
+                          the edits. RemoveFiles runs before InstallFiles, and
+                          only when this component is being installed. -->
+                     <RemoveFile Id="RemoveStaleLanguageJson" Name="*.json" On="install" />
+
                      <File Id="FileListJson"
                            Source="$(var.WtProgram.TargetDir)Language\FileList.json"
                            KeyPath="yes" />
@@ -90,6 +99,8 @@
                <!-- Settings folder -->
                <Directory Id="SettingsFolder" Name="Settings">
                   <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes">
+                     <RemoveFile Id="RemoveStaleSettingsJson" Name="*.json" On="install" />
+
                      <File Id="WindowMarginJson"
                            Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
                            KeyPath="yes" />
@@ -188,35 +199,50 @@
                               TerminateProcess="0"
                               Timeout="5" />
 
-      <!-- Backup user-modified Language/Settings files and record file hashes using PowerShell -->
-      <!-- BackupModifiedFiles: compare each file's current hash against stored hash, copy modified files to Backup_YYYY-MM-DD_HH-MM-SS/... -->
-      <!-- StoreFileHashes: after install, record hashes of all installed Language/Settings files in HKCU\Software\WindowTabs\FileHashes -->
-      <Property Id="POWERSHELLEXE" Value="powershell.exe" />
+      <!-- Backup user-modified Language/Settings files, and record file hashes.
+           These two steps run inside WindowTabs.exe: the MSI used to carry them
+           as "powershell.exe -NoProfile -EncodedCommand <base64>" custom
+           actions, and Defender's machine-learning classifier reported the
+           installer as Trojan:Script/Wacatac.H!ml on that basis. Base64 script
+           that reads the registry, hashes a directory tree, copies and deletes
+           files is what a dropper looks like, whatever it actually does. The
+           MSI now carries no script at all.
+
+           BackupModifiedFiles runs from the OUTGOING install, before anything
+           is touched, so its path comes from the registry rather than from a
+           file this package installs. On a first install there is no previous
+           path and the action is skipped. -->
+      <Property Id="PREVIOUSINSTALLFOLDER">
+         <RegistrySearch Id="FindPreviousInstallFolder"
+                         Root="HKCU"
+                         Key="Software\WindowTabs"
+                         Name="InstallPath"
+                         Type="raw"
+                         Win64="yes" />
+      </Property>
+
+      <SetProperty Id="PREVIOUSINSTALLEXE"
+                   Value="[PREVIOUSINSTALLFOLDER]WindowTabs.exe"
+                   Before="BackupModifiedFiles"
+                   Sequence="execute">PREVIOUSINSTALLFOLDER</SetProperty>
 
       <CustomAction Id="BackupModifiedFiles"
-                    Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -EncodedCommand JABwAD0AKABnAHAAIAAnAEgASwBDAFUAOgBcAFMAbwBmAHQAdwBhAHIAZQBcAFcAaQBuAGQAbwB3AFQAYQBiAHMAJwAgAEkAbgBzAHQAYQBsAGwAUABhAHQAaAAgAC0ARQBBACAAMAApAC4ASQBuAHMAdABhAGwAbABQAGEAdABoADsAaQBmACgAJABwACkAewAkAGgAagA9ACgAZwBwACAAJwBIAEsAQwBVADoAXABTAG8AZgB0AHcAYQByAGUAXABXAGkAbgBkAG8AdwBUAGEAYgBzACcAIABGAGkAbABlAEgAYQBzAGgAZQBzACAALQBFAEEAIAAwACkALgBGAGkAbABlAEgAYQBzAGgAZQBzADsAJABoAHMAPQBpAGYAKAAkAGgAagApAHsAJABoAGoAfABDAG8AbgB2AGUAcgB0AEYAcgBvAG0ALQBKAHMAbwBuAH0AZQBsAHMAZQB7ACQAbgB1AGwAbAB9ADsAJABiAGQAPQBKAG8AaQBuAC0AUABhAHQAaAAgACQAcAAgACgAJwBCAGEAYwBrAHUAcABfACcAKwAoAEcAZQB0AC0ARABhAHQAZQAgAC0AZgAgAHkAeQB5AHkALQBNAE0ALQBkAGQAXwBIAEgALQBtAG0ALQBzAHMAKQApADsAJABzAGgAYQA9AFsAUwB5AHMAdABlAG0ALgBTAGUAYwB1AHIAaQB0AHkALgBDAHIAeQBwAHQAbwBnAHIAYQBwAGgAeQAuAFMASABBADIANQA2AF0AOgA6AEMAcgBlAGEAdABlACgAKQA7AGYAbwByAGUAYQBjAGgAKAAkAHMAIABpAG4AIABAACgAJwBMAGEAbgBnAHUAYQBnAGUAJwAsACcAUwBlAHQAdABpAG4AZwBzACcAKQApAHsAJABzAHIAPQBKAG8AaQBuAC0AUABhAHQAaAAgACQAcAAgACQAcwA7AGkAZgAoAFQAZQBzAHQALQBQAGEAdABoACAAJABzAHIAKQB7AEcAZQB0AC0AQwBoAGkAbABkAEkAdABlAG0AIAAkAHMAcgAgAC0ARgBpAGwAZQAgAC0AUgBlAGMAdQByAHMAZQB8AEYAbwByAEUAYQBjAGgALQBPAGIAagBlAGMAdAB7ACQAcgBlAGwAPQAkAF8ALgBGAHUAbABsAE4AYQBtAGUALgBTAHUAYgBzAHQAcgBpAG4AZwAoACQAcAAuAEwAZQBuAGcAdABoACkALgBUAHIAaQBtAFMAdABhAHIAdAAoACcAXAAnACkAOwAkAG0AbwBkAD0AJAB0AHIAdQBlADsAaQBmACgAJABoAHMAIAAtAGEAbgBkACAAKAAkAGgAcwAuAFAAUwBPAGIAagBlAGMAdAAuAFAAcgBvAHAAZQByAHQAaQBlAHMALgBOAGEAbQBlACAALQBjAG8AbgB0AGEAaQBuAHMAIAAkAHIAZQBsACkAKQB7ACQAYwBoAD0AWwBCAGkAdABDAG8AbgB2AGUAcgB0AGUAcgBdADoAOgBUAG8AUwB0AHIAaQBuAGcAKAAkAHMAaABhAC4AQwBvAG0AcAB1AHQAZQBIAGEAcwBoACgAWwBJAE8ALgBGAGkAbABlAF0AOgA6AFIAZQBhAGQAQQBsAGwAQgB5AHQAZQBzACgAJABfAC4ARgB1AGwAbABOAGEAbQBlACkAKQApACAALQByAGUAcABsAGEAYwBlACAAJwAtACcALAAnACcAOwBpAGYAKAAkAGMAaAAgAC0AZQBxACAAJABoAHMALgAkAHIAZQBsACkAewAkAG0AbwBkAD0AJABmAGEAbABzAGUAfQB9ADsAaQBmACgAJABtAG8AZAApAHsAJABkAGYAPQBKAG8AaQBuAC0AUABhAHQAaAAgACQAYgBkACAAJAByAGUAbAA7ACQAZABkAD0AUwBwAGwAaQB0AC0AUABhAHQAaAAgACQAZABmACAALQBQAGEAcgBlAG4AdAA7AGkAZgAoAC0AbgBvAHQAKABUAGUAcwB0AC0AUABhAHQAaAAgACQAZABkACkAKQB7AG4AaQAgAC0AUABhAHQAaAAgACQAZABkACAALQBJAHQAZQBtAFQAeQBwAGUAIABEAGkAcgBlAGMAdABvAHIAeQAgAC0ARgBvAHIAYwBlAHwATwB1AHQALQBOAHUAbABsAH0AOwBjAHAAIAAkAF8ALgBGAHUAbABsAE4AYQBtAGUAIAAkAGQAZgAgAC0ARgBvAHIAYwBlAH0AfQB9AH0AfQA="
+                    Property="PREVIOUSINSTALLEXE"
+                    ExeCommand="--installer-backup-modified"
                     Execute="immediate"
-                    Return="ignore" />
-
-      <CustomAction Id="DeleteLanguageSettingsFiles"
-                    Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -EncodedCommand JABwAD0AKABnAHAAIAAnAEgASwBDAFUAOgBcAFMAbwBmAHQAdwBhAHIAZQBcAFcAaQBuAGQAbwB3AFQAYQBiAHMAJwAgAEkAbgBzAHQAYQBsAGwAUABhAHQAaAAgAC0ARQBBACAAMAApAC4ASQBuAHMAdABhAGwAbABQAGEAdABoADsAaQBmACgAJABwACkAewBmAG8AcgBlAGEAYwBoACgAJABzACAAaQBuACAAQAAoACcATABhAG4AZwB1AGEAZwBlACcALAAnAFMAZQB0AHQAaQBuAGcAcwAnACkAKQB7ACQAcwByAD0ASgBvAGkAbgAtAFAAYQB0AGgAIAAkAHAAIAAkAHMAOwBpAGYAKABUAGUAcwB0AC0AUABhAHQAaAAgACQAcwByACkAewBSAGUAbQBvAHYAZQAtAEkAdABlAG0AIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABzAHIAIAAnACoALgBqAHMAbwBuACcAKQAgAC0ARgBvAHIAYwBlACAALQBFAEEAIAAwAH0AfQB9AA=="
-                    Execute="immediate"
+                    Impersonate="yes"
                     Return="ignore" />
 
       <CustomAction Id="StoreFileHashes"
-                    Property="POWERSHELLEXE"
-                    ExeCommand="-NoProfile -EncodedCommand JABwAD0AKABnAHAAIAAnAEgASwBDAFUAOgBcAFMAbwBmAHQAdwBhAHIAZQBcAFcAaQBuAGQAbwB3AFQAYQBiAHMAJwAgAEkAbgBzAHQAYQBsAGwAUABhAHQAaAAgAC0ARQBBACAAMAApAC4ASQBuAHMAdABhAGwAbABQAGEAdABoADsAaQBmACgAJABwACkAewAkAGgAcwA9AEAAewB9ADsAJABzAGgAYQA9AFsAUwB5AHMAdABlAG0ALgBTAGUAYwB1AHIAaQB0AHkALgBDAHIAeQBwAHQAbwBnAHIAYQBwAGgAeQAuAFMASABBADIANQA2AF0AOgA6AEMAcgBlAGEAdABlACgAKQA7AGYAbwByAGUAYQBjAGgAKAAkAHMAIABpAG4AIABAACgAJwBMAGEAbgBnAHUAYQBnAGUAJwAsACcAUwBlAHQAdABpAG4AZwBzACcAKQApAHsAJABzAHIAPQBKAG8AaQBuAC0AUABhAHQAaAAgACQAcAAgACQAcwA7AGkAZgAoAFQAZQBzAHQALQBQAGEAdABoACAAJABzAHIAKQB7AEcAZQB0AC0AQwBoAGkAbABkAEkAdABlAG0AIAAkAHMAcgAgAC0ARgBpAGwAZQAgAC0AUgBlAGMAdQByAHMAZQB8AEYAbwByAEUAYQBjAGgALQBPAGIAagBlAGMAdAB7ACQAcgBlAGwAPQAkAF8ALgBGAHUAbABsAE4AYQBtAGUALgBTAHUAYgBzAHQAcgBpAG4AZwAoACQAcAAuAEwAZQBuAGcAdABoACkALgBUAHIAaQBtAFMAdABhAHIAdAAoACcAXAAnACkAOwAkAGgAcwBbACQAcgBlAGwAXQA9AFsAQgBpAHQAQwBvAG4AdgBlAHIAdABlAHIAXQA6ADoAVABvAFMAdAByAGkAbgBnACgAJABzAGgAYQAuAEMAbwBtAHAAdQB0AGUASABhAHMAaAAoAFsASQBPAC4ARgBpAGwAZQBdADoAOgBSAGUAYQBkAEEAbABsAEIAeQB0AGUAcwAoACQAXwAuAEYAdQBsAGwATgBhAG0AZQApACkAKQAgAC0AcgBlAHAAbABhAGMAZQAgACcALQAnACwAJwAnAH0AfQB9ADsAcwBwACAAJwBIAEsAQwBVADoAXABTAG8AZgB0AHcAYQByAGUAXABXAGkAbgBkAG8AdwBUAGEAYgBzACcAIABGAGkAbABlAEgAYQBzAGgAZQBzACAAKABDAG8AbgB2AGUAcgB0AFQAbwAtAEoAcwBvAG4AIAAtAEMAbwBtAHAAcgBlAHMAcwAgACQAaABzACkAfQA="
+                    FileKey="WindowTabsExe"
+                    ExeCommand="--installer-store-hashes"
                     Execute="immediate"
+                    Impersonate="yes"
                     Return="ignore" />
 
       <InstallExecuteSequence>
          <Custom Action="BackupModifiedFiles" Before="InstallInitialize">
-            1
-         </Custom>
-         <Custom Action="DeleteLanguageSettingsFiles" After="RemoveExistingProducts">
-            REINSTALL OR NOT REMOVE
+            PREVIOUSINSTALLEXE
          </Custom>
          <Custom Action="StoreFileHashes" After="InstallFinalize">
             REINSTALL OR NOT REMOVE

@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.08.31_next2
+
+- The installer no longer carries any script
+  - Its file maintenance moved into WindowTabs.exe, and clearing stale files now uses Windows Installer's own mechanism
+  - The embedded encoded PowerShell was what led Defender to report the installer as a trojan
+- The release build signs the executable and the installer when a certificate is configured
+
 ## version ss_2026.08.31_next1
 
 ## version ss_2026.08.31
