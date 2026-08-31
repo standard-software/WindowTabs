@@ -137,6 +137,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/SavedTabState.fs" />
     <Compile Include="Shared/SavedSession.fs" />
     <Compile Include="Shared/Regroup.fs" />
+    <Compile Include="Shared/InstallerActions.fs" />
     <Compile Include="Shared/Dpi.fs" />
     <Compile Include="Shared/Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />

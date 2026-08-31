@@ -2,6 +2,13 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.08.31_next2
+
+- インストーラからスクリプトを全廃しました
+  - ファイルの退避処理を WindowTabs.exe 本体に移し、古いファイルの削除は Windows Installer 標準の仕組みに置き換えました
+  - 埋め込んでいたエンコード済み PowerShell が、Defender にトロイの木馬と判定される原因でした
+- リリースビルドで、証明書を設定すれば exe とインストーラに署名するようにしました
+
 ## version ss_2026.08.31_next1
 
 ## version ss_2026.08.31
