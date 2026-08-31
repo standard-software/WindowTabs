@@ -2,18 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.08.28_next2
-- Turning on Auto Grouping or a Category in the Programs tab now also gathers the windows that are already open, which used to wait for the next window to be opened
-  - The windows go through the same path a newly opened one takes, so they are grouped by the same rule and a window that had been pulled out of its tabs joins the others
-  - A tab pulled out by hand while the setting is already on stays out - only switching the setting on does this
-
-## version ss_2026.08.28_next1
+## version ss_2026.08.31
+- This version marks the day every Japanese person remembers from their school days: the last of the summer holiday, spent wrestling with a mountain of homework.
 - Tab groups now come back after a Windows restart or a logoff
   - Windows are found again by their application and title, so a group returns however late its applications start
   - Name, pin, colours and left/right alignment come back too, and the tabs return to their saved order
   - A window whose title has not settled waits rather than take a place that is not its own, and takes its own when its real title appears
-  - The record of a window that has not reopened is kept: thirty days for one that has not started, eight for a tab closed by hand
+  - What was saved for a window that has not reopened is kept: thirty days for one that has not started, eight for a tab closed by hand
   - The groups are frozen as of the shutdown notification, so applications closing during it cannot overwrite them
+- Turning on Auto Grouping or a Category in the Programs tab now also gathers the windows that are already open
+  - They go through the same path a newly opened window takes, so a window pulled out of its tabs joins the others
+  - A tab pulled out by hand while the setting is already on stays out
 
 ## version ss_2026.08.28
 - Fixed the settings file being emptied while WindowTabs was running: a saved value holding a "//" - a renamed tab carrying a URL - was cut short by the JSONC comment strip, which broke the whole file and made the next save write defaults over it
