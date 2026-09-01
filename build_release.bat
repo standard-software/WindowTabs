@@ -81,46 +81,6 @@ echo   PerMonitorV2 manifest verified.
 echo.
 
 :: ----------------------------------------
-:: Code signing (optional)
-::
-:: Unsigned binaries carry no publisher reputation, so SmartScreen warns on
-:: them and Defender's machine-learning classifiers judge them on behaviour
-:: alone - which is how an installer doing ordinary file maintenance came to
-:: be reported as Trojan:Script/Wacatac.H!ml.
-::
-:: This step does nothing until a certificate exists. Set both variables to
-:: turn it on, for example:
-::
-::   set WT_SIGN_TOOL=C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe
-::   set WT_SIGN_ARGS=/fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /n "Satoshi Yamamoto"
-::
-:: A timestamp is not optional: without /tr the signature stops verifying the
-:: day the certificate expires, and every build already shipped goes back to
-:: being unsigned.
-::
-:: The exe is signed here, before it is copied into either the ZIP or the MSI,
-:: so both carry the same signed binary. The MSI is signed separately once it
-:: has been built.
-:: ----------------------------------------
-if defined WT_SIGN_TOOL (
-    echo Signing WindowTabs.exe...
-    "%WT_SIGN_TOOL%" sign %WT_SIGN_ARGS% "WtProgram\bin\Release\WindowTabs.exe"
-    if errorlevel 1 (
-        echo ERROR: signing WindowTabs.exe failed
-        exit /b 1
-    )
-    "%WT_SIGN_TOOL%" verify /pa "WtProgram\bin\Release\WindowTabs.exe"
-    if errorlevel 1 (
-        echo ERROR: the signature on WindowTabs.exe does not verify
-        exit /b 1
-    )
-    echo   WindowTabs.exe signed and verified.
-) else (
-    echo Skipping code signing ^(WT_SIGN_TOOL is not set^).
-)
-echo.
-
-:: ----------------------------------------
 :: Verify installer file list (name-level)
 :: (Every shipped Language/Settings *.json needs a <File> entry in
 ::  WtSetup.wxs; the MSI silently omits unlisted files - this caused the
@@ -250,26 +210,6 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-
-:: Sign the MSI itself. Signing the executable inside it is not enough: the
-:: file a user downloads and double-clicks is the MSI, and that is what
-:: SmartScreen and the AV engines judge. Signed after the content check, so
-:: that nothing modifies the package afterwards.
-if defined WT_SIGN_TOOL (
-    echo Signing WtSetup.msi...
-    "%WT_SIGN_TOOL%" sign %WT_SIGN_ARGS% "exe\installer\WtSetup.msi"
-    if errorlevel 1 (
-        echo ERROR: signing WtSetup.msi failed
-        exit /b 1
-    )
-    "%WT_SIGN_TOOL%" verify /pa "exe\installer\WtSetup.msi"
-    if errorlevel 1 (
-        echo ERROR: the signature on WtSetup.msi does not verify
-        exit /b 1
-    )
-    echo   WtSetup.msi signed and verified.
-    echo.
-)
 
 :: ----------------------------------------
 :: Summary
