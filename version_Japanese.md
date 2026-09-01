@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.02_next1
+
 ## version ss_2026.09.02
 
 - インストーラからスクリプトを全廃しました
