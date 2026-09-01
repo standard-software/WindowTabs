@@ -6,8 +6,7 @@
 
 - The installer no longer carries any script
   - Its file maintenance moved into WindowTabs.exe, and clearing stale files now uses Windows Installer's own mechanism
-  - The embedded encoded PowerShell was what led Defender to report the installer as a trojan
-- The release build signs the executable and the installer when a certificate is configured
+  - The embedded encoded PowerShell was under suspicion of being what made Defender report the installer as a trojan, so it has been taken out
 
 ## version ss_2026.08.31_next1
 
