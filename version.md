@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.02_next1
+
 ## version ss_2026.09.02
 
 - The installer no longer carries any script
