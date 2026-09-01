@@ -2,13 +2,11 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.08.31_next2
+## version ss_2026.09.02
 
 - インストーラからスクリプトを全廃しました
   - ファイルの退避処理を WindowTabs.exe 本体に移し、古いファイルの削除は Windows Installer 標準の仕組みに置き換えました
   - 埋め込んでいたエンコード済み PowerShell が、Defender にトロイの木馬と判定される原因の疑いがあったため取り除きました
-
-## version ss_2026.08.31_next1
 
 ## version ss_2026.08.31
 - このバージョンは、日本の誰もが知る、学生時代に夏休み最終日に膨大な宿題と格闘する大切な日を記念するものです。

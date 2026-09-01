@@ -2,13 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.08.31_next2
+## version ss_2026.09.02
 
 - The installer no longer carries any script
   - Its file maintenance moved into WindowTabs.exe, and clearing stale files now uses Windows Installer's own mechanism
   - The embedded encoded PowerShell was under suspicion of being what made Defender report the installer as a trojan, so it has been taken out
-
-## version ss_2026.08.31_next1
 
 ## version ss_2026.08.31
 - This version marks the day every Japanese person remembers from their school days: the last of the summer holiday, spent wrestling with a mountain of homework.
