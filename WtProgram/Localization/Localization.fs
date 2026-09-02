@@ -21,20 +21,17 @@ module Localization =
         | "ja" -> "Japanese"
         | other -> other
 
-    // Get the Language folder path
-    let getLanguageFolder() =
-        let exePath = Assembly.GetExecutingAssembly().Location
-        let exeDir = Path.GetDirectoryName(exePath)
-        Path.Combine(exeDir, "Language")
-
-    // Load language strings from JSON file (supports JSONC format with comments)
+    // Load language strings from JSON file (supports JSONC format with comments).
+    // The shipped file under <exe>\Settings\Language is the default; a file of
+    // the same name under %APPDATA%\WindowTabs\Settings\Language is the user's,
+    // and its strings replace the shipped ones key by key - so one corrected
+    // string is a one-line file, and strings added by a later version still
+    // arrive. See UserOverrides.
     // Nested objects are flattened with dot-separated keys (e.g., "Parent.Child")
     let loadLanguageFromJson(langName: string) =
         try
-            let jsonPath = Path.Combine(getLanguageFolder(), langName + ".json")
-            if File.Exists(jsonPath) then
-                let json = File.ReadAllText(jsonPath)
-                let jobj = parseJsoncObject(json)
+            match UserOverrides.loadObject UserOverrides.languageDir (langName + ".json") with
+            | Some(jobj) ->
                 let dict = Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 let rec flattenProps (prefix: string) (obj: JObject) =
                     for prop in obj.Properties() do
@@ -46,7 +43,7 @@ module Localization =
                             dict.[key] <- prop.Value.ToString()
                 flattenProps "" jobj
                 Some(dict :> IDictionary<string, string>)
-            else
+            | None ->
                 None
         with
         | _ -> None

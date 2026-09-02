@@ -408,27 +408,29 @@ type NotifyIconPlugin() as this =
         with
         | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
 
-    member this.getLanguageFolder() =
-        let exePath = Assembly.GetExecutingAssembly().Location
-        let exeDir = Path.GetDirectoryName(exePath)
-        Path.Combine(exeDir, "Language")
-
-    // Returns list of (displayName, fileName) tuples (supports JSONC format with comments)
+    // Returns list of (displayName, fileName) tuples (supports JSONC format with comments).
+    //
+    // The list says which languages the menu shows. The shipped one is under
+    // <exe>\Settings\Language; a FileList.json under
+    // %APPDATA%\WindowTabs\Settings\Language replaces it whole, which is how a
+    // user shows only the languages they want as much as how they add one.
+    // An entry whose file exists in neither place is left out: a menu item
+    // that does nothing is worse than no item.
     member this.getLanguageListFromFileList() : (string * string) list =
         try
-            let fileListPath = Path.Combine(this.getLanguageFolder(), "FileList.json")
-            if File.Exists(fileListPath) then
-                let rawJson = File.ReadAllText(fileListPath)
-                let arr = parseJsoncArray(rawJson)
+            match UserOverrides.loadArray UserOverrides.languageDir "FileList.json" with
+            | Some(arr) ->
                 arr
-                |> Seq.map (fun t ->
+                |> Seq.choose (fun t ->
                     let obj = t :?> JObject
                     let name = obj.["name"].ToString()
-                    let fileName = obj.["fileName"].ToString().Replace(".json", "")
-                    (name, fileName))
+                    let file = obj.["fileName"].ToString()
+                    if UserOverrides.exists UserOverrides.languageDir file
+                    then Some(name, file.Replace(".json", ""))
+                    else None)
                 |> Seq.toList
-            else
-                // FileList.json not found - return empty list
+            | None ->
+                // No FileList.json anywhere - return empty list
                 []
         with
         | _ -> []

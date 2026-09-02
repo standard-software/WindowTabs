@@ -80,19 +80,18 @@ for %%d in (cs de en es fr it ja ja-JP ko pl pt-BR ru tr zh-Hans zh-Hant) do (
   )
 )
 
-echo ===== Copying Language files =====
+echo ===== Copying Settings files =====
 if exist "$(TargetDir)Language" (
-  echo Removing existing Language folder...
+  echo Removing the old Language folder - languages now ship under Settings\Language...
   rmdir /s /q "$(TargetDir)Language"
 )
-mkdir "$(TargetDir)Language"
-copy /y "$(ProjectDir)Language\*.json" "$(TargetDir)Language\"
-
-echo ===== Copying Settings files =====
-if not exist "$(TargetDir)Settings" (
-  mkdir "$(TargetDir)Settings"
+if exist "$(TargetDir)Settings" (
+  echo Removing existing Settings folder...
+  rmdir /s /q "$(TargetDir)Settings"
 )
+mkdir "$(TargetDir)Settings\Language"
 copy /y "$(ProjectDir)Settings\*.json" "$(TargetDir)Settings\"
+copy /y "$(ProjectDir)Settings\Language\*.json" "$(TargetDir)Settings\Language\"
 
 if $(ConfigurationName) == Release (
   echo ===== ILRepack merge starting =====
@@ -123,6 +122,7 @@ if $(ConfigurationName) == Release (
   <ItemGroup>
     <Compile Include="Localization\Localization_English.fs" />
     <Compile Include="Localization\JsoncHelper.fs" />
+    <Compile Include="Shared/UserOverrides.fs" />
     <Compile Include="Localization\Localization.fs" />
     <Compile Include="Shared/Operators.fs" />
     <Compile Include="Shared/Dynamic.fs" />
@@ -137,9 +137,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/SavedTabState.fs" />
     <Compile Include="Shared/SavedSession.fs" />
     <Compile Include="Shared/Regroup.fs" />
-    <Compile Include="Shared/InstallerActions.fs" />
     <Compile Include="Shared/AppPath.fs" />
-    <Compile Include="Shared/UserOverrides.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
     <Compile Include="Shared/Dpi.fs" />
     <Compile Include="Shared/Win32.fs" />

@@ -11,7 +11,11 @@ open System.Windows.Forms
 open Bemo.Win32.Forms
 open Newtonsoft.Json.Linq
 
-// Per-exe margin settings loaded from Settings/Window_Margin.json
+// Per-exe margin settings loaded from Settings\WindowMargin.json - the shipped
+// default under <exe>\Settings with the user's own under
+// %APPDATA%\WindowTabs\Settings laid over it, entry by entry. An entry the
+// user names replaces the shipped one as a whole (all four numbers), and the
+// entries they do not name keep their defaults. See UserOverrides.
 module WindowMarginSettings =
     // Cache: exe name (lowercase) -> (top, left, right, bottom)
     let mutable private marginCache : Dictionary<string, (int * int * int * int)> option = None
@@ -19,12 +23,8 @@ module WindowMarginSettings =
     let private loadSettings() =
         let dict = Dictionary<string, (int * int * int * int)>(StringComparer.OrdinalIgnoreCase)
         try
-            let exePath = Assembly.GetExecutingAssembly().Location
-            let exeDir = Path.GetDirectoryName(exePath)
-            let jsonPath = Path.Combine(exeDir, "Settings", "Window_Margin.json")
-            if File.Exists(jsonPath) then
-                let json = File.ReadAllText(jsonPath)
-                let jobj = JObject.Parse(json)
+            match UserOverrides.loadObject UserOverrides.settingsDir "WindowMargin.json" with
+            | Some(jobj) ->
                 for prop in jobj.Properties() do
                     let exeName = prop.Name
                     match prop.Value with
@@ -40,8 +40,8 @@ module WindowMarginSettings =
                         dict.[exeName] <- (top, left, right, bottom)
                         System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Loaded: %s -> (%d,%d,%d,%d)" exeName top left right bottom)
                     | _ -> ()
-            else
-                System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Settings file not found: %s" jsonPath)
+            | None ->
+                System.Diagnostics.Debug.WriteLine("[WindowMargin] no WindowMargin.json beside the executable or under %APPDATA%")
         with ex ->
             System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Error loading settings: %s" ex.Message)
         dict
@@ -800,7 +800,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Same DPI: move with position and size at once for better performance
             window.move(bounds)
 
-    // Get per-exe margin as (top, left, right, bottom) from Settings/Window_Margin.json
+    // Get per-exe margin as (top, left, right, bottom) from Settings\WindowMargin.json
     // Positive = shrink window, Negative = expand window
     member this.getExeMarginRaw(hwnd:IntPtr) =
         let window = this.os.windowFromHwnd(hwnd)

@@ -4,7 +4,7 @@
    <Product Id="*"
             Name="WindowTabs"
             Language="1033"
-            Version="26.09.02.1"
+            Version="26.09.02.2"
             Manufacturer="Satoshi Yamamoto (standard-software)"
             UpgradeCode="6763D234-BCFA-4172-8190-756DEE9CF2B1">
 
@@ -46,68 +46,72 @@
                         Source="$(var.WtProgram.ProjectDir)..\WtSetup\README.txt" />
                </Component>
 
-               <!-- Language folder -->
-               <Directory Id="LanguageFolder" Name="Language">
-                  <Component Id="LanguageFiles" Guid="D8E5F4A6-7F9C-0123-DEFA-AB4567890123" Win64="yes">
-                     <!-- Clear the folder before the new defaults are laid down.
-                          MSI leaves a file it did not write untouched, so a
-                          user-edited language file would otherwise survive an
-                          upgrade and hide the new strings. The copy made by
-                          the installer-backup-modified step is what preserves
-                          the edits. RemoveFiles runs before InstallFiles, and
-                          only when this component is being installed. -->
-                     <RemoveFile Id="RemoveStaleLanguageJson" Name="*.json" On="install" />
-
-                     <File Id="FileListJson"
-                           Source="$(var.WtProgram.TargetDir)Language\FileList.json"
-                           KeyPath="yes" />
-                     <File Id="EnglishJson"
-                           Source="$(var.WtProgram.TargetDir)Language\English.json" />
-                     <File Id="JapaneseJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Japanese.json" />
-                     <File Id="JapaneseKansaiJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Japanese_Kansai.json" />
-                     <File Id="JapaneseTohokuJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Japanese_Tohoku.json" />
-                     <File Id="ChineseSimplifiedJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Chinese_Simplified.json" />
-                     <File Id="ChineseTraditionalJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Chinese_Traditional.json" />
-                     <File Id="KoreanJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Korean.json" />
-                     <File Id="FrenchJson"
-                           Source="$(var.WtProgram.TargetDir)Language\French.json" />
-                     <File Id="GermanJson"
-                           Source="$(var.WtProgram.TargetDir)Language\German.json" />
-                     <File Id="ItalianJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Italian.json" />
-                     <File Id="SpanishJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Spanish.json" />
-                     <File Id="PortugueseJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Portuguese.json" />
-                     <File Id="TurkishJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Turkish.json" />
-                     <File Id="PolishJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Polish.json" />
-                     <File Id="VietnameseJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Vietnamese.json" />
-                     <File Id="IndonesianJson"
-                           Source="$(var.WtProgram.TargetDir)Language\Indonesian.json" />
-                  </Component>
-               </Directory>
-
-               <!-- Settings folder -->
+               <!-- Settings folder: every JSON file WindowTabs ships. These are
+                    DEFAULTS. A file of the same name under
+                    %APPDATA%\WindowTabs\Settings is the user's own and is laid
+                    over the shipped one at run time (UserOverrides.fs), so the
+                    installer owns this folder outright: stale files are cleared
+                    before the new defaults are laid down, and a language file
+                    dropped from a release does not linger. RemoveFiles runs
+                    before InstallFiles, and only when the component is being
+                    installed. Nothing here is backed up, because nothing the
+                    user writes lives here. -->
                <Directory Id="SettingsFolder" Name="Settings">
                   <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes">
                      <RemoveFile Id="RemoveStaleSettingsJson" Name="*.json" On="install" />
 
                      <File Id="WindowMarginJson"
-                           Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
+                           Source="$(var.WtProgram.TargetDir)Settings\WindowMargin.json"
                            KeyPath="yes" />
-
                      <File Id="VersionFolderJson"
-                           Source="$(var.WtProgram.TargetDir)Settings\Version_Folder.json" />
+                           Source="$(var.WtProgram.TargetDir)Settings\VersionFolder.json" />
                   </Component>
+
+                  <!-- Languages moved here from <install>\Language. A new
+                       component GUID because the install location changed;
+                       the old component goes with the old product, which the
+                       major upgrade removes first. -->
+                  <Directory Id="LanguageFolder" Name="Language">
+                     <Component Id="LanguageFiles" Guid="7A2C9E41-3B5D-4F86-9C1E-2D8B6F4A0E37" Win64="yes">
+                        <RemoveFile Id="RemoveStaleLanguageJson" Name="*.json" On="install" />
+
+                        <File Id="FileListJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\FileList.json"
+                              KeyPath="yes" />
+                        <File Id="EnglishJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\English.json" />
+                        <File Id="JapaneseJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Japanese.json" />
+                        <File Id="JapaneseKansaiJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Japanese_Kansai.json" />
+                        <File Id="JapaneseTohokuJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Japanese_Tohoku.json" />
+                        <File Id="ChineseSimplifiedJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Chinese_Simplified.json" />
+                        <File Id="ChineseTraditionalJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Chinese_Traditional.json" />
+                        <File Id="KoreanJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Korean.json" />
+                        <File Id="FrenchJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\French.json" />
+                        <File Id="GermanJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\German.json" />
+                        <File Id="ItalianJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Italian.json" />
+                        <File Id="SpanishJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Spanish.json" />
+                        <File Id="PortugueseJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Portuguese.json" />
+                        <File Id="TurkishJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Turkish.json" />
+                        <File Id="PolishJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Polish.json" />
+                        <File Id="VietnameseJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Vietnamese.json" />
+                        <File Id="IndonesianJson"
+                              Source="$(var.WtProgram.TargetDir)Settings\Language\Indonesian.json" />
+                     </Component>
+                  </Directory>
                </Directory>
 
                <!-- Registry entries for installation path persistence -->
@@ -202,55 +206,15 @@
                               TerminateProcess="0"
                               Timeout="5" />
 
-      <!-- Backup user-modified Language/Settings files, and record file hashes.
-           These two steps run inside WindowTabs.exe: the MSI used to carry them
-           as "powershell.exe -NoProfile -EncodedCommand <base64>" custom
-           actions, and Defender's machine-learning classifier reported the
-           installer as Trojan:Script/Wacatac.H!ml on that basis. Base64 script
-           that reads the registry, hashes a directory tree, copies and deletes
-           files is what a dropper looks like, whatever it actually does. The
-           MSI now carries no script at all.
-
-           BackupModifiedFiles runs from the OUTGOING install, before anything
-           is touched, so its path comes from the registry rather than from a
-           file this package installs. On a first install there is no previous
-           path and the action is skipped. -->
-      <Property Id="PREVIOUSINSTALLFOLDER">
-         <RegistrySearch Id="FindPreviousInstallFolder"
-                         Root="HKCU"
-                         Key="Software\WindowTabs"
-                         Name="InstallPath"
-                         Type="raw"
-                         Win64="yes" />
-      </Property>
-
-      <SetProperty Id="PREVIOUSINSTALLEXE"
-                   Value="[PREVIOUSINSTALLFOLDER]WindowTabs.exe"
-                   Before="BackupModifiedFiles"
-                   Sequence="execute">PREVIOUSINSTALLFOLDER</SetProperty>
-
-      <CustomAction Id="BackupModifiedFiles"
-                    Property="PREVIOUSINSTALLEXE"
-                    ExeCommand="--installer-backup-modified"
-                    Execute="immediate"
-                    Impersonate="yes"
-                    Return="ignore" />
-
-      <CustomAction Id="StoreFileHashes"
-                    FileKey="WindowTabsExe"
-                    ExeCommand="--installer-store-hashes"
-                    Execute="immediate"
-                    Impersonate="yes"
-                    Return="ignore" />
-
-      <InstallExecuteSequence>
-         <Custom Action="BackupModifiedFiles" Before="InstallInitialize">
-            PREVIOUSINSTALLEXE
-         </Custom>
-         <Custom Action="StoreFileHashes" After="InstallFinalize">
-            REINSTALL OR NOT REMOVE
-         </Custom>
-      </InstallExecuteSequence>
+      <!-- No custom actions beyond launching the application. The files under
+           Settings\ are defaults and are simply replaced; what the user writes
+           lives under %APPDATA% and is never touched by this package. Earlier
+           releases backed up edited files here, first with embedded
+           PowerShell (which Defender reported as a trojan) and then by
+           running the OUTGOING WindowTabs.exe with a switch that only the
+           incoming one understood, which left the installer waiting on a
+           program that had started instead. Both are gone with the reason
+           for them. -->
 
       <!-- Features -->
       <Feature Id="MainApplication"

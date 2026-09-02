@@ -82,7 +82,7 @@ echo.
 
 :: ----------------------------------------
 :: Verify installer file list (name-level)
-:: (Every shipped Language/Settings *.json needs a <File> entry in
+:: (Every shipped Settings and Settings\Language *.json needs a <File> entry in
 ::  WtSetup.wxs; the MSI silently omits unlisted files - this caused the
 ::  ss_2026.07.16 MSI to ship without the 6 newly added languages.)
 :: ----------------------------------------
@@ -125,15 +125,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Copy Language folder
-mkdir "%OUTPUT_DIR%\Language"
-xcopy /Y /E "WtProgram\bin\Release\Language\*" "%OUTPUT_DIR%\Language\" >nul
-if errorlevel 1 (
-    echo ERROR: Failed to copy Language folder
-    exit /b 1
-)
-
-:: Copy Settings folder
+:: Copy Settings folder (languages ship under Settings\Language; /E recurses)
 mkdir "%OUTPUT_DIR%\Settings"
 xcopy /Y /E "WtProgram\bin\Release\Settings\*" "%OUTPUT_DIR%\Settings\" >nul
 if errorlevel 1 (

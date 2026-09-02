@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.02_next1**
+Latest version: **ss_2026.09.02_next2**
 
 See [version.md](version.md) for details.
 
@@ -327,9 +327,14 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 - English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian language support
 - Japanese Kansai and Tohoku dialect files included
-- Any language can be supported by adding a language file
 - Runtime language switching without restart
 - Switch languages via tray menu
+- The language files under `Settings\Language\` beside `WindowTabs.exe` are defaults, replaced by every upgrade. Your own go under `%APPDATA%\WindowTabs\Settings\Language\`, which no upgrade touches:
+  - To add a language, put `MyLanguage.json` there together with a `FileList.json` that lists it
+  - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
+  - `FileList.json` there replaces the shipped list whole, so it can also hide languages from the tray menu
+  - Delete the folder to return to the shipped behaviour
+- The same applies to the other files under `Settings\` (`WindowMargin.json`, `VersionFolder.json`): a file of the same name under `%APPDATA%\WindowTabs\Settings\` is laid over the shipped one, entry by entry
 - Per-tab context menu items (such as "Close tab") can show the target tab name: put `{TabName}` (or `{0}`) in the language file string where the name should appear
   - Example: `"CloseTab": "Close tab : {TabName}"`
 

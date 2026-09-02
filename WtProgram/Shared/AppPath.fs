@@ -32,7 +32,7 @@ open System.Collections.Generic
 //   wrong often enough to matter: "C:\Program Files\Microsoft Visual
 //   Studio\18\..." is the same shape, and somebody who keeps two versions of
 //   Visual Studio installed wants them told apart. So this rule is applied
-//   only to executables named in Settings\Version_Folder.json.
+//   only to executables named in Settings\VersionFolder.json.
 //
 // The part that moves is replaced by "*", and the pattern is what gets
 // stored:

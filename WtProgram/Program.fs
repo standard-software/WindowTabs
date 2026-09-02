@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.02_next1"
+    let version = "ss_2026.09.02_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2546,12 +2546,6 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
-    // The installer calls this executable to do its file maintenance, so that
-    // the MSI itself carries no script. These steps touch nothing but files
-    // and one registry value, and must finish before anything here starts a
-    // DPI context, a mutex or a window.
-    if InstallerActions.tryRun argv then exit(0)
-
     // Per-Monitor-V2 DPI awareness, before anything creates a window or a DC.
     // app.manifest declares the same thing and normally wins, in which case
     // this call simply fails and changes nothing; keeping it means the tab

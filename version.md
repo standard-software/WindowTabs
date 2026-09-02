@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.02_next2
+
+- Every JSON file WindowTabs ships can be overridden from `%APPDATA%\WindowTabs\Settings`, which no upgrade touches
+  - Languages moved from `Language\` to `Settings\Language\` beside the executable. A file of the same name under `%APPDATA%` is laid over the shipped one key by key; `FileList.json` there replaces the shipped list whole
+  - `Window_Margin.json` and `Version_Folder.json` are now `WindowMargin.json` and `VersionFolder.json`
+- The installer no longer backs up edited files, and no longer stops during an upgrade waiting on the previous version's WindowTabs.exe
+
 ## version ss_2026.09.02_next1
 
 - Per-application settings survive the application's own updates

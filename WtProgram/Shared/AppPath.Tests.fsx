@@ -28,7 +28,7 @@ let lmp v = sprintf @"C:\Users\me\AppData\Local\LINE\Data\plugin\LineMediaPlayer
 let chrome = @"C:\Program Files\Google\Chrome\Application\chrome.exe"
 
 // The version-directory rule applies only to executables named in
-// Settings\Version_Folder.json. The shipped file lists this one; everything
+// Settings\VersionFolder.json. The shipped file lists this one; everything
 // else keeps its full path.
 AppPath.setVersionDirectoryApps [ "LineMediaPlayer.exe" ]
 
