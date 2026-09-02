@@ -308,10 +308,6 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 - Tab strips and the settings dialog are per-monitor DPI aware: on scaled displays they are drawn at native resolution (no bitmap-stretch blur), and follow the scale of whichever monitor they are on
 - Automatic window resizing when dropped to prevent exceeding monitor dimensions
 
-> **Substantially improved in ss_jp_2026.06.22:** Earlier versions had incomplete tab-strip DPI support — at non-integer DPI scales, tab rendering and hit-test areas were offset from the visible tabs. This version finally addresses it properly.
->
-> **Sharp rendering since ss_2026.08.21:** tab strips and the settings dialog were previously bitmap-stretched by Windows on scaled displays and looked blurry; they are now drawn at each monitor's native resolution.
-
 ### Virtual Desktop Support
 
 - Tab groups are preserved when switching virtual desktops (Win+Tab)
