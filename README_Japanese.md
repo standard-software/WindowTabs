@@ -336,6 +336,12 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
+### ss_2026.09.02 以前の設定ファイルについて
+
+- ss_2026.09.02 までは、言語ファイルは `WindowTabs.exe` と同じ場所の `Language\` に、余白設定は `Settings\Window_Margin.json` にあり、それらを直接編集する仕様でした
+- 現在のバージョンはどちらも読みません。MSI はバージョンアップ時にどちらも削除し、zip では残ります
+- 編集していた場合は、バージョンアップの前に移してください。言語ファイルは `%APPDATA%\WindowTabs\Settings\Language\` へ、`Window_Margin.json` は `%APPDATA%\WindowTabs\Settings\WindowMargin.json` へ
+
 ### 最新バージョンの確認
 
 - トレイメニューの「最新バージョンの確認」から、GitHub の最新リリースを確認できます。
