@@ -340,6 +340,12 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
+### Settings files from ss_2026.09.02 and earlier
+
+- Up to ss_2026.09.02 the language files sat in `Language\` beside `WindowTabs.exe` and the margins in `Settings\Window_Margin.json`, and those files were edited in place
+- The current version does not read either place. The MSI removes both on upgrade; the zip leaves them
+- If you edited them, move your copies before upgrading: language files to `%APPDATA%\WindowTabs\Settings\Language\`, and `Window_Margin.json` to `%APPDATA%\WindowTabs\Settings\WindowMargin.json`
+
 ### Check for Updates
 
 - "Check for Updates" in the tray menu checks the latest GitHub release.
