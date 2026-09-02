@@ -6,7 +6,8 @@ open System.Reflection
 open Newtonsoft.Json.Linq
 
 // Which executables keep each version in a directory of its own, read from
-// Settings\Version_Folder.json beside the executable:
+// Settings\VersionFolder.json beside the executable, with the user's own
+// under %APPDATA%\WindowTabs\Settings laid over it:
 //
 //     {
 //       "LineMediaPlayer.exe": true
@@ -20,7 +21,7 @@ open Newtonsoft.Json.Linq
 // told apart. Store applications need no entry - Windows decides their
 // layout, so AppPath always handles them.
 //
-// The same shape as Settings\Window_Margin.json, which already names this
+// The same shape as Settings\WindowMargin.json, which already names this
 // application for a different reason, so adding one is a matter of editing a
 // file rather than rebuilding. A value of false keeps an entry while turning
 // it off.
@@ -31,16 +32,16 @@ open Newtonsoft.Json.Linq
 module AppPathSettings =
 
     [<Literal>]
-    let fileName = "Version_Folder.json"
+    let fileName = "VersionFolder.json"
 
     // The file shipped beside the executable is the default; the one under
-    // %APPDATA%\WindowTabs\Settings is the user's, and is merged over it name
+    // %APPDATA%\WindowTabs\Settings is the user's, and is laid over it name
     // by name. The installer replaces the shipped file every upgrade, so an
     // application added there would not survive one - and under the default
     // install folder it cannot be written at all.
     let private read () =
         try
-            match UserOverrides.load "Settings" fileName with
+            match UserOverrides.loadObject UserOverrides.settingsDir fileName with
             | Some(parsed) ->
                 [ for prop in parsed.Properties() do
                     match prop.Value.Type with

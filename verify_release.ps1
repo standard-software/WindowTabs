@@ -1,7 +1,7 @@
 # Verifies that the files shipped by the installer stay in sync with the
 # build output. Called from build_release.bat with the repo root as CWD:
 #   -Phase pre  : after the WtProgram build — compare the file names in
-#                 WtProgram\bin\Release\{Language,Settings} against the
+#                 WtProgram\bin\Release\Settings and Settings\Language against the
 #                 <File> entries in WtSetup\WtSetup.wxs (the MSI file list
 #                 is static; unlisted files are omitted silently, which is
 #                 how the ss_2026.07.16 MSI shipped without 6 languages)
@@ -23,7 +23,7 @@ function Get-JsonNames([string]$dir) {
 
 if ($Phase -eq 'pre') {
     $wxsText = Get-Content $Wxs -Raw
-    foreach ($folder in 'Language', 'Settings') {
+    foreach ($folder in 'Settings', 'Settings\Language') {
         $disk = Get-JsonNames "WtProgram\bin\Release\$folder"
         $wxsNames = @([regex]::Matches($wxsText, [regex]::Escape("TargetDir)$folder\") + '([^"]+\.json)') |
             ForEach-Object { $_.Groups[1].Value } | Sort-Object)
@@ -67,7 +67,7 @@ else {
         exit 1
     }
     try {
-        foreach ($folder in 'Language', 'Settings') {
+        foreach ($folder in 'Settings', 'Settings\Language') {
             $disk = Get-JsonNames "WtProgram\bin\Release\$folder"
             $inMsi = Get-JsonNames (Join-Path $extract "WindowTabs\$folder")
             $missing = @($disk | Where-Object { $inMsi -notcontains $_ })

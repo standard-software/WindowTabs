@@ -2,6 +2,13 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.02_next2
+
+- 同梱している JSON ファイルはすべて、`%APPDATA%\WindowTabs\Settings` に置いた自分のファイルで上書きできるようにしました。ここはバージョンアップで触られません
+  - 言語ファイルは exe と同じ場所の `Language\` から `Settings\Language\` に移りました。`%APPDATA%` 側に同じ名前のファイルがあればキー単位で重なり、`FileList.json` は丸ごと置き換わります
+  - `Window_Margin.json` と `Version_Folder.json` は `WindowMargin.json` と `VersionFolder.json` になりました
+- インストーラは編集済みファイルのバックアップをやめました。バージョンアップ中に前バージョンの WindowTabs.exe を待って止まることもなくなりました
+
 ## version ss_2026.09.02_next1
 
 - アプリ自身の更新をまたいで、アプリごとの設定が効き続けるようにしました
