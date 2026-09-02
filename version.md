@@ -4,6 +4,10 @@
 
 ## version ss_2026.09.02_next1
 
+- Per-application settings survive the application's own updates
+  - An application whose path carries its version - a Store app, or an installer that keeps each version in a directory of its own - was filed under a new name by every update, and its settings stopped applying
+  - Settings can now be given in a file of your own under %APPDATA%\WindowTabs\Settings, which no upgrade replaces
+
 ## version ss_2026.09.02
 
 - The installer no longer carries any script

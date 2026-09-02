@@ -104,6 +104,9 @@
                      <File Id="WindowMarginJson"
                            Source="$(var.WtProgram.TargetDir)Settings\Window_Margin.json"
                            KeyPath="yes" />
+
+                     <File Id="VersionFolderJson"
+                           Source="$(var.WtProgram.TargetDir)Settings\Version_Folder.json" />
                   </Component>
                </Directory>
 
