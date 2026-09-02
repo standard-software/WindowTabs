@@ -466,6 +466,57 @@ type Program() as this =
         settingsManager.update <| fun s -> { s with version = version }
         original 
 
+    // A path that carries a version - a Store application's package folder,
+    // or a plain directory named after the version - files the application
+    // under a new name on every update and leaves the old entries behind.
+    // Settings written before AppPath existed can hold a dozen generations of
+    // one application, spread over several categories, and the Programs tab
+    // would show a row for each. Collapse them once, at startup.
+    //
+    // The survivor is the entry still on disk - the version currently
+    // installed - and failing that the last one written, which is the most
+    // recent choice the user made. Lists with nothing to collapse are left
+    // untouched, so this writes nothing on a settings file that is already
+    // clean.
+    // Which executables keep each version in a directory of its own. Read
+    // before anything compares or rewrites a stored path, the collapse below
+    // included.
+    let loadAppPathSettings = AppPathSettings.load()
+
+    let collapseStorePathGenerations =
+        try
+            let settingsJson = settingsManager.settingsJson
+            let categoryKeys = [ for i in 1..10 -> sprintf "Category%dPaths" i ]
+            let keys = [ "IncludedPaths"; "ExcludedPaths"; "AutoGroupingPaths" ] @ categoryKeys
+            let stored = keys |> List.map (fun k -> (settingsJson.getStringArray k).def(List2()).list)
+            let canonical = stored |> List.map AppPath.canonicalise
+
+            // An application belongs to one category. Settings made before
+            // this module existed could put each generation of one
+            // application in a different category, and collapsing the
+            // generations leaves it in several at once. The lowest number
+            // wins, which is the one getCategoryForProcess would have acted
+            // on anyway, so nothing changes behaviour - the file and the
+            // dialog just stop disagreeing with it.
+            // HashSet.Add is false for something already claimed, and the
+            // category lists are walked in order, so the lowest number keeps
+            // the application and the rest let it go.
+            let claimed = Collections.Generic.HashSet<string>()
+            let ownedByLowerCategory =
+                List.zip keys canonical
+                |> List.map (fun (key, paths) ->
+                    if List.contains key categoryKeys
+                    then paths |> List.filter claimed.Add
+                    else paths)
+
+            let mutable changed = false
+            for (key, before, after) in List.zip3 keys stored ownedByLowerCategory do
+                if before <> after then
+                    settingsJson.setStringArray(key, List2(after))
+                    changed <- true
+            if changed then settingsManager.settingsJson <- settingsJson
+        with _ -> ()
+
     let registerShellHooks =
         os.registerShellHooks <| fun (hwnd, shellEvent) ->
             match shellEvent with
@@ -2198,7 +2249,7 @@ type Program() as this =
             os.windowsInZorder.where(this.isAppWindow).map(fun w -> w.hwnd)
 
         member x.getAutoGroupingEnabled procPath =
-            settingsManager.settings.autoGroupingPaths.contains(procPath)
+            AppPath.containsApp settingsManager.settings.autoGroupingPaths.items.list procPath
 
         // Off to on regroups the application's windows; on to off deliberately
         // does nothing, so a group the user has built up is not torn apart by
@@ -2226,16 +2277,26 @@ type Program() as this =
             this.saveSettingsAndUpdateAppWindows <| fun s ->
                 { s with
                     autoGroupingPaths =
-                        if enabled then s.autoGroupingPaths.add procPath
-                        else s.autoGroupingPaths.remove procPath }
+                        Set2(List2(
+                            if enabled then AppPath.addApp s.autoGroupingPaths.items.list procPath
+                            else AppPath.removeApp s.autoGroupingPaths.items.list procPath)) }
             if enabled && wasEnabled.not then
                 this.regroupProcessWindows(procPath, fun () -> (x :> IProgram).getAutoGroupingEnabled(procPath))
 
+        // An application belongs to one category. If the file somehow lists
+        // it under several - hand-edited, or written by a version that let it
+        // happen - the lowest number is the one that counts, everywhere,
+        // including the tick the dialog draws.
         member x.getCategoryEnabled (procPath, categoryNum) =
             let settingsJson = settingsManager.settingsJson
-            let categoryKey = sprintf "Category%dPaths" categoryNum
-            let paths = settingsJson.getStringArray(categoryKey).def(List2())
-            paths.contains((=) procPath)
+            let listedIn i =
+                let paths = settingsJson.getStringArray(sprintf "Category%dPaths" i).def(List2())
+                AppPath.containsApp paths.list procPath
+            let rec firstListed i =
+                if i > 10 then 0
+                elif listedIn i then i
+                else firstListed (i + 1)
+            firstListed 1 = categoryNum
 
         // The auto-grouping setting is not consulted here. The dialog only
         // shows the category boxes for an application whose auto-grouping is
@@ -2245,12 +2306,16 @@ type Program() as this =
         member x.setCategoryEnabled procPath categoryNum enabled =
             let wasEnabled = (x :> IProgram).getCategoryEnabled(procPath, categoryNum)
             let settingsJson = settingsManager.settingsJson
-            let categoryKey = sprintf "Category%dPaths" categoryNum
-            let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
-            let newPaths =
-                if enabled then paths.add procPath
-                else paths.remove procPath
-            settingsJson.setStringArray(categoryKey, newPaths.items)
+            // Ticking a category unticks the rest: an application in two
+            // categories has no defined home, and only the lower number would
+            // ever be acted on.
+            for i in 1..10 do
+                let key = sprintf "Category%dPaths" i
+                let paths = settingsJson.getStringArray(key).def(List2())
+                let newPaths =
+                    if enabled && i = categoryNum then AppPath.addApp paths.list procPath
+                    else AppPath.removeApp paths.list procPath
+                if newPaths <> paths.list then settingsJson.setStringArray(key, List2(newPaths))
             settingsManager.settingsJson <- settingsJson
             if enabled && wasEnabled.not then
                 this.regroupProcessWindows(procPath, fun () -> (x :> IProgram).getCategoryEnabled(procPath, categoryNum))
@@ -2405,22 +2470,25 @@ type Program() as this =
                 let categoryKey = sprintf "Category%dPaths" i
                 let categoryPaths = settingsJson.getStringArray(categoryKey).def(List2())
                 categoryPaths.iter(fun p -> paths.Add(p) |> ignore)
-            List2(paths |> Seq.toList)
+            // One entry per application: the same application can be listed
+            // in several of these under different spellings if the settings
+            // predate AppPath and have not been collapsed yet.
+            List2(AppPath.canonicalise paths)
 
         member x.removeProcessSettings(procPath) =
             // Remove from includedPaths, excludedPaths, autoGroupingPaths
             this.saveSettingsAndUpdateAppWindows <| fun s ->
                 { s with
-                    includedPaths = s.includedPaths.remove procPath
-                    excludedPaths = s.excludedPaths.remove procPath
-                    autoGroupingPaths = s.autoGroupingPaths.remove procPath }
+                    includedPaths = Set2(List2(AppPath.removeApp s.includedPaths.items.list procPath))
+                    excludedPaths = Set2(List2(AppPath.removeApp s.excludedPaths.items.list procPath))
+                    autoGroupingPaths = Set2(List2(AppPath.removeApp s.autoGroupingPaths.items.list procPath)) }
             // Remove from Category1-10Paths
             let settingsJson = settingsManager.settingsJson
             for i in 1..10 do
                 let categoryKey = sprintf "Category%dPaths" i
-                let paths = Set2(settingsJson.getStringArray(categoryKey).def(List2()))
-                let newPaths = paths.remove procPath
-                settingsJson.setStringArray(categoryKey, newPaths.items)
+                let paths = settingsJson.getStringArray(categoryKey).def(List2())
+                let newPaths = AppPath.removeApp paths.list procPath
+                settingsJson.setStringArray(categoryKey, List2(newPaths))
             settingsManager.settingsJson <- settingsJson
 
         member x.markRecentlyPlaced(hwnds) =

@@ -352,10 +352,17 @@ type ProgramView() as this=
             // When showAllSettings is ON, also add configured programs that are not currently running
             let allProcNodes =
                 if showAll then
+                    // Compared by application, not by string: a setting is
+                    // stored as a pattern for an application whose path
+                    // carries its version, so it never equals the path the
+                    // running process reports, and the application would be
+                    // listed twice.
                     let runningPaths = System.Collections.Generic.HashSet<string>()
-                    procs.items.iter <| fun (procPath, _) -> runningPaths.Add(procPath) |> ignore
+                    procs.items.iter <| fun (procPath, _) ->
+                        runningPaths.Add(AppPath.normalize procPath) |> ignore
                     let configuredPaths = Services.program.getAllConfiguredProcessPaths()
-                    let extraNodes = configuredPaths.where(fun p -> not (runningPaths.Contains(p))).map <| fun procPath ->
+                    let extraNodes =
+                        configuredPaths.where(fun p -> not (runningPaths.Contains(AppPath.normalize p))).map <| fun procPath ->
                         let node = ExeNode(procPath)
                         node.isRunning <- false
                         node

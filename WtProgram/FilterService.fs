@@ -60,11 +60,13 @@ type FilterService() as this =
     member this.isOnScreenOrMinimized(window:Window) =
         window.isMinimized || this.screenRegion.containsRect(window.bounds)
     
+    // Asked by application, not by path: a Store application's path carries
+    // its version and changes under us on every update. See AppPath.
     member this.getIsTabbingEnabledForProcess(processPath) =
         if this.isTabbingEnabledForAllProcessesByDefault then
-            this.excludedPaths.contains(processPath).not
+            (AppPath.containsApp this.excludedPaths.items.list processPath).not
         else
-            this.includedPaths.contains(processPath)
+            AppPath.containsApp this.includedPaths.items.list processPath
 
     member this.isTabbableWindow(window:Window) = 
         this.getIsTabbingEnabledForProcess(window.pid.processPath) && this.isAppWindow(window)
@@ -88,18 +90,17 @@ type FilterService() as this =
             and set(value) = this.isTabbingEnabledForAllProcessesByDefault <- value
 
         member x.setIsTabbingEnabledForProcess processPath enabled = 
+            // add/remove work on the application, so setting a Store app
+            // replaces the entry left by its previous version instead of
+            // adding a second one beside it.
+            let setTo (paths: Set2<string>) enable =
+                Set2(List2(
+                    if enable then AppPath.addApp paths.items.list processPath
+                    else AppPath.removeApp paths.items.list processPath))
             if this.isTabbingEnabledForAllProcessesByDefault then
-                this.excludedPaths <-
-                    if enabled then
-                        this.excludedPaths.remove processPath
-                    else
-                        this.excludedPaths.add processPath
+                this.excludedPaths <- setTo this.excludedPaths (not enabled)
             else
-                this.includedPaths <-
-                    if enabled then
-                        this.includedPaths.add processPath
-                    else
-                        this.includedPaths.remove processPath
+                this.includedPaths <- setTo this.includedPaths enabled
                 
             Services.program.refresh().ignore
 
