@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.02_next3
+
+- A tab that leaves its group while its window is still alive (hidden, moved off-screen, or its application switched off in the settings) keeps its place and its colour, underline, border, pin and name
+  - When the window can be tabbed again it returns to its own group at its own position instead of being auto-grouped; switching an application off and on in the settings no longer shuffles the group
+  - If it is closed instead, it is recorded as a closed tab and comes back in place when reopened. Previously the colour and the underline were lost
+
 ## version ss_2026.09.02_next2
 
 - Every JSON file WindowTabs ships can be overridden from `%APPDATA%\WindowTabs\Settings`, which no upgrade touches
