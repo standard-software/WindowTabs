@@ -2,24 +2,16 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.02_next3
+## version ss_2026.09.04
 
-- A tab that leaves its group while its window is still alive (hidden, moved off-screen, or its application switched off in the settings) keeps its place and its colour, underline, border, pin and name
-  - When the window can be tabbed again it returns to its own group at its own position instead of being auto-grouped; switching an application off and on in the settings no longer shuffles the group
-  - If it is closed instead, it is recorded as a closed tab and comes back in place when reopened. Previously the colour and the underline were lost
-
-## version ss_2026.09.02_next2
-
-- Every JSON file WindowTabs ships can be overridden from `%APPDATA%\WindowTabs\Settings`, which no upgrade touches
-  - Languages moved from `Language\` to `Settings\Language\` beside the executable. A file of the same name under `%APPDATA%` is laid over the shipped one key by key; `FileList.json` there replaces the shipped list whole
-  - `Window_Margin.json` and `Version_Folder.json` are now `WindowMargin.json` and `VersionFolder.json`
-- The installer no longer backs up edited files, and no longer stops during an upgrade waiting on the previous version's WindowTabs.exe
-
-## version ss_2026.09.02_next1
-
-- Per-application settings survive the application's own updates
-  - An application whose path carries its version - a Store app, or an installer that keeps each version in a directory of its own - was filed under a new name by every update, and its settings stopped applying
-  - Settings can now be given in a file of your own under %APPDATA%\WindowTabs\Settings, which no upgrade replaces
+- Per-application settings now survive the application's own updates
+  - A Store app, or an application that keeps each version in a directory of its own such as LineMediaPlayer.exe, counted as a new application after every update, and its tab settings were lost
+- Every JSON file WindowTabs ships is now a default, overridden by your own file under `%APPDATA%\WindowTabs\Settings`
+  - Languages moved from `Language\` to `Settings\Language\`, and `Window_Margin.json` is now `WindowMargin.json`
+  - See the README for how, and for moving files edited under an earlier version
+  - The installer no longer backs up edited files
+- A tab that leaves its group (hidden, moved off-screen, or its application switched off in the settings) keeps its state
+  - Position, colour, underline, pin and name come back when the window returns or is reopened
 
 ## version ss_2026.09.02
 
