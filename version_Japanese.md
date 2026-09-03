@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.04_next1
+
 ## version ss_2026.09.04
 
 - アプリ自身の更新をまたいで、アプリごとの設定が効き続けるようになった

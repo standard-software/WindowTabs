@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.04_next1
+
 ## version ss_2026.09.04
 
 - Per-application settings now survive the application's own updates
