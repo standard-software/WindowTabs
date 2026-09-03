@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.02_next3**
+Latest version: **ss_2026.09.04**
 
 See [version.md](version.md) for details.
 
@@ -235,7 +235,7 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
 
-Per-tab items no longer repeat the tab name; the "Target tab" caption at the top of the menu shows it instead. A language file can bring the old "... : (tab name)" style back with `{TabName}` (see [Multi-Language Support](#multi-language-support)).
+Per-tab items no longer repeat the tab name; the "Target tab" caption at the top of the menu shows it instead. A language file can bring the old "... : (tab name)" style back with `{TabName}`.
 
 ### New Tab (New Launch)
 
@@ -325,16 +325,29 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 - Japanese Kansai and Tohoku dialect files included
 - Runtime language switching without restart
 - Switch languages via tray menu
-- The language files under `Settings\Language\` beside `WindowTabs.exe` are defaults, replaced by every upgrade. Your own go under `%APPDATA%\WindowTabs\Settings\Language\`, which no upgrade touches:
-  - To add a language, put `MyLanguage.json` there together with a `FileList.json` that lists it
-  - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
-  - `FileList.json` there replaces the shipped list whole, so it can also hide languages from the tray menu
-  - Delete the folder to return to the shipped behaviour
-- The same applies to the other files under `Settings\` (`WindowMargin.json`, `VersionFolder.json`): a file of the same name under `%APPDATA%\WindowTabs\Settings\` is laid over the shipped one, entry by entry
-- Per-tab context menu items (such as "Close tab") can show the target tab name: put `{TabName}` (or `{0}`) in the language file string where the name should appear
-  - Example: `"CloseTab": "Close tab : {TabName}"`
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+
+### Settings Files
+
+- `Settings\` beside `WindowTabs.exe` holds these files
+    - `Settings\VersionFolder.json`
+      - Applications whose path changes with every version are treated as one application
+    - `Settings\WindowMargin.json`
+      - Settings for applications with thick window frames
+    - `Settings\Language\FileList.json`
+      - Which language files are loaded
+    - `Settings\Language\<language>.json`
+- The files under `<exePath>\Settings\`
+  - are the defaults
+  - are replaced by every upgrade
+- To change a setting or a translation
+  - do not edit the files under `<exePath>\Settings\`: an upgrade would overwrite them
+  - put a file of the same name under `%APPDATA%\WindowTabs\Settings\` instead
+  - it is laid over the shipped one entry by entry
+- To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
+  - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
+  - `FileList.json` replaces the shipped list whole, so it can also hide languages from the tray menu
 
 ### Settings files from ss_2026.09.02 and earlier
 

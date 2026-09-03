@@ -25,7 +25,9 @@ if ($Phase -eq 'pre') {
     $wxsText = Get-Content $Wxs -Raw
     foreach ($folder in 'Settings', 'Settings\Language') {
         $disk = Get-JsonNames "WtProgram\bin\Release\$folder"
-        $wxsNames = @([regex]::Matches($wxsText, [regex]::Escape("TargetDir)$folder\") + '([^"]+\.json)') |
+        # Direct children only ([^"\\]): the Settings pass must not pick up the
+        # Settings\Language entries, which have a pass of their own.
+        $wxsNames = @([regex]::Matches($wxsText, [regex]::Escape("TargetDir)$folder\") + '([^"\\]+\.json)') |
             ForEach-Object { $_.Groups[1].Value } | Sort-Object)
         $missingInWxs = @($disk | Where-Object { $wxsNames -notcontains $_ })
         $missingOnDisk = @($wxsNames | Where-Object { $disk -notcontains $_ })
