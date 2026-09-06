@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.04_next1"
+    let version = "ss_2026.09.04_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -1557,10 +1557,28 @@ type Program() as this =
                 // group via the multi-select drag-detach path — they may
                 // still be at the dragExit off-screen parking location
                 // while their adjustChildWindows hasn't run yet.
-                if window.isOnCurrentVirtualDesktop &&
-                   this.isTabbableWindow(window).not &&
-                   not (isRecentlyPlaced(hwnd))
-                then
+                let untabbable =
+                    window.isOnCurrentVirtualDesktop &&
+                    this.isTabbableWindow(window).not &&
+                    not (isRecentlyPlaced(hwnd))
+                // A live, visible, un-minimized window of a tabbed application
+                // sitting at the iconic position (-32000,-32000) has not left:
+                // a restore left it there (see the second pass of
+                // adjustChildWindows). Put it back rather than throw it out,
+                // which is how a tab and its window used to vanish together.
+                let stranded =
+                    untabbable &&
+                    window.isWindow && window.isVisible && not window.isMinimized && not window.isCloaked &&
+                    (let b = window.bounds in b.x <= -30000 || b.y <= -30000) &&
+                    (try Services.filter.getIsTabbingEnabledForProcess window.pid.processPath with _ -> false)
+                if stranded then
+                    RestoreTrace.log (fun () -> sprintf "reseat hwnd=%X group=%X (live window at the iconic position) title=%s"
+                                                        (hwnd.ToInt64()) (try gi.hwnd.ToInt64() with _ -> 0L)
+                                                        (match windowInfoCache.value.tryFind(hwnd) with
+                                                         | Some((_, t)) -> t
+                                                         | None -> ""))
+                    gi.reseatWindow hwnd
+                elif untabbable then
                     // Record only genuinely destroyed windows; a window that is
                     // merely hidden (e.g. minimized to tray) keeps its hwnd and
                     // its state in the global maps. Its place is remembered

@@ -380,7 +380,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // un-minimizes them via SetWindowPlacement. Remember that so the
             // restored window can be kept in front afterwards.
             let restoredHwnd = zorderCell.value.where(isMinimized >> not).tryHead
-            let siblingsWereMinimized = zorderCell.value.tail.any(isMinimized)
+            let minimizedAtEntry = zorderCell.value.tail.where(isMinimized)
+            let siblingsWereMinimized = minimizedAtEntry.isEmpty.not
             // Publish the restore-front target BEFORE un-minimizing the
             // siblings, so adjustWindowPlacement can insert each surfacing
             // sibling directly behind it (no flicker on top).
@@ -408,14 +409,27 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 // Move all background windows again with the correct size
                 zorderCell.value.tail.iter(fun hwnd ->
                     let window = this.os.windowFromHwnd(hwnd)
-                    if window.isMinimized.not then
+                    // A sibling that was minimized when this pass began is
+                    // being un-minimized and moved ASYNCHRONOUSLY by the first
+                    // pass. Read now, it may already be un-minimized but still
+                    // at the iconic position (-32000,-32000); keeping "its"
+                    // position with the corrected size then pinned it there
+                    // for good, and the periodic scan later threw it out of
+                    // the group as being on no screen - a tab and its window
+                    // gone together. Its move is already queued with the right
+                    // size: leave it alone.
+                    if window.isMinimized.not && minimizedAtEntry.contains((=) hwnd).not then
                         // Apply per-exe margin for this background window
                         let targetBounds =
                             if topMaximized then groupBounds
                             else this.applyExeMarginForWrite(hwnd, groupBounds)
                         let currentBounds = window.bounds
-                        // Keep current position but use correct size
-                        let correctBounds = Rect(currentBounds.location, targetBounds.size)
+                        // Keep current position but use correct size - unless
+                        // the position is the iconic one, which is nowhere.
+                        let atIconicPosition = currentBounds.x <= -30000 || currentBounds.y <= -30000
+                        let correctBounds =
+                            if atIconicPosition then targetBounds
+                            else Rect(currentBounds.location, targetBounds.size)
                         System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] 2nd pass: %s group=(%d,%d,%d,%d) target=(%d,%d,%d,%d) correct=(%d,%d,%d,%d)"
                             window.pid.exeName
                             groupBounds.x groupBounds.y groupBounds.width groupBounds.height
@@ -424,7 +438,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         // Skip the move if size already matches - SetWindowPos is expensive and apps that
                         // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
                         // otherwise trigger redundant work and follow-up events on every spurious change.
-                        if currentBounds.size <> correctBounds.size then
+                        if currentBounds.size <> correctBounds.size || atIconicPosition then
                             // Async (SWP_ASYNCWINDOWPOS) so a busy just-restored
                             // app can't stall the strip thread here; z-order is
                             // untouched so this can't disturb the fronting done
@@ -1199,6 +1213,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             | None -> ()
             this.adjustWindowPlacement(hwnd)
             addedEvent.Trigger(hwnd)
+
+    // Put one window of the group back where the group is. For the periodic
+    // scan, which may find a live window of ours stranded at the iconic
+    // position (-32000,-32000) after a restore; see the second pass of
+    // adjustChildWindows for how that happened.
+    member this.reseatWindow(hwnd) = this.withUpdate <| fun() ->
+        if this.windows.contains(hwnd) && inMoveSize.value.not then
+            this.adjustChildWindows()
 
     member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
         if this.windows.contains(hwnd) then    

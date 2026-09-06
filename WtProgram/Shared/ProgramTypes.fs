@@ -162,6 +162,9 @@ type IGroup =
     // True while the group's top window is in a native move/size loop and the
     // other windows are parked off-screen (thread-safe snapshot)
     abstract member isInMoveSizeThreadSafe: bool
+    // Put a window of the group back where the group is (a live window found
+    // stranded at the iconic position by the periodic scan)
+    abstract member reseatWindow: IntPtr -> unit
     abstract member setTabFillColor: IntPtr * Color option -> unit
     abstract member getTabFillColorThreadSafe: IntPtr -> Color option
     abstract member setTabUnderlineColor: IntPtr * Color option -> unit

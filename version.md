@@ -2,7 +2,9 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.04_next1
+## version ss_2026.09.04_next2
+
+- Fixed a window of a minimized group being left at the off-screen minimized position when the group was restored, so it disappeared together with its tab (a fault since ss_2026.07.14). A window found there is now put back in its group
 
 ## version ss_2026.09.04
 
