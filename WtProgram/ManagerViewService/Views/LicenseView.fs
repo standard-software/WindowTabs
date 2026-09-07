@@ -120,10 +120,10 @@ type LicenseView() as this =
         Services.lm.licenseKey <- licenseKey
         if Services.lm.isLicensed then
             this.updateLockedStatus()
-            MessageBox.Show("WindowTabs has been successfully activated!", "WindowTabs Activated").ignore
+            AppDialog.showOwned panel.Value.Value "WindowTabs Activated" "WindowTabs has been successfully activated!"
         else
             this.updateLockedStatus()
-            MessageBox.Show("Please ensure your computer has internet access and that your license key is correct. Email support@windowtabs.com if you are having trouble activating WindowTabs.", "Activation Failed").ignore
+            AppDialog.showOwned panel.Value.Value "Activation Failed" "Please ensure your computer has internet access and that your license key is correct. Email support@windowtabs.com if you are having trouble activating WindowTabs."
 
     interface ISettingsView with
         member x.key = SettingsViewType.LicenseSettings

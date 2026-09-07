@@ -48,3 +48,14 @@ type ManagerViewService() =
             if not (activateExistingIfAny()) then
                 let form = new DesktopManagerForm()
                 form.showView(view)
+
+        // Through the form itself: its FormClosed handler releases the named
+        // mutex and clears DesktopManagerFormState.currentForm, and nothing
+        // else must touch either. (An earlier caller opened a second handle
+        // to the mutex and released it before closing, which decremented the
+        // dialog's own ownership before FormClosed ran and left the dialog
+        // un-openable afterwards.)
+        member x.close() =
+            match DesktopManagerFormState.currentForm with
+            | Some form -> (try form.Close() with _ -> ())
+            | None -> ()

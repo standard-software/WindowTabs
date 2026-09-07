@@ -153,6 +153,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Shell.fs" />
     <Compile Include="Shared/Model.fs" />
     <Compile Include="Shared\UIHelper.fs" />
+    <Compile Include="Shared\AppDialog.fs" />
     <Compile Include="HotKeyManager.fs" />
     <Compile Include="DragDropController.fs" />
     <Compile Include="TabStripSprite.fs" />

@@ -1818,7 +1818,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let showUwpError () =
             let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
             let message = String.Format(Localization.getString("NewLaunchErrorUWP"), appName)
-            MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+            AppDialog.info "WindowTabs" message
         let handleLaunchError (launchCall: string -> unit) =
             try
                 match resolveLaunchPath() with
@@ -1830,11 +1830,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
             | :? System.ComponentModel.Win32Exception as ex ->
                 let message = String.Format(Localization.getString("NewLaunchErrorProcess"), processPath, ex.Message)
-                MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                AppDialog.info "WindowTabs Error" message
                 System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
             | ex ->
                 let message = String.Format(Localization.getString("NewLaunchErrorUnexpected"), ex.Message)
-                MessageBox.Show(message, "WindowTabs Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                AppDialog.info "WindowTabs Error" message
                 System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
 
         // Find the decorator whose group contains the given window hwnd.
