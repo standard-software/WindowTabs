@@ -61,7 +61,6 @@ type ShortcutKeysView() =
         let checkBox = CheckBox()
         checkBox.Text <- Localization.getString captionKey
         checkBox.AutoSize <- true
-        checkBox.Margin <- Padding(0, 3, 0, 3)
         checkBox
     let ctrlCheck = modeCheckBox "EnableCtrlNumberHotKey"
     let altCheck = modeCheckBox "EnableAltNumberHotKey"
@@ -134,8 +133,12 @@ type ShortcutKeysView() =
         for _ in 1 .. 3 do
             table.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore          // number
             table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)) |> ignore   // field
-        for _ in 1 .. 5 do
-            table.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        for _ in 1 .. 3 do
+            table.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)) |> ignore
+        // Five pixels of section space above Ctrl and below Alt. The margins
+        // and row heights grow together so neither caption is clipped.
+        table.RowStyles.Add(RowStyle(SizeType.Absolute, 40.0f)) |> ignore
+        table.RowStyles.Add(RowStyle(SizeType.Absolute, 40.0f)) |> ignore
         for (n, editor) in numberEditors do
             let row = (n - 1) / 3
             let column = ((n - 1) % 3) * 2
@@ -148,8 +151,10 @@ type ShortcutKeysView() =
             table.Controls.Add(editor.control, column + 1, row)
         table.Controls.Add(ctrlCheck, 0, 3)
         table.SetColumnSpan(ctrlCheck, 6)
+        ctrlCheck.Margin <- Padding(0, 10, 0, 5)
         table.Controls.Add(altCheck, 0, 4)
         table.SetColumnSpan(altCheck, 6)
+        altCheck.Margin <- Padding(0, 5, 0, 10)
         table
 
     do
@@ -183,6 +188,9 @@ type ShortcutKeysView() =
             ("PrevTab", prevTabEditor.control)
             ("NewTabRightOfActive", newTabRightEditor.control)
             ]))
+        // The nested table itself owns five complete 35-px rows. An additional
+        // outer margin would make the following shortcut start off-grid.
+        activateTabPanel.Margin <- Padding(0)
         form.Dock <- DockStyle.Fill
         // Same padding as the Appearance and Behavior tabs.
         form.Padding <- Padding(10)

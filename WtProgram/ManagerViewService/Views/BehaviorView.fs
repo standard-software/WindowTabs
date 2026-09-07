@@ -84,12 +84,18 @@ type HotKeyView() =
             table.AutoSize <- true
             table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
             table.Margin <- Padding(0)
-            table.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+            // Keep the complete group on the outer 3 x 35-px grid, but place
+            // the radio rows 30 px apart. The 3-px top inset aligns the first
+            // radio text with the caption; the remaining 12 px stay below the
+            // last row.
+            table.Padding <- Padding(0, 3, 0, 12)
             table.ColumnCount <- 3
             table.RowCount <- 3
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // RadioButton column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // Label column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // TextBox column
+            for _ in 1 .. 3 do
+                table.RowStyles.Add(RowStyle(SizeType.Absolute, 30.0f)) |> ignore
 
             let currentMode =
                 let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -103,6 +109,7 @@ type HotKeyView() =
             let radioNever = new RadioButton()
             radioNever.Text <- Localization.getString("HideTabsNever")
             radioNever.AutoSize <- true
+            radioNever.Margin <- Padding(0, 5, 0, 5)
             radioNever.Checked <- (currentMode = "never")
             radioNever.CheckedChanged.Add(fun _ ->
                 if radioNever.Checked then
@@ -113,6 +120,7 @@ type HotKeyView() =
             let radioDown = new RadioButton()
             radioDown.Text <- Localization.getString("HideTabsWhenDown")
             radioDown.AutoSize <- true
+            radioDown.Margin <- Padding(0, 5, 0, 5)
             radioDown.Checked <- (currentMode = "down")
             radioDown.CheckedChanged.Add(fun _ ->
                 if radioDown.Checked then
@@ -123,6 +131,7 @@ type HotKeyView() =
             let radioDoubleClick = new RadioButton()
             radioDoubleClick.Text <- Localization.getString("HideTabsOnClick")
             radioDoubleClick.AutoSize <- true
+            radioDoubleClick.Margin <- Padding(0, 5, 0, 5)
             radioDoubleClick.Checked <- (currentMode = "doubleclick")
             radioDoubleClick.CheckedChanged.Add(fun _ ->
                 if radioDoubleClick.Checked then
@@ -155,9 +164,13 @@ type HotKeyView() =
             table.AutoSize <- true
             table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
             table.Margin <- Padding(0)
-            table.Padding <- Padding(0, 0, 0, 10)  // Add bottom padding
+            // Same alignment as the three-row group below: two compact 30-px
+            // radio rows plus 3 px above and 7 px below still total 70 px.
+            table.Padding <- Padding(0, 3, 0, 7)
             table.ColumnCount <- 1
             table.RowCount <- 2
+            for _ in 1 .. 2 do
+                table.RowStyles.Add(RowStyle(SizeType.Absolute, 30.0f)) |> ignore
 
             let currentMode =
                 let mode = Services.settings.getValue("changeTabPositionOnSnap") :?> string
@@ -171,6 +184,7 @@ type HotKeyView() =
             let radioChange = new RadioButton()
             radioChange.Text <- Localization.getString("ChangeTabPositionOnSnapWhenUniform")
             radioChange.AutoSize <- true
+            radioChange.Margin <- Padding(0, 5, 0, 5)
             radioChange.Checked <- (currentMode = "change")
             radioChange.CheckedChanged.Add(fun _ ->
                 if radioChange.Checked then
@@ -180,6 +194,7 @@ type HotKeyView() =
             let radioNever = new RadioButton()
             radioNever.Text <- Localization.getString("ChangeTabPositionOnSnapNever")
             radioNever.AutoSize <- true
+            radioNever.Margin <- Padding(0, 5, 0, 5)
             radioNever.Checked <- (currentMode = "nochange")
             radioNever.CheckedChanged.Add(fun _ ->
                 if radioNever.Checked then
@@ -205,6 +220,11 @@ type HotKeyView() =
         ])
 
         let formPanel = UIHelper.form fields
+
+        // These controls already contain rows on the same 35-px grid as the
+        // outer form. Do not add another outer row margin around the group.
+        snapChangeTabPositionRadio.Margin <- Padding(0)
+        hideTabsRadio.Margin <- Padding(0)
 
         // Adjust row heights for radio button groups
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled,

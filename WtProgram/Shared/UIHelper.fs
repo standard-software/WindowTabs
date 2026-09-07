@@ -555,7 +555,9 @@ module UIHelper =
     // and Margin along with the rest of the layout, so the row is 35 px at
     // 100%, 61 px at 175%, and a wrapped caption adds a whole scaled line at
     // either.
-    let private rowContentHeightPx = 22
+    // AppearanceView uses 25 px of content plus 5 px above and below. Keep
+    // forms on that same 35-px vertical grid.
+    let private rowContentHeightPx = 25
 
     // centerRows: label and input centred on the same line. The settings tabs
     // keep the old layout (label held down by a top margin, input at the top
@@ -592,9 +594,17 @@ module UIHelper =
                 control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
                 control.Margin <- Padding(3, 6, 3, 6)
             else
-                control.Dock <- DockStyle.Fill
-                label.Margin <- Padding(0,8,0,5)
-            // 35 px row = 8 px top margin + 22 px content + 5 px bottom margin.
+                // Match AppearanceView's property rows: the caption and input
+                // use the same vertical margins, and the input stretches only
+                // horizontally. Top anchoring matters when the input is a
+                // multi-row option group: its caption belongs beside the first
+                // option, not vertically centred beside the whole group.
+                label.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left
+                label.Margin <- Padding(0,5,0,5)
+                control.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right
+                control.Margin <- Padding(0,5,0,5)
+            // Keep the historical 35-px minimum row height. Wrapped labels can
+            // still make an AutoSize row taller.
             label.MinimumSize <- Size(0, rowContentHeightPx)
             panel.Controls.Add(label)
             panel.Controls.Add(control)
