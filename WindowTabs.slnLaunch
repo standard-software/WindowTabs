@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "WindowTabs",
+    "Projects": [
+      {
+        "Path": "WtProgram\\WtProgram.fsproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
