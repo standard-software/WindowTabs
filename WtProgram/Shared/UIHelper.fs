@@ -557,7 +557,11 @@ module UIHelper =
     // either.
     let private rowContentHeightPx = 22
 
-    let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) =
+    // centerRows: label and input centred on the same line. The settings tabs
+    // keep the old layout (label held down by a top margin, input at the top
+    // of the row), which lined up with their taller inputs; on the compact
+    // dialogs it left the caption visibly lower than its text box.
+    let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) (centerRows: bool) =
         let panel =
             let t = TableLayoutPanel()
             t.AutoScroll <- autoScroll
@@ -579,8 +583,17 @@ module UIHelper =
         fields.enumerate.iter <| fun (i,(text, control:Control)) ->
             let caption = Localization.getString text
             let label = label caption
-            control.Dock <- DockStyle.Fill
-            label.Margin <- Padding(0,8,0,5)
+            if centerRows then
+                // No Top/Bottom anchor: both sit at the vertical centre of the
+                // row, whatever their heights. The input's margin keeps the
+                // row about as tall as before.
+                label.Anchor <- AnchorStyles.Left
+                label.Margin <- Padding(0)
+                control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+                control.Margin <- Padding(3, 6, 3, 6)
+            else
+                control.Dock <- DockStyle.Fill
+                label.Margin <- Padding(0,8,0,5)
             // 35 px row = 8 px top margin + 22 px content + 5 px bottom margin.
             label.MinimumSize <- Size(0, rowContentHeightPx)
             panel.Controls.Add(label)
@@ -594,7 +607,7 @@ module UIHelper =
     // Default form layout: 250-px label column (matches AppearanceView /
     // BehaviorView where labels are long).
     let form (fields:List2<_>) =
-        buildForm fields 250.0f true
+        buildForm fields 250.0f true false
 
     // Compact form layout: 100-px label column for short captions
     // (Workspace edit dialog "Name" / "Title" / "Match Type"). AutoScroll
@@ -602,7 +615,7 @@ module UIHelper =
     // AutoScroll on would cause spurious horizontal scrollbars when input
     // controls' preferred size momentarily exceeded the squeezed cell.
     let formCompact (fields:List2<_>) =
-        buildForm fields 100.0f false
+        buildForm fields 100.0f false true
               
     let vbox (controls:List2<Control>) =
         let t = 
