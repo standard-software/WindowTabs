@@ -642,10 +642,13 @@ module UIHelper =
         let form = Form()
         form.Padding <- Padding(12)
         // A dialog answered with OK or Cancel has no use for minimize or
-        // maximize; only Close stays in the caption. It remains sizable,
-        // with the size grip in the corner.
+        // maximize; only Close stays in the caption, and no icon - a dialog
+        // has no icon and no system menu to click, as the system's own
+        // dialogs have none. It remains sizable, with the size grip in the
+        // corner.
         form.MaximizeBox <- false
         form.MinimizeBox <- false
+        form.ShowIcon <- false
         SizeGripOverlay.attach form
 
         let okButton = Button()
