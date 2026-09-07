@@ -174,6 +174,11 @@ type IGroup =
     abstract member getTabUnderlineColorThreadSafe: IntPtr -> Color option
     abstract member setTabBorderColor: IntPtr * Color option -> unit
     abstract member getTabBorderColorThreadSafe: IntPtr -> Color option
+    // The rest of a tab's state, for putting a saved workspace's tabs back
+    // as they were: name, side, and position in the strip
+    abstract member setTabName: IntPtr * string option -> unit
+    abstract member setTabAlign: IntPtr * TabAlign -> unit
+    abstract member moveTab: IntPtr * int -> unit
 
 type IDesktop =
     abstract member isDragging : bool
