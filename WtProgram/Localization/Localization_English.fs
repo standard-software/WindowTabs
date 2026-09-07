@@ -78,6 +78,9 @@ module Localization_English =
         ("Remove", "Remove")
         ("MatchType", "Match Type")
         ("Title", "Title")
+        ("TabName", "Tab name")
+        ("EditWindow", "Edit Window")
+        ("EditWorkspace", "Edit Workspace")
 
         ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")

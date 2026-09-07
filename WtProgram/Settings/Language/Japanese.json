@@ -74,6 +74,9 @@
   "Remove": "削除",
   "MatchType": "マッチタイプ",
   "Title": "タイトル",
+  "TabName": "タブ名",
+  "EditWindow": "ウィンドウの編集",
+  "EditWorkspace": "ワークスペースの編集",
 
   "Diagnostics": "診断",
   "Reset": "リセット",

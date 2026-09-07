@@ -74,6 +74,9 @@
   "Remove": "Usuń",
   "MatchType": "Typ dopasowania",
   "Title": "Tytuł",
+  "TabName": "Nazwa karty",
+  "EditWindow": "Edytuj okno",
+  "EditWorkspace": "Edytuj obszar roboczy",
 
   "Diagnostics": "Diagnostyka",
   "Reset": "Resetuj",

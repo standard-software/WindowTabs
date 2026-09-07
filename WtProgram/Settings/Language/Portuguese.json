@@ -74,6 +74,9 @@
   "Remove": "Remover",
   "MatchType": "Tipo de correspondência",
   "Title": "Título",
+  "TabName": "Nome da aba",
+  "EditWindow": "Editar janela",
+  "EditWorkspace": "Editar espaço de trabalho",
 
   "Diagnostics": "Diagnóstico",
   "Reset": "Redefinir",

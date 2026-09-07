@@ -74,6 +74,9 @@
   "Remove": "Xóa",
   "MatchType": "Kiểu khớp",
   "Title": "Tiêu đề",
+  "TabName": "Tên thẻ",
+  "EditWindow": "Sửa cửa sổ",
+  "EditWorkspace": "Sửa không gian làm việc",
 
   "Diagnostics": "Chẩn đoán",
   "Reset": "Đặt lại",

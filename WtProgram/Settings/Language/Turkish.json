@@ -74,6 +74,9 @@
   "Remove": "Kaldır",
   "MatchType": "Eşleşme Türü",
   "Title": "Başlık",
+  "TabName": "Sekme adı",
+  "EditWindow": "Pencereyi düzenle",
+  "EditWorkspace": "Çalışma alanını düzenle",
 
   "Diagnostics": "Tanılama",
   "Reset": "Sıfırla",

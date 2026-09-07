@@ -74,6 +74,9 @@
   "Remove": "刪除",
   "MatchType": "符合類型",
   "Title": "標題",
+  "TabName": "標籤名稱",
+  "EditWindow": "編輯視窗",
+  "EditWorkspace": "編輯工作區",
 
   "Diagnostics": "診斷",
   "Reset": "重設",
