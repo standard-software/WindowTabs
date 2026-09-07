@@ -98,12 +98,13 @@ type WorkspaceWindow() as this =
             tabNameEditor.value <- (this.tabState |> Option.bind (fun st -> st.name) |> Option.defaultValue "")
             { new IEditInfo with
                 member x.title = Localization.getString("EditWindow")
+                // Keys, not captions: the form builder looks them up.
                 member x.fields =
                     List2([
-                        (Localization.getString("ProcessName"), nameEditor.control)
-                        (Localization.getString("Title"), titleEditor.control)
-                        (Localization.getString("MatchType"), matchTypeEditor.cast<IPropEditor>().control)
-                        (Localization.getString("TabName"), tabNameEditor.control)
+                        ("ProcessName", nameEditor.control)
+                        ("Title", titleEditor.control)
+                        ("MatchType", matchTypeEditor.cast<IPropEditor>().control)
+                        ("TabName", tabNameEditor.control)
                     ])
                 member x.height  = 290
                 member x.ok() =
@@ -255,7 +256,7 @@ and
             nameEditor.value <- this?name
             { new IEditInfo with
                 member x.title = Localization.getString("EditWorkspace")
-                member x.fields = List2([(Localization.getString("Name"), nameEditor.control)])
+                member x.fields = List2([("Name", nameEditor.control)])
                 member x.height  = 200
                 member x.ok() = this?name <- nameEditor.value.cast<string>()
             }
