@@ -74,6 +74,9 @@
   "Remove": "제거",
   "MatchType": "일치 유형",
   "Title": "제목",
+  "TabName": "탭 이름",
+  "EditWindow": "창 편집",
+  "EditWorkspace": "작업 공간 편집",
 
   "Diagnostics": "진단",
   "Reset": "초기화",

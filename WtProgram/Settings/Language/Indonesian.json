@@ -74,6 +74,9 @@
   "Remove": "Hapus",
   "MatchType": "Jenis Kecocokan",
   "Title": "Judul",
+  "TabName": "Nama tab",
+  "EditWindow": "Ubah jendela",
+  "EditWorkspace": "Ubah ruang kerja",
 
   "Diagnostics": "Diagnostik",
   "Reset": "Reset",

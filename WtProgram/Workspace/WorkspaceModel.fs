@@ -92,19 +92,38 @@ type WorkspaceWindow() as this =
             titleEditor.value <- this.title
             let matchTypeEditor = EnumEditor<WorkspaceWindowTitleMatchType>()
             matchTypeEditor.value <- this.matchType
+            // The name the tab is to show once restored; blank means none,
+            // and the tab shows the window's title as it always did.
+            let tabNameEditor = TextEditor() :> IPropEditor
+            tabNameEditor.value <- (this.tabState |> Option.bind (fun st -> st.name) |> Option.defaultValue "")
             { new IEditInfo with
-                member x.title = this.name
-                member x.fields = 
+                member x.title = Localization.getString("EditWindow")
+                member x.fields =
                     List2([
-                        ("Name", nameEditor.control)
-                        ("Title", titleEditor.control)
-                        ("Match Type", matchTypeEditor.cast<IPropEditor>().control)
+                        (Localization.getString("ProcessName"), nameEditor.control)
+                        (Localization.getString("Title"), titleEditor.control)
+                        (Localization.getString("MatchType"), matchTypeEditor.cast<IPropEditor>().control)
+                        (Localization.getString("TabName"), tabNameEditor.control)
                     ])
-                member x.height  = 250
-                member x.ok() = 
+                member x.height  = 290
+                member x.ok() =
                     this.name <- nameEditor.value.cast<string>()
                     this.title <- titleEditor.value.cast<string>()
                     this.matchType <- matchTypeEditor.value
+                    let tabName =
+                        match tabNameEditor.value.cast<string>() with
+                        | null -> None
+                        | s when String.IsNullOrWhiteSpace(s) -> None
+                        | s -> Some(s.Trim())
+                    // A window saved before this version has no tab state.
+                    // It gets one only when a name is given, so that clearing
+                    // the field leaves such a window restoring as it always did.
+                    match this.tabState, tabName with
+                    | Some(st), _ -> this.tabState <- Some { st with name = tabName }
+                    | None, Some(_) ->
+                        this.tabState <- Some { fillColor = None; underlineColor = None; borderColor = None
+                                                pinned = false; name = tabName; align = None; order = this.zorder }
+                    | None, None -> ()
             }
 
     member this.serialize() =
@@ -235,8 +254,8 @@ and
             let nameEditor = TextEditor() :> IPropEditor
             nameEditor.value <- this?name
             { new IEditInfo with
-                member x.title = this?name
-                member x.fields = List2([("Name", nameEditor.control)])
+                member x.title = Localization.getString("EditWorkspace")
+                member x.fields = List2([(Localization.getString("Name"), nameEditor.control)])
                 member x.height  = 200
                 member x.ok() = this?name <- nameEditor.value.cast<string>()
             }

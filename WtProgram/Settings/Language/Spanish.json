@@ -74,6 +74,9 @@
   "Remove": "Quitar",
   "MatchType": "Tipo de coincidencia",
   "Title": "Título",
+  "TabName": "Nombre de pestaña",
+  "EditWindow": "Editar ventana",
+  "EditWorkspace": "Editar espacio de trabajo",
 
   "Diagnostics": "Diagnóstico",
   "Reset": "Restablecer",

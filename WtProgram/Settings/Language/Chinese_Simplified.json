@@ -74,6 +74,9 @@
   "Remove": "删除",
   "MatchType": "匹配类型",
   "Title": "标题",
+  "TabName": "标签名",
+  "EditWindow": "编辑窗口",
+  "EditWorkspace": "编辑工作区",
 
   "Diagnostics": "诊断",
   "Reset": "重置",

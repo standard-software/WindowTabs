@@ -74,6 +74,9 @@
   "Remove": "Supprimer",
   "MatchType": "Type de correspondance",
   "Title": "Titre",
+  "TabName": "Nom de l'onglet",
+  "EditWindow": "Modifier la fenêtre",
+  "EditWorkspace": "Modifier l'espace de travail",
 
   "Diagnostics": "Diagnostics",
   "Reset": "Réinitialiser",

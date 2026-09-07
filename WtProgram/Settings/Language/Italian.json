@@ -74,6 +74,9 @@
   "Remove": "Rimuovi",
   "MatchType": "Tipo di corrispondenza",
   "Title": "Titolo",
+  "TabName": "Nome scheda",
+  "EditWindow": "Modifica finestra",
+  "EditWorkspace": "Modifica area di lavoro",
 
   "Diagnostics": "Diagnostica",
   "Reset": "Reimposta",
