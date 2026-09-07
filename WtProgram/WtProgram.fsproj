@@ -122,7 +122,9 @@ if $(ConfigurationName) == Release (
   <ItemGroup>
     <Compile Include="Localization\Localization_English.fs" />
     <Compile Include="Localization\JsoncHelper.fs" />
-    <Compile Include="Shared/UserOverrides.fs" />
+    <Compile Include="Shared\UserOverrides.fs">
+      <Link>Localization\UserOverrides.fs</Link>
+    </Compile>
     <Compile Include="Localization\Localization.fs" />
     <Compile Include="Shared/Operators.fs" />
     <Compile Include="Shared/Dynamic.fs" />
