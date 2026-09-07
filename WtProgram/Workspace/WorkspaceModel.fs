@@ -488,6 +488,10 @@ type WorkspaceModel() as this =
     member this.remove() =
         if this.selected <> null then
             this.selected?remove()
+            // Removing a group or a window only took it out of its parent in
+            // memory; the file was written again at the next workspace-level
+            // change, so the settings dialog opened on the old contents.
+            this.saveSettings()
 
     member this.canRestore =
         this.selected <> null && this.selected.GetType() = typeof<Workspace>
