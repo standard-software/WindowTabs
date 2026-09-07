@@ -223,6 +223,8 @@
   "Disable": "停用",
   "RestartWindowTabs": "重新啟動 WindowTabs",
   "CloseWindowTabs": "關閉 WindowTabs",
+  "RestartConfirm": "要重新啟動 WindowTabs 嗎？",
+  "CloseConfirm": "要關閉 WindowTabs 嗎？",
 
   "CheckForUpdates": "檢查更新",
   "UpdateUpToDateFormat": "目前已是最新版本。(version {0})",

@@ -223,6 +223,8 @@
   "Disable": "사용 안 함",
   "RestartWindowTabs": "WindowTabs 다시 시작",
   "CloseWindowTabs": "WindowTabs 종료",
+  "RestartConfirm": "WindowTabs를 다시 시작할까요?",
+  "CloseConfirm": "WindowTabs를 종료할까요?",
 
   "CheckForUpdates": "업데이트 확인",
   "UpdateUpToDateFormat": "이 버전이 최신 버전입니다. (version {0})",

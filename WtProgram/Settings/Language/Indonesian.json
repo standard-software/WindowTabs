@@ -223,6 +223,8 @@
   "Disable": "Nonaktifkan",
   "RestartWindowTabs": "Mulai Ulang WindowTabs",
   "CloseWindowTabs": "Tutup WindowTabs",
+  "RestartConfirm": "Mulai ulang WindowTabs?",
+  "CloseConfirm": "Tutup WindowTabs?",
 
   "CheckForUpdates": "Periksa Pembaruan",
   "UpdateUpToDateFormat": "Versi ini adalah yang terbaru. (versi {0})",

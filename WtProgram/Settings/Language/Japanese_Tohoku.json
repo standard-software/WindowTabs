@@ -223,6 +223,8 @@
   "Disable": "止めでおぐ",
   "RestartWindowTabs": "WindowTabs 再起動すっぺ",
   "CloseWindowTabs": "WindowTabs 終わんべ",
+  "RestartConfirm": "WindowTabs 再起動すっけど、いいべか？",
+  "CloseConfirm": "WindowTabs 終了すっけど、いいべか？",
 
   "CheckForUpdates": "最新バージョンのチェックすっぺ",
   "UpdateUpToDateFormat": "このバージョンが最新版だべ。(version {0})",

@@ -500,13 +500,19 @@ type NotifyIconPlugin() as this =
             updateMenuItem.Tag <- box("CheckForUpdates")
             this.contextMenuItems.Add(updateMenuItem) |> ignore
 
+            // Both ask first: a slip on the tray menu would otherwise take
+            // every tab strip down with it. Cancel is the default.
             let restartMenuItem = new MenuItem(Localization.getString("RestartWindowTabs"))
-            restartMenuItem.Click.Add <| fun _ -> this.restartApplication()
+            restartMenuItem.Click.Add <| fun _ ->
+                if AppDialog.confirm "WindowTabs" (Localization.getString("RestartConfirm")) then
+                    this.restartApplication()
             restartMenuItem.Tag <- box("RestartWindowTabs")
             this.contextMenuItems.Add(restartMenuItem) |> ignore
 
             let closeMenuItem = new MenuItem(Localization.getString("CloseWindowTabs"))
-            closeMenuItem.Click.Add <| fun _ -> Services.program.shutdown()
+            closeMenuItem.Click.Add <| fun _ ->
+                if AppDialog.confirm "WindowTabs" (Localization.getString("CloseConfirm")) then
+                    Services.program.shutdown()
             closeMenuItem.Tag <- box("CloseWindowTabs")
             this.contextMenuItems.Add(closeMenuItem) |> ignore
 

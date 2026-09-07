@@ -223,6 +223,8 @@
   "Disable": "Devre Dışı Bırak",
   "RestartWindowTabs": "WindowTabs'ı Yeniden Başlat",
   "CloseWindowTabs": "WindowTabs'ı Kapat",
+  "RestartConfirm": "WindowTabs yeniden başlatılsın mı?",
+  "CloseConfirm": "WindowTabs kapatılsın mı?",
 
   "CheckForUpdates": "Güncelleştirmeleri Denetle",
   "UpdateUpToDateFormat": "Bu sürüm en son sürümdür. (sürüm {0})",

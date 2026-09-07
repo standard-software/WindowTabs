@@ -226,6 +226,8 @@ module Localization_English =
         ("Disable", "Disable")
         ("RestartWindowTabs", "Restart WindowTabs")
         ("CloseWindowTabs", "Close WindowTabs")
+        ("RestartConfirm", "Restart WindowTabs?")
+        ("CloseConfirm", "Close WindowTabs?")
 
         ("CheckForUpdates", "Check for Updates")
         ("UpdateUpToDateFormat", "This version is the latest. (version {0})")
