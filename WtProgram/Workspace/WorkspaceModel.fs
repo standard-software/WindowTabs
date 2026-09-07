@@ -410,7 +410,10 @@ type WorkspaceModel() as this =
                 let window = os.windowFromHwnd(hwnd)
                 let ww = WorkspaceWindow()
                 ww.name <- window.pid.exeName
-                ww.processPath <- (try window.pid.processPath with _ -> "")
+                // As the settings file keeps application paths: a Store app's
+                // package folder and a per-version folder become patterns, so
+                // the entry does not go stale at the application's next update.
+                ww.processPath <- (try AppPath.normalize window.pid.processPath with _ -> "")
                 ww.title <- window.text
                 ww.zorder <- innerZorder.find(hwnd)
                 ww.matchType <- WorkspaceWindowTitleMatchType.ExactMatch
@@ -566,7 +569,7 @@ type WorkspaceModel() as this =
          | :? WorkspaceWindow as ww when ww.processPath = "" ->
             try
                 match WindowResolver().resolve(ww) with
-                | Some(hwnd) -> ww.processPath <- os.windowFromHwnd(hwnd).pid.processPath
+                | Some(hwnd) -> ww.processPath <- AppPath.normalize (os.windowFromHwnd(hwnd).pid.processPath)
                 | None -> ()
             with _ -> ()
          | _ -> ())
@@ -616,7 +619,21 @@ type WorkspaceModel() as this =
                             tb.ForeColor <- SystemColors.GrayText
                      | _ -> ())
                     for child in c.Controls do shade child
-                try shade form with _ -> ())
+                try shade form with _ -> ()
+                // Start in the first box that can be typed in - the title, not
+                // the read-only path the form would otherwise focus and
+                // select whole - with the caret at its start and nothing
+                // selected.
+                let rec firstEditable (c: Control) : TextBox option =
+                    match c with
+                    | :? TextBox as tb when not tb.ReadOnly -> Some(tb)
+                    | _ -> c.Controls |> Seq.cast<Control> |> Seq.tryPick firstEditable
+                try
+                    firstEditable form |> Option.iter (fun tb ->
+                        tb.Select()
+                        tb.SelectionStart <- 0
+                        tb.SelectionLength <- 0)
+                with _ -> ())
             let ok = form.ShowDialog(parent) = DialogResult.OK
             if ok then
                 editInfo?ok()
