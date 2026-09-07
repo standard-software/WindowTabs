@@ -25,5 +25,14 @@ check "moving setting hides tabs during move/size" (hideTabs false false true tr
 check "disabled moving setting does not hide" (not (hideTabs false false false true))
 check "one active reason keeps tabs hidden" (hideTabs true true true false)
 
+check "active tab icon mouse-down hides tabs immediately"
+    (hideFromIconMouseDown true true true)
+check "mouse-down that activates an inactive tab does not hide tabs"
+    (not (hideFromIconMouseDown true false true))
+check "mouse-down outside the icon does not hide tabs"
+    (not (hideFromIconMouseDown true true false))
+check "disabled icon-click mode does not hide tabs"
+    (not (hideFromIconMouseDown false true true))
+
 if failed <> 0 then failwithf "%d checks failed" failed
-printfn "all 10 checks passed"
+printfn "all 14 checks passed"

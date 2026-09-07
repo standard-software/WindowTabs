@@ -17,3 +17,6 @@ module TabBehaviorPolicy =
 
     let hideTabs hideOnFullscreen isFullscreen hideWhileMoving isMoving =
         (hideOnFullscreen && isFullscreen) || (hideWhileMoving && isMoving)
+
+    let hideFromIconMouseDown enabled activeAtMouseDown pressedOnIcon =
+        enabled && activeAtMouseDown && pressedOnIcon
