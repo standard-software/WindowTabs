@@ -223,6 +223,8 @@
   "Disable": "無効化",
   "RestartWindowTabs": "WindowTabs の再起動",
   "CloseWindowTabs": "WindowTabs の終了",
+  "RestartConfirm": "WindowTabs を再起動しますか？",
+  "CloseConfirm": "WindowTabs を終了しますか？",
 
   "CheckForUpdates": "最新バージョンの確認",
   "UpdateUpToDateFormat": "このバージョンが最新版です。(version {0})",

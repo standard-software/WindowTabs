@@ -223,6 +223,8 @@
   "Disable": "Tắt",
   "RestartWindowTabs": "Khởi động lại WindowTabs",
   "CloseWindowTabs": "Đóng WindowTabs",
+  "RestartConfirm": "Khởi động lại WindowTabs?",
+  "CloseConfirm": "Đóng WindowTabs?",
 
   "CheckForUpdates": "Kiểm tra cập nhật",
   "UpdateUpToDateFormat": "Phiên bản này là mới nhất. (phiên bản {0})",

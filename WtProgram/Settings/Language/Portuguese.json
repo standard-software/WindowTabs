@@ -223,6 +223,8 @@
   "Disable": "Desabilitar",
   "RestartWindowTabs": "Reiniciar o WindowTabs",
   "CloseWindowTabs": "Fechar o WindowTabs",
+  "RestartConfirm": "Reiniciar o WindowTabs?",
+  "CloseConfirm": "Fechar o WindowTabs?",
 
   "CheckForUpdates": "Verificar atualizações",
   "UpdateUpToDateFormat": "Esta versão é a mais recente. (versão {0})",
