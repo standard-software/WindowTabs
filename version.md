@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next3
+
+- A workspace now saves and restores each tab's colour, underline, border, pin, name, side and position in the strip; workspaces saved earlier restore as before
+- The workspace edit dialog: no caption icon, titles and labels from the language file, labels lined up with their inputs, and a Tab name field (blank = the window title)
+- Fixed removing a workspace group or window not being saved
+
 ## version ss_2026.09.08_next2
 
 - Every message WindowTabs shows now comes through one dialog: in front of the settings dialog (which it closes first), dark-mode aware, and Ctrl+C copies it in the system box's layout
