@@ -26,8 +26,11 @@ type WorkspaceNode(model:Dynamic) as this =
     member this.name = this.model?name
     member this.title = 
         if this.showSettings then this.model?title else null
-    member this.matchType = 
-        if this.showSettings then box(this.model?matchType.ToString()) else null
+    member this.matchType =
+        if this.showSettings then
+            let t : obj = this.model?matchType
+            box(WorkspaceMatchType.caption (unbox<WorkspaceWindowTitleMatchType> t))
+        else null
 
     member this.onRemoved() =
         this.Parent.Nodes.Remove(this).ignore
