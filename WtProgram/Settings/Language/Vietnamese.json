@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Bật di chuột qua để kích hoạt thẻ",
 
   "TabPositionByDefault": "Vị trí thẻ",
-  "ChangeTabPositionOnSnap": "Thay đổi vị trí thẻ khi ghép trái/phải",
+  "ChangeTabPositionOnSnap": "Vị trí thẻ khi ghép trái/phải",
   "ChangeTabPositionOnSnapWhenUniform": "Thay đổi khi tất cả thẻ trong nhóm có cùng vị trí",
   "ChangeTabPositionOnSnapNever": "Không thay đổi",
+  "TabVerticalDirection": "Hướng dọc của thẻ",
+  "TabVerticalAuto": "Lên trên, hoặc xuống dưới nếu ra ngoài màn hình",
+  "TabVerticalAlwaysDown": "Luôn xuống dưới",
   "HideTabsWhenDownByDefault": "Ẩn thẻ khi đặt ở dưới cùng",
   "HideTabsNever": "Không bao giờ ẩn",
   "HideTabsWhenDown": "Ẩn sau thời gian chỉ định",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Ẩn khi bấm vào biểu tượng thẻ đang hoạt động",
 
   "HideTabsOnFullscreen": "Ẩn thẻ khi cửa sổ ở chế độ toàn màn hình",
+  "HideTabsWhileMoving": "Ẩn thẻ khi di chuyển cửa sổ",
   "SnapTabHeightMargin": "Thêm lề bằng chiều cao thẻ khi ghép",
   "NextTab": "Thẻ tiếp theo",
   "PrevTab": "Thẻ trước",

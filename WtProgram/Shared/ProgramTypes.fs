@@ -34,9 +34,13 @@ type SettingsRec = {
     enableAltNumberHotKey: bool
     enableHoverActivate: bool
     tabPositionByDefault: string
+    // "auto": above unless that would leave the screen; "down": always
+    // inside the window at its top edge.
+    tabVerticalDirection: string
     hideTabsWhenDownByDefault: string
     hideTabsDelayMilliseconds: int
     hideTabsOnFullscreen: bool
+    hideTabsWhileMoving: bool
     snapTabHeightMargin: bool
     // "change": on a left/right snap, re-align every tab of a uniformly-aligned
     // group to match the snap direction. "nochange": leave tab alignment alone.

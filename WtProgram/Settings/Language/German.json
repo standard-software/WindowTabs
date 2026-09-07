@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Tab durch Zeigen mit der Maus aktivieren",
 
   "TabPositionByDefault": "Tab-Position",
-  "ChangeTabPositionOnSnap": "Tab-Position beim Andocken links/rechts ändern",
+  "ChangeTabPositionOnSnap": "Tab-Position beim Andocken links/rechts",
   "ChangeTabPositionOnSnapWhenUniform": "Ändern, wenn alle Tabs der Gruppe dieselbe Position haben",
   "ChangeTabPositionOnSnapNever": "Nicht ändern",
+  "TabVerticalDirection": "Vertikale Tab-Richtung",
+  "TabVerticalAuto": "Oben, bei Platzmangel unten",
+  "TabVerticalAlwaysDown": "Immer unten",
   "HideTabsWhenDownByDefault": "Tabs ausblenden, wenn unten positioniert",
   "HideTabsNever": "Nie ausblenden",
   "HideTabsWhenDown": "Nach festgelegter Zeit ausblenden",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Beim Klick auf das Symbol des aktiven Tabs ausblenden",
 
   "HideTabsOnFullscreen": "Tabs im Vollbildmodus ausblenden",
+  "HideTabsWhileMoving": "Tabs beim Verschieben eines Fensters ausblenden",
   "SnapTabHeightMargin": "Beim Andocken Rand für Tab-Höhe hinzufügen",
   "NextTab": "Nächster Tab",
   "PrevTab": "Vorheriger Tab",

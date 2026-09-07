@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Attiva la scheda al passaggio del mouse",
 
   "TabPositionByDefault": "Posizione delle schede",
-  "ChangeTabPositionOnSnap": "Cambia posizione delle schede all'aggancio a sinistra/destra",
+  "ChangeTabPositionOnSnap": "Posizione schede all'aggancio sinistra/destra",
   "ChangeTabPositionOnSnapWhenUniform": "Cambia quando tutte le schede del gruppo hanno la stessa posizione",
   "ChangeTabPositionOnSnapNever": "Non cambiare",
+  "TabVerticalDirection": "Direzione verticale delle schede",
+  "TabVerticalAuto": "In alto, o in basso se fuori schermo",
+  "TabVerticalAlwaysDown": "Sempre in basso",
   "HideTabsWhenDownByDefault": "Nascondi le schede quando sono posizionate in basso",
   "HideTabsNever": "Non nascondere mai",
   "HideTabsWhenDown": "Nascondi dopo il tempo specificato",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Nascondi al clic sull'icona della scheda attiva",
 
   "HideTabsOnFullscreen": "Nascondi le schede quando la finestra è a schermo intero",
+  "HideTabsWhileMoving": "Nascondi le schede durante lo spostamento di una finestra",
   "SnapTabHeightMargin": "Aggiungi margine per l'altezza delle schede all'aggancio",
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",

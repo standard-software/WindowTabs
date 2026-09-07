@@ -57,9 +57,12 @@ module Localization_English =
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
         ("TabPositionByDefault", "Tab position")
-        ("ChangeTabPositionOnSnap", "Change tab position on left/right snap")
+        ("ChangeTabPositionOnSnap", "Tab position on left/right snap")
         ("ChangeTabPositionOnSnapWhenUniform", "Change when all tabs in the group share the same position")
         ("ChangeTabPositionOnSnapNever", "Don't change")
+        ("TabVerticalDirection", "Vertical tab direction")
+        ("TabVerticalAuto", "Up, or down when it would be off-screen")
+        ("TabVerticalAlwaysDown", "Always down")
         ("HideTabsWhenDownByDefault", "Hide tabs when positioned at bottom")
         ("HideTabsNever", "Never hide")
         ("HideTabsWhenDown", "Hide after specified time")
@@ -67,6 +70,7 @@ module Localization_English =
         ("HideTabsOnClick", "Hide when clicking active tab icon")
 
         ("HideTabsOnFullscreen", "Hide tabs when window is fullscreen")
+        ("HideTabsWhileMoving", "Hide tabs while moving a window")
         ("SnapTabHeightMargin", "Add tab height margin when snapping")
         ("NextTab", "Next Tab")
         ("PrevTab", "Previous Tab")

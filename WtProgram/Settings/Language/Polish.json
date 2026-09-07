@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Aktywuj kartę po wskazaniu myszą",
 
   "TabPositionByDefault": "Pozycja kart",
-  "ChangeTabPositionOnSnap": "Zmieniaj pozycję kart przy przyciąganiu w lewo/prawo",
+  "ChangeTabPositionOnSnap": "Pozycja kart przy przyciąganiu w lewo/prawo",
   "ChangeTabPositionOnSnapWhenUniform": "Zmieniaj, gdy wszystkie karty w grupie mają tę samą pozycję",
   "ChangeTabPositionOnSnapNever": "Nie zmieniaj",
+  "TabVerticalDirection": "Pionowy kierunek kart",
+  "TabVerticalAuto": "W górę lub w dół, gdy poza ekranem",
+  "TabVerticalAlwaysDown": "Zawsze w dół",
   "HideTabsWhenDownByDefault": "Ukrywaj karty umieszczone na dole",
   "HideTabsNever": "Nigdy nie ukrywaj",
   "HideTabsWhenDown": "Ukryj po określonym czasie",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Ukryj po kliknięciu ikony aktywnej karty",
 
   "HideTabsOnFullscreen": "Ukrywaj karty, gdy okno jest w trybie pełnoekranowym",
+  "HideTabsWhileMoving": "Ukrywaj karty podczas przenoszenia okna",
   "SnapTabHeightMargin": "Dodaj margines wysokości karty przy przyciąganiu",
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",

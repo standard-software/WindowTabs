@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Activer l'onglet au survol de la souris",
 
   "TabPositionByDefault": "Position des onglets",
-  "ChangeTabPositionOnSnap": "Changer la position des onglets lors de l'ancrage à gauche/droite",
+  "ChangeTabPositionOnSnap": "Position des onglets lors de l'ancrage gauche/droite",
   "ChangeTabPositionOnSnapWhenUniform": "Changer quand tous les onglets du groupe partagent la même position",
   "ChangeTabPositionOnSnapNever": "Ne pas changer",
+  "TabVerticalDirection": "Direction verticale des onglets",
+  "TabVerticalAuto": "En haut, ou en bas si hors écran",
+  "TabVerticalAlwaysDown": "Toujours en bas",
   "HideTabsWhenDownByDefault": "Masquer les onglets lorsqu'ils sont positionnés en bas",
   "HideTabsNever": "Ne jamais masquer",
   "HideTabsWhenDown": "Masquer après le délai spécifié",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Masquer en cliquant sur l'icône de l'onglet actif",
 
   "HideTabsOnFullscreen": "Masquer les onglets quand la fenêtre est en plein écran",
+  "HideTabsWhileMoving": "Masquer les onglets pendant le déplacement d'une fenêtre",
   "SnapTabHeightMargin": "Ajouter une marge de hauteur d'onglet lors de l'ancrage",
   "NextTab": "Onglet suivant",
   "PrevTab": "Onglet précédent",

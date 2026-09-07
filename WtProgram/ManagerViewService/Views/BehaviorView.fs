@@ -84,18 +84,17 @@ type HotKeyView() =
             table.AutoSize <- true
             table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
             table.Margin <- Padding(0)
-            // Keep the complete group on the outer 3 x 35-px grid, but place
-            // the radio rows 30 px apart. The 3-px top inset aligns the first
-            // radio text with the caption; the remaining 12 px stay below the
-            // last row.
-            table.Padding <- Padding(0, 3, 0, 12)
+            // Keep the complete group on the outer 3 x 35-px grid. Start the
+            // radio controls slightly below the caption and keep their internal
+            // spacing compact; the remaining space stays below the last row.
+            table.Padding <- Padding(0, 6, 0, 15)
             table.ColumnCount <- 3
             table.RowCount <- 3
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // RadioButton column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // Label column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // TextBox column
             for _ in 1 .. 3 do
-                table.RowStyles.Add(RowStyle(SizeType.Absolute, 30.0f)) |> ignore
+                table.RowStyles.Add(RowStyle(SizeType.Absolute, 28.0f)) |> ignore
 
             let currentMode =
                 let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -158,53 +157,41 @@ type HotKeyView() =
 
             table
 
-        // "Change tab position on left/right snap": two radio buttons
-        let snapChangeTabPositionRadio =
-            let table = new TableLayoutPanel()
-            table.AutoSize <- true
-            table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            table.Margin <- Padding(0)
-            // Same alignment as the three-row group below: two compact 30-px
-            // radio rows plus 3 px above and 7 px below still total 70 px.
-            table.Padding <- Padding(0, 3, 0, 7)
-            table.ColumnCount <- 1
-            table.RowCount <- 2
-            for _ in 1 .. 2 do
-                table.RowStyles.Add(RowStyle(SizeType.Absolute, 30.0f)) |> ignore
-
+        let snapChangeTabPositionCombo =
+            let combo = ComboBox()
+            combo.DropDownStyle <- ComboBoxStyle.DropDownList
+            combo.Width <- 300
+            combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapWhenUniform")) |> ignore
+            combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapNever")) |> ignore
             let currentMode =
                 let mode = Services.settings.getValue("changeTabPositionOnSnap") :?> string
-                // Valid modes only; default to "change" for invalid/unknown values
                 match mode with
                 | "change" | "nochange" -> mode
                 | _ ->
                     Services.settings.setValue("changeTabPositionOnSnap", "change")
                     "change"
+            combo.SelectedIndex <- if currentMode = "nochange" then 1 else 0
+            combo.SelectedIndexChanged.Add(fun _ ->
+                let value = if combo.SelectedIndex = 1 then "nochange" else "change"
+                Services.settings.setValue("changeTabPositionOnSnap", value))
+            combo
 
-            let radioChange = new RadioButton()
-            radioChange.Text <- Localization.getString("ChangeTabPositionOnSnapWhenUniform")
-            radioChange.AutoSize <- true
-            radioChange.Margin <- Padding(0, 5, 0, 5)
-            radioChange.Checked <- (currentMode = "change")
-            radioChange.CheckedChanged.Add(fun _ ->
-                if radioChange.Checked then
-                    Services.settings.setValue("changeTabPositionOnSnap", "change")
-            )
-
-            let radioNever = new RadioButton()
-            radioNever.Text <- Localization.getString("ChangeTabPositionOnSnapNever")
-            radioNever.AutoSize <- true
-            radioNever.Margin <- Padding(0, 5, 0, 5)
-            radioNever.Checked <- (currentMode = "nochange")
-            radioNever.CheckedChanged.Add(fun _ ->
-                if radioNever.Checked then
-                    Services.settings.setValue("changeTabPositionOnSnap", "nochange")
-            )
-
-            table.Controls.Add(radioChange, 0, 0)
-            table.Controls.Add(radioNever, 0, 1)
-
-            table
+        let tabVerticalDirectionCombo =
+            let combo = ComboBox()
+            combo.DropDownStyle <- ComboBoxStyle.DropDownList
+            combo.Width <- 300
+            combo.Items.Add(Localization.getString("TabVerticalAuto")) |> ignore
+            combo.Items.Add(Localization.getString("TabVerticalAlwaysDown")) |> ignore
+            let current =
+                Services.settings.getValue("tabVerticalDirection") :?> string
+                |> TabBehaviorPolicy.normalizeVerticalDirection
+            combo.SelectedIndex <- if current = TabBehaviorPolicy.verticalAlwaysDown then 1 else 0
+            combo.SelectedIndexChanged.Add(fun _ ->
+                let value =
+                    if combo.SelectedIndex = 1 then TabBehaviorPolicy.verticalAlwaysDown
+                    else TabBehaviorPolicy.verticalAuto
+                Services.settings.setValue("tabVerticalDirection", box(value)))
+            combo
 
         let fields = List2([
             ("RunAtStartup", settingsCheckbox "runAtStartup")
@@ -212,29 +199,30 @@ type HotKeyView() =
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("TabPositionByDefault", defaultTabPositionCombo :> Control)
-            ("ChangeTabPositionOnSnap", snapChangeTabPositionRadio :> Control)
+            ("ChangeTabPositionOnSnap", snapChangeTabPositionCombo :> Control)
+            ("TabVerticalDirection", tabVerticalDirectionCombo :> Control)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
+            ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
         ])
 
         let formPanel = UIHelper.form fields
 
-        // These controls already contain rows on the same 35-px grid as the
+        // This control already contains rows on the same 35-px grid as the
         // outer form. Do not add another outer row margin around the group.
-        snapChangeTabPositionRadio.Margin <- Padding(0)
         hideTabsRadio.Margin <- Padding(0)
 
-        // Adjust row heights for radio button groups
+        // Adjust the row height for the remaining radio button group.
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled,
         //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
-        //            6=hideTabsWhenDown, 7=hideTabsOnFullscreen, 8=snapTabHeightMargin
-        let snapChangeRowIndex = 5
-        let hideTabsRowIndex = 6
+        //            6=tabVerticalDirection, 7=hideTabsWhenDown,
+        //            8=hideTabsOnFullscreen, 9=hideTabsWhileMoving,
+        //            10=snapTabHeightMargin
+        let hideTabsRowIndex = 7
 
-        // Let radio-group rows auto-size based on content.
-        formPanel.RowStyles.[snapChangeRowIndex].SizeType <- SizeType.AutoSize
+        // Let the radio-group row auto-size based on content.
         formPanel.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
 
         "Switch Tabs", formPanel

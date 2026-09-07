@@ -53,9 +53,12 @@
   "EnableHoverActivate": "마우스 오버로 탭 활성화",
 
   "TabPositionByDefault": "탭 위치",
-  "ChangeTabPositionOnSnap": "좌우 스냅 시 탭 위치 변경",
+  "ChangeTabPositionOnSnap": "좌우 스냅 시 탭 위치",
   "ChangeTabPositionOnSnapWhenUniform": "그룹의 모든 탭 위치가 같을 때 변경",
   "ChangeTabPositionOnSnapNever": "변경하지 않음",
+  "TabVerticalDirection": "탭 상하 방향",
+  "TabVerticalAuto": "위쪽, 화면 밖으로 나가면 아래쪽",
+  "TabVerticalAlwaysDown": "항상 아래쪽",
   "HideTabsWhenDownByDefault": "탭이 아래쪽에 있을 때 숨기기",
   "HideTabsNever": "숨기지 않음",
   "HideTabsWhenDown": "지정한 시간 후 숨기기",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "활성 탭의 아이콘을 클릭하면 숨기기",
 
   "HideTabsOnFullscreen": "창이 전체 화면일 때 탭 숨기기",
+  "HideTabsWhileMoving": "창을 이동하는 동안 탭 숨기기",
   "SnapTabHeightMargin": "스냅 시 탭 높이만큼 여백 추가",
   "NextTab": "다음 탭",
   "PrevTab": "이전 탭",

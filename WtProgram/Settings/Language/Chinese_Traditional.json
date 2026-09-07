@@ -53,9 +53,12 @@
   "EnableHoverActivate": "滑鼠懸停時切換分頁",
 
   "TabPositionByDefault": "分頁位置",
-  "ChangeTabPositionOnSnap": "左右吸附時變更分頁位置",
+  "ChangeTabPositionOnSnap": "左右吸附時的分頁位置",
   "ChangeTabPositionOnSnapWhenUniform": "群組內所有分頁位置相同時變更",
   "ChangeTabPositionOnSnapNever": "不變更",
+  "TabVerticalDirection": "分頁上下方向",
+  "TabVerticalAuto": "向上，超出螢幕時向下",
+  "TabVerticalAlwaysDown": "始終向下",
   "HideTabsWhenDownByDefault": "分頁在下方時隱藏功能",
   "HideTabsNever": "不隱藏",
   "HideTabsWhenDown": "指定時間後隱藏",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "點擊活動分頁圖標時隱藏",
 
   "HideTabsOnFullscreen": "全螢幕視窗時隱藏分頁",
+  "HideTabsWhileMoving": "移動視窗時隱藏分頁",
   "SnapTabHeightMargin": "吸附時為分頁高度留出邊距",
   "NextTab": "下一個分頁",
   "PrevTab": "上一個分頁",

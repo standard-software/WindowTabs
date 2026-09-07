@@ -546,6 +546,10 @@ type Settings(isStandAlone) as this =
                             | Some("right") -> "TopRight"
                             | Some(v) -> v  // Already in TopXxx format or other valid value
                             | None -> "TopRight"
+                        tabVerticalDirection =
+                            settingsJson.getString("TabVerticalDirection")
+                            |> Option.map TabBehaviorPolicy.normalizeVerticalDirection
+                            |> Option.defaultValue TabBehaviorPolicy.verticalAuto
                         hideTabsWhenDownByDefault =
                             // Handle backward compatibility: convert old bool values to new string format
                             // First try to get as string (new format)
@@ -561,6 +565,7 @@ type Settings(isStandAlone) as this =
                                 | _ -> "never"
                         hideTabsDelayMilliseconds = settingsJson.getInt32("HideTabsDelayMilliseconds").def(3000)
                         hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
+                        hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
                         snapTabHeightMargin = settingsJson.getBool("SnapTabHeightMargin").def(false)
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
                         version = settingsJson.getString("Version").def(String.Empty)
@@ -599,9 +604,11 @@ type Settings(isStandAlone) as this =
                         enableAltNumberHotKey = false
                         enableHoverActivate = false
                         tabPositionByDefault = "TopRight"
+                        tabVerticalDirection = TabBehaviorPolicy.verticalAuto
                         hideTabsWhenDownByDefault = "never"
                         hideTabsDelayMilliseconds = 3000
                         hideTabsOnFullscreen = true
+                        hideTabsWhileMoving = false
                         snapTabHeightMargin = false
                         changeTabPositionOnSnap = "change"
                         version = String.Empty
@@ -631,9 +638,11 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
             settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
             settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)
+            settingsJson.setString("TabVerticalDirection", settings.tabVerticalDirection)
             settingsJson.setString("HideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
             settingsJson.setInt32("HideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)
             settingsJson.setBool("HideTabsOnFullscreen", settings.hideTabsOnFullscreen)
+            settingsJson.setBool("HideTabsWhileMoving", settings.hideTabsWhileMoving)
             settingsJson.setBool("SnapTabHeightMargin", settings.snapTabHeightMargin)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

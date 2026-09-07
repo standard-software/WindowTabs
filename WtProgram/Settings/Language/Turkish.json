@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Sekmeyi etkinleştirmek için fareyle üzerine gelmeyi etkinleştir",
 
   "TabPositionByDefault": "Sekme konumu",
-  "ChangeTabPositionOnSnap": "Sola/sağa yaslarken sekme konumunu değiştir",
+  "ChangeTabPositionOnSnap": "Sola/sağa yaslamada sekme konumu",
   "ChangeTabPositionOnSnapWhenUniform": "Gruptaki tüm sekmeler aynı konumu paylaştığında değiştir",
   "ChangeTabPositionOnSnapNever": "Değiştirme",
+  "TabVerticalDirection": "Sekmelerin dikey yönü",
+  "TabVerticalAuto": "Yukarı, ekran dışına taşarsa aşağı",
+  "TabVerticalAlwaysDown": "Her zaman aşağı",
   "HideTabsWhenDownByDefault": "Sekmeler altta konumlandığında gizle",
   "HideTabsNever": "Hiçbir zaman gizleme",
   "HideTabsWhenDown": "Belirtilen süre sonra gizle",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Etkin sekme simgesine tıklanınca gizle",
 
   "HideTabsOnFullscreen": "Pencere tam ekranken sekmeleri gizle",
+  "HideTabsWhileMoving": "Pencere taşınırken sekmeleri gizle",
   "SnapTabHeightMargin": "Yaslarken sekme yüksekliği kadar boşluk ekle",
   "NextTab": "Sonraki Sekme",
   "PrevTab": "Önceki Sekme",
