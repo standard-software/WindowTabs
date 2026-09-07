@@ -180,6 +180,10 @@ type DesktopManagerForm() =
         form.Text <- title
         form.Icon <- Services.openIcon("Bemo.ico")
         form.TopMost <- true
+        // The same size grip as the edit dialogs, drawn over the tab
+        // control's corner (SizeGripOverlay in UIHelper). Added before the
+        // design snapshot below, so it scales with the rest.
+        SizeGripOverlay.attach form
         // Turn the 96-dpi design into device pixels for the monitor the dialog
         // is opening on. Everything the window contains exists by now.
         //

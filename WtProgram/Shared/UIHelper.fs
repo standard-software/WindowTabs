@@ -5,7 +5,47 @@ open System.Windows.Forms
 open Bemo.Win32
 open Aga.Controls.Tree
 
-type SmoothNodeTextBox() = 
+// The size grip every sizable dialog shows: drawn in the corner only, laid
+// OVER whatever fills the client area, and the same drawing everywhere. The
+// form's own grip needs the corner free (freeing it with padding under a
+// docked control cost a whole row) and is themed differently from this one,
+// so the dialogs looked unlike each other. Dragging this hands the resize to
+// the frame, as taking the corner of the border does.
+type SizeGripOverlay(owner: Form) as this =
+    inherit Control()
+    do
+        this.Size <- Size(16, 16)
+        this.Anchor <- AnchorStyles.Bottom ||| AnchorStyles.Right
+        this.Cursor <- Cursors.SizeNWSE
+        this.TabStop <- false
+        this.BackColor <- owner.BackColor
+        this.Location <- Point(owner.ClientSize.Width - this.Width, owner.ClientSize.Height - this.Height)
+        // The anchor keeps it in the corner from here on; this covers the
+        // scaling pass, which changes the client size before the form shows.
+        owner.Resize.Add(fun _ ->
+            this.Location <- Point(owner.ClientSize.Width - this.Width, owner.ClientSize.Height - this.Height))
+        owner.BackColorChanged.Add(fun _ -> this.BackColor <- owner.BackColor)
+
+    /// Put the grip on a form: the form's own grip is hidden and this one
+    /// goes on top of everything in the corner.
+    static member attach (form: Form) =
+        form.SizeGripStyle <- SizeGripStyle.Hide
+        let grip = new SizeGripOverlay(form)
+        form.Controls.Add(grip)
+        grip.BringToFront()
+
+    override this.OnPaint(e) =
+        ControlPaint.DrawSizeGrip(e.Graphics, this.BackColor, this.ClientRectangle)
+
+    override this.OnMouseDown(e) =
+        if e.Button = MouseButtons.Left && owner.WindowState = FormWindowState.Normal then
+            WinUserApi.ReleaseCapture() |> ignore
+            WinUserApi.SendMessage(owner.Handle, WindowMessages.WM_NCLBUTTONDOWN,
+                                   HitTestMousePositionCodes.HTBOTTOMRIGHT, 0) |> ignore
+        else
+            base.OnMouseDown(e)
+
+type SmoothNodeTextBox() =
     inherit NodeControls.NodeTextBox()
     override this.Draw(node, context) =
         context.Graphics.TextRenderingHint <- System.Drawing.Text.TextRenderingHint.ClearTypeGridFit
@@ -601,7 +641,13 @@ module UIHelper =
     let okCancelForm control =
         let form = Form()
         form.Padding <- Padding(12)
-        
+        // A dialog answered with OK or Cancel has no use for minimize or
+        // maximize; only Close stays in the caption. It remains sizable,
+        // with the size grip in the corner.
+        form.MaximizeBox <- false
+        form.MinimizeBox <- false
+        SizeGripOverlay.attach form
+
         let okButton = Button()
         okButton.Text <- Localization.getString("OK")
         okButton.Click.Add <| fun _ ->
