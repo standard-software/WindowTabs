@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next4
+
+- The workspace dialogs are titled Window Settings and Workspace Name, show the program's full path (read-only), and list the match types by name in the current language (exact, starts with, ends with, contains, regular expression), in the dialog and in the tree
+
 ## version ss_2026.09.08_next3
 
 - A workspace now saves and restores each tab's colour, underline, border, pin, name, side and position in the strip; workspaces saved earlier restore as before
