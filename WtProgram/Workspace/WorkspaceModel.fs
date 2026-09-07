@@ -34,7 +34,23 @@ type WorkspaceWindowTitleMatchType =
     | Contains = 3
     | RegEx = 4
 
-type WorkspaceWindow() as this = 
+// What a tab looked like when the workspace was saved, so the restore can
+// put it back: the same items the restart restore keeps. Colours travel as
+// RRGGBBAA text and the side as "TopLeft" / "TopRight", as in the settings
+// file. A workspace saved by an earlier version has none of this, and its
+// windows restore exactly as they always did.
+type WorkspaceTabState = {
+    fillColor: string option
+    underlineColor: string option
+    borderColor: string option
+    pinned: bool
+    name: string option
+    align: string option
+    // Position in the tab strip, left to right
+    order: int
+}
+
+type WorkspaceWindow() as this =
     inherit Dynamic()
     // 16-px PNG, drawn by NodeStateIcon at its natural size. The tree's rows
     // grow with the monitor scale, so the icon has to as well.
@@ -54,9 +70,12 @@ type WorkspaceWindow() as this =
         with get() = data.get("matchType").cast<WorkspaceWindowTitleMatchType>()
         and set(value) = data.set("matchType", value)
 
-    member this.zorder 
+    member this.zorder
         with get() = data.get("zorder").cast<int>()
         and set(value) = data.set("zorder", value)
+
+    // Not in `data`: the tree binds to that, and this is not shown there.
+    member val tabState : WorkspaceTabState option = None with get, set
 
     member this.icon = _icon
     member this.children = List2<Dynamic>()
@@ -94,6 +113,15 @@ type WorkspaceWindow() as this =
         obj.setString("title", this.title)
         obj.setInt32("zorder", this.zorder)
         obj.setInt32("matchType", int32(this.matchType))
+        // Only when there is state; an older reader ignores these keys.
+        this.tabState |> Option.iter (fun st ->
+            st.fillColor |> Option.iter (fun v -> obj.setString("tabFillColor", v))
+            st.underlineColor |> Option.iter (fun v -> obj.setString("tabUnderlineColor", v))
+            st.borderColor |> Option.iter (fun v -> obj.setString("tabBorderColor", v))
+            if st.pinned then obj.setInt32("tabPinned", 1)
+            st.name |> Option.iter (fun v -> obj.setString("tabName", v))
+            st.align |> Option.iter (fun v -> obj.setString("tabAlign", v))
+            obj.setInt32("tabOrder", st.order))
         obj
 
     static member deserialize(obj:JObject) =
@@ -102,6 +130,17 @@ type WorkspaceWindow() as this =
         window.title <-  obj.getString("title").Value
         window.zorder <- obj.getInt32("zorder").Value
         window.matchType <- enum<WorkspaceWindowTitleMatchType>(obj.getInt32("matchType").Value)
+        // tabOrder is the marker: a window saved with its tab state always
+        // has it, one saved before this version never does.
+        window.tabState <-
+            obj.getInt32("tabOrder") |> Option.map (fun order ->
+                { fillColor = obj.getString("tabFillColor")
+                  underlineColor = obj.getString("tabUnderlineColor")
+                  borderColor = obj.getString("tabBorderColor")
+                  pinned = (obj.getInt32("tabPinned") = Some(1))
+                  name = obj.getString("tabName")
+                  align = obj.getString("tabAlign")
+                  order = order })
         window
     
     
@@ -298,6 +337,8 @@ type WorkspaceModel() as this =
                     let hwnd = windowsInZorder.head
                     Dpi.withUnawareContext <| fun() -> os.windowFromHwnd(hwnd).placement)
             )
+            // The strip's order, for putting the tabs back in it.
+            let stripOrder = (try group.visualOrderThreadSafe.list with _ -> [])
             group.windows.enumerate.iter <| fun (j, hwnd) ->
                 let window = os.windowFromHwnd(hwnd)
                 let ww = WorkspaceWindow()
@@ -305,6 +346,24 @@ type WorkspaceModel() as this =
                 ww.title <- window.text
                 ww.zorder <- innerZorder.find(hwnd)
                 ww.matchType <- WorkspaceWindowTitleMatchType.ExactMatch
+                // The tab's state, read the way the context menu reads it.
+                // Anything failing here leaves the window as it was saved
+                // before this version: identity and placement only.
+                ww.tabState <-
+                    try
+                        let rgba (c: Color) = SavedTabState.Rgba.format (c.R, c.G, c.B, c.A)
+                        Some {
+                            fillColor = Services.program.getWindowFillColor(hwnd) |> Option.map rgba
+                            underlineColor = Services.program.getWindowUnderlineColor(hwnd) |> Option.map rgba
+                            borderColor = Services.program.getWindowBorderColor(hwnd) |> Option.map rgba
+                            pinned = Services.program.isWindowPinned(hwnd)
+                            name = Services.program.getWindowNameOverride(hwnd)
+                            align =
+                                Services.program.getWindowAlignment(hwnd)
+                                |> Option.map (function TopLeft -> "TopLeft" | TopRight -> "TopRight")
+                            order = stripOrder |> List.tryFindIndex ((=) hwnd) |> Option.defaultValue j
+                        }
+                    with _ -> None
                 wsGroup.addWindow(ww)
             wsGroup
             
@@ -351,8 +410,13 @@ type WorkspaceModel() as this =
         workspace.children.iter <| fun (groupInfo) ->
             let windows : List2<Dynamic> = groupInfo?windows
             let windows = windows.reverse
-            let windows = windows.sortBy(fun w -> w?zorder).choose windowResolver.resolve
-            
+            // Each saved window with the live one it resolved to, so the
+            // saved tab state can be put on the right window below.
+            let resolved =
+                windows.sortBy(fun w -> w?zorder).choose (fun w ->
+                    windowResolver.resolve w |> Option.map (fun hwnd -> (w, hwnd)))
+            let windows = resolved.map snd
+
             windows.iter removeWindow
             windows.iter <| fun hwnd -> WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_RESTORE).ignore
             Dpi.withUnawareContext <| fun() ->
@@ -361,6 +425,34 @@ type WorkspaceModel() as this =
 
             let group = Services.desktop.createGroup(false)
             windows.iter <| fun hwnd -> group.addWindow(hwnd, false)
+
+            // Tab state saved with the windows, put back through the same
+            // calls the context menu uses. Only windows saved with it have
+            // any; a workspace from an earlier version stops here, as it
+            // always did. Every call is queued on the group's own thread
+            // behind the addWindow calls above, so the tabs exist by then.
+            let withState =
+                resolved.list |> List.choose (fun (w, hwnd) ->
+                    match w with
+                    | :? WorkspaceWindow as ww -> ww.tabState |> Option.map (fun st -> (st, hwnd))
+                    | _ -> None)
+            withState |> List.iter (fun (st, hwnd) ->
+                try
+                    let color (s: string option) =
+                        s |> Option.bind SavedTabState.Rgba.parse
+                          |> Option.map (fun (r, g, b, a) -> Color.FromArgb(int a, int r, int g, int b))
+                    color st.fillColor |> Option.iter (fun c -> group.setTabFillColor(hwnd, Some c))
+                    color st.underlineColor |> Option.iter (fun c -> group.setTabUnderlineColor(hwnd, Some c))
+                    color st.borderColor |> Option.iter (fun c -> group.setTabBorderColor(hwnd, Some c))
+                    st.name |> Option.iter (fun n -> group.setTabName(hwnd, Some n))
+                    st.align |> Option.iter (fun a -> group.setTabAlign(hwnd, (if a = "TopRight" then TopRight else TopLeft)))
+                    if st.pinned then group.pinTab(hwnd)
+                with _ -> ())
+            // Then the order, once every tab is on its side: the strip
+            // moves within a side, so the side has to be settled first.
+            withState
+            |> List.sortBy (fun (st, _) -> st.order)
+            |> List.iteri (fun i (_, hwnd) -> try group.moveTab(hwnd, i) with _ -> ())
 
         Services.program.resumeTabMonitoring()
 

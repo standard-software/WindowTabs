@@ -86,6 +86,9 @@ type GroupInfo(enableSuperBar) as this =
         member x.getTabUnderlineColorThreadSafe(hwnd) = _group.getTabUnderlineColorThreadSafe(hwnd)
         member x.setTabBorderColor(hwnd, color) = this.invokeGroup <| fun() -> _group.setTabBorderColor(hwnd, color)
         member x.getTabBorderColorThreadSafe(hwnd) = _group.getTabBorderColorThreadSafe(hwnd)
+        member x.setTabName(hwnd, name) = this.invokeGroup <| fun() -> _group.setTabName(hwnd, name)
+        member x.setTabAlign(hwnd, align) = this.invokeGroup <| fun() -> _group.setTabAlign(hwnd, align)
+        member x.moveTab(hwnd, index) = this.invokeGroup <| fun() -> _group.ts.moveTab(Tab(hwnd), index)
 
 type IDesktopNotification =
     abstract member dragDrop : IntPtr -> unit
