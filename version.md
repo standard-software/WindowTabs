@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next2
+
+- Every message WindowTabs shows now comes through one dialog: in front of the settings dialog (which it closes first), dark-mode aware, and Ctrl+C copies it in the system box's layout
+
 ## version ss_2026.09.08_next1
 
 - Fixed "Restart WindowTabs" and the watchdog restart doing nothing when WindowTabs had been started with a redirected standard input (from a scheduler or another program)

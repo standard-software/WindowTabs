@@ -267,26 +267,6 @@ module UpdateChecker =
 type NotifyIconPlugin() as this =
     let Cell = CellScope()
 
-    let closeSettingsDialog() =
-        // Close the settings dialog if one is open. The form's FormClosed
-        // handler (registered in DesktopManagerForm) is responsible for
-        // releasing the named "WindowTabsSettingsDialog" mutex and clearing
-        // DesktopManagerFormState.currentForm — so we don't touch either
-        // directly here.
-        //
-        // (An earlier version opened a second handle to the named mutex with
-        //  initialOwner=true and immediately ReleaseMutex'd / Dispose'd it
-        //  before calling form.Close(). That extra release on the UI thread
-        //  decremented the lock count of the dialog's M1 ownership before
-        //  FormClosed could run, leaving the named-mutex object in a state
-        //  where the dialog could not be reopened after a language change.
-        //  Removing the dance keeps ownership tracking simple: M1 is acquired
-        //  in show(), released in FormClosed, period.)
-        match DesktopManagerFormState.currentForm with
-        | Some form ->
-            try form.Close() with _ -> ()
-        | None -> ()
-
     member this.icon = Cell.cacheProp this <| fun() ->
         let notifyIcon = new NotifyIcon()
         notifyIcon.Visible <- true
@@ -370,23 +350,22 @@ type NotifyIconPlugin() as this =
             invoker.asyncInvoke <| fun() ->
                 match release with
                 | None ->
-                    MessageBox.Show(Localization.getString("UpdateCheckFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+                    AppDialog.info "WindowTabs" (Localization.getString("UpdateCheckFailed"))
                 | Some(release) ->
                     if UpdateChecker.isNewer currentVersion release.tag then
                         let message = String.Format(Localization.getString("UpdateAvailableFormat"), release.tag)
-                        // Default to Cancel so an accidental Enter does not start the update
-                        let result = MessageBox.Show(message, "WindowTabs", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
-                        if result = DialogResult.OK then
+                        // Cancel is the default, so an accidental Enter does not start the update
+                        if AppDialog.confirm "WindowTabs" message then
                             this.startUpdate(release)
                     else
-                        MessageBox.Show(String.Format(Localization.getString("UpdateUpToDateFormat"), currentVersion), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Information) |> ignore
+                        AppDialog.info "WindowTabs" (String.Format(Localization.getString("UpdateUpToDateFormat"), currentVersion))
 
     member this.startUpdate(release: UpdateChecker.ReleaseInfo) =
         let invoker = InvokerService.invoker
         let useMsi = UpdateChecker.isMsiInstall()
         match (if useMsi then release.msiUrl else release.zipUrl) with
         | None ->
-            MessageBox.Show(Localization.getString("UpdateDownloadFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+            AppDialog.info "WindowTabs" (Localization.getString("UpdateDownloadFailed"))
         | Some(url) ->
             this.icon.ShowBalloonTip(1000, "WindowTabs", Localization.getString("UpdateDownloading"), ToolTipIcon.Info)
             ThreadHelper.queueBackground <| fun() ->
@@ -394,7 +373,7 @@ type NotifyIconPlugin() as this =
                 invoker.asyncInvoke <| fun() ->
                     match downloaded with
                     | None ->
-                        MessageBox.Show(Localization.getString("UpdateDownloadFailed"), "WindowTabs", MessageBoxButtons.OK, MessageBoxIcon.Warning) |> ignore
+                        AppDialog.info "WindowTabs" (Localization.getString("UpdateDownloadFailed"))
                     | Some(path) ->
                         if useMsi then UpdateChecker.installMsi path
                         else UpdateChecker.installZipAndExit path
@@ -413,7 +392,7 @@ type NotifyIconPlugin() as this =
             Process.Start(startInfo) |> ignore
             Services.program.shutdown()
         with
-        | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+        | ex -> AppDialog.info "Error" ex.Message
 
     // Returns list of (displayName, fileName) tuples (supports JSONC format with comments).
     //
@@ -464,63 +443,15 @@ type NotifyIconPlugin() as this =
                         json.["language"] <- JToken.FromObject(fileName)
                         Services.settings.root <- json
                         Localization.setLanguage(fileName)
-                        closeSettingsDialog()
-                        // Theme-aware confirmation dialog (replaces the
-                        // system MessageBox so it follows the dark-mode
-                        // toggle). Title / message / OK button are
-                        // intentionally kept in English even when the app is
-                        // localized — if the user accidentally switches to
-                        // a language they can't read, this dialog still
-                        // tells them in English what just happened so they
-                        // can navigate back and revert the language.
-                        use form = new Form()
-                        form.Text <- "Language Change"
-                        form.FormBorderStyle <- FormBorderStyle.FixedDialog
-                        form.MaximizeBox <- false
-                        form.MinimizeBox <- false
-                        form.StartPosition <- FormStartPosition.CenterScreen
-                        form.TopMost <- true
-                        form.ShowInTaskbar <- false
-                        let label = new Label()
-                        label.Text <- sprintf "Language has been changed to %s." displayName
-                        label.Location <- System.Drawing.Point(30, 30)
-                        label.AutoSize <- true
-                        let okBtn = new Button()
-                        okBtn.Text <- "OK"
-                        okBtn.DialogResult <- DialogResult.OK
-                        okBtn.Size <- System.Drawing.Size(80, 30)
-                        form.Controls.Add(label)
-                        form.Controls.Add(okBtn)
-                        form.AcceptButton <- okBtn
-                        form.CancelButton <- okBtn
-                        // Opened from the tray menu with the settings dialog
-                        // already closed, so the monitor is taken from the
-                        // pointer rather than from a parent window. The Load
-                        // handler below runs afterwards and reads the scale
-                        // this establishes.
-                        SettingsDpi.applyAtCursor form
-                        form.Load.Add(fun _ ->
-                            // Size the form around the label so multi-byte
-                            // strings (Japanese / Chinese) fit comfortably.
-                            let margin = SettingsDpi.px 30
-                            let cw = max (label.Right + margin) (SettingsDpi.px 360)
-                            let ch = label.Bottom + margin + okBtn.Height + margin
-                            form.ClientSize <- System.Drawing.Size(cw, ch)
-                            okBtn.Location <- System.Drawing.Point((cw - okBtn.Width) / 2, label.Bottom + margin))
-                        let darkOn =
-                            try
-                                match Services.settings.root.getBool("EnableDarkMode") with
-                                | Some(v) -> v
-                                | None -> false
-                            with _ -> false
-                        if darkOn then
-                            DarkMode.applyDarkColorsBeforeShow form
-                            form.HandleCreated.Add(fun _ ->
-                                try DarkMode.applyDarkThemeBranch15ToForm form true
-                                with _ -> ())
-                        form.ShowDialog() |> ignore
+                        // The title and the message are intentionally kept in
+                        // English even when the app is localized: if the user
+                        // switches to a language they cannot read, this still
+                        // tells them in English what just happened so they can
+                        // navigate back and revert it. (AppDialog closes the
+                        // settings dialog first and follows the dark mode.)
+                        AppDialog.info "Language Change" (sprintf "Language has been changed to %s." displayName)
                     with
-                    | ex -> MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error) |> ignore
+                    | ex -> AppDialog.info "Error" ex.Message
                 languageMenu.MenuItems.Add(langItem) |> ignore
 
             Some(languageMenu)
