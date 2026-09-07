@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Aktifkan tab dengan mengarahkan mouse",
 
   "TabPositionByDefault": "Posisi tab",
-  "ChangeTabPositionOnSnap": "Ubah posisi tab saat snap kiri/kanan",
+  "ChangeTabPositionOnSnap": "Posisi tab saat snap kiri/kanan",
   "ChangeTabPositionOnSnapWhenUniform": "Ubah saat semua tab dalam grup memiliki posisi yang sama",
   "ChangeTabPositionOnSnapNever": "Jangan ubah",
+  "TabVerticalDirection": "Arah vertikal tab",
+  "TabVerticalAuto": "Ke atas, atau ke bawah jika keluar layar",
+  "TabVerticalAlwaysDown": "Selalu ke bawah",
   "HideTabsWhenDownByDefault": "Sembunyikan tab saat berada di bawah",
   "HideTabsNever": "Jangan pernah sembunyikan",
   "HideTabsWhenDown": "Sembunyikan setelah waktu yang ditentukan",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Sembunyikan saat mengklik ikon tab aktif",
 
   "HideTabsOnFullscreen": "Sembunyikan tab saat jendela layar penuh",
+  "HideTabsWhileMoving": "Sembunyikan tab saat memindahkan jendela",
   "SnapTabHeightMargin": "Tambahkan margin tinggi tab saat snap",
   "NextTab": "Tab Berikutnya",
   "PrevTab": "Tab Sebelumnya",

@@ -34,7 +34,7 @@ type WindowDecorator = {
             Sz(rect.width - 2 * indent, this.decoratorHeight)
         )
 
-    member this.shouldShowInside = 
+    member this.shouldShowInside =
         let decoratorOutsideRegion = Rgn(this.outsideBounds)
         let decoratorInsideRegion = Rgn(this.insideBounds)
         this.monitorBounds.any <| fun monitorBounds ->
@@ -42,6 +42,12 @@ type WindowDecorator = {
             let onMonitorInsideRegion = monitorRegion.intersect(decoratorInsideRegion)
             let onMonitorOutsideRegion = monitorRegion.intersect(decoratorOutsideRegion)
             onMonitorInsideRegion.box.height > onMonitorOutsideRegion.box.height
+
+    member this.showInside(verticalDirection: string) =
+        TabBehaviorPolicy.showInside verticalDirection this.shouldShowInside
+
+    member this.boundsFor(verticalDirection: string) : Rect =
+        if this.showInside(verticalDirection) then this.insideBounds else this.outsideBounds
 
     member this.bounds : Rect =
         if this.shouldShowInside then this.insideBounds else this.outsideBounds

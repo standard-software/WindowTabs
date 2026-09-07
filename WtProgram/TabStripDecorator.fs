@@ -300,6 +300,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeAsync <| fun() ->
                 this.updateTsPlacement()
 
+        Services.settings.notifyValue "tabVerticalDirection" <| fun(_) ->
+            this.invokeAsync <| fun() ->
+                this.updateTsPlacement()
+
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
     
@@ -324,13 +328,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let placement = this.placement
             this.ts.setTabAppearance(group.tabAppearanceAt placement.scale, placement.scale)
             this.ts.setPlacement(placement)
-            // Check if tabs should be hidden due to fullscreen window
-            let hideForFullscreen =
+            let hideTabs =
                 try
                     let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                    hideTabsOnFullscreen && group.isFullscreen.value
+                    let hideTabsWhileMoving = Services.settings.getValue("hideTabsWhileMoving") :?> bool
+                    TabBehaviorPolicy.hideTabs
+                        hideTabsOnFullscreen group.isFullscreen.value
+                        hideTabsWhileMoving group.isInMoveSizeThreadSafe
                 with _ -> false
-            this.ts.visible <- not hideForFullscreen
+            this.ts.visible <- not hideTabs
             
             // Handle UWP application tab visibility
             let hasUWPWindow = group.windows.items.any(fun hwnd ->
@@ -373,9 +379,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             decoratorIndentFlipped = appearance.tabIndentFlipped
             decoratorIndentNormal = appearance.tabIndentNormal
         }
+        let verticalDirection =
+            try Services.settings.getValue("tabVerticalDirection") :?> string
+            with _ -> TabBehaviorPolicy.verticalAuto
         {
-            showInside = decorator.shouldShowInside
-            bounds = decorator.bounds
+            showInside = decorator.showInside(verticalDirection)
+            bounds = decorator.boundsFor(verticalDirection)
             scale = scale
         }
 

@@ -139,6 +139,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Regroup.fs" />
     <Compile Include="Shared/AppPath.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
+    <Compile Include="Shared/TabBehaviorPolicy.fs" />
     <Compile Include="Shared/HotKeyPolicy.fs" />
     <Compile Include="Shared/LaunchPath.fs" />
     <Compile Include="Shared/Dpi.fs" />

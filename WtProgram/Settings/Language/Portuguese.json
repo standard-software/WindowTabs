@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Ativar guia ao passar o mouse",
 
   "TabPositionByDefault": "Posição das guias",
-  "ChangeTabPositionOnSnap": "Alterar posição das guias ao ajustar à esquerda/direita",
+  "ChangeTabPositionOnSnap": "Posição das guias ao ajustar à esquerda/direita",
   "ChangeTabPositionOnSnapWhenUniform": "Alterar quando todas as guias do grupo compartilham a mesma posição",
   "ChangeTabPositionOnSnapNever": "Não alterar",
+  "TabVerticalDirection": "Direção vertical das guias",
+  "TabVerticalAuto": "Para cima, ou para baixo se sair da tela",
+  "TabVerticalAlwaysDown": "Sempre para baixo",
   "HideTabsWhenDownByDefault": "Ocultar guias quando posicionadas na parte inferior",
   "HideTabsNever": "Nunca ocultar",
   "HideTabsWhenDown": "Ocultar após o tempo especificado",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Ocultar ao clicar no ícone da guia ativa",
 
   "HideTabsOnFullscreen": "Ocultar guias quando a janela estiver em tela cheia",
+  "HideTabsWhileMoving": "Ocultar guias ao mover uma janela",
   "SnapTabHeightMargin": "Adicionar margem da altura da guia ao ajustar",
   "NextTab": "Próxima guia",
   "PrevTab": "Guia anterior",

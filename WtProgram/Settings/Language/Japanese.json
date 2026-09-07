@@ -53,9 +53,12 @@
   "EnableHoverActivate": "マウスオーバーでタブをアクティブにする",
 
   "TabPositionByDefault": "タブの位置",
-  "ChangeTabPositionOnSnap": "左右スナップ時にタブの位置を変更する",
+  "ChangeTabPositionOnSnap": "左右スナップ時のタブ位置",
   "ChangeTabPositionOnSnapWhenUniform": "グループの全てのタブ位置が同じときに変更",
   "ChangeTabPositionOnSnapNever": "変更しない",
+  "TabVerticalDirection": "タブの上下方向",
+  "TabVerticalAuto": "上方向、画面外に出る場合は下方向",
+  "TabVerticalAlwaysDown": "常に下方向",
   "HideTabsWhenDownByDefault": "下方向タブを隠す機能",
   "HideTabsNever": "隠さない",
   "HideTabsWhenDown": "指定した時間で隠す",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "アクティブなタブのアイコンクリックで隠す",
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示",
+  "HideTabsWhileMoving": "ウィンドウ移動時はタブを非表示",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあける",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",

@@ -128,6 +128,20 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isForegroundExport = Cell.export <| fun() ->
         zorderCell.value.any((=) foregroundCell.value)
 
+    let shouldHideTabs () =
+        try
+            TabBehaviorPolicy.hideTabs
+                (Services.settings.getValue("hideTabsOnFullscreen") :?> bool)
+                isFullscreenExport.value
+                (Services.settings.getValue("hideTabsWhileMoving") :?> bool)
+                inMoveSize.value
+        with _ -> false
+
+    let updateTabVisibility () =
+        match !_ts with
+        | Some(ts: TabStrip) -> ts.visible <- isVisibleCell.value && not (shouldHideTabs())
+        | None -> ()
+
     // Per-group tab position: always has a concrete value (TopLeft/TopRight)
     let mutable perGroupTabPosition : string = "TopRight"
     // Per-group snap tab height margin: always has a concrete value
@@ -234,25 +248,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             //group on another thread during drag / drop
             this.setTsParent(if this.isEmpty.not then zorderCell.value.head else IntPtr.Zero)
 
-        Cell.listen <| fun() ->
-            // Check if tabs should be hidden due to fullscreen window
-            let hideForFullscreen =
-                try
-                    let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                    hideTabsOnFullscreen && isFullscreenExport.value
-                with _ -> false
-            this.ts.visible <- isVisibleCell.value && not hideForFullscreen
+        Cell.listen updateTabVisibility
 
         // Listen for hideTabsOnFullscreen setting changes
         Services.settings.notifyValue "hideTabsOnFullscreen" <| fun _ ->
-            this.invokeAsync <| fun() ->
-                // Trigger visibility update
-                let hideForFullscreen =
-                    try
-                        let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                        hideTabsOnFullscreen && isFullscreenExport.value
-                    with _ -> false
-                this.ts.visible <- isVisibleCell.value && not hideForFullscreen
+            this.invokeAsync updateTabVisibility
+
+        Services.settings.notifyValue "hideTabsWhileMoving" <| fun _ ->
+            this.invokeAsync updateTabVisibility
 
         Services.registerLocal(this)
 
@@ -984,6 +987,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.onEnterMoveSize() =
         inMoveSize.set(true)
         inMoveSizeSnapshot <- true
+        updateTabVisibility()
         this.hideChildWindows()
         this.saveTopWindowPlacement()
         this.updateIsVisible()
@@ -995,6 +999,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         this.adjustChildWindows()
         this.makeTopWindowForeground()
         this.updateIsVisible()
+        updateTabVisibility()
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isInMoveSizeThreadSafe = inMoveSizeSnapshot
@@ -1088,13 +1093,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         this.reassertRestoreFront()
                         isMaximizedExport.update()
                         isFullscreenExport.update()
-                        // Update tab visibility for fullscreen change
-                        let hideForFullscreen =
-                            try
-                                let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                                hideTabsOnFullscreen && isFullscreenExport.value
-                            with _ -> false
-                        this.ts.visible <- isVisibleCell.value && not hideForFullscreen
+                        updateTabVisibility()
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
             this.saveZorder()
@@ -1129,12 +1128,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             // Update fullscreen state and visibility when foreground changes
             if this.windows.contains(hwnd) then
                 isFullscreenExport.update()
-                let hideForFullscreen =
-                    try
-                        let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                        hideTabsOnFullscreen && isFullscreenExport.value
-                    with _ -> false
-                this.ts.visible <- isVisibleCell.value && not hideForFullscreen
+                updateTabVisibility()
         | _ -> ()
       
     member this.addWindow(hwnd, withDelay) = this.withUpdate <| fun() ->
@@ -1396,4 +1390,3 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.removed = removedEvent.Publish
     member this.visualOrder = this.ts.visualOrder.map(fun(Tab(hwnd)) -> hwnd)
 
-    

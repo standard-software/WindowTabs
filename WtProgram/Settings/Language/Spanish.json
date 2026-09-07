@@ -53,9 +53,12 @@
   "EnableHoverActivate": "Activar pestaña al pasar el cursor por encima",
 
   "TabPositionByDefault": "Posición de las pestañas",
-  "ChangeTabPositionOnSnap": "Cambiar posición de pestañas al acoplar a izquierda/derecha",
+  "ChangeTabPositionOnSnap": "Posición de pestañas al acoplar a izquierda/derecha",
   "ChangeTabPositionOnSnapWhenUniform": "Cambiar cuando todas las pestañas del grupo comparten la misma posición",
   "ChangeTabPositionOnSnapNever": "No cambiar",
+  "TabVerticalDirection": "Dirección vertical de las pestañas",
+  "TabVerticalAuto": "Arriba, o abajo si queda fuera de pantalla",
+  "TabVerticalAlwaysDown": "Siempre abajo",
   "HideTabsWhenDownByDefault": "Ocultar pestañas cuando están en la parte inferior",
   "HideTabsNever": "No ocultar nunca",
   "HideTabsWhenDown": "Ocultar después del tiempo especificado",
@@ -63,6 +66,7 @@
   "HideTabsOnClick": "Ocultar al hacer clic en el icono de la pestaña activa",
 
   "HideTabsOnFullscreen": "Ocultar pestañas cuando la ventana está en pantalla completa",
+  "HideTabsWhileMoving": "Ocultar pestañas al mover una ventana",
   "SnapTabHeightMargin": "Agregar margen de alto de pestaña al acoplar",
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",
