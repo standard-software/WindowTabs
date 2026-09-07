@@ -128,10 +128,11 @@ type WorkspaceWindow() as this =
             // its executable's name otherwise.
             let pathBox = new TextBox()
             pathBox.ReadOnly <- true
-            // Grey, so it does not look editable; still a text box, so the
-            // path can be selected and copied (see WorkspaceModel.edit for
-            // the dark-mode shade).
+            // Greyed like a disabled control, so it does not look editable;
+            // still a text box, so the path can be selected and copied (the
+            // colours are set in WorkspaceModel.edit, after theming).
             pathBox.BackColor <- SystemColors.Control
+            pathBox.ForeColor <- SystemColors.GrayText
             pathBox.Text <- (if this.processPath <> "" then this.processPath else this.name)
             let titleEditor = TextEditor() :> IPropEditor
             titleEditor.value <- this.title
@@ -598,14 +599,21 @@ type WorkspaceModel() as this =
                 form.HandleCreated.Add(fun _ ->
                     try Bemo.DarkMode.applyDarkThemeBranch15ToForm form true
                     with _ -> ())
-            // A read-only box is shown a shade apart from the editable ones,
-            // after the theme pass has coloured everything: the form's grey
-            // in light mode, the form's own dark surface in dark mode.
+            // A read-only box reads as disabled, after the theme pass has
+            // coloured everything: grey text on the form's grey in light
+            // mode; in dark mode the mid-grey that disabled buttons get their
+            // text in (DarkMode), on the same panel colour as the editable
+            // boxes.
             form.Shown.Add(fun _ ->
                 let rec shade (c: Control) =
                     (match c with
                      | :? TextBox as tb when tb.ReadOnly ->
-                        tb.BackColor <- (if darkOn then Bemo.DarkMode.darkSurface else SystemColors.Control)
+                        if darkOn then
+                            tb.BackColor <- Bemo.DarkMode.darkPanel
+                            tb.ForeColor <- Color.FromArgb(160, 160, 160)
+                        else
+                            tb.BackColor <- SystemColors.Control
+                            tb.ForeColor <- SystemColors.GrayText
                      | _ -> ())
                     for child in c.Controls do shade child
                 try shade form with _ -> ())
