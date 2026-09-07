@@ -67,6 +67,11 @@
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",
 
+  "ShortcutKeys": "Tasti di scelta rapida",
+  "ActivateTab": "Attiva scheda",
+  "EnableAltNumberHotKey": "Abilita Alt+1, ...Alt+9 per attivare la scheda",
+  "NewTabRightOfActive": "Aggiungi una nuova scheda a destra della scheda attiva",
+
   "Workspace": "Area di lavoro",
   "New": "Nuovo",
   "Restore": "Ripristina",

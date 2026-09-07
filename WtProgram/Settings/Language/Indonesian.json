@@ -67,6 +67,11 @@
   "NextTab": "Tab Berikutnya",
   "PrevTab": "Tab Sebelumnya",
 
+  "ShortcutKeys": "Tombol Pintasan",
+  "ActivateTab": "Aktifkan Tab",
+  "EnableAltNumberHotKey": "Aktifkan Alt+1, ...Alt+9 untuk mengaktifkan tab",
+  "NewTabRightOfActive": "Tambahkan tab baru di sebelah kanan tab aktif",
+
   "Workspace": "Ruang Kerja",
   "New": "Baru",
   "Restore": "Pulihkan",

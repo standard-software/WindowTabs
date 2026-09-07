@@ -17,25 +17,10 @@ type HotKeyView() =
         }
         
 
+    // Next Tab / Previous Tab and the Ctrl+1 .. Ctrl+9 check box used to be
+    // rows of this tab; they are on the Shortcut Keys tab now
+    // (ShortcutKeysView), under the same settings keys.
     let switchTabs =
-        let hotKeys = List2([
-            ("nextTab", "NextTab")
-            ("prevTab", "PrevTab")
-        ])
-
-        let editors = hotKeys.enumerate.fold (Map2()) <| fun editors (i,(key, text)) ->
-            let caption = Localization.getString text
-            let label = UIHelper.label caption
-            let editor = HotKeyEditor() :> IPropEditor
-            editor.control.Margin <- Padding(0,5,0,5)
-            label.Margin <- Padding(0,5,0,5)
-            editors.add key editor
-
-        hotKeys.iter <| fun (key,_) ->
-            let editor = editors.find key
-            editor.value <- Services.program.getHotKey(key)
-            editor.changed.Add <| fun() ->
-                Services.program.setHotKey key (unbox<int>(editor.value))
         
         let checkBox (prop:IProperty<bool>) = 
             let checkbox = BoolEditor() :> IPropEditor
@@ -206,15 +191,10 @@ type HotKeyView() =
 
             table
 
-        let fields = hotKeys.map <| fun(key,text) ->
-            let editor = editors.find key
-            text, editor.control
-
-        let fields = fields.prependList(List2([
+        let fields = List2([
             ("RunAtStartup", settingsCheckbox "runAtStartup")
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
-            ("EnableCtrlNumberHotKey", settingsCheckbox "enableCtrlNumberHotKey")
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("TabPositionByDefault", defaultTabPositionCombo :> Control)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionRadio :> Control)
@@ -222,22 +202,20 @@ type HotKeyView() =
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
-        ]))
+        ])
 
         let formPanel = UIHelper.form fields
 
         // Adjust row heights for radio button groups
-        // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled, 3=enableCtrlNumber,
-        //            4=enableHover, 5=tabPosition, 6=changeTabPositionOnSnap, 7=hideTabsWhenDown,
-        //            8+=hotkeys
-        let snapChangeRowIndex = 6
-        let hideTabsRowIndex = 7
+        // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled,
+        //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
+        //            6=hideTabsWhenDown, 7=hideTabsOnFullscreen, 8=snapTabHeightMargin
+        let snapChangeRowIndex = 5
+        let hideTabsRowIndex = 6
 
-        if formPanel :? TableLayoutPanel then
-            let table = formPanel :?> TableLayoutPanel
-            // Let radio-group rows auto-size based on content
-            table.RowStyles.[snapChangeRowIndex].SizeType <- SizeType.AutoSize
-            table.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
+        // Let radio-group rows auto-size based on content.
+        formPanel.RowStyles.[snapChangeRowIndex].SizeType <- SizeType.AutoSize
+        formPanel.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
 
         "Switch Tabs", formPanel
 
@@ -257,4 +235,3 @@ type HotKeyView() =
         member x.key = SettingsViewType.HotKeySettings
         member x.title = Localization.getString("Behavior")
         member x.control = table :> Control
-

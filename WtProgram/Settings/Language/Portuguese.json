@@ -67,6 +67,11 @@
   "NextTab": "Próxima guia",
   "PrevTab": "Guia anterior",
 
+  "ShortcutKeys": "Teclas de atalho",
+  "ActivateTab": "Ativar guia",
+  "EnableAltNumberHotKey": "Habilitar Alt+1, ...Alt+9 para ativar guias",
+  "NewTabRightOfActive": "Adicionar uma nova guia à direita da guia ativa",
+
   "Workspace": "Espaço de trabalho",
   "New": "Novo",
   "Restore": "Restaurar",

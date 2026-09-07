@@ -67,6 +67,11 @@
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
 
+  "ShortcutKeys": "ショートカットキー",
+  "ActivateTab": "タブをアクティブにする",
+  "EnableAltNumberHotKey": "Alt+1...Alt+9 でタブをアクティブにする",
+  "NewTabRightOfActive": "アクティブタブの右にタブを追加する",
+
   "Workspace": "ワークスペース",
   "New": "新規",
   "Restore": "復元",

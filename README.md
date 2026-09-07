@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.08_next4**
+Latest version: **ss_2026.09.08_next5**
 
 See [version.md](version.md) for details.
 
@@ -472,4 +472,3 @@ This project is open source and licensed under the MIT License.
 ## Comments
 
 If you have any issues, please contact us via GitHub Issues or email: `standard.software.net@gmail.com`
-

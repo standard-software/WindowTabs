@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next5
+
+- Added a Shortcut Keys settings tab for activating tabs 1-9, moving to the next or previous tab, and adding a new tab to the right
+- Shortcut keys are registered only while a WindowTabs-managed window is active, leaving other applications' keys untouched
+
 ## version ss_2026.09.08_next4
 
 - The workspace dialogs are titled Window Settings and Workspace Name, show the program's full path (read-only), and list the match types by name in the current language (exact, starts with, ends with, contains, regular expression), in the dialog and in the tree

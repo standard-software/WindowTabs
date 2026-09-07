@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.08_next4"
+    let version = "ss_2026.09.08_next5"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -551,16 +551,47 @@ type Program() as this =
             | _ -> ()
 
 
-    let hotKeyInfo = Map2(List2([
-        ("prevTab", (3621, fun (g:IGroup) -> g.switchWindow(false, false)))
-        ("nextTab", (3623, fun g -> g.switchWindow(true, false)))
+    // What a hot key field falls back to when the settings file has no entry
+    // for it. nextTab / prevTab keep the values they have always shipped with
+    // (Ctrl+Alt+Right / Ctrl+Alt+Left, as packed hot key control codes);
+    // every key the Shortcut Keys tab added starts out as None.
+    let hotKeyDefaults = Map2(List2([
+        (HotKeyPolicy.prevTabKey, 3621)
+        (HotKeyPolicy.nextTabKey, 3623)
         ]))
         
     let hotKeyManager = HotKeyManager()
+    // The bindings RegisterHotKey holds for this process right now: the ones
+    // that were wanted AND accepted. A refused one is not here, so the next
+    // sync asks for it again. Only syncHotKeys writes this.
+    let mutable heldHotKeys : HotKeyPolicy.Binding list = []
+    // Retry of refused registrations while the same window stays in front.
+    // See the hot keys section (scheduleHotKeyRetry).
+    let hotKeyRetryTimer = new System.Windows.Forms.Timer(Interval = 1000)
+    let hotKeyRetryLimit = 10
+    let mutable hotKeyRetriesLeft = hotKeyRetryLimit
+    // The fields dropped as duplicates at the last sync, so the Debug line
+    // is written once per change rather than once per sync.
+    let mutable reportedDuplicateHotKeys : HotKeyPolicy.Binding list = []
+    // Keeps the foreground hook alive for the life of the program.
+    let mutable foregroundHotKeyHook : IDisposable option = None
 
     do
         Desktop(this :> IDesktopNotification).ignore
-        this.registerHotKeys()
+        // The hot keys follow the foreground from here on; see the hot keys
+        // section. EVENT_SYSTEM_FOREGROUND is the primary signal - it fires
+        // for the desktop and for tool windows too, which the shell hook's
+        // HSHELL_WINDOWACTIVATED does not - and every window pass resyncs as
+        // well (updateAppWindows). A setting changed in the dialog resyncs at
+        // once; the dialog is in front then, so the effect is that the new
+        // set is held the moment a tabbed window is back in front - the
+        // dialog need not be closed.
+        hotKeyRetryTimer.Tick.Add <| fun _ -> this.retryHotKeys()
+        foregroundHotKeyHook <- Some(
+            os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> this.onForegroundChanged()))
+        Services.settings.notifyValue HotKeyPolicy.enableCtrlNumberSetting (fun _ -> this.syncHotKeys())
+        Services.settings.notifyValue HotKeyPolicy.enableAltNumberSetting (fun _ -> this.syncHotKeys())
+        this.syncHotKeys()
         Services.settings.notifyValue "runAtStartup" this.updateRunAtStartup
         Services.desktop.groupExited.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
         Services.desktop.groupRemoved.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
@@ -1373,6 +1404,10 @@ type Program() as this =
             this.destroyEmptyGroups()
             this.removeUntabableWindows()
 
+        // Group membership may have changed above - a window grouped after
+        // it came to the front, a group destroyed under the foreground
+        // window - and the hot keys follow membership.
+        this.syncHotKeys()
         this.exitIfNeeded()
 
     member this.ensureWindowIsSubscribed(window:Window) =
@@ -1955,16 +1990,122 @@ type Program() as this =
     //needed to keep hook alive
     member this.keepAliveReference = keepAliveCell.value
 
-    member this.foregroundGroup = this.desktop.foregroundGroup
+    // ------------------------------------------------------------- hot keys --
+    //
+    // The keys of the Shortcut Keys tab - numbers 1-9, Next / Previous Tab,
+    // add a tab to the right - are RegisterHotKey hot keys, and a key that
+    // RegisterHotKey holds is taken from EVERY program. So they are held only
+    // while a tabbed window is in front and released the moment anything
+    // else is, which is what leaves Ctrl+1 to Notepad. HotKeyPolicy decides;
+    // this section applies, and syncHotKeys is the only place that does.
+    //
+    // A key that is wanted but refused - another program holds it - does not
+    // count as held, so every later sync asks for it again. And since a
+    // tabbed window can stay in front for hours without a foreground event,
+    // a refusal also starts a timer that asks again once a second, a bounded
+    // number of times; the next foreground change renews the allowance.
 
-    member this.registerHotKeys() =
-        hotKeyInfo.items.iter <| fun(key,(_,f)) ->
-            let f() =
-                this.foregroundGroup.iter <| fun group -> 
-                    f(group)
-            let shortcut = this.cast<IProgram>().getHotKey(key)
-            let shortcut = HotKeyShortcut(HotKeyControlCode=int16(shortcut))
-            hotKeyManager.register key (shortcut.RegisterHotKeyModifierFlags, shortcut.RegisterHotKeyVirtualKeyCode) f |> ignore
+    // Where the window in front stands, in HotKeyPolicy's terms.
+    member private this.classifyForeground() =
+        let hwnd = WinUserApi.GetForegroundWindow()
+        if hwnd = IntPtr.Zero then HotKeyPolicy.Other
+        elif this.isInGroup hwnd then HotKeyPolicy.TabbedWindow
+        else
+            // A dialog a tabbed window put up - Save As, Options, a message
+            // box - is owned by it; GA_ROOTOWNER walks the owner chain up.
+            // HotKeyPolicy.wantsHotKeys says why such a dialog releases the
+            // keys rather than keeping them.
+            let owner = WinUserApi.GetAncestor(hwnd, GetAncestorConstants.GA_ROOTOWNER)
+            if owner <> IntPtr.Zero && owner <> hwnd && this.isInGroup owner then HotKeyPolicy.DialogOfTabbedWindow
+            elif os.windowFromHwnd(hwnd).pid.isCurrentProcess then HotKeyPolicy.OwnWindow
+            else HotKeyPolicy.Other
+
+    // What the settings ask to be held while a tabbed window is in front.
+    member private this.wantedHotKeys() =
+        let settings = settingsManager.settings
+        let mode = HotKeyPolicy.numberKeyMode settings.enableCtrlNumberHotKey settings.enableAltNumberHotKey
+        let kept, dropped = HotKeyPolicy.dedupe (HotKeyPolicy.bindings mode (this.cast<IProgram>().getHotKey))
+        // Two fields with one key: the first keeps it and the other is
+        // inert. The dialog does not warn; this line is the one place it
+        // shows.
+        if dropped <> reportedDuplicateHotKeys then
+            reportedDuplicateHotKeys <- dropped
+            for b in dropped do
+                Debug.WriteLine(sprintf "hotkey: %s repeats another field's key and is not registered" (HotKeyPolicy.describe b))
+        kept
+
+    // The one place hot keys are registered or released. Idempotent: it
+    // compares what is held with what the foreground and the settings want
+    // and touches the difference only (HotKeyPolicy.plan), so it is cheap
+    // and safe to call from every signal that might have changed the answer
+    // - the foreground WinEvent, the end of every window pass, a setting
+    // changed in the dialog, the retry timer. Nothing is swallowed: a
+    // release that failed would leave a key taken from other programs, and
+    // that has to show up somewhere.
+    member private this.syncHotKeys() =
+        try
+            let foreground = this.classifyForeground()
+            let wanted = if HotKeyPolicy.wantsHotKeys foreground then this.wantedHotKeys() else []
+            let plan = HotKeyPolicy.plan heldHotKeys wanted
+            for b in plan.release do
+                if not (hotKeyManager.unregister b.name) then
+                    Debug.WriteLine(sprintf "hotkey: UnregisterHotKey refused %s" (HotKeyPolicy.describe b))
+                heldHotKeys <- heldHotKeys |> List.filter (fun h -> h.name <> b.name)
+            let mutable refused = false
+            for b in plan.acquire do
+                let modifiers, vk = HotKeyPolicy.toRegisterHotKey b.code
+                if hotKeyManager.register b.name (modifiers, vk) (fun () -> this.runHotKey b.action) then
+                    heldHotKeys <- heldHotKeys @ [ b ]
+                else
+                    // Another program holds the key - or, if the settings
+                    // file was edited by hand, another of these bindings.
+                    refused <- true
+                    Debug.WriteLine(sprintf "hotkey: RegisterHotKey refused %s (mod=%d vk=0x%02X)" (HotKeyPolicy.describe b) modifiers vk)
+            this.scheduleHotKeyRetry(refused)
+        with ex ->
+            Debug.WriteLine(sprintf "hotkey: sync failed: %s" (ex.ToString()))
+
+    member private this.scheduleHotKeyRetry(refused: bool) =
+        if refused && hotKeyRetriesLeft > 0 then
+            hotKeyRetryTimer.Start()
+        else
+            hotKeyRetryTimer.Stop()
+            if refused then
+                Debug.WriteLine "hotkey: retries exhausted; asking again at the next foreground change"
+
+    member private this.retryHotKeys() =
+        hotKeyRetriesLeft <- hotKeyRetriesLeft - 1
+        this.syncHotKeys()
+
+    member private this.onForegroundChanged() =
+        hotKeyRetriesLeft <- hotKeyRetryLimit
+        this.syncHotKeys()
+
+    // A held key fired. The group is the one of the window in front NOW, not
+    // the one that was in front when the key was registered: the keys stay
+    // held across a switch from one tabbed window to another, and a stale
+    // group would act on the wrong strip.
+    member private this.runHotKey (action: HotKeyPolicy.HotKeyAction) =
+        let hwnd = WinUserApi.GetForegroundWindow()
+        match this.desktop.groups.tryFind(fun g -> g.windows.contains((=) hwnd)) with
+        | None ->
+            // Fired in the moment between a foreground change and the
+            // release it causes. Nothing to act on.
+            ()
+        | Some(group) ->
+            match action with
+            | HotKeyPolicy.ActivateTab n -> group.activateIndex(n - 1)
+            | HotKeyPolicy.NextTab -> group.switchWindow(true, false)
+            | HotKeyPolicy.PrevTab -> group.switchWindow(false, false)
+            | HotKeyPolicy.NewTabRight ->
+                // The tab menu's "New tab : right of this tab", from the
+                // keyboard. The same NewWindowLaunch.start the menu item
+                // calls, so a Store application, Windows Terminal and a
+                // failed start are handled alike; tryNewWindowLaunch then
+                // docks the new window right of the invoking tab.
+                let processPath = os.windowFromHwnd(hwnd).pid.processPath
+                NewWindowLaunch.start processPath (fun path ->
+                    this.cast<IProgram>().launchNewWindow group.hwnd hwnd path)
 
    
     member this.hwndZorders() : Map2<IntPtr, int>= Map2(os.windowsInZorder.enumerate.map(fun(i,w) -> w.hwnd,i))
@@ -2536,9 +2677,7 @@ type Program() as this =
             let hotKeys = settingsManager.settingsJson.getObject("HotKeys").def(JObject())
             match hotKeys.getInt32(key) with
             | Some(value) -> value
-            | None -> 
-                let shortcut, _ = hotKeyInfo.find(key)
-                int(shortcut)
+            | None -> hotKeyDefaults.tryFind(key).def(HotKeyPolicy.noKey)
 
         member x.setHotKey key value = 
             let settings = settingsManager.settingsJson
@@ -2546,7 +2685,7 @@ type Program() as this =
             hotKeys.setInt32(key, value)
             settings.setObject("HotKeys", hotKeys)
             settingsManager.settingsJson <- settings
-            this.registerHotKeys()
+            this.syncHotKeys()
 
         member x.ping() = 
             ()

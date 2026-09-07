@@ -67,6 +67,11 @@
   "NextTab": "Nächster Tab",
   "PrevTab": "Vorheriger Tab",
 
+  "ShortcutKeys": "Tastenkürzel",
+  "ActivateTab": "Tab aktivieren",
+  "EnableAltNumberHotKey": "Alt+1, ...Alt+9 zum Aktivieren von Tabs aktivieren",
+  "NewTabRightOfActive": "Neuen Tab rechts neben dem aktiven Tab hinzufügen",
+
   "Workspace": "Arbeitsbereich",
   "New": "Neu",
   "Restore": "Wiederherstellen",

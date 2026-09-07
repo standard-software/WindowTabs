@@ -67,6 +67,11 @@
   "NextTab": "Sonraki Sekme",
   "PrevTab": "Önceki Sekme",
 
+  "ShortcutKeys": "Kısayol Tuşları",
+  "ActivateTab": "Sekmeyi Etkinleştir",
+  "EnableAltNumberHotKey": "Sekmeyi etkinleştirmek için Alt+1, ...Alt+9 kısayollarını etkinleştir",
+  "NewTabRightOfActive": "Etkin sekmenin sağına yeni sekme ekle",
+
   "Workspace": "Çalışma Alanı",
   "New": "Yeni",
   "Restore": "Geri Yükle",

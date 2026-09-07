@@ -113,7 +113,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.09.08_next4**
+最新のバージョン: **ss_2026.09.08_next5**
 
 詳細は [version.md](version.md) を参照してください。
 
@@ -470,6 +470,4 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 何か要望や問題がありましたら、GitHub Issues またはメールでお問い合わせください: `standard.software.net@gmail.com`
 
 Issues の方がすぐに気が付きやすいと思います。
-
-
 

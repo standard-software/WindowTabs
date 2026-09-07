@@ -67,6 +67,11 @@
   "NextTab": "下一个标签页",
   "PrevTab": "上一个标签页",
 
+  "ShortcutKeys": "快捷键",
+  "ActivateTab": "激活标签页",
+  "EnableAltNumberHotKey": "使用 Alt+1...+9 切换标签页",
+  "NewTabRightOfActive": "在活动标签页右侧添加新标签页",
+
   "Workspace": "工作区",
   "New": "新建",
   "Restore": "恢复",

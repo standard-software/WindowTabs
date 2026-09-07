@@ -10,11 +10,13 @@ type GroupInfo(enableSuperBar) as this =
     let windowsCell = Cell.create(List2())
     let mutable _isExited = false
     let desktopInvoker = InvokerService.invoker
-    let enableCtrlNumberHotKey = Services.settings.getValue("enableCtrlNumberHotKey").cast<bool>()
     let (_group, invoker) = ThreadHelper.startOnThreadAndWait <| fun() ->
         let plugins = List2<_>([
             None // MouseScrollPlugin disabled - mouse wheel tab switching removed
-            (if enableCtrlNumberHotKey then Some(NumericTabHotKeyPlugin().cast<IPlugin>()) else None)
+            // Ctrl+1 .. Ctrl+9 used to be a low-level keyboard hook plugin
+            // here (NumericTabHotKeyPlugin). The number keys are
+            // RegisterHotKey hot keys now, owned by Program together with
+            // Next / Previous Tab: see HotKeyPolicy and Program.syncHotKeys.
             Some(HideTabsOnInactiveGroupPlugin().cast<IPlugin>())
             (if enableSuperBar then Some(SuperBarPlugin().cast<IPlugin>()) else None)
             ])
@@ -58,6 +60,9 @@ type GroupInfo(enableSuperBar) as this =
         this.invokeGroup <| fun() -> this.group.removeWindow(hwnd)
     member private this.destroy() = this.invokeGroup <| fun() -> this.group.destroy()
     member private x.switchWindow(next, force) = this.invokeGroup <| fun() -> this.group.switchWindow(next, force)
+    // force = true, as the old Ctrl+number plugin did: the user named the tab
+    // and expects it in front even when its window is the one already active.
+    member private x.activateIndex(index) = this.invokeGroup <| fun() -> this.group.activateIndex(index, true)
 
     interface IGroup with
         member x.hwnd = this.hwnd
@@ -69,6 +74,7 @@ type GroupInfo(enableSuperBar) as this =
         member x.addWindow(hwnd, delay) = this.addWindow(hwnd, delay)
         member x.removeWindow hwnd = this.removeWindow hwnd
         member x.switchWindow(next,force) = this.switchWindow(next, force)
+        member x.activateIndex(index) = this.activateIndex(index)
         member x.perGroupTabPositionValue
             with get() : string = _group.perGroupTabPositionValue
             and set(value:string) = this.invokeGroup <| fun() -> _group.perGroupTabPositionValue <- value

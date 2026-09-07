@@ -67,6 +67,11 @@
   "NextTab": "다음 탭",
   "PrevTab": "이전 탭",
 
+  "ShortcutKeys": "단축키",
+  "ActivateTab": "탭 활성화",
+  "EnableAltNumberHotKey": "Alt+1, ...Alt+9로 탭 활성화",
+  "NewTabRightOfActive": "활성 탭 오른쪽에 새 탭 추가",
+
   "Workspace": "작업 영역",
   "New": "새로 만들기",
   "Restore": "복원",
