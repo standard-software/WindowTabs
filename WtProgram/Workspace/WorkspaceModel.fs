@@ -34,6 +34,39 @@ type WorkspaceWindowTitleMatchType =
     | Contains = 3
     | RegEx = 4
 
+// The match types as the user sees them: in a fixed order, with captions
+// from the language file (the enum names were shown before, in English).
+module WorkspaceMatchType =
+    let all = [
+        WorkspaceWindowTitleMatchType.ExactMatch
+        WorkspaceWindowTitleMatchType.StartsWith
+        WorkspaceWindowTitleMatchType.EndsWith
+        WorkspaceWindowTitleMatchType.Contains
+        WorkspaceWindowTitleMatchType.RegEx
+    ]
+    let caption (t: WorkspaceWindowTitleMatchType) = Localization.getString("MatchType" + t.ToString())
+
+// A drop-down of the match types, showing their captions.
+type MatchTypeEditor() as this =
+    let control =
+        let c = ComboBox()
+        c.DropDownStyle <- ComboBoxStyle.DropDownList
+        for t in WorkspaceMatchType.all do c.Items.Add(WorkspaceMatchType.caption t) |> ignore
+        c
+    member this.value
+        with get() : WorkspaceWindowTitleMatchType =
+            match control.SelectedIndex with
+            | i when i >= 0 && i < WorkspaceMatchType.all.Length -> WorkspaceMatchType.all.[i]
+            | _ -> WorkspaceWindowTitleMatchType.ExactMatch
+        and set(v: WorkspaceWindowTitleMatchType) =
+            control.SelectedIndex <- (WorkspaceMatchType.all |> List.tryFindIndex ((=) v) |> Option.defaultValue 0)
+    interface IPropEditor with
+        member x.value
+            with get() = box this.value
+            and set(v) = this.value <- unbox<WorkspaceWindowTitleMatchType> v
+        member x.control = control :> Control
+        member x.changed = control.SelectedIndexChanged |> Event.map ignore
+
 // What a tab looked like when the workspace was saved, so the restore can
 // put it back: the same items the restart restore keeps. Colours travel as
 // RRGGBBAA text and the side as "TopLeft" / "TopRight", as in the settings
@@ -74,8 +107,12 @@ type WorkspaceWindow() as this =
         with get() = data.get("zorder").cast<int>()
         and set(value) = data.set("zorder", value)
 
-    // Not in `data`: the tree binds to that, and this is not shown there.
+    // Not in `data`: the tree binds to that, and these are not shown there.
     member val tabState : WorkspaceTabState option = None with get, set
+    // Full path of the executable, for the dialog to show; matching is by
+    // title, so this is information only. Empty for a window saved before
+    // it was recorded.
+    member val processPath : string = "" with get, set
 
     member this.icon = _icon
     member this.children = List2<Dynamic>()
@@ -86,29 +123,36 @@ type WorkspaceWindow() as this =
         member x.removed = removedEvent.Publish
         member x.canEdit = true
         member x.beginEdit() =
-            let nameEditor = TextEditor() :> IPropEditor
-            nameEditor.value <- this.name
+            // The program, for information: its full path when known (see
+            // WorkspaceModel.edit for a window saved before it was recorded),
+            // its executable's name otherwise.
+            let pathBox = new TextBox()
+            pathBox.ReadOnly <- true
+            // Grey, so it does not look editable; still a text box, so the
+            // path can be selected and copied (see WorkspaceModel.edit for
+            // the dark-mode shade).
+            pathBox.BackColor <- SystemColors.Control
+            pathBox.Text <- (if this.processPath <> "" then this.processPath else this.name)
             let titleEditor = TextEditor() :> IPropEditor
             titleEditor.value <- this.title
-            let matchTypeEditor = EnumEditor<WorkspaceWindowTitleMatchType>()
+            let matchTypeEditor = MatchTypeEditor()
             matchTypeEditor.value <- this.matchType
             // The name the tab is to show once restored; blank means none,
             // and the tab shows the window's title as it always did.
             let tabNameEditor = TextEditor() :> IPropEditor
             tabNameEditor.value <- (this.tabState |> Option.bind (fun st -> st.name) |> Option.defaultValue "")
             { new IEditInfo with
-                member x.title = Localization.getString("EditWindow")
+                member x.title = Localization.getString("WindowSettings")
                 // Keys, not captions: the form builder looks them up.
                 member x.fields =
                     List2([
-                        ("ProcessName", nameEditor.control)
+                        ("ProcessPath", pathBox :> Control)
                         ("Title", titleEditor.control)
                         ("MatchType", matchTypeEditor.cast<IPropEditor>().control)
                         ("TabName", tabNameEditor.control)
                     ])
                 member x.height  = 290
                 member x.ok() =
-                    this.name <- nameEditor.value.cast<string>()
                     this.title <- titleEditor.value.cast<string>()
                     this.matchType <- matchTypeEditor.value
                     let tabName =
@@ -133,6 +177,7 @@ type WorkspaceWindow() as this =
         obj.setString("title", this.title)
         obj.setInt32("zorder", this.zorder)
         obj.setInt32("matchType", int32(this.matchType))
+        if this.processPath <> "" then obj.setString("processPath", this.processPath)
         // Only when there is state; an older reader ignores these keys.
         this.tabState |> Option.iter (fun st ->
             st.fillColor |> Option.iter (fun v -> obj.setString("tabFillColor", v))
@@ -150,6 +195,7 @@ type WorkspaceWindow() as this =
         window.title <-  obj.getString("title").Value
         window.zorder <- obj.getInt32("zorder").Value
         window.matchType <- enum<WorkspaceWindowTitleMatchType>(obj.getInt32("matchType").Value)
+        window.processPath <- (obj.getString("processPath") |> Option.defaultValue "")
         // tabOrder is the marker: a window saved with its tab state always
         // has it, one saved before this version never does.
         window.tabState <-
@@ -255,7 +301,7 @@ and
             let nameEditor = TextEditor() :> IPropEditor
             nameEditor.value <- this?name
             { new IEditInfo with
-                member x.title = Localization.getString("EditWorkspace")
+                member x.title = Localization.getString("WorkspaceNameSettings")
                 member x.fields = List2([("Name", nameEditor.control)])
                 member x.height  = 200
                 member x.ok() = this?name <- nameEditor.value.cast<string>()
@@ -363,6 +409,7 @@ type WorkspaceModel() as this =
                 let window = os.windowFromHwnd(hwnd)
                 let ww = WorkspaceWindow()
                 ww.name <- window.pid.exeName
+                ww.processPath <- (try window.pid.processPath with _ -> "")
                 ww.title <- window.text
                 ww.zorder <- innerZorder.find(hwnd)
                 ww.matchType <- WorkspaceWindowTitleMatchType.ExactMatch
@@ -511,6 +558,17 @@ type WorkspaceModel() as this =
 
     member this.edit(parent) =
         let selected = this.selected
+        // A window saved before its path was recorded gets it from the live
+        // window that matches it now, if there is one, and keeps it from
+        // then on; failing that the dialog shows the executable's name.
+        (match selected with
+         | :? WorkspaceWindow as ww when ww.processPath = "" ->
+            try
+                match WindowResolver().resolve(ww) with
+                | Some(hwnd) -> ww.processPath <- os.windowFromHwnd(hwnd).pid.processPath
+                | None -> ()
+            with _ -> ()
+         | _ -> ())
         if this.canEdit then
             let editInfo = selected?beginEdit()
             let table = UIHelper.formCompact(editInfo?fields)
@@ -540,6 +598,17 @@ type WorkspaceModel() as this =
                 form.HandleCreated.Add(fun _ ->
                     try Bemo.DarkMode.applyDarkThemeBranch15ToForm form true
                     with _ -> ())
+            // A read-only box is shown a shade apart from the editable ones,
+            // after the theme pass has coloured everything: the form's grey
+            // in light mode, the form's own dark surface in dark mode.
+            form.Shown.Add(fun _ ->
+                let rec shade (c: Control) =
+                    (match c with
+                     | :? TextBox as tb when tb.ReadOnly ->
+                        tb.BackColor <- (if darkOn then Bemo.DarkMode.darkSurface else SystemColors.Control)
+                     | _ -> ())
+                    for child in c.Controls do shade child
+                try shade form with _ -> ())
             let ok = form.ShowDialog(parent) = DialogResult.OK
             if ok then
                 editInfo?ok()
