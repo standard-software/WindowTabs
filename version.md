@@ -4,6 +4,8 @@
 
 ## version ss_2026.09.08_next1
 
+- Fixed "Restart WindowTabs" and the watchdog restart doing nothing when WindowTabs had been started with a redirected standard input (from a scheduler or another program)
+
 ## version ss_2026.09.08
 
 - Fixed a window staying invisible at the off-screen minimized position
