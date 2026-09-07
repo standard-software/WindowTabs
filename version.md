@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next1
+
 ## version ss_2026.09.08
 
 - Fixed a window staying invisible at the off-screen minimized position

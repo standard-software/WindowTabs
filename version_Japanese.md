@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.08_next1
+
 ## version ss_2026.09.08
 
 - ウィンドウが画面外の最小化位置に置かれたままで表示されない不具合の修正
