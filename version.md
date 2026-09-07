@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next6
+
+- Added tab direction and hide-while-moving behavior settings
+
 ## version ss_2026.09.08_next5
 
 - Added a Shortcut Keys settings tab for activating tabs 1-9, moving to the next or previous tab, and adding a new tab to the right
