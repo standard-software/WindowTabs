@@ -139,6 +139,8 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Regroup.fs" />
     <Compile Include="Shared/AppPath.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
+    <Compile Include="Shared/HotKeyPolicy.fs" />
+    <Compile Include="Shared/LaunchPath.fs" />
     <Compile Include="Shared/Dpi.fs" />
     <Compile Include="Shared/Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />
@@ -154,6 +156,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Model.fs" />
     <Compile Include="Shared\UIHelper.fs" />
     <Compile Include="Shared\AppDialog.fs" />
+    <Compile Include="NewWindowLaunch.fs" />
     <Compile Include="HotKeyManager.fs" />
     <Compile Include="DragDropController.fs" />
     <Compile Include="TabStripSprite.fs" />
@@ -164,7 +167,6 @@ if $(ConfigurationName) == Release (
     <Compile Include="WindowGroup.fs" />
     <Compile Include="TabStripDecorator.fs" />
     <Compile Include="GroupPlugins/SuperBarPlugin.fs" />
-    <Compile Include="GroupPlugins/NumericTabHotKeyPlugin.fs" />
     <Compile Include="GroupPlugins/HideTabsOnInactiveGroupPlugin.fs" />
     <Compile Include="Desktop.fs" />
     <Compile Include="Launcher.fs" />
@@ -172,6 +174,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Workspace\WorkspaceView.fs" />
     <Compile Include="ManagerViewService\Views\AppearanceView.fs" />
     <Compile Include="ManagerViewService\Views\BehaviorView.fs" />
+    <Compile Include="ManagerViewService\Views\ShortcutKeysView.fs" />
     <Compile Include="ManagerViewService\Views\DiagnosticsView.fs" />
     <Compile Include="ManagerViewService\Views\LicenseView.fs" />
     <Compile Include="ManagerViewService\Views\ProgramView.fs" />

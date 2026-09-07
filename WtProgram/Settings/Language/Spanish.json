@@ -67,6 +67,11 @@
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",
 
+  "ShortcutKeys": "Teclas de acceso rápido",
+  "ActivateTab": "Activar pestaña",
+  "EnableAltNumberHotKey": "Habilitar Alt+1, ...Alt+9 para activar pestañas",
+  "NewTabRightOfActive": "Agregar una nueva pestaña a la derecha de la pestaña activa",
+
   "Workspace": "Espacio de trabajo",
   "New": "Nuevo",
   "Restore": "Restaurar",

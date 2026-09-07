@@ -53,7 +53,7 @@ module Localization_English =
         ("RunAtStartup", "Run WindowTabs at startup")
         ("HideInactiveTabs", "Fade out tabs on inactive windows")
         ("IsTabbingEnabledForAllProcessesByDefault", "Enable tabs for all programs by default")
-        ("EnableCtrlNumberHotKey", "Enable Ctrl+1, ...Ctrl+9 to active tab")
+        ("EnableCtrlNumberHotKey", "Enable Ctrl+1, ...Ctrl+9 to activate tab")
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
         ("TabPositionByDefault", "Tab position")
@@ -70,6 +70,11 @@ module Localization_English =
         ("SnapTabHeightMargin", "Add tab height margin when snapping")
         ("NextTab", "Next Tab")
         ("PrevTab", "Previous Tab")
+
+        ("ShortcutKeys", "Shortcut Keys")
+        ("ActivateTab", "Activate Tab")
+        ("EnableAltNumberHotKey", "Enable Alt+1, ...Alt+9 to activate tab")
+        ("NewTabRightOfActive", "Add a new tab to the right of the active tab")
 
         ("Workspace", "Workspace")
         ("New", "New")

@@ -67,7 +67,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let exitedEvent = Event<_>()
     let mouseLLEvent = Event<Int32 * Pt * IntPtr>()
     let flashEvent = Event<_>()
-    let keyboardLLEvent = Event<Int32 * KBDLLHOOKSTRUCT>()
     let foregroundEvent = Event<_>()
 
     let isDestroyed = Cell.create(false)
@@ -274,9 +273,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             None
 
     member this.postMouseLL(msg, pt, data) = mouseLLEvent.Trigger(msg, pt, data)
-    member this.postKeyboardLL(key, data) = keyboardLLEvent.Trigger(key, data)
     member this.mouseLL = mouseLLEvent.Publish
-    member this.keyboardLL = keyboardLLEvent.Publish
     member this.bb = _bb
     member this.ts : TabStrip = _ts.Value.Value
     

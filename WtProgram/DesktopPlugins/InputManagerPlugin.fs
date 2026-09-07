@@ -4,7 +4,6 @@ open System.Runtime.InteropServices
 
 type InputManagerPlugin(msgSet:Set2<Int32>) as this =
     let hookProcDelegate = HOOKPROC(this.llHook)
-    let mutable kbHook = null
     let OS = OS()
 
     member this.desktop = Services.desktop
@@ -27,15 +26,12 @@ type InputManagerPlugin(msgSet:Set2<Int32>) as this =
     member this.registerMouseLLHook() =
         WinUserApi.SetWindowsHookEx(WindowHookTypes.WH_MOUSE_LL, hookProcDelegate, IntPtr.Zero, 0).ignore
 
-    member this.registerKeyboardLLHook() =
-        kbHook <- OS.registerKeyboardLLHook <| fun(key, data) ->
-            this.foregroundGroup.iter <| fun group ->
-                let groupInfo = group.cast<GroupInfo>()
-                groupInfo.invokeGroup <| fun() ->
-                    groupInfo.group.postKeyboardLL(int(key), data)
-            None
+    // No keyboard hook. There used to be a WH_KEYBOARD_LL hook here that fed
+    // every keystroke on the machine to the foreground group, for the
+    // Ctrl+number plugin alone; that plugin is gone (the number keys are
+    // RegisterHotKey hot keys now, see Program.syncHotKeys), and a hook with
+    // no listener would still route all typing through this process.
 
     interface IPlugin with
         member x.init() =
             this.registerMouseLLHook()
-            this.registerKeyboardLLHook()

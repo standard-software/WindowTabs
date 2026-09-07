@@ -1797,45 +1797,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let exeName = pid.exeName
         let processPath = pid.processPath
 
-        // Helper function to get alternative launch command for UWP apps
-        let getAlternativeLaunchCommand(path: string) =
-            let fileName = System.IO.Path.GetFileName(path).ToLowerInvariant()
-            if fileName.Contains("windowsterminal") then
-                Some("wt.exe")
-            else
-                None
-
-        // Resolve the actual path to hand to Process.Start.
-        // For known UWP apps we use an alternative launch command (e.g. wt.exe).
-        // Returns None only for UWP apps with no alternative - the caller then surfaces an error.
-        let resolveLaunchPath () =
-            if processPath.Contains("WindowsApps") then
-                getAlternativeLaunchCommand(processPath)
-            else
-                Some(processPath)
-
-        // Shared error reporting wrapper used by all three new-launch menu items
-        let showUwpError () =
-            let appName = System.IO.Path.GetFileNameWithoutExtension(processPath)
-            let message = String.Format(Localization.getString("NewLaunchErrorUWP"), appName)
-            AppDialog.info "WindowTabs" message
+        // Start another window of this tab's program and report what cannot
+        // be started (a Store application, a failed start). All three
+        // new-launch menu items go through here, and so does the "add a tab
+        // to the right of the active tab" hot key (Program.runHotKey) - the
+        // same NewWindowLaunch.start, so the menu and the key behave alike.
         let handleLaunchError (launchCall: string -> unit) =
-            try
-                match resolveLaunchPath() with
-                | Some(path) -> launchCall path
-                | None -> showUwpError ()
-            with
-            | :? System.ComponentModel.Win32Exception as ex when processPath.Contains("WindowsApps") ->
-                showUwpError ()
-                System.Diagnostics.Debug.WriteLine(sprintf "UWP app cannot be launched: %s - %s" processPath ex.Message)
-            | :? System.ComponentModel.Win32Exception as ex ->
-                let message = String.Format(Localization.getString("NewLaunchErrorProcess"), processPath, ex.Message)
-                AppDialog.info "WindowTabs Error" message
-                System.Diagnostics.Debug.WriteLine(sprintf "Error starting process: %s - %s" processPath ex.Message)
-            | ex ->
-                let message = String.Format(Localization.getString("NewLaunchErrorUnexpected"), ex.Message)
-                AppDialog.info "WindowTabs Error" message
-                System.Diagnostics.Debug.WriteLine(sprintf "Unexpected error starting process: %s - %s" processPath ex.Message)
+            NewWindowLaunch.start processPath launchCall
 
         // Find the decorator whose group contains the given window hwnd.
         // Used by the "new window + position" callback to reach the newly created group.

@@ -67,6 +67,11 @@
   "NextTab": "Onglet suivant",
   "PrevTab": "Onglet précédent",
 
+  "ShortcutKeys": "Raccourcis clavier",
+  "ActivateTab": "Activer un onglet",
+  "EnableAltNumberHotKey": "Activer Alt+1, ...Alt+9 pour activer un onglet",
+  "NewTabRightOfActive": "Ajouter un nouvel onglet à droite de l'onglet actif",
+
   "Workspace": "Espace de travail",
   "New": "Nouveau",
   "Restore": "Restaurer",

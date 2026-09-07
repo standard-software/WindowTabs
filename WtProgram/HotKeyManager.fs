@@ -39,7 +39,10 @@ type HotKeyManager() =
         hotKeyWindow.unregisterHotKey(id).ignore
         hotKeyWindow.registerHotKey(id,modifiers,key,true)
 
+    // True when the OS released the key. A name never registered is a
+    // harmless false.
     member this.unregister name =
         let id = this.findOrAllocateId name
-        hotKeyWindow.unregisterHotKey(id).ignore
+        let released = hotKeyWindow.unregisterHotKey(id)
         handlers.map(fun m -> m.remove id)
+        released

@@ -67,6 +67,11 @@
   "NextTab": "Thẻ tiếp theo",
   "PrevTab": "Thẻ trước",
 
+  "ShortcutKeys": "Phím tắt",
+  "ActivateTab": "Kích hoạt thẻ",
+  "EnableAltNumberHotKey": "Bật Alt+1, ...Alt+9 để kích hoạt thẻ",
+  "NewTabRightOfActive": "Thêm thẻ mới ở bên phải thẻ đang hoạt động",
+
   "Workspace": "Không gian làm việc",
   "New": "Mới",
   "Restore": "Khôi phục",

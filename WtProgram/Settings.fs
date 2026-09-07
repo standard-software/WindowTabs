@@ -534,6 +534,7 @@ type Settings(isStandAlone) as this =
                         hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
                         enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(hasExistingSettings.not)
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
+                        enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
                         tabPositionByDefault =
                             // Handle backward compatibility: convert old format to new TopXxx format
@@ -595,6 +596,7 @@ type Settings(isStandAlone) as this =
                         hideInactiveTabs = false
                         enableTabbingByDefault = true
                         enableCtrlNumberHotKey = false
+                        enableAltNumberHotKey = false
                         enableHoverActivate = false
                         tabPositionByDefault = "TopRight"
                         hideTabsWhenDownByDefault = "never"
@@ -626,6 +628,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
+            settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
             settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
             settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)
             settingsJson.setString("HideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)

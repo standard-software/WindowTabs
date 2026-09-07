@@ -29,6 +29,9 @@ type SettingsRec = {
     hideInactiveTabs: bool
     enableTabbingByDefault: bool
     enableCtrlNumberHotKey: bool
+    // Alt+1 .. Alt+9 activate tabs. Exclusive with the Ctrl setting above in
+    // the dialog; HotKeyPolicy.numberKeyMode settles a file that has both.
+    enableAltNumberHotKey: bool
     enableHoverActivate: bool
     tabPositionByDefault: string
     hideTabsWhenDownByDefault: string
@@ -65,7 +68,10 @@ type SettingsViewType =
     | AppearanceSettings
     | DiagnosticsSettings
     | LayoutSettings
+    // The "Behavior" tab, despite the name.
     | HotKeySettings
+    // The "Shortcut Keys" tab.
+    | ShortcutKeySettings
 
 type ISettingsView =
     abstract key : SettingsViewType
@@ -150,6 +156,9 @@ type IGroup =
     abstract member addWindow: IntPtr * bool -> unit
     abstract member removeWindow: IntPtr -> unit
     abstract member switchWindow: bool * bool -> unit
+    // Activate the tab at a 0-based index in the strip's visual order (left
+    // to right). Out of range: nothing happens.
+    abstract member activateIndex: int -> unit
     abstract member windows: List2<IntPtr>
     abstract member visualOrder: List2<IntPtr>  // Tab display order (left to right)
     // Real on-screen order from the tab strip's thread-safe snapshot. The

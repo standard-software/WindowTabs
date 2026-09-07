@@ -137,6 +137,7 @@ type DesktopManagerForm() =
         ProgramView() :> ISettingsView
         AppearanceView() :> ISettingsView
         HotKeyView() :> ISettingsView
+        ShortcutKeysView() :> ISettingsView
         WorkspaceView() :> ISettingsView
         // DiagnosticsView() :> ISettingsView  // Scan tab hidden
         ])

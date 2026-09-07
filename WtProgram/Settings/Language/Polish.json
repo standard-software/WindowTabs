@@ -67,6 +67,11 @@
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",
 
+  "ShortcutKeys": "Skróty klawiszowe",
+  "ActivateTab": "Aktywuj kartę",
+  "EnableAltNumberHotKey": "Włącz Alt+1, ...Alt+9 do aktywacji kart",
+  "NewTabRightOfActive": "Dodaj nową kartę po prawej stronie aktywnej karty",
+
   "Workspace": "Obszar roboczy",
   "New": "Nowy",
   "Restore": "Przywróć",

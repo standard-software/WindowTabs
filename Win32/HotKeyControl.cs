@@ -133,6 +133,10 @@ namespace Bemo.Win32
             base.OnKeyDown(e);
         }
 
+        // Rendered the way the comctl32 hot key control renders the same
+        // value ("Ctrl + 1", "Alt + F5"), so the two code paths read alike;
+        // in particular a digit is shown as the digit, not as the Keys enum
+        // name "D1".
         private static string FormatHotKey(int packed)
         {
             int vk = packed & 0xFF;
@@ -140,10 +144,13 @@ namespace Bemo.Win32
             if (vk == 0)
                 return NoneLabel;
             var sb = new System.Text.StringBuilder();
-            if ((mods & 2) != 0) sb.Append("Ctrl+");
-            if ((mods & 4) != 0) sb.Append("Alt+");
-            if ((mods & 1) != 0) sb.Append("Shift+");
-            sb.Append(((Keys)vk).ToString());
+            if ((mods & 2) != 0) sb.Append("Ctrl + ");
+            if ((mods & 4) != 0) sb.Append("Alt + ");
+            if ((mods & 1) != 0) sb.Append("Shift + ");
+            if (vk >= (int)Keys.D0 && vk <= (int)Keys.D9)
+                sb.Append((char)('0' + (vk - (int)Keys.D0)));
+            else
+                sb.Append(((Keys)vk).ToString());
             return sb.ToString();
         }
 
