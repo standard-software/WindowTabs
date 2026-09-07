@@ -491,8 +491,6 @@ type WorkspaceModel() as this =
             let editInfo = selected?beginEdit()
             let table = UIHelper.formCompact(editInfo?fields)
             let form = UIHelper.okCancelForm table
-            let icon = Services.openIcon("edit.ico")
-            form.Icon <- icon
             // 380px gives the input column ~250px after the 100px label
             // column + form padding — enough for a comfortable Match Type
             // dropdown without horizontal scrollbar.
