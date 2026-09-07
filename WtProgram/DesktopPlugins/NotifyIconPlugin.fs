@@ -95,7 +95,13 @@ module Watchdog =
             let exePath = Assembly.GetExecutingAssembly().Location
             let startInfo = ProcessStartInfo()
             startInfo.FileName <- "cmd.exe"
-            startInfo.Arguments <- sprintf "/c timeout /t 2 /nobreak >nul && start \"\" \"%s\"" exePath
+            // ping, not timeout, for the delay: timeout refuses to run when its
+            // standard input is not a console ("Input redirection is not
+            // supported"), which it is not when this process was started from
+            // a scheduler or another program with redirected handles - and then
+            // the && never reached start, so the old process quit and nothing
+            // came back.
+            startInfo.Arguments <- sprintf "/c ping -n 3 127.0.0.1 >nul && start \"\" \"%s\"" exePath
             startInfo.WindowStyle <- ProcessWindowStyle.Hidden
             startInfo.CreateNoWindow <- true
             Process.Start(startInfo) |> ignore
@@ -396,10 +402,11 @@ type NotifyIconPlugin() as this =
     // Restart application using normal shutdown
     member this.restartApplication() =
         let exePath = Assembly.GetExecutingAssembly().Location
-        // Start new process with a delay using cmd
+        // Start new process with a delay using cmd. ping rather than timeout:
+        // see trySaveAndRestart.
         let startInfo = ProcessStartInfo()
         startInfo.FileName <- "cmd.exe"
-        startInfo.Arguments <- sprintf "/c timeout /t 3 /nobreak >nul && start \"\" \"%s\"" exePath
+        startInfo.Arguments <- sprintf "/c ping -n 4 127.0.0.1 >nul && start \"\" \"%s\"" exePath
         startInfo.WindowStyle <- ProcessWindowStyle.Hidden
         startInfo.CreateNoWindow <- true
         try
