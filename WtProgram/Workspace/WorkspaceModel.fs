@@ -21,6 +21,9 @@ type IEditInfo =
 type IWorkspaceNode =
     inherit INode
     abstract member beginEdit : unit -> IEditInfo
+    // Whether Edit applies to this node at all. A group has nothing worth
+    // editing: its name labels the tree row and nothing else.
+    abstract member canEdit : bool
     abstract member remove : unit -> unit
     abstract member removed: IEvent<unit>
 
@@ -62,6 +65,7 @@ type WorkspaceWindow() as this =
         member x.remove() =
             removedEvent.Trigger()
         member x.removed = removedEvent.Publish
+        member x.canEdit = true
         member x.beginEdit() =
             let nameEditor = TextEditor() :> IPropEditor
             nameEditor.value <- this.name
@@ -126,15 +130,9 @@ and
         member x.remove() =
             removedEvent.Trigger()
         member x.removed = removedEvent.Publish
-        member x.beginEdit() =
-            let nameEditor = TextEditor() :> IPropEditor
-            nameEditor.value <- this?name
-            { new IEditInfo with
-                member x.title = this?name
-                member x.fields = List2([("Name", nameEditor.control)])
-                member x.height  = 200
-                member x.ok() = this?name <- nameEditor.value.cast<string>()
-            }
+        // Nothing to edit: the name only labels the tree row.
+        member x.canEdit = false
+        member x.beginEdit() = Unchecked.defaultof<IEditInfo>
     
     member this.serialize() =
         let placementObj = 
@@ -193,6 +191,7 @@ and
         member x.remove() =
             removedEvent.Trigger()
         member x.removed = removedEvent.Publish
+        member x.canEdit = true
         member x.beginEdit() =
             let nameEditor = TextEditor() :> IPropEditor
             nameEditor.value <- this?name
@@ -260,6 +259,7 @@ type WorkspaceModel() as this =
     let workspaceAddedEvt = Event<_>()
     let selectedChangedEvt = Event<_>()
     let canRestoreChangedEvt = Event<_>()
+    let canEditChangedEvt = Event<_>()
     let _workspaces = System.Collections.Generic.List<Workspace>()
     let mutable _selected = null : obj
 
@@ -275,6 +275,7 @@ type WorkspaceModel() as this =
             _selected <- value
             selectedChangedEvt.Trigger(value)
             canRestoreChangedEvt.Trigger(this.canRestore)
+            canEditChangedEvt.Trigger(this.canEdit)
 
     member this.selectedChanged = selectedChangedEvt.Publish
 
@@ -382,6 +383,11 @@ type WorkspaceModel() as this =
 
     member this.canRestoreChanged = canRestoreChangedEvt.Publish
 
+    member this.canEdit =
+        this.selected <> null && this.selected.cast<IWorkspaceNode>().canEdit
+
+    member this.canEditChanged = canEditChangedEvt.Publish
+
     member this.restore() =
         if this.selected <> null then
             let ws = this.selected :?> Workspace
@@ -389,7 +395,7 @@ type WorkspaceModel() as this =
 
     member this.edit(parent) =
         let selected = this.selected
-        if selected <> null then
+        if this.canEdit then
             let editInfo = selected?beginEdit()
             let table = UIHelper.formCompact(editInfo?fields)
             let form = UIHelper.okCancelForm table

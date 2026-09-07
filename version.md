@@ -7,6 +7,7 @@
 - Every message WindowTabs shows now comes through one dialog: in front of the settings dialog (which it closes first), dark-mode aware, and Ctrl+C copies it in the system box's layout
 - Restart and Close on the tray menu ask for confirmation first, in every language
 - The workspace edit dialog keeps only Close in its caption; the settings dialog and the edit dialog show the same size grip in the corner
+- Edit is disabled for a workspace group; its name was never used for anything
 
 ## version ss_2026.09.08_next1
 

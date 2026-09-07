@@ -137,6 +137,10 @@ type WorkspaceView() as this =
         let btn = ToolStripButton(Localization.getString("Edit"))
         btn.Image <- Services.openImage("edit.png")
         btn.Click.Add <| fun _ -> this.onEditButton()
+        // Off for a node that has nothing to edit (a group), like Restore
+        // is off for anything but a workspace.
+        this.wm.canEditChanged.Add <| fun(canEdit) ->
+            btn.Enabled <- canEdit
         btn
 
     member this.toolbar = Cell.cacheProp this <| fun() ->
