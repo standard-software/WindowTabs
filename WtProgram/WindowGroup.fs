@@ -129,17 +129,24 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         zorderCell.value.any((=) foregroundCell.value)
 
     let shouldHideTabs () =
+        // Read reactive state before settings. Even if a settings read fails,
+        // Cell.listen must retain its fullscreen dependency.
+        let isFullscreen = isFullscreenExport.value
+        let isMoving = inMoveSizeSnapshot
         try
             TabBehaviorPolicy.hideTabs
                 (Services.settings.getValue("hideTabsOnFullscreen") :?> bool)
-                isFullscreenExport.value
+                isFullscreen
                 (Services.settings.getValue("hideTabsWhileMoving") :?> bool)
-                inMoveSize.value
+                isMoving
         with _ -> false
+
+    let shouldShowTabStrip () =
+        isVisibleCell.value && not (shouldHideTabs())
 
     let updateTabVisibility () =
         match !_ts with
-        | Some(ts: TabStrip) -> ts.visible <- isVisibleCell.value && not (shouldHideTabs())
+        | Some(ts: TabStrip) -> ts.visible <- shouldShowTabStrip()
         | None -> ()
 
     // Per-group tab position: always has a concrete value (TopLeft/TopRight)
@@ -985,16 +992,16 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         
 
     member this.onEnterMoveSize() =
-        inMoveSize.set(true)
         inMoveSizeSnapshot <- true
+        inMoveSize.set(true)
         updateTabVisibility()
         this.hideChildWindows()
         this.saveTopWindowPlacement()
         this.updateIsVisible()
 
     member this.onExitMoveSize() =
-        inMoveSize.set(false)
         inMoveSizeSnapshot <- false
+        inMoveSize.set(false)
         this.saveTopWindowPlacement()
         this.adjustChildWindows()
         this.makeTopWindowForeground()
@@ -1003,6 +1010,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isInMoveSizeThreadSafe = inMoveSizeSnapshot
+
+    member this.shouldShowTabs = shouldShowTabStrip()
 
     member this.main(hwnd, evt) = this.invokeAsync <| fun() -> this.withUpdate <| fun() ->
         match evt with

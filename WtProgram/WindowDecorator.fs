@@ -48,8 +48,5 @@ type WindowDecorator = {
 
     member this.boundsFor(verticalDirection: string) : Rect =
         if this.showInside(verticalDirection) then this.insideBounds else this.outsideBounds
-
-    member this.bounds : Rect =
-        if this.shouldShowInside then this.insideBounds else this.outsideBounds
     
 

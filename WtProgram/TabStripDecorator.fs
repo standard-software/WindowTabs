@@ -152,9 +152,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let dropTarget = Cell.create(None)
     let mouseEvent = Event<IntPtr * MouseButton * TabPart * MouseAction * Pt>()
     let _ts = TabStrip(this :> ITabStripMonitor)
-    // Variables for double-click detection
-    let hiddenByDoubleClick = ref false
-    let doubleClickProtectUntil = ref System.DateTime.MinValue
+    // State for suppressing hover-driven reveal after an icon click.
+    let hiddenByIconClick = ref false
+    let iconClickProtectUntil = ref System.DateTime.MinValue
+    let iconClickHideProtection = System.TimeSpan.FromSeconds(1.0)
     let firstClickTab = ref None  // Track the tab that was clicked first in potential double-click
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
@@ -246,16 +247,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                 // Clear first click tracking after double-click
                 firstClickTab := None
-            | MouseUp, MouseLeft ->
-                // Hide tabs when clicking the icon of the active tab (if icon-click hide mode is enabled)
-                capturedHwnd.Value.iter <| fun captured ->
-                    if hwnd = captured && hwnd = group.topWindow && part = TabIcon then
-                        let autoHideIconClick = group.bb.read("autoHideDoubleClick", false)
-                        if autoHideIconClick then
-                            hiddenByDoubleClick := true
-                            doubleClickProtectUntil := System.DateTime.Now.AddMilliseconds(300.0)
-                            group.invokeAsync <| fun() ->
-                                this.ts.isShrunk <- true
+            | MouseDown, MouseLeft ->
+                // This event runs before tab activation. Hide immediately only
+                // when the pressed icon belongs to the already-active tab.
+                let autoHideIconClick = group.bb.read("autoHideDoubleClick", false)
+                if TabBehaviorPolicy.hideFromIconMouseDown
+                       autoHideIconClick (hwnd = group.topWindow) (part = TabIcon) then
+                    hiddenByIconClick := true
+                    // Ignore hover/move-driven reveal immediately after the
+                    // strip disappears beneath the pointer.
+                    iconClickProtectUntil := System.DateTime.Now.Add(iconClickHideProtection)
+                    group.invokeAsync <| fun() ->
+                        this.ts.isShrunk <- true
+                capturedHwnd := Some(hwnd)
+                // Track the first click for double-click detection
+                // Only set if it's the active tab to ensure double-click only works on already active tabs
+                if hwnd = group.topWindow then
+                    firstClickTab := Some(hwnd)
+                else
+                    firstClickTab := None
             | MouseUp, MouseRight ->
                 let ptScreen = os.windowFromHwnd(group.hwnd).ptToScreen(pt)
                 // ONE scale for the whole menu, decided from the point the menu
@@ -276,14 +286,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     with | _ -> false
                 Win32Menu.show group.hwnd ptScreen menuScale (this.contextMenu(hwnd, menuScale)) darkModeEnabled
                 group.bb.write("contextMenuVisible", false)
-            | MouseDown, MouseLeft ->
-                capturedHwnd := Some(hwnd)
-                // Track the first click for double-click detection
-                // Only set if it's the active tab to ensure double-click only works on already active tabs
-                if hwnd = group.topWindow then
-                    firstClickTab := Some(hwnd)
-                else
-                    firstClickTab := None
             | MouseDown, _ ->
                 capturedHwnd := Some(hwnd)
             | MouseUp, MouseMiddle ->
@@ -328,15 +330,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let placement = this.placement
             this.ts.setTabAppearance(group.tabAppearanceAt placement.scale, placement.scale)
             this.ts.setPlacement(placement)
-            let hideTabs =
-                try
-                    let hideTabsOnFullscreen = Services.settings.getValue("hideTabsOnFullscreen") :?> bool
-                    let hideTabsWhileMoving = Services.settings.getValue("hideTabsWhileMoving") :?> bool
-                    TabBehaviorPolicy.hideTabs
-                        hideTabsOnFullscreen group.isFullscreen.value
-                        hideTabsWhileMoving group.isInMoveSizeThreadSafe
-                with _ -> false
-            this.ts.visible <- not hideTabs
+            // WindowGroup is the single owner of visibility policy. Keeping
+            // placement updates on the same decision prevents move-state races.
+            this.ts.visible <- group.shouldShowTabs
             
             // Handle UWP application tab visibility
             let hasUWPWindow = group.windows.items.any(fun hwnd ->
@@ -3055,20 +3051,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if autoHideDoubleClickCell.value then
 
                 // Check if protection period has expired
-                let protectionExpired = System.DateTime.Now > !doubleClickProtectUntil
+                let protectionExpired = System.DateTime.Now > !iconClickProtectUntil
 
-                // In double-click mode, only show tabs when mouse is over and hidden
+                // In icon-click mode, only show tabs when mouse is over and hidden
                 if this.ts.isShrunk && isMouseOver.value && not isDraggingCell.value then
                     // Check if we should show tabs (protection period expired OR mouse left and returned)
-                    if not !hiddenByDoubleClick || protectionExpired then
-                        if protectionExpired && !hiddenByDoubleClick then
-                            hiddenByDoubleClick := false
-                        if not !hiddenByDoubleClick then
+                    if not !hiddenByIconClick || protectionExpired then
+                        if protectionExpired && !hiddenByIconClick then
+                            hiddenByIconClick := false
+                        if not !hiddenByIconClick then
                             this.ts.isShrunk <- false
                 // Clear the flag when mouse leaves
                 elif not isMouseOver.value then
-                    if !hiddenByDoubleClick && protectionExpired then
-                        hiddenByDoubleClick := false
+                    if !hiddenByIconClick && protectionExpired then
+                        hiddenByIconClick := false
             else
                 // Normal auto-hide logic for other modes
                 let shrink =

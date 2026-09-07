@@ -5,6 +5,7 @@
 ## version ss_2026.09.08_next6
 
 - Added tab direction and hide-while-moving behavior settings
+- Fixed: clicking a tab's icon hid the tabs even when that tab was not the active one
 
 ## version ss_2026.09.08_next5
 
@@ -27,10 +28,6 @@
 - Restart and Close on the tray menu ask for confirmation first, in every language
 - The workspace edit dialog keeps only Close in its caption; the settings dialog and the edit dialog show the same size grip in the corner
 - Edit is disabled for a workspace group; its name was never used for anything
-
-## version ss_2026.09.08_next1
-
-- Fixed "Restart WindowTabs" and the watchdog restart doing nothing when WindowTabs had been started with a redirected standard input (from a scheduler or another program)
 
 ## version ss_2026.09.08
 

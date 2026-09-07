@@ -122,6 +122,9 @@ if $(ConfigurationName) == Release (
   <ItemGroup>
     <Compile Include="Localization\Localization_English.fs" />
     <Compile Include="Localization\JsoncHelper.fs" />
+    <!-- Keep this early compile order while placing the shared source under
+         Localization in the Visual Studio project tree. This avoids the legacy
+         F# project-system load failure caused by its physical folder ordering. -->
     <Compile Include="Shared\UserOverrides.fs">
       <Link>Localization\UserOverrides.fs</Link>
     </Compile>
