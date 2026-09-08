@@ -9,6 +9,7 @@
 - Reduced settings dialog and startup overhead by caching parsed settings and process drive mappings
 - Reduced per-program category lookups from ten cross-thread calls to one
 - Reduced repeated settings copies during window and hot-key updates, and ignored stale background results in the Programs page
+- The Workspace page now starts with every saved workspace collapsed
 - Prevented delayed mouse-wheel input from being delivered to a different foreground window
 
 ## version ss_2026.09.08_next6
