@@ -36,16 +36,17 @@ type ExeNode(procPath) =
     let mutable _isRunning = true
     let mutable _enableTabs = Services.filter.getIsTabbingEnabledForProcess(procPath)
     let mutable _enableAutoGrouping = Services.program.getAutoGroupingEnabled(procPath)
-    let mutable _category1 = Services.program.getCategoryEnabled(procPath, 1)
-    let mutable _category2 = Services.program.getCategoryEnabled(procPath, 2)
-    let mutable _category3 = Services.program.getCategoryEnabled(procPath, 3)
-    let mutable _category4 = Services.program.getCategoryEnabled(procPath, 4)
-    let mutable _category5 = Services.program.getCategoryEnabled(procPath, 5)
-    let mutable _category6 = Services.program.getCategoryEnabled(procPath, 6)
-    let mutable _category7 = Services.program.getCategoryEnabled(procPath, 7)
-    let mutable _category8 = Services.program.getCategoryEnabled(procPath, 8)
-    let mutable _category9 = Services.program.getCategoryEnabled(procPath, 9)
-    let mutable _category10 = Services.program.getCategoryEnabled(procPath, 10)
+    let initialCategoryNumber = Services.program.getCategoryNumber(procPath)
+    let mutable _category1 = initialCategoryNumber = 1
+    let mutable _category2 = initialCategoryNumber = 2
+    let mutable _category3 = initialCategoryNumber = 3
+    let mutable _category4 = initialCategoryNumber = 4
+    let mutable _category5 = initialCategoryNumber = 5
+    let mutable _category6 = initialCategoryNumber = 6
+    let mutable _category7 = initialCategoryNumber = 7
+    let mutable _category8 = initialCategoryNumber = 8
+    let mutable _category9 = initialCategoryNumber = 9
+    let mutable _category10 = initialCategoryNumber = 10
     member this.Icon with get() = icon
     member this.processPath = procPath
     member this.isRunning
@@ -328,6 +329,7 @@ type ProgramView() as this=
         panel.Controls.Add(tree)
         panel.Controls.Add(toolBar)
         panel
+    let mutable populationGeneration = 0
 
     do  
         this.populateNodes()
@@ -335,6 +337,7 @@ type ProgramView() as this=
             this.populateNodes()
 
     member private this.populateNodes() =
+        let generation = Threading.Interlocked.Increment(&populationGeneration)
         model.Nodes.Clear()
         let showAll = showAllSettings
         ThreadHelper.queueBackground <| fun() ->
@@ -371,9 +374,10 @@ type ProgramView() as this=
                     procNodes
 
             invoker.asyncInvoke <| fun() ->
-                model.Nodes.Clear()
-                // Sort by category number first (0 = unset first, then 1-5), then by name
-                allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
+                if not panel.IsDisposed && generation = Threading.Volatile.Read(&populationGeneration) then
+                    model.Nodes.Clear()
+                    // Sort by category number first (0 = unset first, then 1-5), then by name
+                    allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
 
     interface ISettingsView with
         member x.key = SettingsViewType.ProgramSettings

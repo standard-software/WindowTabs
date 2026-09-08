@@ -69,7 +69,21 @@ type IWindow =
     abstract member hwnd : IntPtr
 
 type OS() as this= 
+    static let dosDevicesLock = obj()
+    static let mutable cachedDosDevices = None
+    static let mutable dosDevicesCacheUntil = DateTime.MinValue
+
     let Cell = CellScope()
+
+    let readDosDevices() =
+        let driveLetters = List2([0..25]).map(fun i -> char(int('A') + i))
+        driveLetters.choose <| fun driveLetter ->
+            let pathLength = 512
+            let path = StringBuilder(pathLength)
+            if WinBaseApi.QueryDosDevice(driveLetter.ToString() + ":", path, pathLength) then
+                Some(path.ToString(), driveLetter)
+            else
+                None
 
     member this.getTaskbar() = if this.isWin7OrHigher then Some(ShellApi.GetTaskbar()) else None
     
@@ -237,14 +251,17 @@ type OS() as this=
         }
 
     member this.dosDevices = 
-        let driveLetters = List2([0..25]).map(fun i -> char(int('A') + i))
-        driveLetters.choose <| fun driveLetter ->
-            let pathLength = 512
-            let path = StringBuilder(pathLength)
-            if WinBaseApi.QueryDosDevice(driveLetter.ToString() + ":", path, pathLength) then
-                Some(path.ToString(), driveLetter)
-            else
-                None
+        lock dosDevicesLock <| fun() ->
+            let now = DateTime.UtcNow
+            match cachedDosDevices with
+            | Some(devices) when now < dosDevicesCacheUntil -> devices
+            | _ ->
+                let devices = readDosDevices()
+                cachedDosDevices <- Some(devices)
+                // Drive mappings can change while WindowTabs is running, so
+                // avoid a process-lifetime cache while removing scan bursts.
+                dosDevicesCacheUntil <- now.AddSeconds(30.0)
+                devices
 
     member this.setSingleWinEvent (event:WinEvent) proc =
         let proc hWinEventHook _ hwnd idObject idChild dwEventThread dwmsEventTime =

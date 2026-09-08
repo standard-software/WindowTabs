@@ -1200,6 +1200,20 @@ module DarkMode =
                 invalidateTreeViewAdvs(child)
             form.Invalidate(true)
 
+    /// Apply the complete dark pipeline only to a settings page created after
+    /// the form was shown. Existing pages keep their handlers and subclasses.
+    let applyDarkThemeToAddedControl (control: Control) =
+        applyDarkColorsToControl(control)
+        attachDarkOwnerDrawHandlers(control)
+        applyDarkNativeThemeToControl(control)
+        applyDarkExtraTreatments(control)
+        attachDarkBackgroundSubclassRecursive(control)
+        attachDarkTreeViewAdvOverlayRecursive(control)
+        attachDarkSpinnerAndArrowSubclassesRecursive(control)
+        attachDarkContextMenuStripsRecursive(control)
+        attachDarkStatusBarOwnerDrawRecursive(control)
+        invalidateTreeViewAdvs(control)
+
 // A NodeCheckBox subclass that paints itself in our dark palette so the
 // Programs-tab Tabs / AutoGrouping / Category columns match the standard
 // CheckBox dark style instead of the system-themed white square.

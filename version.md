@@ -2,6 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next8
+
+- Completed the Programs page layout before opening the settings dialog while loading its application information in the background; the other pages are prepared immediately after the dialog appears
+- Moved the low-level mouse hook to a dedicated message thread so main-window work no longer stalls system mouse input
+- Reduced settings dialog and startup overhead by caching parsed settings and process drive mappings
+- Reduced per-program category lookups from ten cross-thread calls to one
+- Reduced repeated settings copies during window and hot-key updates, and ignored stale background results in the Programs page
+- Prevented delayed mouse-wheel input from being delivered to a different foreground window
+
 ## version ss_2026.09.08_next6
 
 - Added tab direction and hide-while-moving behavior settings
