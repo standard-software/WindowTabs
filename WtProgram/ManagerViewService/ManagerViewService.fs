@@ -11,6 +11,7 @@ type ManagerViewService() =
     let activateExistingIfAny() =
         match DesktopManagerFormState.currentForm with
         | Some(existing) ->
+            DesktopManagerFormState.log(sprintf "activate existing visible=%b opacity=%.2f" existing.Visible existing.Opacity)
             try
                 if existing.WindowState = FormWindowState.Minimized then
                     existing.WindowState <- FormWindowState.Normal
@@ -40,6 +41,7 @@ type ManagerViewService() =
     // dialog-wide one - see WorkspaceModel.createWorkspace / restoreWorkspace.
     interface IManagerView with
         member x.show() =
+            DesktopManagerFormState.log("manager show requested")
             if not (activateExistingIfAny()) then
                 let form = new DesktopManagerForm()
                 form.show()
