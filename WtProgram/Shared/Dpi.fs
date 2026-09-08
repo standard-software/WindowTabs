@@ -943,6 +943,25 @@ module SettingsDpi =
     /// the scale of the monitor they appear on.
     let applyToChildDialog (form: Form) = applyScale form 1.0 currentScale
 
+    /// Scale a settings-page control that was constructed after its parent
+    /// form was shown. The control is still in 96-dpi design units here; only
+    /// this new subtree is scaled, leaving the established pages untouched.
+    let applyToAddedControl (control: Control) =
+        let scale = currentScale
+        try captureCellDesigns control 1.0 with _ -> ()
+        try captureControlLayout control with _ -> ()
+        match font scale with
+        | Some(f) -> (try control.Font <- f with _ -> ())
+        | None -> ()
+        if scale <> 1.0 then
+            try
+                let factor = float32 scale
+                control.Scale(SizeF(factor, factor))
+            with _ -> ()
+            try reassertCellDesigns control scale with _ -> ()
+        try applyControlLayout control scale with _ -> ()
+        fixups control scale scale
+
     /// Lay a stand-alone dialog out for the monitor the pointer is on (the
     /// "language changed" confirmation, which is opened from the tray menu
     /// after the settings dialog has already closed).

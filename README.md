@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.08_next6_b6**
+Latest version: **ss_2026.09.08_next8_build14**
 
 See [version.md](version.md) for details.
 

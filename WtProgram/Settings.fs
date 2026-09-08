@@ -19,6 +19,10 @@ module ColorMix =
 
 type Settings(isStandAlone) as this =
     let mutable cachedSettingsString = None
+    // JObject is mutable, so keep an internal parsed template and return a
+    // clone to callers. This avoids reparsing unchanged JSON without allowing
+    // an unsaved caller mutation to leak into later reads.
+    let mutable cachedSettingsJson : (string * JObject) option = None
     let mutable cachedSettingsRec = None
     let mutable hasExistingSettings = false
     // One safety copy of the settings file per process, taken the first time
@@ -50,6 +54,7 @@ type Settings(isStandAlone) as this =
 
     member this.clearCaches() =
         cachedSettingsString <- None
+        cachedSettingsJson <- None
         cachedSettingsRec <- None
         valueCache.Clear()
 
@@ -212,6 +217,7 @@ type Settings(isStandAlone) as this =
                             File.Move(tempPath, this.path)
                         // Refresh in-memory caches with the freshly written content
                         cachedSettingsString <- Some(newContent)
+                        cachedSettingsJson <- None
                         cachedSettingsRec <- None
                         valueCache.Clear()
             with
@@ -267,6 +273,7 @@ type Settings(isStandAlone) as this =
                             // nothing built while the settings were unreadable
                             // survives into the recovered process.
                             cachedSettingsString <- Some(text)
+                            cachedSettingsJson <- None
                             cachedSettingsRec <- None
                             valueCache.Clear()
                             settingsUntrusted <- false
@@ -284,13 +291,19 @@ type Settings(isStandAlone) as this =
                     with _ -> None)
             with _ -> None
 
-    member this.settingsJson
-        with get() =
+    member private this.getSettingsJson(cloneForCaller: bool) =
+        let result =
             try
                 match this.settingsString with
                 | Some(s) ->
                     try
-                        parseJsoncObject(s)
+                        match cachedSettingsJson with
+                        | Some(cachedSource, cachedJson) when cachedSource = s ->
+                            cachedJson
+                        | _ ->
+                            let parsed = parseJsoncObject(s)
+                            cachedSettingsJson <- Some(s, parsed)
+                            parsed
                     with
                     | ex ->
                         // A later parse succeeding is NOT enough to trust this
@@ -312,6 +325,16 @@ type Settings(isStandAlone) as this =
             | ex ->
                 this.logEmptyFallback "settingsJson outer" ex
                 JObject()  // Return empty JObject if any error occurs
+
+        if cloneForCaller then result.DeepClone() :?> JObject else result
+
+    member this.settingsJsonReadOnly =
+        // This object must never escape code that only reads it. Mutating
+        // callers use settingsJson, which returns an isolated clone.
+        this.getSettingsJson(false)
+
+    member this.settingsJson
+        with get() = this.getSettingsJson(true)
         and set(settingsJson:JObject) = this.settingsString <- Some(settingsJson.ToString())
 
     member this.defaultTabAppearance =

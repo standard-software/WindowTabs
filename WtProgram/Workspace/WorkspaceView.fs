@@ -38,12 +38,16 @@ type WorkspaceNode(model:Dynamic) as this =
 
 type WorkspaceView() as this =
     let Cell = CellScope()
+    let mutable loadingInitialWorkspaces = true
     
 
     member this.wm = Cell.cacheProp this <| fun() ->
         let wm = WorkspaceModel()
         wm.workspaceAdded.Add this.onWorkspaceAdded
-        wm.init()
+        try
+            wm.init()
+        finally
+            loadingInitialWorkspaces <- false
         wm
 
     member this.nameColumn = Cell.cacheProp this <| fun() ->
@@ -184,14 +188,15 @@ type WorkspaceView() as this =
             this.tree.FullUpdate()
 
     member this.onWorkspaceAdded(ws:Workspace) =
-        this.tree.Root.CollapseAll()
         let wsNode = WorkspaceNode(ws)
         this.model.Nodes.Insert(0, wsNode)
-        let path = this.model.GetPath(wsNode)
-        let treeNode = this.tree.FindNode(path)
-        treeNode.ExpandAll()
-        InvokerService.invoker.asyncInvoke <| fun() ->
-            this.tree.SelectedNode <- treeNode
+        if not loadingInitialWorkspaces then
+            this.tree.Root.CollapseAll()
+            let path = this.model.GetPath(wsNode)
+            let treeNode = this.tree.FindNode(path)
+            treeNode.ExpandAll()
+            InvokerService.invoker.asyncInvoke <| fun() ->
+                this.tree.SelectedNode <- treeNode
 
     interface ISettingsView with
         member x.key = SettingsViewType.LayoutSettings

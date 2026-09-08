@@ -119,6 +119,7 @@ type IProgram =
     abstract member getAutoGroupingEnabled : string -> bool
     abstract member setAutoGroupingEnabled : string -> bool -> unit
     abstract member getCategoryEnabled : string * int -> bool
+    abstract member getCategoryNumber : string -> int
     abstract member setCategoryEnabled : string -> int -> bool -> unit
     abstract member tabAppearanceInfo : TabAppearanceInfo
     abstract member defaultTabAppearanceInfo : TabAppearanceInfo
