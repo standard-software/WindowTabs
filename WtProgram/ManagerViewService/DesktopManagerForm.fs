@@ -15,6 +15,8 @@ module DesktopManagerFormState =
             let directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
             Directory.CreateDirectory(directory).ignore
             let path = Path.Combine(directory, "settings_dialog_trace.log")
+            if File.Exists(path) && FileInfo(path).Length > 256L * 1024L then
+                File.WriteAllText(path, "")
             File.AppendAllText(path, sprintf "%s [t%d] %s%s" (DateTime.Now.ToString("HH:mm:ss.fff")) Thread.CurrentThread.ManagedThreadId message Environment.NewLine)
         with _ -> ()
 #else
