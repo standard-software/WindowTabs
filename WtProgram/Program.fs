@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.08_next6_b6"
+    let version = "ss_2026.09.08_next8_build14"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -297,7 +297,7 @@ type Program() as this =
     do
         let savedDisabledState =
             try
-                settingsManager.settingsJson.getBool("IsDisabled").def(false)
+                settingsManager.settingsJsonReadOnly.getBool("IsDisabled").def(false)
             with
             | _ -> false
         isDisabledCell.set(savedDisabledState)
@@ -701,12 +701,7 @@ type Program() as this =
 
     // Get the category number (1-10) for a given process path, or 0 if no category is set
     member private this.getCategoryForProcess(procPath: string) =
-        let program = this :> IProgram
-        let rec check i =
-            if i > 10 then 0
-            elif program.getCategoryEnabled(procPath, i) then i
-            else check (i + 1)
-        check 1
+        (this :> IProgram).getCategoryNumber(procPath)
 
     // getCategoryEnabled reparses the settings file on every call, and asking
     // for a category means asking it up to ten times, so a pass that looks at
@@ -2024,7 +2019,11 @@ type Program() as this =
     member private this.wantedHotKeys() =
         let settings = settingsManager.settings
         let mode = HotKeyPolicy.numberKeyMode settings.enableCtrlNumberHotKey settings.enableAltNumberHotKey
-        let kept, dropped = HotKeyPolicy.dedupe (HotKeyPolicy.bindings mode (this.cast<IProgram>().getHotKey))
+        // Read HotKeys once per synchronization. Calling IProgram.getHotKey
+        // for every binding would clone the entire settings JSON each time.
+        let hotKeys = settingsManager.settingsJsonReadOnly.getObject("HotKeys").def(JObject())
+        let getHotKey key = hotKeys.getInt32(key).def(hotKeyDefaults.tryFind(key).def(HotKeyPolicy.noKey))
+        let kept, dropped = HotKeyPolicy.dedupe (HotKeyPolicy.bindings mode getHotKey)
         // Two fields with one key: the first keeps it and the other is
         // inert. The dialog does not warn; this line is the one place it
         // shows.
@@ -2304,7 +2303,7 @@ type Program() as this =
     // restoration.
     member this.restoreTabGroupsFromSettings() =
         try
-            let json = settingsManager.settingsJson
+            let json = settingsManager.settingsJsonReadOnly
             match json.getValueCI("SavedTabGroupsForRestart") with
             | Some(:? JArray as groupsArray) when groupsArray.Count > 0 ->
                 isRestoringTabGroups.set(true)
@@ -2618,7 +2617,10 @@ type Program() as this =
         // happen - the lowest number is the one that counts, everywhere,
         // including the tick the dialog draws.
         member x.getCategoryEnabled (procPath, categoryNum) =
-            let settingsJson = settingsManager.settingsJson
+            (x :> IProgram).getCategoryNumber(procPath) = categoryNum
+
+        member x.getCategoryNumber procPath =
+            let settingsJson = settingsManager.settingsJsonReadOnly
             let listedIn i =
                 let paths = settingsJson.getStringArray(sprintf "Category%dPaths" i).def(List2())
                 AppPath.containsApp paths.list procPath
@@ -2626,7 +2628,7 @@ type Program() as this =
                 if i > 10 then 0
                 elif listedIn i then i
                 else firstListed (i + 1)
-            firstListed 1 = categoryNum
+            firstListed 1
 
         // The auto-grouping setting is not consulted here. The dialog only
         // shows the category boxes for an application whose auto-grouping is
@@ -2674,7 +2676,7 @@ type Program() as this =
             settingsManager.darkRedFrameTabAppearance
             
         member x.getHotKey key = 
-            let hotKeys = settingsManager.settingsJson.getObject("HotKeys").def(JObject())
+            let hotKeys = settingsManager.settingsJsonReadOnly.getObject("HotKeys").def(JObject())
             match hotKeys.getInt32(key) with
             | Some(value) -> value
             | None -> hotKeyDefaults.tryFind(key).def(HotKeyPolicy.noKey)
@@ -2793,7 +2795,7 @@ type Program() as this =
             // Collect from autoGroupingPaths
             settings.autoGroupingPaths.items.iter(fun p -> paths.Add(p) |> ignore)
             // Collect from Category1Paths through Category10Paths
-            let settingsJson = settingsManager.settingsJson
+            let settingsJson = settingsManager.settingsJsonReadOnly
             for i in 1..10 do
                 let categoryKey = sprintf "Category%dPaths" i
                 let categoryPaths = settingsJson.getStringArray(categoryKey).def(List2())
@@ -2838,7 +2840,7 @@ type Program() as this =
         // Initialize localization with language setting
         let language =
             try
-                let value = settingsManager.settingsJson.["language"]
+                let value = settingsManager.settingsJsonReadOnly.["language"]
                 if value = null then "English" else value.ToString()
             with
             | _ -> "English"
@@ -2847,7 +2849,7 @@ type Program() as this =
         // Check if there are saved tab groups to restore
         let hasSavedTabGroups =
             try
-                let json = settingsManager.settingsJson
+                let json = settingsManager.settingsJsonReadOnly
                 match json.getValueCI("SavedTabGroupsForRestart") with
                 | Some(:? JArray as arr) when arr.Count > 0 -> true
                 | _ -> false
