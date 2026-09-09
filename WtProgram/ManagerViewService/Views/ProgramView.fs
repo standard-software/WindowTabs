@@ -27,12 +27,29 @@ module ImgHelper =
                     SystemIcons.Application.ToBitmap().img
         img.resize(Sz(size,size)).bitmap :> Image
 
+type private DpiIcon(icon: Icon) =
+    // Keep one image for each monitor scale. TreeViewAdv can ask for the same
+    // property again while completing an earlier paint, so disposing the
+    // previous scale's image during a DPI transition is unsafe. A desktop has
+    // only a handful of distinct monitor scales, keeping this cache bounded in
+    // normal use and making repeated monitor crossings allocation-free.
+    let images = Collections.Generic.Dictionary<float, Image>()
+
+    member this.image =
+        let scale = SettingsDpi.current()
+        match images.TryGetValue(scale) with
+        | true, image -> image
+        | _ ->
+            let image = ImgHelper.imgFromIcon icon
+            images.[scale] <- image
+            image
+
 
 type ExeNode(procPath) =
     inherit Node(Path.GetFileName(procPath))
     let icon =
         let procIcon = Win32Helper.GetFileIcon(procPath)
-        ImgHelper.imgFromIcon (Ico.fromHandle(procIcon).def(System.Drawing.SystemIcons.Application))
+        DpiIcon(Ico.fromHandle(procIcon).def(System.Drawing.SystemIcons.Application))
     let mutable _isRunning = true
     let mutable _enableTabs = Services.filter.getIsTabbingEnabledForProcess(procPath)
     let mutable _enableAutoGrouping = Services.program.getAutoGroupingEnabled(procPath)
@@ -47,7 +64,7 @@ type ExeNode(procPath) =
     let mutable _category8 = initialCategoryNumber = 8
     let mutable _category9 = initialCategoryNumber = 9
     let mutable _category10 = initialCategoryNumber = 10
-    member this.Icon with get() = icon
+    member this.Icon with get() = icon.image
     member this.processPath = procPath
     member this.isRunning
         with get() = _isRunning
@@ -137,8 +154,8 @@ type ExeNode(procPath) =
 
 type WindowNode(window:Window) =
     inherit Node(window.text)
-    let icon = ImgHelper.imgFromIcon window.iconSmall
-    member this.Icon with get() = icon 
+    let icon = DpiIcon(window.iconSmall)
+    member this.Icon with get() = icon.image
     interface INode with
         member x.showSettings = false
 
