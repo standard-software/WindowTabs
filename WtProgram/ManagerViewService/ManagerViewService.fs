@@ -3,23 +3,18 @@
 open System.Windows.Forms
 
 type ManagerViewService() =
-    // If a settings dialog is already open, just bring it to the front
-    // instead of constructing a second DesktopManagerForm. The second
-    // form would otherwise leak the named-mutex ownership (M1) by
-    // overwriting DesktopManagerFormState.mutex with a non-owning M2,
-    // leaving the dialog permanently un-openable after it closes.
-    let activateExistingIfAny() =
-        match DesktopManagerFormState.currentForm with
-        | Some(existing) ->
-            DesktopManagerFormState.log(sprintf "activate existing visible=%b opacity=%.2f" existing.Visible existing.Opacity)
-            try
-                if existing.WindowState = FormWindowState.Minimized then
-                    existing.WindowState <- FormWindowState.Normal
-                existing.Activate()
-                existing.BringToFront()
-            with _ -> ()
-            true
-        | None -> false
+    let showSettings show =
+        if not Services.program.isDisabled then
+            match DialogState.tryAcquire() with
+            | None -> ()
+            | Some session ->
+                try
+                    let form = new DesktopManagerForm(session)
+                    show form
+                    if DesktopManagerFormState.currentForm.IsNone then session.Dispose()
+                with _ ->
+                    session.Dispose()
+                    reraise()
 
     // The settings dialog used to be built inside Dpi.withUnawareContext,
     // which made Windows lay it out in 96-dpi units and bitmap-stretch the
@@ -42,14 +37,10 @@ type ManagerViewService() =
     interface IManagerView with
         member x.show() =
             DesktopManagerFormState.log("manager show requested")
-            if not (activateExistingIfAny()) then
-                let form = new DesktopManagerForm()
-                form.show()
+            showSettings (fun form -> form.show())
 
         member x.show(view) =
-            if not (activateExistingIfAny()) then
-                let form = new DesktopManagerForm()
-                form.showView(view)
+            showSettings (fun form -> form.showView(view))
 
         // Through the form itself: its FormClosed handler releases the named
         // mutex and clears DesktopManagerFormState.currentForm, and nothing

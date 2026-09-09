@@ -134,6 +134,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Observable.fs" />
     <Compile Include="Shared/Blackboard.fs" />
     <Compile Include="Shared/Invoker.fs" />
+    <Compile Include="Shared/DialogState.fs" />
     <Compile Include="Shared/Cell.fs" />
     <Compile Include="Shared/Drawing.fs" />
     <Compile Include="Shared/Sprite.fs" />
