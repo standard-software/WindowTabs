@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next10
+
+- Constructed every settings page before the dialog's initial DPI layout to keep monitor scaling consistent across all controls
+- Updated Programs page application icons for the destination display scale when moving the settings dialog between monitors
+- Updated Workspace page icons for the destination display scale when moving the settings dialog between monitors
+- Removed the unused low-level mouse hook so WindowTabs no longer participates in system-wide mouse input processing
+
 ## version ss_2026.09.08_next8
 
 - Completed the Programs page layout before opening the settings dialog while loading its application information in the background; the other pages are prepared immediately after the dialog appears
