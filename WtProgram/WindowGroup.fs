@@ -65,7 +65,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let movedEvent = Event<IntPtr*int>()
     let removedEvent = Event<_>()
     let exitedEvent = Event<_>()
-    let mouseLLEvent = Event<Int32 * Pt * IntPtr>()
     let flashEvent = Event<_>()
     let foregroundEvent = Event<_>()
 
@@ -282,8 +281,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         else
             None
 
-    member this.postMouseLL(msg, pt, data) = mouseLLEvent.Trigger(msg, pt, data)
-    member this.mouseLL = mouseLLEvent.Publish
     member this.bb = _bb
     member this.ts : TabStrip = _ts.Value.Value
     
