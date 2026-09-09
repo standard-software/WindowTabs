@@ -187,7 +187,6 @@ if $(ConfigurationName) == Release (
     <Compile Include="ManagerViewService\DesktopManagerForm.fs" />
     <Compile Include="ManagerViewService\ManagerViewService.fs" />
     <Compile Include="FilterService.fs" />
-    <Compile Include="DesktopPlugins/InputManagerPlugin.fs" />
     <Compile Include="DesktopPlugins/NotifyIconPlugin.fs" />
     <Compile Include="DesktopPlugins/ExceptionHandlerPlugin.fs" />
     <Compile Include="Program.fs" />
