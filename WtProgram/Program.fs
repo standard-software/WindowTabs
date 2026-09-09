@@ -2930,7 +2930,6 @@ let main argv =
 
     let program = Program()
     program.run(List2<obj>([
-        InputManagerPlugin(Set2(List2([WindowMessages.WM_MOUSEWHEEL])))
         NotifyIconPlugin()
         ExceptionHandlerPlugin()
     ]).map(fun o -> o.cast<IPlugin>()))
