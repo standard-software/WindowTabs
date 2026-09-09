@@ -9,9 +9,8 @@ open System.Windows.Forms
 // on top, and still took the focus: the dialog could not be used and the
 // message could not be seen. This form follows the dark-mode setting, sits
 // on top, is laid out for the monitor it opens on, copies itself with
-// Ctrl+C in the system box's layout, and - when opened from the tray menu or a
-// tab strip - closes the settings dialog first, as the "language changed"
-// confirmation always has.
+// Ctrl+C in the system box's layout. Existing dialogs are never dismissed
+// to make room for a new request.
 module AppDialog =
     type Buttons =
         | OkOnly
@@ -90,8 +89,8 @@ module AppDialog =
                 e.SuppressKeyPress <- true)
 
         // Owned by the settings dialog: laid out at its scale, since the box
-        // opens centred on it. Stand-alone: the settings dialog is closed by
-        // then, so the monitor is taken from the pointer. The Load handler
+        // opens centred on it. Stand-alone: the monitor is taken from the
+        // pointer. The Load handler
         // below runs afterwards and reads the scale this establishes.
         match owner with
         | Some(_) -> SettingsDpi.applyToChildDialog form
@@ -126,12 +125,17 @@ module AppDialog =
         | Some(o) -> form.ShowDialog(o)
         | None -> form.ShowDialog()
 
-    /// A message from the tray menu or a tab strip. The settings dialog is
-    /// closed first: it is always on top, and a box behind it would take the
-    /// focus from a window the user could then not use.
-    let show (title: string) (message: string) (buttons: Buttons) (defaultButton: DefaultButton) : DialogResult =
-        (try Services.managerView.close() with _ -> ())
+    /// Used by an update check that already owns a dialog session.
+    let showReserved title message buttons defaultButton =
         run None title message buttons defaultButton
+
+    /// A new top-level request is rejected while another dialog is open.
+    let show (title: string) (message: string) (buttons: Buttons) (defaultButton: DefaultButton) : DialogResult =
+        match DialogState.tryAcquire() with
+        | None -> DialogResult.Cancel
+        | Some session ->
+            use lifetime = session
+            run None title message buttons defaultButton
 
     /// A message with only OK, from the tray menu or a tab strip.
     let info (title: string) (message: string) =
@@ -145,4 +149,6 @@ module AppDialog =
     /// A message from INSIDE the settings dialog: owned by it and centred on
     /// it, so it comes up in front and the dialog stays open behind it.
     let showOwned (owner: IWin32Window) (title: string) (message: string) =
+        // Owned messages are part of the settings session. ShowDialog disables
+        // the parent while the child is open; external entry points stay gated.
         run (Some owner) title message OkOnly DefaultOk |> ignore

@@ -276,6 +276,7 @@ type NotifyIconPlugin() as this =
 
         // Apply dark mode setting and update menu texts when menu is about to be shown
         contextMenu.Popup.Add <| fun _ ->
+            let dialogBusy = DialogState.isBusy()
             let darkModeEnabled =
                 try
                     let json = Services.settings.root
@@ -304,7 +305,7 @@ type NotifyIconPlugin() as this =
                             match langItem.Tag with
                             | :? string as langName ->
                                 langItem.Checked <- (currentLanguage = langName)
-                                langItem.Enabled <- not (currentLanguage = langName)
+                                langItem.Enabled <- not dialogBusy && not (currentLanguage = langName)
                             | _ -> ()
                     | "Disable" ->
                         menuItem.Text <- Localization.getString("Disable")
@@ -315,16 +316,17 @@ type NotifyIconPlugin() as this =
                     | _ -> ()
                 | _ -> ()
 
-            // Update Settings menu item enabled state based on disabled status
+            // Block all tray commands while a dialog session is active.
             for i in 0 .. contextMenu.MenuItems.Count - 1 do
                 let menuItem = contextMenu.MenuItems.[i]
                 match menuItem.Tag with
-                | :? string as tag when tag = "Settings" ->
-                    menuItem.Enabled <- not Services.program.isDisabled
+                | :? string as tag ->
+                    menuItem.Enabled <- DialogState.canUseTrayCommand tag Services.program.isDisabled
                 | _ -> ()
 
         notifyIcon.ContextMenu <- contextMenu
-        notifyIcon.DoubleClick.Add <| fun _ -> Services.managerView.show()
+        notifyIcon.DoubleClick.Add <| fun _ ->
+            if not (DialogState.isBusy()) then Services.managerView.show()
         notifyIcon
 
     member this.contextMenuItems = this.icon.ContextMenu.MenuItems
@@ -343,22 +345,35 @@ type NotifyIconPlugin() as this =
     // Check the latest GitHub release and report the result. Only invoked
     // from the tray-menu item — WindowTabs never checks on its own.
     member this.checkForUpdates() =
-        let invoker = InvokerService.invoker
-        let currentVersion = Services.program.version
-        ThreadHelper.queueBackground <| fun() ->
-            let release = try Some(UpdateChecker.fetchLatestRelease()) with _ -> None
-            invoker.asyncInvoke <| fun() ->
-                match release with
-                | None ->
-                    AppDialog.info "WindowTabs" (Localization.getString("UpdateCheckFailed"))
-                | Some(release) ->
-                    if UpdateChecker.isNewer currentVersion release.tag then
-                        let message = String.Format(Localization.getString("UpdateAvailableFormat"), release.tag)
-                        // Cancel is the default, so an accidental Enter does not start the update
-                        if AppDialog.confirm "WindowTabs" message then
-                            this.startUpdate(release)
-                    else
-                        AppDialog.info "WindowTabs" (String.Format(Localization.getString("UpdateUpToDateFormat"), currentVersion))
+        match DialogState.tryAcquire() with
+        | None -> ()
+        | Some session ->
+            try
+                let show message buttons defaultButton =
+                    AppDialog.showReserved "WindowTabs" message buttons defaultButton
+                let invoker = InvokerService.invoker
+                let currentVersion = Services.program.version
+                ThreadHelper.queueBackground <| fun() ->
+                    let release = try Some(UpdateChecker.fetchLatestRelease()) with _ -> None
+                    invoker.asyncInvoke <| fun() ->
+                        let mutable install = None
+                        try
+                            match release with
+                            | None ->
+                                show (Localization.getString("UpdateCheckFailed")) AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+                            | Some(release) ->
+                                if UpdateChecker.isNewer currentVersion release.tag then
+                                    let message = String.Format(Localization.getString("UpdateAvailableFormat"), release.tag)
+                                    if show message AppDialog.OkCancel AppDialog.DefaultCancel = DialogResult.OK then
+                                        install <- Some release
+                                else
+                                    show (String.Format(Localization.getString("UpdateUpToDateFormat"), currentVersion)) AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+                        finally
+                            session.Dispose()
+                        install |> Option.iter this.startUpdate
+            with _ ->
+                session.Dispose()
+                reraise()
 
     member this.startUpdate(release: UpdateChecker.ReleaseInfo) =
         let invoker = InvokerService.invoker
@@ -437,24 +452,28 @@ type NotifyIconPlugin() as this =
                 langItem.Checked <- (currentLanguage = fileName)
                 langItem.Enabled <- not (currentLanguage = fileName)
                 langItem.Tag <- box(fileName)  // Store fileName (without .json) in Tag for language switching
-                langItem.Click.Add <| fun _ ->
-                    try
-                        let json = Services.settings.root
-                        json.["language"] <- JToken.FromObject(fileName)
-                        Services.settings.root <- json
-                        Localization.setLanguage(fileName)
-                        // The title and the message are intentionally kept in
-                        // English even when the app is localized: if the user
-                        // switches to a language they cannot read, this still
-                        // tells them in English what just happened so they can
-                        // navigate back and revert it. (AppDialog closes the
-                        // settings dialog first and follows the dark mode.)
-                        AppDialog.info "Language Change" (sprintf "Language has been changed to %s." displayName)
-                    with
-                    | ex -> AppDialog.info "Error" ex.Message
+                langItem.Click.Add <| fun _ -> this.changeLanguage(displayName, fileName)
                 languageMenu.MenuItems.Add(langItem) |> ignore
 
             Some(languageMenu)
+
+    member this.changeLanguage(displayName, fileName) =
+        match DialogState.tryAcquire() with
+        | None -> ()
+        | Some session ->
+            use lifetime = session
+            let show title message =
+                AppDialog.showReserved title message AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+            try
+                let json = Services.settings.root
+                json.["language"] <- JToken.FromObject(fileName)
+                Services.settings.root <- json
+                Localization.setLanguage(fileName)
+                // Keep this message in English so a user can recover after
+                // accidentally choosing a language they cannot read.
+                show "Language Change" (sprintf "Language has been changed to %s." displayName)
+            with
+            | ex -> show "Error" ex.Message
 
     interface IPlugin with
         member this.init() =
@@ -488,8 +507,9 @@ type NotifyIconPlugin() as this =
 
             let disableMenuItem = new MenuItem(Localization.getString("Disable"))
             disableMenuItem.Click.Add <| fun _ ->
-                let newState = not Services.program.isDisabled
-                Services.program.setDisabled(newState)
+                if not (DialogState.isBusy()) then
+                    let newState = not Services.program.isDisabled
+                    Services.program.setDisabled(newState)
             disableMenuItem.Tag <- box("Disable")
             this.contextMenuItems.Add(disableMenuItem) |> ignore
 

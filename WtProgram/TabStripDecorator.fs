@@ -2581,7 +2581,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 text = Localization.getString("SettingsMenu")
                 image = None
                 click = fun() -> Services.managerView.show()
-                flags = List2()
+                flags = grayed(not (DialogState.canOpenSettings Services.program.isDisabled))
             })
 
         // "Detach this tab and move (position)". Single monitor: one submenu.

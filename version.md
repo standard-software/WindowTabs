@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next11
+
+- Disable all tray menu commands while settings, a confirmation, or an update check is open; also disable the tab menu's Settings command
+- Preserve open dialogs and workspace editors instead of closing them to display another message
+
 ## version ss_2026.09.08_next10
 
 - Constructed every settings page before the dialog's initial DPI layout to keep monitor scaling consistent across all controls

@@ -109,7 +109,7 @@ type SettingsDialogWindow(initialScale: float) =
             with _ -> ()
         base.WndProc(&m)
 
-type DesktopManagerForm() =
+type DesktopManagerForm(dialogSession: IDisposable) =
     // Flip code-path flags BEFORE the views are constructed so child
     // controls are born in their dark-aware variants:
     //  - HotKeyControl: managed (TextBox-based) path instead of comctl32
@@ -250,6 +250,7 @@ type DesktopManagerForm() =
         if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
         form.FormClosed.Add(fun _ ->
+            dialogSession.Dispose()
             DesktopManagerFormState.currentForm <- None
             // Release mutex when form is closed
             match DesktopManagerFormState.mutex with
@@ -261,6 +262,7 @@ type DesktopManagerForm() =
                 DesktopManagerFormState.mutex <- None
             | None -> ()
         )
+        form.Disposed.Add(fun _ -> dialogSession.Dispose())
         form
 
     // Acquire the single-instance mutex. If the named mutex already exists
