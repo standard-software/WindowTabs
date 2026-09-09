@@ -83,11 +83,26 @@ type WorkspaceTabState = {
     order: int
 }
 
+type private DpiImage(source: Image) =
+    // Do not dispose an image when the scale changes: TreeViewAdv may still
+    // be completing a paint that obtained it. Reuse one bitmap per distinct
+    // monitor scale instead; a desktop normally has only a few such scales.
+    let images = Dictionary<float, Image>()
+
+    member this.image =
+        let scale = SettingsDpi.current()
+        match images.TryGetValue(scale) with
+        | true, image -> image
+        | _ ->
+            let image = SettingsDpi.scaledImage(source)
+            images.[scale] <- image
+            image
+
 type WorkspaceWindow() as this =
     inherit Dynamic()
     // 16-px PNG, drawn by NodeStateIcon at its natural size. The tree's rows
     // grow with the monitor scale, so the icon has to as well.
-    let _icon = SettingsDpi.scaledImage(Services.openImage("window.png"))
+    let dpiIcon = DpiImage(Services.openImage("window.png"))
     let removedEvent = Event<_>()
     let data = ModelObject()
 
@@ -114,7 +129,7 @@ type WorkspaceWindow() as this =
     // it was recorded.
     member val processPath : string = "" with get, set
 
-    member this.icon = _icon
+    member this.icon = dpiIcon.image
     member this.children = List2<Dynamic>()
     interface IWorkspaceNode with
         member x.showSettings = true
@@ -279,7 +294,7 @@ and
     let removedEvent = Event<_>()
     [<DefaultValue>] val mutable name : string
     let mutable _groups  = System.Collections.Generic.List<Dynamic>()
-    let _icon = SettingsDpi.scaledImage(Services.openImage("workspace.png"))
+    let dpiIcon = DpiImage(Services.openImage("workspace.png"))
     
     member this.addGroup(group) =
         group.cast<IWorkspaceNode>().removed.Add <| fun()-> this.removeGroup(group)
@@ -290,7 +305,7 @@ and
 
     member this.groups = List2(_groups)
     member this.children = this.groups
-    member this.icon = _icon
+    member this.icon = dpiIcon.image
 
     interface IWorkspaceNode with
         member x.showSettings = false
@@ -659,4 +674,4 @@ type WorkspaceModel() as this =
 
     member this.onWorkspaceRemoved(ws) =
         _workspaces.Remove(ws).ignore
-        this.saveSettings() 
+        this.saveSettings()

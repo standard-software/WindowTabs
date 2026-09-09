@@ -23,12 +23,6 @@ module DesktopManagerFormState =
         ()
 #endif
 
-type private SettingsTabDefinition = {
-    key: SettingsViewType
-    title: string
-    create: unit -> ISettingsView
-}
-
 // The settings window is a Form subclass for one reason: WM_DPICHANGED.
 //
 // The process is Per-Monitor-V2, so when the user drags the dialog onto a
@@ -152,25 +146,16 @@ type DesktopManagerForm() =
     do SettingsDpi.setCurrent(openScale)
 
     let title = sprintf "WindowTabs Settings (version %s)"  (Services.program.version)
-    let tabDefinitions = [|
-        { key = SettingsViewType.ProgramSettings
-          title = Localization.getString("Programs")
-          create = fun() -> ProgramView() :> ISettingsView }
-        { key = SettingsViewType.AppearanceSettings
-          title = Localization.getString("Appearance")
-          create = fun() -> AppearanceView() :> ISettingsView }
-        { key = SettingsViewType.HotKeySettings
-          title = Localization.getString("Behavior")
-          create = fun() -> HotKeyView() :> ISettingsView }
-        { key = SettingsViewType.ShortcutKeySettings
-          title = Localization.getString("ShortcutKeys")
-          create = fun() -> ShortcutKeysView() :> ISettingsView }
-        { key = SettingsViewType.LayoutSettings
-          title = Localization.getString("Workspace")
-          create = fun() -> WorkspaceView() :> ISettingsView }
-        |]
-    let loadedViews : ISettingsView option array = Array.create tabDefinitions.Length None
-    let loadingTabs = Array.create tabDefinitions.Length false
+    // Construct every page before the first DPI design snapshot. Mixing
+    // controls captured with the form and controls added after Show made a
+    // monitor crossing depend on which path had created each page.
+    let tabs = List2([
+        ProgramView() :> ISettingsView
+        AppearanceView() :> ISettingsView
+        HotKeyView() :> ISettingsView
+        ShortcutKeysView() :> ISettingsView
+        WorkspaceView() :> ISettingsView
+        ])
     let tabControl : TabControl = {
         new TabControl() with
             override this.OnKeyDown(e:KeyEventArgs) =
@@ -197,17 +182,13 @@ type DesktopManagerForm() =
         // the window in design units, and to register what every later scale is
         // computed from - so the two cannot drift apart.
         let designSize = Sz(800, 600)
-        tabDefinitions |> Array.iter (fun definition ->
-            let page = TabPage(definition.title)
+        tabs.iter <| fun view ->
+            let page = TabPage(view.title)
+            let control = view.control
+            control.Dock <- DockStyle.Fill
+            page.Controls.Add(control)
             page.Dock <- DockStyle.Fill
-            tabControl.TabPages.Add(page))
-        // Build and lay out the initially visible page before showing the
-        // dialog. ProgramView queues application discovery in the background,
-        // so only its controls are created synchronously here.
-        let firstView = tabDefinitions.[0].create()
-        loadedViews.[0] <- Some(firstView)
-        firstView.control.Dock <- DockStyle.Fill
-        tabControl.TabPages.[0].Controls.Add(firstView.control)
+            tabControl.TabPages.Add(page)
         tabControl.Dock <- DockStyle.Fill
         form.Controls.Add(tabControl)
         form.FormBorderStyle <- FormBorderStyle.SizableToolWindow
@@ -282,58 +263,6 @@ type DesktopManagerForm() =
         )
         form
 
-    let loadTab index =
-        if index >= 0 && index < tabDefinitions.Length && loadedViews.[index].IsNone then
-            let page = tabControl.TabPages.[index]
-            let mutable addedControl : Control option = None
-            page.SuspendLayout()
-            try
-                try
-                    let view = tabDefinitions.[index].create()
-                    let control = view.control
-                    control.Dock <- DockStyle.Fill
-                    page.Controls.Add(control)
-                    addedControl <- Some(control)
-                    SettingsDpi.applyToAddedControl control
-                    if isDarkModeEnabled() then
-                        DarkMode.applyDarkThemeToAddedControl control
-                    // Do not mark a page as loaded until every initialization
-                    // step has succeeded. A failed page can then be retried.
-                    loadedViews.[index] <- Some(view)
-                with ex ->
-                    DesktopManagerFormState.log(sprintf "tab %d initialization failed: %O" index ex)
-                    addedControl |> Option.iter (fun control ->
-                        try
-                            page.Controls.Remove(control)
-                            control.Dispose()
-                        with _ -> ())
-            finally
-                loadingTabs.[index] <- false
-                page.ResumeLayout(true)
-
-    let queueTabLoad index =
-        if index >= 0 && loadedViews.[index].IsNone && not loadingTabs.[index] then
-            loadingTabs.[index] <- true
-            try
-                form.BeginInvoke(MethodInvoker(fun() ->
-                    if not form.IsDisposed && form.IsHandleCreated then
-                        loadTab index
-                    else
-                        loadingTabs.[index] <- false)).ignore
-            with _ ->
-                loadingTabs.[index] <- false
-
-    let queueSelectedTabLoad() =
-        queueTabLoad tabControl.SelectedIndex
-
-    let queueRemainingTabLoads() =
-        for index in 0 .. tabDefinitions.Length - 1 do
-            queueTabLoad index
-
-    do
-        tabControl.SelectedIndexChanged.Add(fun _ ->
-            if form.Visible then queueSelectedTabLoad())
-
     // Acquire the single-instance mutex. If the named mutex already exists
     // (mutexCreated=false), DISPOSE the just-created non-owning handle
     // immediately and leave State.mutex untouched — overwriting it would
@@ -386,7 +315,6 @@ type DesktopManagerForm() =
             DesktopManagerFormState.currentForm <- Some(form)
             try
                 showFormCommon()
-                queueRemainingTabLoads()
                 DesktopManagerFormState.log(sprintf "show completed visible=%b opacity=%.2f" form.Visible form.Opacity)
             with ex ->
                 DesktopManagerFormState.log(sprintf "show failed: %O" ex)
@@ -394,10 +322,8 @@ type DesktopManagerForm() =
 
     member this.showView(view) =
         if tryAcquireSingleInstanceMutex() then
-            let tabIndex = tabDefinitions |> Array.findIndex(fun tab -> tab.key = view)
+            let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
             tabControl.SelectedIndex <- tabIndex
-            loadTab tabIndex
             DesktopManagerFormState.currentForm <- Some(form)
             showFormCommon()
-            queueRemainingTabLoads()
 
