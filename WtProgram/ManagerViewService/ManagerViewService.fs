@@ -41,8 +41,27 @@ type ManagerViewService() =
             | None -> ()
             | Some session ->
                 try
+#if DEBUG
+                    let timing = SettingsTiming.beginRun Services.program.version
+#endif
                     let form = getForm()
+#if DEBUG
+                    timing.Mark("constructed")
+#endif
                     show form session
+#if DEBUG
+                    timing.Mark("shown")
+                    timing.Mark(sprintf "dpi=%.2f" (SettingsDpi.current()))
+                    timing.Flush()
+                    match DesktopManagerFormState.currentForm with
+                    | Some visibleForm ->
+                        if SettingsTiming.enabled() then visibleForm.Update()
+                        timing.Mark("form-painted")
+                        visibleForm.BeginInvoke(MethodInvoker(fun () ->
+                            timing.Mark("ui-callback-after-show")
+                            timing.Flush())) |> ignore
+                    | None -> ()
+#endif
                     if DesktopManagerFormState.currentForm.IsNone then session.Dispose()
                 with _ ->
                     cached |> Option.iter(fun (_, form) -> form.dispose())

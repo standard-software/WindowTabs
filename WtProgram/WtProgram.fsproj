@@ -156,6 +156,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/DarkMode.fs" />
     <Compile Include="Shared/Win32Menu.fs" />
     <Compile Include="Shared/Services.fs" />
+    <Compile Include="Shared/SettingsTiming.fs" />
     <Compile Include="Shared/AnimationWindow.fs" />
     <Compile Include="Shared/Forms.fs" />
     <Compile Include="Shared/Json.fs" />
@@ -190,6 +191,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="FilterService.fs" />
     <Compile Include="DesktopPlugins/NotifyIconPlugin.fs" />
     <Compile Include="DesktopPlugins/ExceptionHandlerPlugin.fs" />
+    <Compile Include="ManagerViewService/SettingsBenchmark.fs" />
     <Compile Include="Program.fs" />
     <EmbeddedResource Include="Resources\Bemo.ico" />
     <EmbeddedResource Include="Resources\workspace.png" />

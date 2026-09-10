@@ -2871,6 +2871,7 @@ type Program() as this =
 
         plugins.iter <| fun p -> p.init()
 
+        SettingsBenchmark.install()
         Application.Run()
 
         plugins.iter <| fun p ->
@@ -2881,6 +2882,9 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+#if DEBUG
+    SettingsTiming.startStartup()
+#endif
     // Per-Monitor-V2 DPI awareness, before anything creates a window or a DC.
     // app.manifest declares the same thing and normally wins, in which case
     // this call simply fails and changes nothing; keeping it means the tab

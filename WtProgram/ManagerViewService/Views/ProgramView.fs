@@ -362,6 +362,9 @@ type ProgramView() as this=
         if not panel.IsDisposed then this.populateNodes()
 
     member private this.populateNodes() =
+#if DEBUG
+        let timing = SettingsTiming.current
+#endif
         let generation = Threading.Interlocked.Increment(&populationGeneration)
         // Keep the last completed list until its replacement is ready.
         let showAll = showAllSettings
@@ -403,6 +406,13 @@ type ProgramView() as this=
                     model.Nodes.Clear()
                     // Sort by category number first (0 = unset first, then 1-5), then by name
                     allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
+#if DEBUG
+                    timing |> Option.iter(fun run ->
+                        run.Mark(sprintf "programs-ready:nodes=%d" model.Nodes.Count)
+                        tree.Update()
+                        run.Mark("programs-painted")
+                        run.Flush())
+#endif
 
     interface ISettingsView with
         member x.key = SettingsViewType.ProgramSettings
