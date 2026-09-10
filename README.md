@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.08_next16**
+Latest version: **ss_2026.09.12**
 
 See [version.md](version.md) for details.
 
@@ -179,10 +179,8 @@ Download the installer or the zip containing the exe from the [releases](https:/
 ### Tab Context Menu
 
 - Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
-- New tab : execute (exe name)
-  - Right of this tab
-  - Position (same submenu as "Position Move", with a leading "Same position" item)
-  - Link to another group
+- New tab : execute (exe name) — right of this tab, at a specified position, or linked to another group
+  - Position uses the "Position Move" submenu, with a leading "Same position" item
 - Position Move
   - Snap Left / Snap Right / Snap Top / Snap Bottom
   - Snap 90% / 70% / 50% / 30% (each)
@@ -195,37 +193,13 @@ Download the installer or the zip containing the exe from the [releases](https:/
     - Left Edge / Right Edge / Top Edge / Bottom Edge
     - Top Left / Top Right / Bottom Left / Bottom Right
 - Link this tab group to another group (submenu lists other tab groups; choose the destination)
-- Detach this tab
-  - Position (same submenu as "Position Move")
-  - Link to another group
-- Close Tab
-  - Close tab
-  - Close {N} tabs to the left
-  - Close {N} tabs to the right
-  - Close other tabs
-  - Close all tabs
-- Tab Margin When Snapping
-  - Add margin at top
-- Tab Alignment
-  - Align all tabs to Left
-  - Align all tabs to Right
-  - Align this tab to Left
-  - Align this tab to Right
-- Tab Pin
-  - Pin this tab
-  - Unpin this tab
-  - Pin all tabs
-  - Unpin all tabs
-- Tab Color Settings
-  - This tab color
-    - Red / Blue / Green / Yellow / Purple / Orange / Pink
-    - (same 7 colors, Underline variants)
-    - (same 7 colors, Border variants)
-  - Clear this tab color
-  - Clear color settings on all tabs
-- Tab Name
-  - Rename this tab : (tab name)
-  - Reset this tab name : (name after reset)
+- Detach this tab — reposition using the "Position Move" submenu, or link to another group
+- Close Tab — this tab, tabs to the left or right, other tabs, or all tabs
+- Tab Margin When Snapping — add margin at top
+- Tab Alignment — align this tab or all tabs left / right
+- Tab Pin — pin / unpin this tab or all tabs
+- Tab Color Settings — red / blue / green / yellow / purple / orange / pink backgrounds, underlines, or borders; clear colors for this tab or all tabs
+- Tab Name — rename / reset
 - System
   - Copy (exe name) path
   - Copy window title : (window title)
