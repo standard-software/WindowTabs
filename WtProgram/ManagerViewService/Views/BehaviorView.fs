@@ -8,12 +8,17 @@ open Bemo.Win32.Forms
 
 
 type HotKeyView() =
+    let mutable refreshing = false
+    let refreshers = ResizeArray<unit -> unit>()
+    let save key value =
+        if not refreshing then Services.settings.setValue(key, value)
+
     let settingsProperty name =
         {
             new IProperty<'a> with
                 member x.value
                     with get() = unbox<'a>(Services.settings.getValue(name))
-                    and set(value) = Services.settings.setValue(name, box(value))
+                    and set(value) = save name (box(value))
         }
         
 
@@ -25,7 +30,9 @@ type HotKeyView() =
         let checkBox (prop:IProperty<bool>) = 
             let checkbox = BoolEditor() :> IPropEditor
             checkbox.value <- box(prop.value)
-            checkbox.changed.Add <| fun() -> prop.value <- unbox<bool>(checkbox.value)
+            checkbox.changed.Add <| fun() ->
+                if not refreshing then prop.value <- unbox<bool>(checkbox.value)
+            refreshers.Add(fun () -> checkbox.value <- box(prop.value))
             checkbox.control
 
         let settingsCheckbox key = checkBox(settingsProperty(key))
@@ -45,8 +52,10 @@ type HotKeyView() =
 
             combo.SelectedIndexChanged.Add(fun _ ->
                 let value = match combo.SelectedIndex with | 0 -> "TopLeft" | _ -> "TopRight"
-                Services.settings.setValue("tabPositionByDefault", value)
+                save "tabPositionByDefault" value
             )
+            refreshers.Add(fun () ->
+                combo.SelectedIndex <- if unbox<string>(Services.settings.getValue("tabPositionByDefault")) = "TopLeft" then 0 else 1)
 
             combo
 
@@ -66,7 +75,7 @@ type HotKeyView() =
             textBox.LostFocus.Add(fun _ ->
                 match System.Int32.TryParse(textBox.Text) with
                 | true, value when value >= 0 && value <= 10000 ->
-                    Services.settings.setValue("hideTabsDelayMilliseconds", value)
+                    save "hideTabsDelayMilliseconds" value
                 | false, _ | _, _ ->
                     // Reset to previous value if invalid
                     textBox.Text <-
@@ -75,6 +84,8 @@ type HotKeyView() =
                         with
                         | _ -> "3000"
             )
+            refreshers.Add(fun () ->
+                textBox.Text <- (unbox<int>(Services.settings.getValue("hideTabsDelayMilliseconds"))).ToString())
             textBox
 
         let hideTabsRadio =
@@ -112,7 +123,7 @@ type HotKeyView() =
             radioNever.Checked <- (currentMode = "never")
             radioNever.CheckedChanged.Add(fun _ ->
                 if radioNever.Checked then
-                    Services.settings.setValue("hideTabsWhenDownByDefault", "never")
+                    save "hideTabsWhenDownByDefault" "never"
                     hideTabsDelay.Enabled <- false
             )
 
@@ -123,7 +134,7 @@ type HotKeyView() =
             radioDown.Checked <- (currentMode = "down")
             radioDown.CheckedChanged.Add(fun _ ->
                 if radioDown.Checked then
-                    Services.settings.setValue("hideTabsWhenDownByDefault", "down")
+                    save "hideTabsWhenDownByDefault" "down"
                     hideTabsDelay.Enabled <- true
             )
 
@@ -134,9 +145,15 @@ type HotKeyView() =
             radioDoubleClick.Checked <- (currentMode = "doubleclick")
             radioDoubleClick.CheckedChanged.Add(fun _ ->
                 if radioDoubleClick.Checked then
-                    Services.settings.setValue("hideTabsWhenDownByDefault", "doubleclick")
+                    save "hideTabsWhenDownByDefault" "doubleclick"
                     hideTabsDelay.Enabled <- false
             )
+            refreshers.Add(fun () ->
+                let mode = unbox<string>(Services.settings.getValue("hideTabsWhenDownByDefault"))
+                radioNever.Checked <- (mode = "never")
+                radioDown.Checked <- (mode = "down")
+                radioDoubleClick.Checked <- (mode <> "never" && mode <> "down")
+                hideTabsDelay.Enabled <- (mode = "down"))
 
             let delayLabel = new Label()
             delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
@@ -173,7 +190,9 @@ type HotKeyView() =
             combo.SelectedIndex <- if currentMode = "nochange" then 1 else 0
             combo.SelectedIndexChanged.Add(fun _ ->
                 let value = if combo.SelectedIndex = 1 then "nochange" else "change"
-                Services.settings.setValue("changeTabPositionOnSnap", value))
+                save "changeTabPositionOnSnap" value)
+            refreshers.Add(fun () ->
+                combo.SelectedIndex <- if unbox<string>(Services.settings.getValue("changeTabPositionOnSnap")) = "nochange" then 1 else 0)
             combo
 
         let tabVerticalDirectionCombo =
@@ -190,7 +209,10 @@ type HotKeyView() =
                 let value =
                     if combo.SelectedIndex = 1 then TabBehaviorPolicy.verticalAlwaysDown
                     else TabBehaviorPolicy.verticalAuto
-                Services.settings.setValue("tabVerticalDirection", box(value)))
+                save "tabVerticalDirection" (box(value)))
+            refreshers.Add(fun () ->
+                let direction = unbox<string>(Services.settings.getValue("tabVerticalDirection")) |> TabBehaviorPolicy.normalizeVerticalDirection
+                combo.SelectedIndex <- if direction = TabBehaviorPolicy.verticalAlwaysDown then 1 else 0)
             combo
 
         let fields = List2([
@@ -238,6 +260,14 @@ type HotKeyView() =
         // Add padding to match Appearance tab
         control.Padding <- Padding(10)
         control
+
+    member this.refresh() =
+        let previous = refreshing
+        refreshing <- true
+        try
+            for refresh in refreshers do refresh()
+        finally
+            refreshing <- previous
 
     interface ISettingsView with
         member x.key = SettingsViewType.HotKeySettings
