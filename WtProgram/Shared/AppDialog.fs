@@ -12,6 +12,9 @@ open System.Windows.Forms
 // Ctrl+C in the system box's layout. Existing dialogs are never dismissed
 // to make room for a new request.
 module AppDialog =
+    let private pending = System.Collections.Generic.Queue<string * string>()
+    let mutable private dispatch: ((unit -> unit) -> unit) option = None
+
     type Buttons =
         | OkOnly
         | OkCancel
@@ -137,9 +140,41 @@ module AppDialog =
             use lifetime = session
             run None title message buttons defaultButton
 
-    /// A message with only OK, from the tray menu or a tab strip.
+    let private hasPending() = lock pending (fun () -> pending.Count > 0)
+
+    let private drain() =
+        if hasPending() then
+            match DialogState.tryAcquire() with
+            | None -> ()
+            | Some session ->
+                use lifetime = session
+                let title, message = lock pending (fun () -> pending.Dequeue())
+                run None title message OkOnly DefaultOk |> ignore
+
+    let private requestDrain() =
+        if hasPending() && not (DialogState.isBusy()) then
+            let scheduler = lock pending (fun () -> dispatch)
+            scheduler |> Option.iter (fun post ->
+                try post drain
+                with :? InvalidOperationException -> ())
+
+    /// Bind deferred notifications to the main UI thread, not a tab-group
+    /// thread that may disappear before the settings dialog is closed.
+    let initialize() =
+        let invoker = InvokerService.invoker
+        let first = lock pending (fun () ->
+            if dispatch.IsSome then false
+            else
+                dispatch <- Some(fun action -> invoker.asyncInvoke action)
+                true)
+        if first then DialogState.available.Add(fun () -> requestDrain())
+        requestDrain()
+
+    /// Preserve informational/error messages until existing dialogs close.
+    /// Confirmations are never queued: a delayed restart or exit is unsafe.
     let info (title: string) (message: string) =
-        show title message OkOnly DefaultOk |> ignore
+        lock pending (fun () -> pending.Enqueue(title, message))
+        requestDrain()
 
     /// A question with OK and Cancel, from the tray menu or a tab strip.
     /// Cancel is the default, so an accidental Enter does nothing.

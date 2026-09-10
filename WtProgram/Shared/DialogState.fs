@@ -7,8 +7,10 @@ open System
 type DialogGate() =
     let sync = obj()
     let mutable occupied = false
+    let available = Event<unit>()
 
     member this.IsBusy = lock sync (fun () -> occupied)
+    member this.Available = available.Publish
 
     member this.TryAcquire() =
         lock sync (fun () ->
@@ -18,15 +20,20 @@ type DialogGate() =
                 let mutable released = false
                 Some { new IDisposable with
                     member this.Dispose() =
-                        lock sync (fun () ->
-                            if not released then
-                                released <- true
-                                occupied <- false) })
+                        let notify =
+                            lock sync (fun () ->
+                                if released then false
+                                else
+                                    released <- true
+                                    occupied <- false
+                                    true)
+                        if notify then available.Trigger() })
 
 module DialogState =
     let private gate = DialogGate()
     let isBusy() = gate.IsBusy
     let tryAcquire() = gate.TryAcquire()
+    let available = gate.Available
 
     let canOpenSettings disabled = not disabled && not (isBusy())
 
