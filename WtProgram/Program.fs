@@ -2861,8 +2861,13 @@ type Program() as this =
 
         Services.register(this :> IProgram)
         Services.register(FilterService() :> IFilterService)
-        Services.register(ManagerViewService() :> IManagerView)
+        let managerView = ManagerViewService()
+        Services.register(managerView :> IManagerView)
         Services.program.refresh()
+
+        // Pay settings construction cost during startup, before the watchdog
+        // is armed. Preloading never shows a window or acquires the dialog gate.
+        managerView.preload()
 
         plugins.iter <| fun p -> p.init()
 

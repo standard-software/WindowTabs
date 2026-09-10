@@ -671,6 +671,11 @@ type WorkspaceModel() as this =
         settingsObj.setObjectArray("workspaces", workspaceObjs)
         Services.settings.root <- settingsObj
 
+    member this.reload() =
+        this.selected <- null
+        _workspaces.Clear()
+        this.loadSettings()
+
 
     member this.onWorkspaceRemoved(ws) =
         _workspaces.Remove(ws).ignore
