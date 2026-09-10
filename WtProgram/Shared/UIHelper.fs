@@ -662,7 +662,7 @@ module UIHelper =
     // it. Doing it here instead would scale the design size the caller has
     // not assigned yet. See WorkspaceModel.edit.
     let okCancelForm control =
-        let form = Form()
+        let form = DpiAwareDialog()
         form.Padding <- Padding(12)
         // A dialog answered with OK or Cancel has no use for minimize or
         // maximize; only Close stays in the caption, and no icon - a dialog
@@ -687,6 +687,8 @@ module UIHelper =
 
         let buttonPanel = hbox (List2([okButton.cast<Control>(); cancelButton.cast<Control>()]))
         let vboxLayout = vbox (List2([control; buttonPanel.cast<Control>()]))
+        buttonPanel.AutoScroll <- false
+        vboxLayout.AutoScroll <- false
         vboxLayout.RowStyles.Item(0).SizeType <- SizeType.AutoSize
         vboxLayout.RowStyles.Item(1).SizeType <- SizeType.Absolute
         buttonPanel.Anchor <- AnchorStyles.Bottom ||| AnchorStyles.Right

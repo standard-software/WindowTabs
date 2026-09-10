@@ -32,7 +32,7 @@ module AppDialog =
 
     let private build (owner: IWin32Window option) (title: string) (message: string)
                       (buttons: Buttons) (defaultButton: DefaultButton) =
-        let form = new Form()
+        let form = new DpiAwareDialog()
         form.Text <- title
         form.FormBorderStyle <- FormBorderStyle.FixedDialog
         form.MaximizeBox <- false
@@ -96,8 +96,8 @@ module AppDialog =
         // pointer. The Load handler
         // below runs afterwards and reads the scale this establishes.
         match owner with
-        | Some(_) -> SettingsDpi.applyToChildDialog form
-        | None -> SettingsDpi.applyAtCursor form
+        | Some(_) -> form.InitializeDpi(SettingsDpi.current())
+        | None -> form.InitializeDpi(SettingsDpi.forCursor())
 
         form.Load.Add(fun _ ->
             // Size the form around the label so multi-byte strings (Japanese,

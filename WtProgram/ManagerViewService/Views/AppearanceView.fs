@@ -1239,7 +1239,7 @@ type AppearanceView() as this =
     // Empty name means delete the theme
     // OK button is disabled until text is changed from current value
     let showEditThemeDialog (currentName: string) =
-        use form = new Form()
+        use form = new DpiAwareDialog()
         form.Text <- Localization.getString("EditThemeTitle")
         form.Size <- Size(440, 240)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1294,7 +1294,7 @@ type AppearanceView() as this =
         // the theming pass sees final control sizes. Everything here is
         // absolute Location / Size, which is exactly what Control.Scale
         // handles.
-        SettingsDpi.applyToChildDialog form
+        form.InitializeDpi(SettingsDpi.current())
 
         // Inherit dark mode from the parent settings dialog when the user
         // has the "Settings Dialog Dark Mode" toggle on.
@@ -1318,7 +1318,7 @@ type AppearanceView() as this =
     // Show Save As dialog with ComboBox for theme name selection (used for Save As)
     // Returns: Some(name, isOverwrite) if OK pressed, None if cancelled
     let showSaveAsDialog (title: string) =
-        use form = new Form()
+        use form = new DpiAwareDialog()
         form.Text <- title
         form.Size <- Size(440, 210)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1370,7 +1370,7 @@ type AppearanceView() as this =
         form.CancelButton <- cancelBtn
 
         // See showEditThemeDialog: scale for the parent's monitor first.
-        SettingsDpi.applyToChildDialog form
+        form.InitializeDpi(SettingsDpi.current())
 
         // Inherit dark mode from the parent settings dialog.
         if isDarkModeEnabled() then
