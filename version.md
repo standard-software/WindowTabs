@@ -2,6 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.08_next16
+
+- Open settings faster by preparing the dialog during startup and reusing it.
+  - Reopen on the Programs page and refresh settings and lists without rebuilding for ordinary setting changes.
+- Improve settings display across monitors with different scaling.
+  - Correct checkbox, radio button and tree header sizing, and scale confirmation and theme dialogs when moved between monitors.
+  - Remove unwanted workspace editor scrollbars and keep language-confirmation buttons in English.
+- Keep settings editable after reading an invalid value.
+
 ## version ss_2026.09.08_next12
 
 - Added tab shortcuts and display options
