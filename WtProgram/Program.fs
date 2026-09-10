@@ -2503,6 +2503,9 @@ type Program() as this =
             this.refresh()
 
         member x.shutdown() =
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: begin"
+#endif
             // Stop the periodic save before the explicit final save, so we don't
             // race against an in-flight Tick during shutdown teardown.
             periodicSaveTimer.Stop()
@@ -2513,10 +2516,16 @@ type Program() as this =
             if inSessionEnd.value.not then
                 this.saveTabGroupsToSettings()
             inShutdown.set(true)
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: saved settings; removing grouped windows"
+#endif
             this.desktop.groups.iter <| fun gi ->
                 gi.windows.iter <| fun window ->
                     gi.removeWindow window
             this.updateAppWindows()
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: window update returned"
+#endif
                    
         member x.tabLimit = None
      
@@ -2873,11 +2882,16 @@ type Program() as this =
 
         SettingsBenchmark.install()
         Application.Run()
-
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: message loop returned; disposing plugins"
+#endif
         plugins.iter <| fun p ->
             match p with
             | :? IDisposable as d -> d.Dispose()
             | _ -> ()
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: plugins disposed"
+#endif
 
 [<STAThread>]
 [<EntryPoint>]

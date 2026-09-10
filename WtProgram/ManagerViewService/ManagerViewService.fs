@@ -32,8 +32,15 @@ type ManagerViewService() =
                 preparing <- false
 
     do Application.ApplicationExit.Add(fun _ ->
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: cached settings disposal begin"
+#endif
         cached |> Option.iter(fun (_, form) -> form.dispose())
-        cached <- None)
+        cached <- None
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: cached settings disposal complete"
+#endif
+        ())
 
     let showSettings show =
         if not preparing && not Services.program.isDisabled then
