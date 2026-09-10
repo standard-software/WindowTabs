@@ -31,7 +31,7 @@ module AppDialog =
         with _ -> false
 
     let private build (owner: IWin32Window option) (title: string) (message: string)
-                      (buttons: Buttons) (defaultButton: DefaultButton) =
+                      (buttons: Buttons) (defaultButton: DefaultButton) (englishButtons: bool) =
         let form = new DpiAwareDialog()
         form.Text <- title
         form.FormBorderStyle <- FormBorderStyle.FixedDialog
@@ -49,7 +49,7 @@ module AppDialog =
         form.Controls.Add(label)
 
         let okBtn = new Button()
-        okBtn.Text <- Localization.getString("OK")
+        okBtn.Text <- if englishButtons then "OK" else Localization.getString("OK")
         okBtn.DialogResult <- DialogResult.OK
         okBtn.Size <- Size(80, 30)
         form.Controls.Add(okBtn)
@@ -58,7 +58,7 @@ module AppDialog =
             match buttons with
             | OkCancel ->
                 let b = new Button()
-                b.Text <- Localization.getString("Cancel")
+                b.Text <- if englishButtons then "Cancel" else Localization.getString("Cancel")
                 b.DialogResult <- DialogResult.Cancel
                 b.Size <- Size(80, 30)
                 form.Controls.Add(b)
@@ -123,7 +123,7 @@ module AppDialog =
         form
 
     let private run (owner: IWin32Window option) title message buttons defaultButton : DialogResult =
-        use form = build owner title message buttons defaultButton
+        use form = build owner title message buttons defaultButton false
         match owner with
         | Some(o) -> form.ShowDialog(o)
         | None -> form.ShowDialog()
@@ -131,6 +131,11 @@ module AppDialog =
     /// Used by an update check that already owns a dialog session.
     let showReserved title message buttons defaultButton =
         run None title message buttons defaultButton
+
+    /// Language recovery messages must remain readable regardless of selection.
+    let showReservedEnglish title message =
+        use form = build None title message OkOnly DefaultOk true
+        form.ShowDialog()
 
     /// A new top-level request is rejected while another dialog is open.
     let show (title: string) (message: string) (buttons: Buttons) (defaultButton: DefaultButton) : DialogResult =
