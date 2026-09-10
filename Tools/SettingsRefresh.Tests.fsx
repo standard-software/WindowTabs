@@ -3,6 +3,7 @@
 #r "System.Drawing"
 #r "System.Windows.Forms"
 #r "../Newtonsoft.Json.dll"
+#r "../WtProgram/bin/Debug/SettingsRefreshValidation/FSharp.PowerPack.dll"
 #r "../WtProgram/bin/Debug/SettingsRefreshValidation/WindowTabs.exe"
 #r "../WtProgram/bin/Debug/SettingsRefreshValidation/Win32.dll"
 open System
@@ -25,7 +26,8 @@ let mutable root = JObject()
 // Build a fixture without constructing the real file-backed Settings service.
 let defaults =
     let fields = FSharpType.GetRecordFields(typeof<TabAppearanceInfo>) |> Array.map(fun field ->
-        if field.PropertyType = typeof<int> then box 25
+        if field.Name = "tabPinnedTabWidth" then box 90
+        elif field.PropertyType = typeof<int> then box 25
         elif field.PropertyType = typeof<bool> then box true
         else box Drawing.Color.Black)
     FSharpValue.MakeRecord(typeof<TabAppearanceInfo>, fields) :?> TabAppearanceInfo
@@ -114,5 +116,102 @@ values.["enableAltNumberHotKey"] <- box false
 refresh()
 check "dependent controls return to disabled/custom states" (not (behaviorControls |> List.pick(function :? TextBox as t -> Some t | _ -> None)).Enabled && modeChecks |> List.forall(fun c -> not c.Checked))
 check "return refresh remains read-only" (writes = baselineWrites)
+// Check every Behavior row, not just one representative checkbox.
+let behaviorTable = (behavior :> ISettingsView).control :?> TableLayoutPanel
+check "Behavior contains the audited eleven rows" (behaviorTable.RowCount = 11)
+let boolRows = [0, "runAtStartup"; 1, "hideInactiveTabs"; 2, "filter";
+                3, "enableHoverActivate"; 8, "hideTabsOnFullscreen";
+                9, "hideTabsWhileMoving"; 10, "snapTabHeightMargin"]
+for row, key in boolRows do
+    let checkbox = behaviorTable.GetControlFromPosition(1, row) :?> CheckBox
+    for expected in [false; true; false] do
+        if key = "filter" then tabbing <- expected else values.[key] <- box expected
+        behavior.refresh()
+        check (sprintf "Behavior row %d %s=%b" row key expected) (checkbox.Checked = expected)
+for row, key, options in [
+    4, "tabPositionByDefault", ["TopLeft"; "TopRight"]
+    5, "changeTabPositionOnSnap", ["change"; "nochange"]
+    6, "tabVerticalDirection", [TabBehaviorPolicy.verticalAuto; TabBehaviorPolicy.verticalAlwaysDown]] do
+    let combo = behaviorTable.GetControlFromPosition(1,row) :?> ComboBox
+    for index, value in options |> List.indexed do
+        values.[key] <- box value
+        behavior.refresh()
+        check (sprintf "Behavior row %d %s=%s" row key value) (combo.SelectedIndex = index)
+let radioControls = controls (behaviorTable.GetControlFromPosition(1,7)) |> Seq.choose(function :? RadioButton as radio -> Some radio | _ -> None) |> Seq.toArray
+for index, mode in ["never"; "down"; "doubleclick"] |> List.indexed do
+    values.["hideTabsWhenDownByDefault"] <- box mode
+    behavior.refresh()
+    check ("Behavior row 7 mode=" + mode) (radioControls |> Array.mapi(fun i r -> r.Checked = (i = index)) |> Array.forall id)
+for delay in [0; 10000] do
+    values.["hideTabsDelayMilliseconds"] <- box delay
+    behavior.refresh()
+    check (sprintf "Behavior delay boundary %d" delay) ((behaviorControls |> List.pick(function :? TextBox as t -> Some t | _ -> None)).Text = string delay)
+
+// Audit all 22 appearance editors against their corresponding record fields.
+// Reflection is test-only and avoids exposing control internals in production.
+let editorField = typeof<AppearanceView>.GetFields(Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic) |> Array.find(fun f -> f.FieldType = typeof<Map2<string,IPropEditor>>)
+let appearanceEditors = editorField.GetValue(appearanceView) :?> Map2<string,IPropEditor>
+let appearanceFields = FSharpType.GetRecordFields(typeof<TabAppearanceInfo>)
+let changedValues = appearanceFields |> Array.mapi(fun i field ->
+    if field.PropertyType = typeof<int> then box(100+i)
+    elif field.PropertyType = typeof<bool> then box false
+    else box(Drawing.Color.FromArgb(255, 40+i, 80+i, 120+i)))
+appearance <- FSharpValue.MakeRecord(typeof<TabAppearanceInfo>, changedValues) :?> TabAppearanceInfo
+appearanceView.refresh()
+let uiFields = appearanceFields |> Array.filter(fun f -> f.Name <> "tabHeightOffset")
+check "Appearance audit covers all 22 editable record fields" (uiFields.Length = 22)
+for field in uiFields do
+    let actual = (appearanceEditors.find field.Name).value
+    let expected = field.GetValue(appearance, null)
+    check ("Appearance field " + field.Name) (actual = expected)
+
+appearance <- defaults
+root.["CustomColorThemes"] <- JArray.Parse("""[{"name":"External theme","inactiveTextColor":1193046}]""")
+root.["SavedCustomColors"] <- JObject.Parse("""{"inactiveTextColor":6636321}""")
+appearanceView.refresh()
+let themeCombo = controls (appearanceView :> ISettingsView).control |> Seq.pick(function :? ComboBox as c -> Some c | _ -> None)
+check "external custom theme additions refresh the combo" (themeCombo.Items.Contains("External theme"))
+let savedField = typeof<AppearanceView>.GetFields(Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic) |> Array.find(fun f -> f.FieldType = typeof<ColorThemeData option>)
+let savedColors = savedField.GetValue(appearanceView) :?> ColorThemeData option
+check "saved custom colors reload from settings" (savedColors |> Option.exists(fun c -> c.inactiveTextColor = 6636321))
+root.Remove("CustomColorThemes") |> ignore
+root.Remove("SavedCustomColors") |> ignore
+appearanceView.refresh()
+check "external custom theme removal refreshes the combo" (not (themeCombo.Items.Contains("External theme")))
+
+// All twelve hotkey fields must reload, including custom number keys hidden
+// while Ctrl/Alt mode is enabled. Exercise both native and managed controls.
+let auditShortcuts (view: ShortcutKeysView) label =
+    let inputs = controls (view :> ISettingsView).control |> Seq.choose(function :? Bemo.Win32.HotKeyControl as c -> Some c | _ -> None) |> Seq.toArray
+    let hotkeyNames = (HotKeyPolicy.numbers |> List.map HotKeyPolicy.activateTabKey) @ [HotKeyPolicy.nextTabKey; HotKeyPolicy.prevTabKey; HotKeyPolicy.newTabRightKey]
+    check (label + " has twelve hotkey fields") (inputs.Length = hotkeyNames.Length)
+    for index, key in hotkeyNames |> List.indexed do keys.[key] <- 0x0270 + index
+    for ctrl, alt in [false,false; true,false; false,true; false,false] do
+        values.[HotKeyPolicy.enableCtrlNumberSetting] <- box ctrl
+        values.[HotKeyPolicy.enableAltNumberSetting] <- box alt
+        view.refresh()
+        let mode = HotKeyPolicy.numberKeyMode ctrl alt
+        for index, key in hotkeyNames |> List.indexed do
+            let expected = if index < 9 then HotKeyPolicy.numberKeyCode mode (fun n -> keys.[HotKeyPolicy.activateTabKey n]) (index+1) else keys.[key]
+            check (sprintf "%s %s Ctrl=%b Alt=%b" label key ctrl alt) (inputs.[index].HotKey = expected)
+auditShortcuts shortcuts "Native"
+Bemo.Win32.HotKeyControl.UseManaged <- true
+let managedShortcuts = ShortcutKeysView()
+host.Controls.Add((managedShortcuts :> ISettingsView).control)
+for control in controls (managedShortcuts :> ISettingsView).control do control.Handle |> ignore
+auditShortcuts managedShortcuts "Managed"
+check "the complete field audit performs no writes" (writes = baselineWrites)
+// An invalid externally supplied width must not latch the change guard and
+// prevent the user's next valid edit from being saved.
+let pinnedEditor = appearanceEditors.find "tabPinnedTabWidth"
+let mutable pinnedChanges = 0
+pinnedEditor.changed.Add(fun () -> pinnedChanges <- pinnedChanges + 1)
+appearance <- { appearance with tabPinnedTabWidth = 42 }
+appearanceView.refresh()
+check "invalid external width refresh does not write settings" (writes = baselineWrites)
+let pinnedInput = controls pinnedEditor.control |> Seq.pick(function :? NumericUpDown as n -> Some n | _ -> None)
+pinnedInput.Value <- 120M
+check "valid user edit still fires after an invalid external width" (pinnedChanges = 1 && writes > baselineWrites)
+(managedShortcuts :> ISettingsView).control.Dispose()
 for view in views do view.control.Dispose()
 host.Dispose()

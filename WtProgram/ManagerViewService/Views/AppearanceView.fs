@@ -379,10 +379,12 @@ type AppearanceView() as this =
                 with get() = box(int pinnedWidthNumeric.Value)
                 and set(newValue) =
                     updating <- true
-                    let v = unbox<int>(newValue)
-                    if v > 0 then
-                        pinnedWidthNumeric.Value <- decimal v
-                    updating <- false
+                    try
+                        let v = unbox<int>(newValue)
+                        if v > 0 then
+                            pinnedWidthNumeric.Value <- decimal v
+                    finally
+                        updating <- false
             member x.control = pinnedWidthInputPanel :> Control
             member x.changed = changedEvent.Publish
         }
@@ -400,11 +402,13 @@ type AppearanceView() as this =
                 with get() = box(pinnedWidthIconOnlyRadio.Checked)
                 and set(newValue) =
                     updating <- true
-                    let v = unbox<bool>(newValue)
-                    pinnedWidthIconOnlyRadio.Checked <- v
-                    pinnedWidthSpecifyRadio.Checked <- not v
-                    pinnedWidthNumeric.Enabled <- not v
-                    updating <- false
+                    try
+                        let v = unbox<bool>(newValue)
+                        pinnedWidthIconOnlyRadio.Checked <- v
+                        pinnedWidthSpecifyRadio.Checked <- not v
+                        pinnedWidthNumeric.Enabled <- not v
+                    finally
+                        updating <- false
             member x.control = pinnedWidthInputPanel :> Control
             member x.changed = changedEvent.Publish
         }
