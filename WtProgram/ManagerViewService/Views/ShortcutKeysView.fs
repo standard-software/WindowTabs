@@ -73,6 +73,7 @@ type ShortcutKeysView() =
     let applyMode () =
         let mode = currentMode()
         let editable = HotKeyPolicy.numberFieldsEditable mode
+        let previous = suppress
         suppress <- true
         try
             for (n, editor) in numberEditors do
@@ -86,7 +87,7 @@ type ShortcutKeysView() =
                 | :? TextBox as textBox -> textBox.ReadOnly <- (not editable) || HotKeyControl.UseManaged
                 | _ -> ()
         finally
-            suppress <- false
+            suppress <- previous
 
     // Write the check boxes to the settings - only the flag that differs
     // from what is stored, since each write is a file save and a resync of
@@ -195,6 +196,22 @@ type ShortcutKeysView() =
         // Same padding as the Appearance and Behavior tabs.
         form.Padding <- Padding(10)
         form
+
+    member this.refresh() =
+        let previous = suppress
+        suppress <- true
+        try
+            let ctrl = unbox<bool>(Services.settings.getValue(HotKeyPolicy.enableCtrlNumberSetting))
+            let alt = unbox<bool>(Services.settings.getValue(HotKeyPolicy.enableAltNumberSetting))
+            ctrlCheck.Checked <- ctrl
+            altCheck.Checked <- alt && not ctrl
+            for key, editor in [HotKeyPolicy.nextTabKey, nextTabEditor;
+                                HotKeyPolicy.prevTabKey, prevTabEditor;
+                                HotKeyPolicy.newTabRightKey, newTabRightEditor] do
+                editor.value <- box(Services.program.getHotKey(key))
+            applyMode()
+        finally
+            suppress <- previous
 
     interface ISettingsView with
         member x.key = SettingsViewType.ShortcutKeySettings
