@@ -476,7 +476,7 @@ type NotifyIconPlugin() as this =
         | Some session ->
             use lifetime = session
             let show title message =
-                AppDialog.showReserved title message AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+                AppDialog.showReservedEnglish title message |> ignore
             try
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject(fileName)
