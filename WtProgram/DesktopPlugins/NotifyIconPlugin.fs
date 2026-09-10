@@ -201,9 +201,22 @@ module UpdateChecker =
         wc.Headers.Add("User-Agent", "WindowTabs")
         wc
 
+    let waitForResponse timeoutMs (response: System.Threading.Tasks.Task<string>) =
+        if not (response.Wait(timeoutMs: int)) then
+            raise (TimeoutException("Update check response timed out."))
+        response.Result
+
     let fetchLatestRelease() =
         use wc = newWebClient()
-        let json = JObject.Parse(wc.DownloadString(releaseApiUrl))
+        // Bound the entire response, including a stalled or trickling body.
+        // Waiting happens on the worker thread, never on the UI thread.
+        let response = wc.DownloadStringTaskAsync(Uri(releaseApiUrl))
+        let body =
+            try waitForResponse 15000 response
+            with :? TimeoutException ->
+                wc.CancelAsync()
+                reraise()
+        let json = JObject.Parse(body)
         let assetUrl (name: string) =
             match json.["assets"] with
             | :? JArray as assets ->
@@ -477,6 +490,7 @@ type NotifyIconPlugin() as this =
 
     interface IPlugin with
         member this.init() =
+            AppDialog.initialize()
             let notifyIcon = this.icon
             let contextMenu = notifyIcon.ContextMenu
 
