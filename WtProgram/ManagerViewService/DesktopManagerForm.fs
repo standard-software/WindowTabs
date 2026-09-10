@@ -95,6 +95,13 @@ type SettingsDialogWindow(initialScale: float) =
             if not rescaling && this.WindowState = FormWindowState.Normal then
                 SettingsDpi.adoptWindowSize this scale
 
+    member this.prepareAtCursor() =
+        let targetScale = SettingsDpi.forCursor()
+        let bounds = SettingsDpi.centeredAt Control.MousePosition.Pt (SettingsDpi.windowSizeAt this targetScale)
+        this.rescale(targetScale, bounds)
+        SettingsDpi.setCurrent(targetScale)
+        SettingsDpi.placeWindow this bounds
+
     override this.WndProc(m: byref<Message>) =
         if m.Msg = WM_SIZING && not rescaling then userSizing <- true
         if m.Msg = WM_DPICHANGED then
@@ -109,7 +116,19 @@ type SettingsDialogWindow(initialScale: float) =
             with _ -> ()
         base.WndProc(&m)
 
-type DesktopManagerForm(dialogSession: IDisposable) =
+type DesktopManagerForm() =
+    let mutable dialogSession: IDisposable option = None
+    let releaseSession() =
+        let session = dialogSession
+        dialogSession <- None
+        DesktopManagerFormState.currentForm <- None
+        match DesktopManagerFormState.mutex with
+        | Some mutex ->
+            DesktopManagerFormState.mutex <- None
+            try mutex.ReleaseMutex() with _ -> ()
+            mutex.Dispose()
+        | None -> ()
+        session |> Option.iter (fun value -> value.Dispose())
     // Flip code-path flags BEFORE the views are constructed so child
     // controls are born in their dark-aware variants:
     //  - HotKeyControl: managed (TextBox-based) path instead of comctl32
@@ -249,20 +268,15 @@ type DesktopManagerForm(dialogSession: IDisposable) =
         // — see below — so the dialog never paints in system colors.
         if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
-        form.FormClosed.Add(fun _ ->
-            dialogSession.Dispose()
-            DesktopManagerFormState.currentForm <- None
-            // Release mutex when form is closed
-            match DesktopManagerFormState.mutex with
-            | Some m -> 
-                try
-                    m.ReleaseMutex()
-                    m.Dispose()
-                with _ -> ()
-                DesktopManagerFormState.mutex <- None
-            | None -> ()
-        )
-        form.Disposed.Add(fun _ -> dialogSession.Dispose())
+        else
+            ScaledChoiceGlyph.applyLight form
+        form.FormClosing.Add(fun e ->
+            if e.CloseReason = CloseReason.UserClosing && not Services.program.isShuttingDown then
+                e.Cancel <- true
+                form.Hide()
+                releaseSession())
+        form.FormClosed.Add(fun _ -> releaseSession())
+        form.Disposed.Add(fun _ -> releaseSession())
         form
 
     // Acquire the single-instance mutex. If the named mutex already exists
@@ -288,42 +302,65 @@ type DesktopManagerForm(dialogSession: IDisposable) =
             // anyway" rather than leaving the user with no dialog.
             true
 
+    let mutable prepared = false
+    let prepareHidden() =
+        if not prepared then
+            // Create native controls and theme them without ever showing or
+            // activating the top-level window, including at application startup.
+            let rec createHandles (control: Control) =
+                control.Handle |> ignore
+                for child in control.Controls do createHandles child
+            createHandles form
+            if isDarkModeEnabled() then DarkMode.applyDarkThemeBranch15ToForm form true
+            SettingsDpi.reassertAfterShow form
+            prepared <- true
+
     let showFormCommon () =
-        // Anti-flicker: hide via Opacity=0 while we Show + apply the dark
-        // theme, then bump Opacity back to 1. This lets the form paint its
-        // initial system frame off-screen (invisible) so the user only ever
-        // sees the fully-themed dark dialog.
-        if isDarkModeEnabled() then
-            form.Opacity <- 0.0
-            try
-                form.Show()
-                form.CreateControl()
-                DarkMode.applyDarkThemeBranch15ToForm form true
-                // Handle creation may have run a WinForms scaling walk on a
-                // scaled-system-DPI machine; put the design metrics back before
-                // the window becomes visible.
-                SettingsDpi.reassertAfterShow form
-                form.Refresh()
-            finally
-                if not form.IsDisposed then form.Opacity <- 1.0
-        else
+        // The native controls and theme already exist. Keep the initial
+        // WinForms Show-time scaling invisible until metrics are reasserted.
+        prepareHidden()
+        tabs.iter(fun view ->
+            match view with
+            | :? AppearanceView as appearance -> appearance.refresh()
+            | :? HotKeyView as behavior -> behavior.refresh()
+            | :? ShortcutKeysView as shortcuts -> shortcuts.refresh()
+            | _ -> ())
+        (form :?> SettingsDialogWindow).prepareAtCursor()
+        form.Opacity <- 0.0
+        try
             form.Show()
             SettingsDpi.reassertAfterShow form
+        finally
+            if not form.IsDisposed then form.Opacity <- 1.0
         form.Activate()
+        form.BeginInvoke(MethodInvoker(fun () ->
+            if not form.IsDisposed && form.Visible then
+                tabs.iter(fun view ->
+                    match view with
+                    | :? ProgramView as programs -> programs.refresh()
+                    | :? WorkspaceView as workspaces -> workspaces.refresh()
+                    | _ -> ()))) |> ignore
 
-    member this.show() =
+    member this.preload() = prepareHidden()
+    member this.dispose() = form.Dispose()
+    member this.isDisposed = form.IsDisposed
+
+    member this.show(session: IDisposable) =
         DesktopManagerFormState.log("show requested")
         if tryAcquireSingleInstanceMutex() then
+            dialogSession <- Some session
             DesktopManagerFormState.currentForm <- Some(form)
             try
+                tabControl.SelectedIndex <- tabs.findIndex(fun tab -> tab.key = SettingsViewType.ProgramSettings)
                 showFormCommon()
                 DesktopManagerFormState.log(sprintf "show completed visible=%b opacity=%.2f" form.Visible form.Opacity)
             with ex ->
                 DesktopManagerFormState.log(sprintf "show failed: %O" ex)
                 reraise()
 
-    member this.showView(view) =
+    member this.showView(view, session: IDisposable) =
         if tryAcquireSingleInstanceMutex() then
+            dialogSession <- Some session
             let tabIndex = tabs.findIndex(fun tab -> tab.key = view)
             tabControl.SelectedIndex <- tabIndex
             DesktopManagerFormState.currentForm <- Some(form)

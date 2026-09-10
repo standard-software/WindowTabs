@@ -59,6 +59,10 @@ type Settings(isStandAlone) as this =
         valueCache.Clear()
 
     member this.path =
+#if DEBUG
+        let benchmarkPath = Environment.GetEnvironmentVariable("WINDOWTABS_BENCHMARK_SETTINGS")
+        if not (String.IsNullOrEmpty(benchmarkPath)) then benchmarkPath else
+#endif
         let path = 
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
         Path.Combine(path, "WindowTabsSettings.txt")

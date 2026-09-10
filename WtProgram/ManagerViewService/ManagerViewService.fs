@@ -3,18 +3,97 @@
 open System.Windows.Forms
 
 type ManagerViewService() =
+    let presentationKey() =
+        let root = Services.settings.root
+        // Ordinary settings are reloaded into the existing controls before Show.
+        // Language and dark mode affect captions and native control types.
+        sprintf "%s|%b" Localization.currentLanguage (root.getBool("EnableDarkMode").def(false))
+
+    let mutable cached: (string * DesktopManagerForm) option = None
+    let mutable preparing = false
+    let getForm() =
+        let key = presentationKey()
+        match cached with
+        | Some(oldKey, form) when oldKey = key && not form.isDisposed -> form
+        | old ->
+            preparing <- true
+            try
+                cached <- None
+                old |> Option.iter(fun (_, form) -> form.dispose())
+                let form = DesktopManagerForm()
+                try
+                    form.preload()
+                    cached <- Some(key, form)
+                    form
+                with _ ->
+                    form.dispose()
+                    reraise()
+            finally
+                preparing <- false
+
+    do Application.ApplicationExit.Add(fun _ ->
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: cached settings disposal begin"
+#endif
+        cached |> Option.iter(fun (_, form) -> form.dispose())
+        cached <- None
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: cached settings disposal complete"
+#endif
+        ())
+
     let showSettings show =
-        if not Services.program.isDisabled then
+        if not preparing && not Services.program.isDisabled then
             match DialogState.tryAcquire() with
             | None -> ()
             | Some session ->
                 try
-                    let form = new DesktopManagerForm(session)
-                    show form
+#if DEBUG
+                    let timing = SettingsTiming.beginRun Services.program.version
+#endif
+                    let form = getForm()
+#if DEBUG
+                    timing.Mark("constructed")
+#endif
+                    show form session
+#if DEBUG
+                    timing.Mark("shown")
+                    timing.Mark(sprintf "dpi=%.2f" (SettingsDpi.current()))
+                    timing.Flush()
+                    match DesktopManagerFormState.currentForm with
+                    | Some visibleForm ->
+                        if SettingsTiming.enabled() then visibleForm.Update()
+                        timing.Mark("form-painted")
+                        visibleForm.BeginInvoke(MethodInvoker(fun () ->
+                            timing.Mark("ui-callback-after-show")
+                            timing.Flush())) |> ignore
+                    | None -> ()
+#endif
                     if DesktopManagerFormState.currentForm.IsNone then session.Dispose()
                 with _ ->
+                    cached |> Option.iter(fun (_, form) -> form.dispose())
+                    cached <- None
                     session.Dispose()
                     reraise()
+
+    member this.preload() =
+#if DEBUG
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        use process = System.Diagnostics.Process.GetCurrentProcess()
+        let initialBytes = process.PrivateMemorySize64
+        let initialHandles = process.HandleCount
+#endif
+        try
+            getForm() |> ignore
+            DesktopManagerFormState.log "settings preloaded hidden"
+#if DEBUG
+            process.Refresh()
+            DesktopManagerFormState.log (sprintf "preload ms=%.1f privateBytesDelta=%d handlesDelta=%d gateBusy=%b"
+                clock.Elapsed.TotalMilliseconds (process.PrivateMemorySize64 - initialBytes)
+                (process.HandleCount - initialHandles) (DialogState.isBusy()))
+#endif
+        with ex ->
+            DesktopManagerFormState.log (sprintf "settings preload failed: %O" ex)
 
     // The settings dialog used to be built inside Dpi.withUnawareContext,
     // which made Windows lay it out in 96-dpi units and bitmap-stretch the
@@ -37,17 +116,12 @@ type ManagerViewService() =
     interface IManagerView with
         member x.show() =
             DesktopManagerFormState.log("manager show requested")
-            showSettings (fun form -> form.show())
+            showSettings (fun form session -> form.show(session))
 
         member x.show(view) =
-            showSettings (fun form -> form.showView(view))
+            showSettings (fun form session -> form.showView(view, session))
 
-        // Through the form itself: its FormClosed handler releases the named
-        // mutex and clears DesktopManagerFormState.currentForm, and nothing
-        // else must touch either. (An earlier caller opened a second handle
-        // to the mutex and released it before closing, which decremented the
-        // dialog's own ownership before FormClosed ran and left the dialog
-        // un-openable afterwards.)
+        // User close hides the cached form and releases its visible session.
         member x.close() =
             match DesktopManagerFormState.currentForm with
             | Some form -> (try form.Close() with _ -> ())

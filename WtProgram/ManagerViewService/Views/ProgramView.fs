@@ -350,12 +350,23 @@ type ProgramView() as this=
 
     do  
         this.populateNodes()
+        // ISettings has no unsubscribe API. Do not let its process-lifetime
+        // notification retain a disposed settings page after a structural rebuild.
+        let target = WeakReference<ProgramView>(this)
         Services.settings.notifyValue "enableTabbingByDefault" <| fun(_) ->
-            this.populateNodes()
+            match target.TryGetTarget() with
+            | true, view -> view.refresh()
+            | _ -> ()
+
+    member this.refresh() =
+        if not panel.IsDisposed then this.populateNodes()
 
     member private this.populateNodes() =
+#if DEBUG
+        let timing = SettingsTiming.current
+#endif
         let generation = Threading.Interlocked.Increment(&populationGeneration)
-        model.Nodes.Clear()
+        // Keep the last completed list until its replacement is ready.
         let showAll = showAllSettings
         ThreadHelper.queueBackground <| fun() ->
             let os = OS()
@@ -395,6 +406,13 @@ type ProgramView() as this=
                     model.Nodes.Clear()
                     // Sort by category number first (0 = unset first, then 1-5), then by name
                     allProcNodes.sortBy(fun n -> (n.categoryNumber, n.Text)).iter <| fun node -> model.Nodes.Add(node)
+#if DEBUG
+                    timing |> Option.iter(fun run ->
+                        run.Mark(sprintf "programs-ready:nodes=%d" model.Nodes.Count)
+                        tree.Update()
+                        run.Mark("programs-painted")
+                        run.Flush())
+#endif
 
     interface ISettingsView with
         member x.key = SettingsViewType.ProgramSettings

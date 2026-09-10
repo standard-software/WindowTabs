@@ -476,7 +476,7 @@ type NotifyIconPlugin() as this =
         | Some session ->
             use lifetime = session
             let show title message =
-                AppDialog.showReserved title message AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+                AppDialog.showReservedEnglish title message |> ignore
             try
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject(fileName)
@@ -553,7 +553,7 @@ type NotifyIconPlugin() as this =
             Services.program.newVersion.Add this.onNewVersion
 
             // Start watchdog to detect UI freeze and auto-restart
-            Watchdog.start()
+            if not (SettingsTiming.enabled()) then Watchdog.start()
 
     interface IDisposable with
         member this.Dispose() =

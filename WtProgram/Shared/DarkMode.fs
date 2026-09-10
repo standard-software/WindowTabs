@@ -5,6 +5,67 @@ open System.Runtime.InteropServices
 open System.Windows.Forms
 open Aga.Controls.Tree
 
+module ScaledChoiceGlyph =
+    let private images = System.Collections.Generic.Dictionary<bool * int * bool, Bitmap>()
+
+    // Theme parts can keep their intrinsic size even in a larger destination.
+    // Render once at the design size and explicitly scale the resulting pixels.
+    let draw (graphics: Graphics) (bounds: Rectangle) radio state =
+        let themed = Application.RenderWithVisualStyles
+        lock images (fun () ->
+            let key = radio, state, themed
+            let bitmap =
+                match images.TryGetValue key with
+                | true, image -> image
+                | _ ->
+                    let image = new Bitmap(13, 13)
+                    image.SetResolution(96.0f, 96.0f)
+                    use g = Graphics.FromImage image
+                    if themed then
+                        let renderer = VisualStyles.VisualStyleRenderer("BUTTON", (if radio then 2 else 3), state)
+                        renderer.DrawBackground(g, Rectangle(0, 0, 13, 13))
+                    else
+                        let flags = (if state >= 5 then ButtonState.Checked else ButtonState.Normal) |||
+                                    (if state % 4 = 0 then ButtonState.Inactive else ButtonState.Normal)
+                        if radio then ControlPaint.DrawRadioButton(g, Rectangle(0, 0, 13, 13), flags)
+                        else ControlPaint.DrawCheckBox(g, Rectangle(0, 0, 13, 13), flags)
+                    images.Add(key, image)
+                    image
+            graphics.DrawImage(bitmap, bounds))
+
+    let private attached = System.Runtime.CompilerServices.ConditionalWeakTable<Control, obj>()
+    let rec applyLight (control: Control) =
+        match control with
+        | :? CheckBox | :? RadioButton ->
+            if not (attached.TryGetValue(control) |> fst) then
+                attached.Add(control, obj())
+                let radio = control :? RadioButton
+                (match control with
+                 | :? CheckBox as cb -> cb.FlatStyle <- FlatStyle.Flat
+                 | :? RadioButton as rb -> rb.FlatStyle <- FlatStyle.Flat
+                 | _ -> ())
+                SettingsDpi.applyGlyphPadding control
+                let mutable hot = false
+                let mutable pressed = false
+                control.MouseEnter.Add(fun _ -> hot <- true; control.Invalidate())
+                control.MouseLeave.Add(fun _ -> hot <- false; pressed <- false; control.Invalidate())
+                control.MouseDown.Add(fun _ -> pressed <- true; control.Invalidate())
+                control.MouseUp.Add(fun _ -> pressed <- false; control.Invalidate())
+                control.Paint.Add(fun e ->
+                    let state =
+                        match control with
+                        | :? CheckBox as cb -> if cb.CheckState = CheckState.Indeterminate then 9 elif cb.Checked then 5 else 1
+                        | :? RadioButton as rb -> if rb.Checked then 5 else 1
+                        | _ -> 1
+                    let state = state + (if not control.Enabled then 3 elif pressed then 2 elif hot then 1 else 0)
+                    let size = 13 + control.Padding.Left
+                    let native = int ((if radio then 12.0 else 11.0) * float e.Graphics.DpiX / 96.0)
+                    use background = new SolidBrush(control.BackColor)
+                    e.Graphics.FillRectangle(background, Rectangle(0, 0, control.Padding.Left + native + 1, control.Height))
+                    draw e.Graphics (Rectangle(0, (control.Height - size) / 2, size, size)) radio state)
+        | _ -> ()
+        for child in control.Controls do applyLight child
+
 module DarkMode =
     // Dark theme palette inspired by Win11 / VS Dark.
     //   darkSurface : form bg + most static surfaces (mid-dark)
@@ -804,15 +865,9 @@ module DarkMode =
                         g.FillRectangle(bg, cornerRect)
                     // Column header overpaint.
                     if tva.UseColumns then
-                        // Default _columnHeaderHeight in Aga is 20; widen to a
-                        // safety value that comfortably covers any reasonable
-                        // font so the entire system-drawn header is hidden.
-                        // SettingsDpi computes the same number for Aga's own
-                        // layout - the header height has no setter, so it
-                        // writes the private field - which is what keeps this
-                        // overpaint from spilling onto the first row once the
-                        // font is scaled. At 100% it is exactly the
-                        // `max 24 (Font.Height + 8)` it has always been.
+                        // SettingsDpi assigns this same height to Aga's native
+                        // layout at every DPI, including a return to 100%.
+                        // Keep overpaint aligned with the first content row.
                         let columnHeaderHeight = SettingsDpi.treeHeaderHeight tva
                         let headerRect = Rectangle(0, 0, cr.Width, columnHeaderHeight)
                         g.FillRectangle(bg, headerRect)
@@ -1221,14 +1276,14 @@ type DarkNodeCheckBox() =
     inherit Aga.Controls.Tree.NodeControls.NodeCheckBox()
 
     override this.MeasureSize(_node: Aga.Controls.Tree.TreeNodeAdv, _context: Aga.Controls.Tree.DrawContext) =
-        let size = SettingsDpi.checkBoxSize()
+        let size = SettingsDpi.checkBoxSizeFor this.Parent
         System.Drawing.Size(size, size)
 
     override this.Draw(node: Aga.Controls.Tree.TreeNodeAdv, context: Aga.Controls.Tree.DrawContext) =
         let bounds = this.GetBounds(node, context)
         let state = this.GetCheckState(node)
         let g = context.Graphics
-        let imgSize = SettingsDpi.checkBoxSize()
+        let imgSize = SettingsDpi.checkBoxSizeFor this.Parent
         // Every offset below was drawn for a 13-px box; carry them across at
         // the same ratio so the tick keeps its proportions.
         let unit = float imgSize / float Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
@@ -1276,11 +1331,11 @@ type ScaledNodeCheckBox() =
     inherit Aga.Controls.Tree.NodeControls.NodeCheckBox()
 
     override this.MeasureSize(_node: Aga.Controls.Tree.TreeNodeAdv, _context: Aga.Controls.Tree.DrawContext) =
-        let size = SettingsDpi.checkBoxSize()
+        let size = SettingsDpi.checkBoxSizeFor this.Parent
         System.Drawing.Size(size, size)
 
     override this.Draw(node: Aga.Controls.Tree.TreeNodeAdv, context: Aga.Controls.Tree.DrawContext) =
-        let size = SettingsDpi.checkBoxSize()
+        let size = SettingsDpi.checkBoxSizeFor this.Parent
         if size = Aga.Controls.Tree.NodeControls.NodeCheckBox.ImageSize
            || not System.Windows.Forms.Application.RenderWithVisualStyles then
             base.Draw(node, context)
@@ -1294,9 +1349,8 @@ type ScaledNodeCheckBox() =
                     System.Windows.Forms.VisualStyles.VisualStyleElement.Button.CheckBox.CheckedNormal
                 | _ ->
                     System.Windows.Forms.VisualStyles.VisualStyleElement.Button.CheckBox.UncheckedNormal
-            let renderer = System.Windows.Forms.VisualStyles.VisualStyleRenderer(element)
-            renderer.DrawBackground(context.Graphics,
-                System.Drawing.Rectangle(bounds.X, bounds.Y, size, size))
+            ScaledChoiceGlyph.draw context.Graphics
+                (System.Drawing.Rectangle(bounds.X, bounds.Y, size, size)) false element.State
 
 module DarkModeFactory =
     /// Create a NodeCheckBox - DarkNodeCheckBox if dark mode is on, the

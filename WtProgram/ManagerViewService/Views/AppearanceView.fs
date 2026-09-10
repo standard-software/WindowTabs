@@ -75,6 +75,7 @@ type AppearanceView() as this =
         { displayText=displayText; key=key; propertyType=HotKeyProperty }
         
     let mutable suppressEvents = false
+    let mutable initializingTheme = true
 
     // Read the unified "Dark Mode" toggle. Used by child dialogs (Save
     // Theme / Edit Theme) so they inherit the parent dialog's theme on
@@ -132,6 +133,7 @@ type AppearanceView() as this =
     // Main container panel (vertical stack)
     let panel =
         let panel = TableLayoutPanel()
+        panel.SuspendLayout()
         panel.AutoScroll <- true
         panel.Dock <- DockStyle.Fill
         panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
@@ -146,6 +148,7 @@ type AppearanceView() as this =
     // Upper panel for int properties, dark mode, and theme
     let upperPanel =
         let p = TableLayoutPanel()
+        p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
@@ -172,6 +175,7 @@ type AppearanceView() as this =
     // Color grid panel for color settings (separate from upper panel)
     let colorPanel =
         let p = TableLayoutPanel()
+        p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
@@ -375,10 +379,12 @@ type AppearanceView() as this =
                 with get() = box(int pinnedWidthNumeric.Value)
                 and set(newValue) =
                     updating <- true
-                    let v = unbox<int>(newValue)
-                    if v > 0 then
-                        pinnedWidthNumeric.Value <- decimal v
-                    updating <- false
+                    try
+                        let v = unbox<int>(newValue)
+                        if v > 0 then
+                            pinnedWidthNumeric.Value <- decimal v
+                    finally
+                        updating <- false
             member x.control = pinnedWidthInputPanel :> Control
             member x.changed = changedEvent.Publish
         }
@@ -396,11 +402,13 @@ type AppearanceView() as this =
                 with get() = box(pinnedWidthIconOnlyRadio.Checked)
                 and set(newValue) =
                     updating <- true
-                    let v = unbox<bool>(newValue)
-                    pinnedWidthIconOnlyRadio.Checked <- v
-                    pinnedWidthSpecifyRadio.Checked <- not v
-                    pinnedWidthNumeric.Enabled <- not v
-                    updating <- false
+                    try
+                        let v = unbox<bool>(newValue)
+                        pinnedWidthIconOnlyRadio.Checked <- v
+                        pinnedWidthSpecifyRadio.Checked <- not v
+                        pinnedWidthNumeric.Enabled <- not v
+                    finally
+                        updating <- false
             member x.control = pinnedWidthInputPanel :> Control
             member x.changed = changedEvent.Publish
         }
@@ -714,15 +722,18 @@ type AppearanceView() as this =
     // Refresh ComboBox items
     let refreshComboBoxItems() =
         themeItems <- buildThemeItems()
+        let previous = suppressEvents
         suppressEvents <- true
-        colorThemeComboBox.Items.Clear()
-        themeItems |> List.iter (fun item ->
-            match item with
-            | Preset name -> colorThemeComboBox.Items.Add(name) |> ignore
-            | CustomTheme name -> colorThemeComboBox.Items.Add(name) |> ignore
-            | UnsavedCustom -> colorThemeComboBox.Items.Add("Custom") |> ignore
-        )
-        suppressEvents <- false
+        try
+            colorThemeComboBox.Items.Clear()
+            themeItems |> List.iter (fun item ->
+                match item with
+                | Preset name -> colorThemeComboBox.Items.Add(name) |> ignore
+                | CustomTheme name -> colorThemeComboBox.Items.Add(name) |> ignore
+                | UnsavedCustom -> colorThemeComboBox.Items.Add("Custom") |> ignore
+            )
+        finally
+            suppressEvents <- previous
 
     // Initialize ComboBox items
     do refreshComboBoxItems()
@@ -988,7 +999,7 @@ type AppearanceView() as this =
     // Set up ComboBox event handler
     do
         colorThemeComboBox.SelectedIndexChanged.Add <| fun _ ->
-            if not suppressEvents then
+            if not initializingTheme && not suppressEvents then
                 let currentIndex = colorThemeComboBox.SelectedIndex
                 if currentIndex >= 0 && currentIndex < themeItems.Length then
                     match themeItems.[currentIndex] with
@@ -1228,7 +1239,7 @@ type AppearanceView() as this =
     // Empty name means delete the theme
     // OK button is disabled until text is changed from current value
     let showEditThemeDialog (currentName: string) =
-        use form = new Form()
+        use form = new DpiAwareDialog()
         form.Text <- Localization.getString("EditThemeTitle")
         form.Size <- Size(440, 240)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1283,7 +1294,7 @@ type AppearanceView() as this =
         // the theming pass sees final control sizes. Everything here is
         // absolute Location / Size, which is exactly what Control.Scale
         // handles.
-        SettingsDpi.applyToChildDialog form
+        form.InitializeDpi(SettingsDpi.current())
 
         // Inherit dark mode from the parent settings dialog when the user
         // has the "Settings Dialog Dark Mode" toggle on.
@@ -1307,7 +1318,7 @@ type AppearanceView() as this =
     // Show Save As dialog with ComboBox for theme name selection (used for Save As)
     // Returns: Some(name, isOverwrite) if OK pressed, None if cancelled
     let showSaveAsDialog (title: string) =
-        use form = new Form()
+        use form = new DpiAwareDialog()
         form.Text <- title
         form.Size <- Size(440, 210)
         form.StartPosition <- FormStartPosition.CenterParent
@@ -1359,7 +1370,7 @@ type AppearanceView() as this =
         form.CancelButton <- cancelBtn
 
         // See showEditThemeDialog: scale for the parent's monitor first.
-        SettingsDpi.applyToChildDialog form
+        form.InitializeDpi(SettingsDpi.current())
 
         // Inherit dark mode from the parent settings dialog.
         if isDarkModeEnabled() then
@@ -1613,7 +1624,37 @@ type AppearanceView() as this =
             refreshComboBoxItems()
             colorThemeComboBox.SelectedIndex <- themeItems.Length - 1  // Custom
         updateButtonState()
-        
+
+        // Construction only reflects the current theme; it is not a user edit.
+        initializingTheme <- false
+
+        // Finish all design layout before the containing form captures DPI data.
+        upperPanel.ResumeLayout(true)
+        colorPanel.ResumeLayout(true)
+        panel.ResumeLayout(true)
+
+    member this.refresh() =
+        let previous = suppressEvents
+        suppressEvents <- true
+        panel.SuspendLayout()
+        try
+            customThemes <- loadCustomThemes()
+            savedCustomColors <- loadSavedCustomColors()
+            setEditorValues Services.program.tabAppearanceInfo
+            refreshComboBoxItems()
+            let matchIndex = findMatchingTheme()
+            if matchIndex >= 0 then
+                colorThemeComboBox.SelectedIndex <- matchIndex
+            else
+                // Reflect current colors without writing settings during refresh.
+                savedCustomColors <- Some(getCurrentColors())
+                colorThemeComboBox.SelectedIndex <- themeItems.Length - 1
+            updateButtonState()
+            updateCopyAllSavedMenuState()
+        finally
+            suppressEvents <- previous
+            panel.ResumeLayout(true)
+
     member this.applyAppearance() =
         // Get all current values from UI editors
         let getValue key = (editors.find key).value
@@ -1654,4 +1695,3 @@ type AppearanceView() as this =
         member x.key = SettingsViewType.AppearanceSettings
         member x.title = Localization.getString("Appearance")
         member x.control = panel :> Control
-

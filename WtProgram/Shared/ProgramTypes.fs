@@ -90,8 +90,7 @@ type IPropEditor =
 type IManagerView =
     abstract member show : unit -> unit
     abstract member show : SettingsViewType -> unit
-    // Close the settings dialog if it is open (before a message is shown
-    // from outside it; the dialog is always on top)
+    // Hide settings and release its visible session; keep the prepared form.
     abstract member close : unit -> unit
 
 type IProgram =

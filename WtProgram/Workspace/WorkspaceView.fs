@@ -39,6 +39,8 @@ type WorkspaceNode(model:Dynamic) as this =
 type WorkspaceView() as this =
     let Cell = CellScope()
     let mutable loadingInitialWorkspaces = true
+    let signature() = Services.settings.root.getValueCI("workspaces") |> Option.map(fun value -> value.ToString())
+    let mutable lastSignature = None
     
 
     member this.wm = Cell.cacheProp this <| fun() ->
@@ -48,6 +50,7 @@ type WorkspaceView() as this =
             wm.init()
         finally
             loadingInitialWorkspaces <- false
+            lastSignature <- signature()
         wm
 
     member this.nameColumn = Cell.cacheProp this <| fun() ->
@@ -197,6 +200,17 @@ type WorkspaceView() as this =
             treeNode.ExpandAll()
             InvokerService.invoker.asyncInvoke <| fun() ->
                 this.tree.SelectedNode <- treeNode
+
+    member this.refresh() =
+        let current = signature()
+        if current <> lastSignature then
+            loadingInitialWorkspaces <- true
+            try
+                this.model.Nodes.Clear()
+                this.wm.reload()
+                lastSignature <- current
+            finally
+                loadingInitialWorkspaces <- false
 
     interface ISettingsView with
         member x.key = SettingsViewType.LayoutSettings

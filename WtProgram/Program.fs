@@ -2503,6 +2503,9 @@ type Program() as this =
             this.refresh()
 
         member x.shutdown() =
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: begin"
+#endif
             // Stop the periodic save before the explicit final save, so we don't
             // race against an in-flight Tick during shutdown teardown.
             periodicSaveTimer.Stop()
@@ -2513,10 +2516,16 @@ type Program() as this =
             if inSessionEnd.value.not then
                 this.saveTabGroupsToSettings()
             inShutdown.set(true)
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: saved settings; removing grouped windows"
+#endif
             this.desktop.groups.iter <| fun gi ->
                 gi.windows.iter <| fun window ->
                     gi.removeWindow window
             this.updateAppWindows()
+#if DEBUG
+            DesktopManagerFormState.log "shutdown: window update returned"
+#endif
                    
         member x.tabLimit = None
      
@@ -2861,21 +2870,35 @@ type Program() as this =
 
         Services.register(this :> IProgram)
         Services.register(FilterService() :> IFilterService)
-        Services.register(ManagerViewService() :> IManagerView)
+        let managerView = ManagerViewService()
+        Services.register(managerView :> IManagerView)
         Services.program.refresh()
+
+        // Pay settings construction cost during startup, before the watchdog
+        // is armed. Preloading never shows a window or acquires the dialog gate.
+        managerView.preload()
 
         plugins.iter <| fun p -> p.init()
 
+        SettingsBenchmark.install()
         Application.Run()
-
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: message loop returned; disposing plugins"
+#endif
         plugins.iter <| fun p ->
             match p with
             | :? IDisposable as d -> d.Dispose()
             | _ -> ()
+#if DEBUG
+        DesktopManagerFormState.log "shutdown: plugins disposed"
+#endif
 
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+#if DEBUG
+    SettingsTiming.startStartup()
+#endif
     // Per-Monitor-V2 DPI awareness, before anything creates a window or a DC.
     // app.manifest declares the same thing and normally wins, in which case
     // this call simply fails and changes nothing; keeping it means the tab
