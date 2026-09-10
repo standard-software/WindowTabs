@@ -2,54 +2,21 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.08_next11
+## version ss_2026.09.08_next12
 
-- Disable all tray menu commands while settings, a confirmation, or an update check is open; also disable the tab menu's Settings command
-- Preserve open dialogs and workspace editors instead of closing them to display another message
-
-## version ss_2026.09.08_next10
-
-- Constructed every settings page before the dialog's initial DPI layout to keep monitor scaling consistent across all controls
-- Updated Programs page application icons for the destination display scale when moving the settings dialog between monitors
-- Updated Workspace page icons for the destination display scale when moving the settings dialog between monitors
-- Removed the unused low-level mouse hook so WindowTabs no longer participates in system-wide mouse input processing
-
-## version ss_2026.09.08_next8
-
-- Completed the Programs page layout before opening the settings dialog while loading its application information in the background; the other pages are prepared immediately after the dialog appears
-- Moved the low-level mouse hook to a dedicated message thread so main-window work no longer stalls system mouse input
-- Reduced settings dialog and startup overhead by caching parsed settings and process drive mappings
-- Reduced per-program category lookups from ten cross-thread calls to one
-- Reduced repeated settings copies during window and hot-key updates, and ignored stale background results in the Programs page
-- The Workspace page now starts with every saved workspace collapsed
-- Prevented delayed mouse-wheel input from being delivered to a different foreground window
-
-## version ss_2026.09.08_next6
-
-- Added tab direction and hide-while-moving behavior settings
-- Fixed: clicking a tab's icon hid the tabs even when that tab was not the active one
-
-## version ss_2026.09.08_next5
-
-- Added a Shortcut Keys settings tab for activating tabs 1-9, moving to the next or previous tab, and adding a new tab to the right
-- Shortcut keys are registered only while a WindowTabs-managed window is active, leaving other applications' keys untouched
-
-## version ss_2026.09.08_next4
-
-- The workspace dialogs are titled Window Settings and Workspace Name, show the program's full path (read-only), and list the match types by name in the current language (exact, starts with, ends with, contains, regular expression), in the dialog and in the tree
-
-## version ss_2026.09.08_next3
-
-- A workspace now saves and restores each tab's colour, underline, border, pin, name, side and position in the strip; workspaces saved earlier restore as before
-- The workspace edit dialog: no caption icon, titles and labels from the language file, labels lined up with their inputs, and a Tab name field (blank = the window title)
-- Fixed removing a workspace group or window not being saved
-
-## version ss_2026.09.08_next2
-
-- Every message WindowTabs shows now comes through one dialog: in front of the settings dialog (which it closes first), dark-mode aware, and Ctrl+C copies it in the system box's layout
-- Restart and Close on the tray menu ask for confirmation first, in every language
-- The workspace edit dialog keeps only Close in its caption; the settings dialog and the edit dialog show the same size grip in the corner
-- Edit is disabled for a workspace group; its name was never used for anything
+- Added tab shortcuts and display options
+  - Added configurable shortcuts for tab selection, navigation and creation, active only in managed windows.
+  - Added tab-direction and hide-while-moving settings; fixed inactive icons incorrectly hiding tabs.
+- Expanded workspace restoration and improved editing
+  - Save and restore tab styling, pins, names and layout; fixed unsaved deletions.
+  - Improved editors and initially collapse saved workspaces.
+- Improved settings display and prevented conflicting dialog operations
+  - Fixed font and icon scaling when moving settings between displays with different DPI.
+  - Confirm restart and exit; disable tray commands and other conflicting entry points while dialogs are open.
+  - Unified messages with dark-mode support and Ctrl+C copying.
+  - Retain pending notifications and time out update checks after 15 seconds.
+- Reduced overhead during startup and normal use
+  - Streamlined settings and application-information retrieval; removed unnecessary mouse monitoring.
 
 ## version ss_2026.09.08
 
