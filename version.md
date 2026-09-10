@@ -2,30 +2,38 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.08_next16
+## version ss_2026.09.12
 
-- Open settings faster by preparing the dialog during startup and reusing it.
-  - Reopen on the Programs page and refresh settings and lists without rebuilding for ordinary setting changes.
-- Improve settings display across monitors with different scaling.
-  - Correct checkbox, radio button and tree header sizing, and scale confirmation and theme dialogs when moved between monitors.
-  - Remove unwanted workspace editor scrollbars and keep language-confirmation buttons in English.
-- Keep settings editable after reading an invalid value.
-
-## version ss_2026.09.08_next12
-
-- Added tab shortcuts and display options
-  - Added configurable shortcuts for tab selection, navigation and creation, active only in managed windows.
-  - Added tab-direction and hide-while-moving settings; fixed inactive icons incorrectly hiding tabs.
-- Expanded workspace restoration and improved editing
-  - Save and restore tab styling, pins, names and layout; fixed unsaved deletions.
-  - Improved editors and initially collapse saved workspaces.
-- Improved settings display and prevented conflicting dialog operations
-  - Fixed font and icon scaling when moving settings between displays with different DPI.
-  - Confirm restart and exit; disable tray commands and other conflicting entry points while dialogs are open.
-  - Unified messages with dark-mode support and Ctrl+C copying.
-  - Retain pending notifications and time out update checks after 15 seconds.
-- Reduced overhead during startup and normal use
-  - Streamlined settings and application-information retrieval; removed unnecessary mouse monitoring.
+- Reduce overhead by streamlining processing during startup and normal use.
+  - Remove an unnecessary low-level mouse hook that intercepted mouse input system-wide.
+  - Remove the hook's dedicated thread. This eliminates the path through which settings UI delays could affect mouse input via the hook, and reduces overhead during normal use.
+  - Reuse previously read settings to reduce repeated parsing and data copying when looking up values.
+  - Reduce redundant lookups when checking automatic-grouping categories and shortcut key settings.
+  - Temporarily reuse drive information used to resolve application executable paths, reducing duplicate work when inspecting many applications.
+- Speed up both the first opening and reopening of settings.
+  - Prepare the dialog during startup and reuse it, allowing quick reopening after ordinary setting changes without rebuilding the dialog.
+  - Reopen on the Programs page and refresh settings values and lists.
+  - Fix some settings edits not taking effect after an invalid setting value was read.
+- Add a Shortcut Keys tab to settings.
+  - Add configurable shortcuts for selecting tabs 1–9, switching to the previous or next tab, and adding a new tab.
+  - Activate these shortcuts only while a managed window is active.
+- Expand workspace restoration and improve editing.
+  - Save and restore tab styling, pins, names and layout.
+  - Fix changes not being saved after deleting groups or windows from a workspace.
+  - Refine editor layouts and remove unwanted scrollbars.
+  - Initially display the workspace list collapsed.
+- Add options to the Behavior tab in settings.
+  - Choose between upward tabs that turn downward when they would extend off-screen, and tabs that always point downward.
+  - Add a setting to hide tabs while moving a window.
+  - Fix clicking an inactive tab's icon hiding the tabs when the option is set to hide them by clicking the active tab's icon.
+- Improve display when moving between monitors with different scaling (DPI).
+  - Scale settings checkboxes, radio buttons, tree headers and icons to match the monitor.
+  - Support monitor transitions in confirmation dialogs and color theme save/edit dialogs as well.
+- Improve dialog behavior.
+  - Add restart and exit confirmations.
+  - Disable tray commands and other conflicting actions while settings or confirmation dialogs are open to prevent overlapping dialogs.
+  - Show pending notifications after the currently open dialog closes.
+  - Support copying confirmation and notification dialog contents with Ctrl+C.
 
 ## version ss_2026.09.08
 
