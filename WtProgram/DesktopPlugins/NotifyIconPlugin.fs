@@ -553,7 +553,7 @@ type NotifyIconPlugin() as this =
             Services.program.newVersion.Add this.onNewVersion
 
             // Start watchdog to detect UI freeze and auto-restart
-            Watchdog.start()
+            if not (SettingsTiming.enabled()) then Watchdog.start()
 
     interface IDisposable with
         member this.Dispose() =
