@@ -603,7 +603,7 @@ type WorkspaceModel() as this =
             // dark theme so the theming pass sees final control sizes.
             // CenterParent puts this on the settings dialog's monitor, which
             // is the scale applyToChildDialog uses.
-            SettingsDpi.applyToChildDialog form
+            form.InitializeDpi(SettingsDpi.current())
             // Apply dark mode if the user enabled "Settings Dialog Dark Mode"
             // on the View tab. Same pattern as the Save / Edit theme dialogs.
             let darkOn =

@@ -426,6 +426,7 @@ module SettingsDpi =
     open Aga.Controls.Tree.NodeControls
 
     let mutable private currentScale = 1.0
+    let private treeScales = Runtime.CompilerServices.ConditionalWeakTable<TreeViewAdv, float ref>()
 
     /// The scale the settings windows are laid out for right now. 1.0 when
     /// none has been opened yet, so everything that reads this is inert
@@ -497,6 +498,15 @@ module SettingsDpi =
     /// variants (DarkNodeCheckBox and ScaledNodeCheckBox) draw the glyph
     /// themselves, so both follow this.
     let checkBoxSize() = px NodeCheckBox.ImageSize
+
+    let checkBoxSizeFor (tree: TreeViewAdv) =
+        let scale =
+            if isNull tree then currentScale
+            else
+                match treeScales.TryGetValue tree with
+                | true, value -> value.Value
+                | _ -> currentScale
+        Dpi.px scale NodeCheckBox.ImageSize
 
     /// Side of the glyph a WinForms CheckBox or RadioButton draws, at the
     /// current scale.
@@ -725,6 +735,7 @@ module SettingsDpi =
         int (Math.Round(float value * factor, MidpointRounding.AwayFromZero))
 
     let private scaleTree (tva: TreeViewAdv) (toScale: float) (factor: float) =
+        treeScales.GetValue(tva, fun _ -> ref toScale).Value <- toScale
         try
             let design = treeDesigns.GetValue(tva, fun t -> TreeDesign(t))
             // TreeViewAdv assigns its own Font in its constructor
@@ -758,10 +769,10 @@ module SettingsDpi =
                     if i < margins.Length then
                         control.LeftMargin <- max 0 (Dpi.px toScale margins.[i])
                 i <- i + 1
-            // Left at Aga's stock 20 px on an unscaled monitor so nothing
-            // moves at 100%; the dark overpaint's own historical 24 px is
-            // unchanged there too.
-            if toScale <> 1.0 && headerHeightField <> null then
+            // Reset at 100% too: otherwise the enlarged native header remains
+            // behind the smaller dark overlay after moving between monitors.
+            // Layout, hit testing and overpaint must share the same height.
+            if headerHeightField <> null then
                 headerHeightField.SetValue(tva, box (treeHeaderHeight tva))
             tva.FullUpdate()
         with _ -> ()
@@ -937,6 +948,9 @@ module SettingsDpi =
     let reassertAfterShow (form: Form) =
         try reassertCellDesigns (form :> Control) currentScale with _ -> ()
         try applyControlLayout (form :> Control) currentScale with _ -> ()
+        // Layout restoration also restores design Padding (usually zero).
+        // Reapply glyph reservations and tree metrics after that restoration.
+        fixups (form :> Control) currentScale 1.0
 
     /// Lay a child dialog of the settings window out at the scale the parent
     /// is using. Child dialogs open CenterParent, so that is by construction
@@ -1117,3 +1131,46 @@ module SettingsDpi =
                     design.appliedSize <- current
                 | _ -> ()
         with _ -> ()
+
+// Small modal dialogs use the same explicit scaling policy as Settings.
+// Keep each dialog's source scale independent of the last window that moved.
+type DpiAwareDialog() =
+    inherit Form()
+    let previousScale = SettingsDpi.current()
+    let mutable scale = 1.0
+    let mutable applying = false
+    do base.AutoScaleMode <- AutoScaleMode.None
+
+    member this.InitializeDpi(target: float) =
+        SettingsDpi.applyScale this scale target
+        scale <- target
+
+    member this.ApplyDpi(target: float, suggested: Rectangle) =
+        if target > 0.0 && target <> scale && not applying then
+            applying <- true
+            this.SuspendLayout()
+            try
+                SettingsDpi.applyScale this scale target
+                scale <- target
+                this.Bounds <- suggested
+            finally
+                this.ResumeLayout(true)
+                applying <- false
+            this.Invalidate(true)
+
+    override this.OnShown(e: EventArgs) =
+        base.OnShown(e)
+        SettingsDpi.setCurrent scale
+        SettingsDpi.reassertAfterShow this
+
+    override this.OnFormClosed(e: FormClosedEventArgs) =
+        SettingsDpi.setCurrent previousScale
+        base.OnFormClosed(e)
+
+    override this.WndProc(message: byref<Message>) =
+        if message.Msg = 0x02E0 && message.LParam <> IntPtr.Zero then
+            let target = float (message.WParam.ToInt64() &&& 0xFFFFL) / Dpi.BaseDpi
+            let pointer = message.LParam
+            let read offset = Runtime.InteropServices.Marshal.ReadInt32(pointer, offset)
+            this.ApplyDpi(target, Rectangle.FromLTRB(read 0, read 4, read 8, read 12))
+        base.WndProc(&message)

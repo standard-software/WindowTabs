@@ -268,6 +268,8 @@ type DesktopManagerForm() =
         // — see below — so the dialog never paints in system colors.
         if isDarkModeEnabled() then
             DarkMode.applyDarkColorsBeforeShow form
+        else
+            ScaledChoiceGlyph.applyLight form
         form.FormClosing.Add(fun e ->
             if e.CloseReason = CloseReason.UserClosing && not Services.program.isShuttingDown then
                 e.Cancel <- true
