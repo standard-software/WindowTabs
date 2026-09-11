@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.12_next1
+
 ## version ss_2026.09.12
 
 - 起動時や通常使用中の処理を見直し、負荷を軽減

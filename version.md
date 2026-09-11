@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next1
+
 ## version ss_2026.09.12
 
 - Reduce overhead by streamlining processing during startup and normal use.
