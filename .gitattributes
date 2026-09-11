@@ -1,0 +1,22 @@
+# Keep text normalized in Git and use CRLF in Windows working trees.
+* text=auto eol=crlf
+
+# Keep repository metadata and Unix/CI scripts portable.
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+.github/** text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Never normalize binary assets.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.zip binary
+*.msi binary
