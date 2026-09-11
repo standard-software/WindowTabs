@@ -17,53 +17,51 @@ WindowTabs is a tool that extends Windows productivity by letting you manage any
 
 WindowTabs is a tool that greatly enhances Windows productivity.
 
-In an era when smartphones and tablets can handle web browsing and entertainment, the fact that you're using a Windows PC probably means you're doing some kind of creative work. For example: accounting, customer support, presentation preparation, business management, legal paperwork, electronic medical records for healthcare, video editing, illustration, or software development.
+In an era when smartphones and tablets can handle web browsing and entertainment, using a Windows PC probably means you're doing some kind of creative work: accounting, customer support, presentations, business management, legal paperwork, electronic medical records, video editing, illustration, or software development.
 
-For people doing that kind of work daily and wanting to improve their Windows productivity, I really want them to use WindowTabs to boost both operability and work efficiency. I've built and iterated features across many versions to meet exactly those needs.
+If that describes your daily work and you want Windows to be easier to use, I really hope WindowTabs can help you work more comfortably and efficiently. I've developed its features over many versions with those needs in mind.
 
 ### Why a tab UI?
 
-As you'll feel from using a browser every day, the tab UI is highly intuitive and pleasant for humans.
+As you can feel from using a browser every day, a tabbed interface is intuitive and comfortable.
 
-Installing WindowTabs brings browser-like operability to Windows. Once you try it, it's very convenient. I think you'll find it's an important kind of usability for getting work done crisply. You probably switch between many windows to complete a task — WindowTabs lowers the operational cost of doing so, letting you focus on your goal.
+WindowTabs brings that same ease of use to windows across your desktop. Once you try it, I think you'll appreciate how much it helps you get work done. Switching between windows takes less effort, leaving you free to focus on the task at hand.
 
 ### Microsoft once prototyped this, but the project was abandoned
 
-Microsoft too once attempted to manage every window with tabs as an OS-level extension prototype — a feature they called **Sets**. It was, however, discontinued. I don't know the exact reason, so this is just speculation: perhaps integrating it into the OS internals was too difficult given backward-compatibility constraints, or perhaps the benefits didn't justify the complexity.
+Microsoft once aimed to bring tabbed management to all windows through an experimental Windows feature called **Sets**.
+It was discontinued. I don't know the exact reason, but my guess is that integrating it into the OS while preserving backward compatibility proved too difficult, and the benefits were judged too small for the complexity.
 
-Still, the direction they were aiming for is right, I think. WindowTabs has existed since before Sets, and delivers an excellent tab UI without touching the OS internals.
+Although the project fell through, I think its vision was wonderful.
+Using WindowTabs every day shows me just how comfortable switching windows can be, and how much it helps me work efficiently.
+WindowTabs provides an excellent tabbed interface for almost any window without being built into the OS itself.
 
 ### About me (satoshi-yamamoto, the author of the ss_ version)
 
-I have been a paid user of WindowTabs since before it was open-sourced, and I love its tab UI. I have long hoped that this kind of operability would spread to more people, and I have also tried out various similar software over the years.
+I've been a paid user of WindowTabs since before it was open-sourced, and I've always loved its tabbed interface. I've long wanted more people to experience this way of working, and I've tried many similar tools over the years.
 
-So I'm very happy to have the opportunity to improve WindowTabs as open source and deliver it to others.
+So I'm delighted to have the opportunity to improve WindowTabs as open source and share it with others.
 
-Part of my motivation for updating WindowTabs is asking myself: "What kind of operability will be efficient for the most people? How can I help work get done faster?" — and I'm improving WindowTabs little by little along those lines.
+I keep improving WindowTabs little by little, asking myself: "How can I make working with windows more efficient for more people — in other words, how can I help more people get their work done faster?"
 
 ### How to use it
 
-There are many useful ways to use it, but typical examples might be:
+Everyone uses Windows differently, so I imagine each person will find their own useful ways to use WindowTabs. Here are some typical examples:
+
 - Operate Chrome, Edge, and Firefox — along with each one's incognito / private windows — all as a single browser window.
 - Manage multiple Excel windows, or multiple Word and PowerPoint windows, as a single office app window.
 
-Just as each user has their own way of using Windows, each user is likely to find their own convenient way of using WindowTabs.
-
 I (satoshi-yamamoto) am a software developer; in my day job I build web applications. I've built things like a browser-based drawing tool, an in-browser car navigation app, and business chat tools.
 
-As a developer, I run 7 or 8 instances of VSCode, plus Visual Studio, several Windows Terminals, several WinMerges — along with file explorers, image viewers, and Excel — and browsers (Edge, Chrome, private mode), all managed under WindowTabs. Most of those apps already have their own tab UI, but I use WindowTabs to bundle them at the window level. I snap them to the left and right of each display in a multi-display setup. I color-code the VSCode / Terminal / WinMerge tabs of related projects with the same color so the relationships stand out. Rather than relaunching applications, I keep them all running and just switch between them.
+I group multiple VSCode, Visual Studio, Terminal, WinMerge, file explorer, image viewer, Excel, and browser windows with WindowTabs, snapping them to the left and right of each display. Even apps with their own tabs can be managed at the window level, creating multiple levels of tab organization. Giving tabs from the same project matching colors lets me manage a great many windows with little effort.
 
 ### What's enhanced in version ss_
 
-WindowTabs version ss_... lets you snap windows to the left/right/top/bottom of a display, and even jump a window across displays — all in a single action. The Windows-native snap feature has been refined to be much easier to use. In a multi-display environment, you can switch window placement without resorting to drag-and-drop. It's quite convenient, and I'm sure it will be useful for you too.
+In addition to tabbed window management, WindowTabs version ss_... lets you snap windows to any screen edge or move them to another display in one action. Its snapping features go beyond those built into Windows, letting you change window layouts without dragging and dropping. This is particularly useful with multiple displays.
 
 ### I'd be truly happy if you'd recommend it to people around you
 
-The real convenience of WindowTabs is something you can only fully feel once you've tried it. Screenshots and words alone can't really convey how much it eases your day-to-day Windows work to be able to "manage things with tabs." That's exactly why there is value that only existing users can convey to others.
-
-If you happen to see a coworker, friend, or family member shuffling between tons of windows on Windows every day, please tell them: "How about trying WindowTabs? It turns your windows into tabs — Windows might get a little easier to use." The kind of usability a tab UI brings is the kind you can't go back from once you get used to it. I'd love for as many people as possible to experience the same "wait, Windows can feel this comfortable?" surprise that I've felt all this time.
-
-A single tweet on social media, a blog post or article that mentions it, a shared link in your team chat, simply showing it to the person at the next desk — any of those would be truly appreciated. A casual "there's a nice tool I want to show you" from you might make someone's daily PC work much easier.
+If you know someone who works by switching between lots of windows, I'd be delighted if you'd suggest, "Why not give WindowTabs a try?" Some of its convenience only becomes clear when you use it yourself.
 
 I'm building this primarily because I want it for myself. But if it can be useful to others and bring even a small positive impact to their work, that would make me very happy as a software developer. My thanks go to all of you who use it.
 
@@ -137,26 +135,17 @@ Download the installer or the zip containing the exe from the [releases](https:/
 
 ### Using the MSI Installer (WtSetup.msi)
 
-1. Download `WtSetup.msi` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
-2. Run the installer and follow the installation wizard
-3. Choose the installation directory (default: Program Files\WindowTabs)
-4. Desktop shortcut and Start Menu shortcut will be created automatically
-5. Optionally launch WindowTabs at the end of installation
+Run `WtSetup.msi` and follow the installation wizard (default: `Program Files\WindowTabs`).
 
 ### Using the Portable Version (WindowTabs.zip)
 
-1. Download `WindowTabs.zip` from the [Releases](https://github.com/standard-software/WindowTabs/releases) page
-2. Extract the archive to your preferred location
-3. Run `WindowTabs.exe` to launch it.
+Extract `WindowTabs.zip` to your preferred location and run `WindowTabs.exe`.
 
 
 ## Usage
 
-- Right-click the WindowTabs tray icon to open the menu and access the settings dialog.
-- In the [Programs] tab of settings, choose programs you want tabs for.
-- Tabs will appear on those programs' windows.
-- Right-click on tabs to access the tab-specific menu.
-- Drag and drop tabs to combine them into tab groups.
+- Right-click the tray icon, select "Settings" from the menu, then choose programs to tab in the "Programs" tab.
+- Drag and drop tabs to group them, and right-click for further actions.
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
@@ -179,8 +168,10 @@ Download the installer or the zip containing the exe from the [releases](https:/
 ### Tab Context Menu
 
 - Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
-- New tab : execute (exe name) — right of this tab, at a specified position, or linked to another group
-  - Position uses the "Position Move" submenu, with a leading "Same position" item
+- New tab : execute (exe name)
+  - Right of this tab
+  - Position (same submenu as "Position Move")
+  - Link to another group
 - Position Move
   - Snap Left / Snap Right / Snap Top / Snap Bottom
   - Snap 90% / 70% / 50% / 30% (each)
@@ -193,13 +184,37 @@ Download the installer or the zip containing the exe from the [releases](https:/
     - Left Edge / Right Edge / Top Edge / Bottom Edge
     - Top Left / Top Right / Bottom Left / Bottom Right
 - Link this tab group to another group (submenu lists other tab groups; choose the destination)
-- Detach this tab — reposition using the "Position Move" submenu, or link to another group
-- Close Tab — this tab, tabs to the left or right, other tabs, or all tabs
-- Tab Margin When Snapping — add margin at top
-- Tab Alignment — align this tab or all tabs left / right
-- Tab Pin — pin / unpin this tab or all tabs
-- Tab Color Settings — red / blue / green / yellow / purple / orange / pink backgrounds, underlines, or borders; clear colors for this tab or all tabs
-- Tab Name — rename / reset
+- Detach this tab
+  - Position (same submenu as "Position Move")
+  - Link to another group
+- Close Tab
+  - Close this tab
+  - Close {N} tabs to the left
+  - Close {N} tabs to the right
+  - Close other tabs
+  - Close all tabs
+- Tab Margin When Snapping
+  - Add margin at top
+- Tab Alignment
+  - Align all tabs to Left
+  - Align all tabs to Right
+  - Align this tab to Left
+  - Align this tab to Right
+- Tab Pin
+  - Pin this tab
+  - Unpin this tab
+  - Pin all tabs
+  - Unpin all tabs
+- Tab Color Settings
+  - This tab color
+    - Red / Blue / Green / Yellow / Purple / Orange / Pink
+    - (same 7 colors, Underline variants)
+    - (same 7 colors, Border variants)
+  - Clear this tab color
+  - Clear color settings on all tabs
+- Tab Name
+  - Rename this tab : (tab name)
+  - Reset this tab name : (name after reset)
 - System
   - Copy (exe name) path
   - Copy window title : (window title)
@@ -207,23 +222,18 @@ Download the installer or the zip containing the exe from the [releases](https:/
   - Force kill this process
 - Settings...
 
-In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs; items that depend on a single pivot or a single process (Left/Right close, Open folder, Force kill) are grayed out.
-
-Per-tab items no longer repeat the tab name; the "Target tab" caption at the top of the menu shows it instead. A language file can bring the old "... : (tab name)" style back with `{TabName}`.
+In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. Items that require a single target tab are disabled.
 
 ### New Tab (New Launch)
 
-- Launch a new instance of the same exe as the target tab.
-- You can launch as a new tab to the right of the target, as a new window with a specified position, or linked to another tab group.
+- Launch the same exe as the target tab, placing it to the right, in a new window at a specified position, or in another tab group.
 
 ![Popup Menu](README_Image/PopupMenu.png)
 
 ### Position Move
 
-- Move a tab group's position.
-- Snap keeps the current width / height and snaps to a screen edge. Snap Left / Right / Top / Bottom sit at the top of the menu for quick access.
-- Snap with a percentage resizes the width / height to the specified portion of the display and snaps to an edge.
-- Move to a display edge or corner, and snap-to-display / snap-to-desktop maximize-style options are also available.
+- Snap moves the group to a screen edge, keeping its width / height; percentage snaps resize it relative to the display.
+- Move to screen edges or corners, or maximize across a display or the desktop.
 - On multi-monitor setups, the position menus ("Position Move", the new-tab "Position", and the detach "Position") appear once per display, e.g. "Position Move Display Left"; the display the window currently sits on is marked with a "(here)" suffix. The other displays' menus start with a "Same position on this display" item.
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
@@ -231,7 +241,6 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 ### Link this tab group to another group
 
 - Move all tabs of the current tab group into another existing tab group.
-- Other tab groups can be distinguished by their leading tab icon, tab name, and tab count.
 
 ![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
@@ -242,31 +251,25 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 ### Close Tab
 
-- Close the selected tab, the tabs to its left or right, the other tabs in the group, or all tabs.
-
 ![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
 
 ### Per-Tab Alignment
 
-- Each tab can be individually set to left- or right-aligned within a tab group.
-- The "align all tabs to left / right" menu items are placed first for quick batch alignment.
-- Alignment can also be changed by dragging: drop a tab on the other half of the strip. This works for a single-tab group too — the lone tab slides inside the strip, and dragging beyond the strip detaches it as before.
+- Align tabs left / right individually or all at once.
+- Drag to the other half of the strip to change alignment, even in a single-tab group. Dragging outside the strip detaches the tab.
 - Optionally (Behavior tab setting, on by default), snapping a uniformly-aligned group left or right (including x% snaps) realigns its tabs to the snap side.
 
 ### Pinned Tabs
 
-- A pinned tab can be displayed as an icon-only tab.
-- It can also be configured with a specified width and show a pin button.
+- Display pinned tabs as icons only, or at a specified width with a pin button.
 - Pinned tabs are placed leftmost within their (left- or right-aligned) group.
-- The selected tab, or the left-side / right-side tabs, can be pinned together.
 
 ![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
 ![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
 
 ### Tab Color
 
-- Apply a color to the selected tab, or to all left-side / right-side tabs.
-- Choose between background fill, underline, or border color types.
+- Color-code tabs with backgrounds, underlines, or borders.
 
 ![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
 
@@ -276,10 +279,8 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 ### Multi-Display and DPI Support
 
-- Multi-display support with proper window positioning
-- Tab strip, Close/Pin buttons, and the tab-rename input box render at correct positions and sizes at non-integer DPI scales (125% / 150% / 175% etc.), and hover / click match the visible tab geometry
-- Works the same on multi-monitor mixed-DPI setups (each monitor at a different DPI)
-- Tab strips and the settings dialog are per-monitor DPI aware: on scaled displays they are drawn at native resolution (no bitmap-stretch blur), and follow the scale of whichever monitor they are on
+- Tabs, settings, and confirmation dialogs adapt when moved between displays with different DPI scales
+- Sharp rendering at 125% / 150% / 175% and other scales, with tab and button hover / click positions matching their appearance
 - Automatic window resizing when dropped to prevent exceeding monitor dimensions
 
 ### Virtual Desktop Support
@@ -297,8 +298,7 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 - English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian language support
 - Japanese Kansai and Tohoku dialect files included
-- Runtime language switching without restart
-- Switch languages via tray menu
+- Switch languages via the tray menu without restarting
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
 
@@ -343,7 +343,7 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 ### Tab Group Persistence
 
 - WindowTabs preserves your tab group configuration across restarts and when disabled.
-- State is saved every 10 seconds, so it survives a force-quit (Task Manager kill, crash, power loss) as well.
+- State is saved every 10 seconds. After a force-quit, saved state can be restored.
 - Groups also come back after a Windows restart or a logoff, when every window has been closed and reopened with a handle of its own. Windows are recognised again by their application and their title.
 - A tab's name, pin, colours, left/right alignment and its place in the group come back with its window.
 - A window whose title has not settled yet - Excel before a workbook has loaded, say - takes its place once its real title appears.
@@ -358,14 +358,13 @@ Per-tab items no longer repeat the tab name; the "Target tab" caption at the top
 
 Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
 
-### Programs Tab
+Tray actions are disabled while settings or another dialog is open to prevent overlapping operations.
 
-Configure programs to use tabs and auto-grouping.
+### Programs Tab
 
 - **Tabs**: Enable/disable tabbing for each program
 - **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
-- **Category 1-10**: Assign programs to a category for cross-application auto-grouping
-  - Programs in the same category are automatically grouped together regardless of the executable
+- **Category 1-10**: Programs in the same category are automatically grouped together, even across different applications
   - For example, assign Word, Excel, PowerPoint, etc. to the same category to auto-group Office apps together
   - Category columns are only visible when Auto Grouping is enabled for a program
 - Switching Auto Grouping or a Category **on** also gathers the windows that are already open, as though each of them had just been opened. A tab pulled out by hand while the setting was already on stays out.
@@ -376,9 +375,7 @@ Configure programs to use tabs and auto-grouping.
 
 ### Appearance Tab
 
-- Customize the visual appearance of tabs.
-- Custom color theme features
-  - If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
+If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
@@ -386,14 +383,20 @@ Configure programs to use tabs and auto-grouping.
 
 ### Behavior Tab
 
-- Configure tab behavior.
-- "Change tab position on left/right snap": when a group whose tabs are all left-aligned or all right-aligned is snapped left or right (including x% snaps), the tabs realign to the snap side. Default is on; select "Don't change" to keep alignment untouched.
+- **Tab position on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
+- **Vertical tab direction**: choose "Up, or down when it would be off-screen" (default) or "Always down".
+- Configure hiding tabs for full-screen windows, while moving windows, and when tabs face downward.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
+### Shortcut Keys Tab
+
+- Configure keys for selecting tabs 1–9, switching to the next / previous tab, and adding a new tab.
+- Use Ctrl+1–9, Alt+1–9, or individual assignments for numbered tabs. Shortcuts are active only while working in a target window.
+
 ### Workspace Tab
 
-- Save the layout of currently displayed tab groups and restore it later.
+- Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
 
 ## Building from Source
 
