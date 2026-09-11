@@ -1,8 +1,8 @@
 // Run with .NET Framework fsi.exe. This probe never calls Show or Activate.
 #r "System.Drawing"
 #r "System.Windows.Forms"
-#r "../WtProgram/bin/Debug/SettingsRefreshValidation/WindowTabs.exe"
-#r "../WtProgram/bin/Debug/SettingsRefreshValidation/Win32.dll"
+#r "../WtProgram/bin/Debug/WindowTabs.exe"
+#r "../WtProgram/bin/Debug/Win32.dll"
 open System
 open System.Drawing
 open System.Windows.Forms

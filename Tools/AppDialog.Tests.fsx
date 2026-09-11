@@ -1,7 +1,7 @@
-// Run with Visual Studio's .NET Framework fsi.exe after building WtProgram
-// with /p:OutputPath=bin\Debug\DialogValidation\. No windows are shown.
+// Run with Visual Studio's .NET Framework fsi.exe after a normal Debug build.
+// See SettingsTests.md. No windows are shown.
 #r "System.Windows.Forms"
-#r "../WtProgram/bin/Debug/DialogValidation/WindowTabs.exe"
+#r "../WtProgram/bin/Debug/WindowTabs.exe"
 
 open System
 open System.Windows.Forms

@@ -1,11 +1,11 @@
-// Run with .NET Framework fsi.exe after building SettingsRefreshValidation.
+// Run with .NET Framework fsi.exe after a normal Debug build; see SettingsTests.md.
 // This test uses in-memory services, never displays windows, and never saves files.
 #r "System.Drawing"
 #r "System.Windows.Forms"
 #r "../Newtonsoft.Json.dll"
-#r "../WtProgram/bin/Debug/SettingsRefreshValidation/FSharp.PowerPack.dll"
-#r "../WtProgram/bin/Debug/SettingsRefreshValidation/WindowTabs.exe"
-#r "../WtProgram/bin/Debug/SettingsRefreshValidation/Win32.dll"
+#r "../WtProgram/bin/Debug/FSharp.PowerPack.dll"
+#r "../WtProgram/bin/Debug/WindowTabs.exe"
+#r "../WtProgram/bin/Debug/Win32.dll"
 open System
 open System.Collections.Generic
 open System.Windows.Forms

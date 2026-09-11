@@ -2,10 +2,10 @@
 #r "System.Drawing"
 #r "System.Windows.Forms"
 #r "../Newtonsoft.Json.dll"
-#r "../WtProgram/bin/Debug/DpiChoiceValidation/WindowTabs.exe"
-#r "../WtProgram/bin/Debug/DpiChoiceValidation/Win32.dll"
-#r "../WtProgram/bin/Debug/DpiChoiceValidation/Aga.Controls.dll"
-#r "../WtProgram/bin/Debug/DpiChoiceValidation/FSharp.PowerPack.dll"
+#r "../WtProgram/bin/Debug/WindowTabs.exe"
+#r "../WtProgram/bin/Debug/Win32.dll"
+#r "../WtProgram/bin/Debug/Aga.Controls.dll"
+#r "../WtProgram/bin/Debug/FSharp.PowerPack.dll"
 open System
 open System.Drawing
 open System.Windows.Forms
@@ -51,7 +51,9 @@ for dark in [false; true] do
         use part = new Bitmap(control.Width, control.Height)
         control.DrawToBitmap(part, Rectangle(Point.Empty, part.Size))
         output.DrawImageUnscaled(part, 10, 10 + index * 55)
-    snapshot.Save(IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "unite", (if dark then "dpi-choice-dark.png" else "dpi-choice-light.png")))
+    let outputDirectory = IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "WtProgram", "bin", "Debug", "TestResults")
+    IO.Directory.CreateDirectory(outputDirectory) |> ignore
+    snapshot.Save(IO.Path.Combine(outputDirectory, (if dark then "dpi-choice-dark.png" else "dpi-choice-light.png")))
 
 SettingsDpi.setCurrent 1.0
 let treeForm = new DpiAwareDialog()
