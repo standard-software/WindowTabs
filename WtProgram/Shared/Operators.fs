@@ -8,7 +8,7 @@ open System.Text.RegularExpressions
 open System.Threading
 open System.Windows.Forms
 open System.Drawing
-open Microsoft.FSharp.Collections.Tagged
+open System.Collections.Immutable
 
 type IProperty<'a> =
     abstract member value : 'a with get,set
@@ -173,10 +173,6 @@ type List2<'a>(?items) =
     member this.skip count = List2(Seq.toList(Seq.skip count items))
     member this.splitn idx = this.take idx, this.skip idx
 
-type Comparer<'a>()=
-    interface IComparer<'a> with
-        member x.Compare(a,b) = (box(a)).GetHashCode().CompareTo(box(b).GetHashCode())
-
 
 [<AutoOpen>]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -234,39 +230,61 @@ module List2 =
             | None -> this
         member this.zip (l2:List2<_>) = List2(List.zip this.list l2.list)
 
-    type System.Collections.Generic.IEnumerable<'a> with
-        member this.list = List2(this)
+    // Narrowed from IEnumerable<'a> to arrays when FSharp.Core gained an
+    // "allows ref struct" constraint on IEnumerable<'T>, which a type
+    // extension cannot restate (FS0341). Every caller outside this file passes
+    // an array anyway - the reflection results in Dynamic.fs - so nothing else
+    // had to change.
+    type ``[]``<'a> with
+        member this.list = List2(this :> seq<'a>)
 
     let distinct (this:List2<_>) = List2(Seq.toList(Seq.distinct (this.list)))    
      
-type Map2<'a, 'b> when 'a : equality (map) =
-    new(?l:List2<_>) = Map2<'a, 'b>(Tagged.Map<'a, 'b, Comparer<'a>>.Create(Comparer<'a>(),(defaultArg l (List2())).list))
-    member this.items : List2<'a * 'b> = List2(map.ToList())
-    member this.add key value = Map2(map.Add(key, value))
+// Map2 and Set2 were built on Microsoft.FSharp.Collections.Tagged, which is
+// .NET Framework-only and has no .NET 10 equivalent. They are now
+// ImmutableDictionary / ImmutableHashSet, which keep what this code actually
+// relies on - immutable values whose add/remove return a new collection - and
+// drop what it never wanted.
+//
+// What it never wanted was ORDERING. Tagged.Map and Tagged.Set are sorted
+// collections and needed a comparer, so this file supplied one that compared
+// HASH CODES (see Comparer below, now unused). That is not a valid ordering:
+// two different items that happen to share a hash code compared equal, and the
+// set silently kept only one of them. The hash-based collections here compare
+// with Equals, so equal items are equal and different items stay different.
+//
+// The visible difference is that `items` is in no particular order. It was in
+// hash order before, which was not meaningful either, so no caller could have
+// depended on it.
+type Map2<'a, 'b> when 'a : equality (map:ImmutableDictionary<'a, 'b>) =
+    new(?l:List2<_>) =
+        let pairs = (defaultArg l (List2())).list |> List.map (fun (k, v) -> KeyValuePair(k, v))
+        Map2<'a, 'b>(ImmutableDictionary.CreateRange<'a, 'b>(pairs))
+    member this.items : List2<'a * 'b> = List2([ for kv in map -> kv.Key, kv.Value ])
+    member this.add key value = Map2(map.SetItem(key, value))
     member this.remove key = Map2(map.Remove(key))
     member this.removeWhereValue pred = Map2(this.items.choose(fun(key,value) -> if pred value then None else Some(key, value)))
-    member this.tryFind key = map.TryFind(key)
+    member this.tryFind key =
+        match map.TryGetValue(key) with
+        | true, value -> Some(value)
+        | _ -> None
     member this.contains key = map.ContainsKey(key)
     member this.find key = map.Item(key)
     member this.keys = this.items.map(fst)
     member this.values = this.items.map(snd)
 
-type Set2<'a when 'a : equality>(set) =
-    new(?l:List2<_>) = Set2<'a>(Tagged.Set<'a, Comparer<'a>>.Create(Comparer<'a>(),(defaultArg l (List2())).list))
+type Set2<'a when 'a : equality>(set:ImmutableHashSet<'a>) =
+    new(?l:List2<_>) = Set2<'a>(ImmutableHashSet.CreateRange<'a>((defaultArg l (List2())).list))
     member this.innerSet = set
-    member this.items = List2(set.ToList())
+    member this.items = List2(List.ofSeq set)
     member this.add item = Set2(set.Add(item))
     member this.remove item = Set2(set.Remove(item))
     member this.contains item = set.Contains(item)
-    member this.isEmpty = this.items.isEmpty
+    member this.isEmpty = set.IsEmpty
     member this.toggle item = if this.contains item then this.remove item else this.add item
     member this.count = set.Count
-    member this.sub (setToRemove:Set2<_>)=
-        let t,f = set.Partition(setToRemove.contains)
-        Set2(f)
-    member this.union (setToAdd:Set2<'a>) = 
-        let s = Set<'a, Comparer<'a>>.Union(this.innerSet, setToAdd.innerSet)
-        Set2(s)
+    member this.sub (setToRemove:Set2<_>) = Set2(set.Except(setToRemove.innerSet))
+    member this.union (setToAdd:Set2<'a>) = Set2(set.Union(setToAdd.innerSet))
     member this.map f = Set2(this.items.map(f))
 
 module Seq =

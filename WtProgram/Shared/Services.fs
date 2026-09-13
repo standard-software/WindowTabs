@@ -3,9 +3,6 @@ open System
 open System.Drawing
 open System.Reflection
 open System.Collections.Generic
-open System.Reflection
-open System.Runtime.Remoting.Proxies
-open System.Runtime.Remoting.Messaging
 
 type ServiceAsyncResult() as this =
     let returnInvoker = InvokerService.invoker
@@ -29,20 +26,36 @@ type ServiceAsyncResult() as this =
                 cachedfCompleted <- Some(fCompleted)
                 this.tryToComplete()
 
-type ServiceProxy<'a>(service:'a) =
-    inherit RealProxy(typeof<'a>)
+// Dispatches every call on a registered service interface onto the thread that
+// registered it: synchronously, or - for a method marked
+// [<ServiceMethod(async=true)>] - by posting and handing back an
+// IServiceAsyncResult.
+//
+// This was a System.Runtime.Remoting RealProxy until the move to .NET 10, where
+// Remoting does not exist. DispatchProxy is its supported replacement and
+// intercepts the same things (methods, property getters and setters, and event
+// accessors), so the ~250 call sites through Services.* are unchanged. Two
+// differences are worth knowing:
+//
+//   * DispatchProxy.Create requires a parameterless constructor, so the service
+//     and the invoker are injected after construction rather than captured in
+//     the constructor. ServiceProvider.register is the only thing that builds
+//     one, and it sets both before the proxy is reachable.
+//   * The invoker is captured at REGISTRATION time, exactly as the RealProxy
+//     version captured it in its constructor. InvokerService.invoker is
+//     ThreadStatic, so this is what binds a service to the thread that
+//     registered it - the main thread for every service registered today.
+type ServiceProxy() =
+    inherit DispatchProxy()
     let attributeCache = new Dictionary<int, ServiceMethodAttribute>()
 
-    let invoker = InvokerService.invoker
-    
-    member private this.returnMessage(msg : IMessage, result : obj) =
-        let mcm = msg :?> IMethodCallMessage
-        ReturnMessage(result, null, 0, mcm.LogicalCallContext, mcm) :> IMessage
+    member val private Service : obj = null with get, set
+    member val private Invoker : Invoker = null with get, set
 
-    member private this.methodInfo(msg: IMessage) =
-        let mcm = msg :?> IMethodCallMessage
-        mcm.MethodBase :?> MethodInfo
-    
+    member this.init(service: obj, invoker: Invoker) =
+        this.Service <- service
+        this.Invoker <- invoker
+
     member private this.serviceMethodAttributeCached(mi:MethodInfo) =
         let key = mi.MetadataToken
         lock this <| fun() ->
@@ -52,39 +65,35 @@ type ServiceProxy<'a>(service:'a) =
                 attributeCache.Add(key, sma)
             attributeCache.Item(key)
 
-    member private this.serviceMethodAttribute<'s>(msg: IMessage) =
-        let mi = this.methodInfo(msg)
-        this.serviceMethodAttributeCached mi
+    // Unwraps the TargetInvocationException that reflection wraps around
+    // anything the service itself throws, so callers keep seeing the exception
+    // the service raised. The RealProxy path returned it through the message
+    // and behaved the same way.
+    member private this.invokeMethod(mi: MethodInfo, args: obj[]) =
+        try
+            mi.Invoke(this.Service, args)
+        with :? TargetInvocationException as ex when not (isNull ex.InnerException) ->
+            raise ex.InnerException
 
-    member private this.invokeMethod(msg : IMessage) =
-        let mcm = msg :?> IMethodCallMessage
-        let mi = this.methodInfo(msg)
-        mi.Invoke(service, mcm.InArgs)
-
-    member private this.isUnitReturnType(msg: IMessage) =
-        this.methodInfo(msg).ReturnType = typeof<unit>
-
-    member private this.doSyncInvoke(msg: IMessage) =
-        invoker.invoke <| fun() ->
-            this.invokeMethod(msg)
-
-    member private this.doAsyncInvoke(msg: IMessage) =  
+    member private this.doAsyncInvoke(mi: MethodInfo, args: obj[]) =
         let asyncResult = ServiceAsyncResult()
 
-        invoker.asyncInvoke <| fun() -> 
-            let result = this.invokeMethod(msg)
+        this.Invoker.asyncInvoke <| fun() ->
+            let result = this.invokeMethod(mi, args)
             asyncResult.complete(result)
 
-        if this.isUnitReturnType(msg) then null else box(asyncResult)
+        // void/unit returns nothing to wait on; anything else hands back the
+        // result object the caller can subscribe to.
+        if mi.ReturnType = typeof<unit> || mi.ReturnType = typeof<Void>
+        then null
+        else box(asyncResult)
 
-    override this.Invoke(msg) =
-        let sma = this.serviceMethodAttribute(msg)
-        let result = 
-            if sma.async then
-                this.doAsyncInvoke(msg)
-            else
-                this.doSyncInvoke(msg)
-        this.returnMessage(msg, result)
+    override this.Invoke(mi: MethodInfo, args: obj[]) =
+        let sma = this.serviceMethodAttributeCached mi
+        if sma.async then
+            this.doAsyncInvoke(mi, args)
+        else
+            this.Invoker.invoke <| fun() -> this.invokeMethod(mi, args)
 
 type ServiceProvider() =
     [<DefaultValue>]
@@ -100,10 +109,11 @@ type ServiceProvider() =
             ServiceProvider._localServices
 
     member this.register(service:'a, wrap) =
-        let service = 
+        let service =
             if wrap then
-                let rp = new ServiceProxy<'a>(service)
-                rp.GetTransparentProxy()
+                let proxy = DispatchProxy.Create<'a, ServiceProxy>()
+                (box proxy :?> ServiceProxy).init(box service, InvokerService.invoker)
+                box proxy
             else
                 box(unbox<'a>(service))
         services.Add(typeof<'a>, service)

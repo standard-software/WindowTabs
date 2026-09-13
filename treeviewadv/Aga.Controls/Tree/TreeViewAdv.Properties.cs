@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Drawing;
-using System.Drawing.Design;
 using System.Windows.Forms;
 
 using Aga.Controls.Tree.NodeControls;
@@ -567,7 +566,6 @@ namespace Aga.Controls.Tree
 
 		private NodeControlsCollection _controls;
 		[Category("Behavior"), DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
-		[Editor(typeof(NodeControlCollectionEditor), typeof(UITypeEditor))]
 		public Collection<NodeControl> NodeControls
 		{
 			get

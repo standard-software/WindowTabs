@@ -16,7 +16,7 @@ type ObservableEvent(name:string) as this =
         listeners.Add(listener)
 
     member this.fire(arg) =
-        listeners.list.iter <| fun listener ->
+        List2(listeners).iter <| fun listener ->
             listener.fire(arg)
 
 type Observable() as this =

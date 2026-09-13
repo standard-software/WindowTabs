@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.ComponentModel.Design;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Drawing.Design;
 
 namespace Aga.Controls.Tree.NodeControls
 {
@@ -74,21 +72,4 @@ namespace Aga.Controls.Tree.NodeControls
 		}
 	}
 
-	internal class NodeControlCollectionEditor : CollectionEditor
-	{
-		private Type[] _types;
-
-		public NodeControlCollectionEditor(Type type)
-			: base(type)
-		{
-			_types = new Type[] { typeof(NodeTextBox), typeof(NodeIntegerTextBox), typeof(NodeDecimalTextBox), 
-				typeof(NodeComboBox), typeof(NodeCheckBox),
-				typeof(NodeStateIcon), typeof(NodeIcon), typeof(NodeNumericUpDown), typeof(ExpandingIcon)  };
-		}
-
-		protected override System.Type[] CreateNewItemTypes()
-		{
-			return _types;
-		}
-	}
 }

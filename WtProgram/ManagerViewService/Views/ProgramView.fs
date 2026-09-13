@@ -45,7 +45,7 @@ type private DpiIcon(icon: Icon) =
             image
 
 
-type ExeNode(procPath) =
+type ExeNode(procPath: string) =
     inherit Node(Path.GetFileName(procPath))
     let icon =
         let procIcon = Win32Helper.GetFileIcon(procPath)
