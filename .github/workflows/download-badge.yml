@@ -2,10 +2,13 @@ name: Update download badge
 
 on:
   schedule:
-    # Runs every 4 hours. Note: GitHub disables scheduled workflows after
-    # 60 days without repository activity; the release trigger below also
-    # updates the badge whenever a new release is published.
-    - cron: '17 */4 * * *'
+    # Runs hourly. GitHub starts scheduled runs late or skips them when it is
+    # busy (a 4-hour schedule was observed updating only every 4-9 hours), so
+    # an hourly schedule keeps the real interval within a few hours.
+    # GitHub disables scheduled workflows after 60 days without repository
+    # activity; the release trigger below also updates the badge whenever a
+    # new release is published.
+    - cron: '17 * * * *'
   release:
     types: [published]
   workflow_dispatch:
