@@ -4,6 +4,8 @@
 
 ## version ss_2026.09.12_next1
 
+- Fix tab title tooltips taking keyboard focus away from the active application when hovering over tabs.
+
 ## version ss_2026.09.12
 
 - Reduce overhead by streamlining processing during startup and normal use.
