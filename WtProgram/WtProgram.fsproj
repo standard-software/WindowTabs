@@ -1,167 +1,77 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{ae7d5e18-ac62-4bd3-ab9e-02cbb2eb29d6}</ProjectGuid>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <OutputType>WinExe</OutputType>
     <RootNamespace>WindowTabs</RootNamespace>
     <AssemblyName>WindowTabs</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-    <Name>WtProgram</Name>
-    <TargetFrameworkProfile />
-    <SccProjectName>&lt;Project Location In Database&gt;</SccProjectName>
-    <SccProvider>Mercurial Source Control Package</SccProvider>
-    <SccAuxPath>&lt;Source Control Database&gt;</SccAuxPath>
-    <SccLocalPath>&lt;Local Binding Root of Project&gt;</SccLocalPath>
-    <!-- DPI awareness is declared in app.manifest. The compiler can only embed
-         a manifest when it also generates the win32 resource block, and
-         <Win32Resource>.\app.res</Win32Resource> suppressed that generation -
-         which is why the shipped executable had no RT_MANIFEST at all and no
-         way to opt into DPI awareness. app.res (built in 2020) contains
-         nothing but the application icon, so the icon is now passed separately
-         via <ApplicationIcon>, and app.rc / app.res have been deleted rather
-         than left in the tree as unbuilt files nobody can regenerate (app.rc
-         was one line: 1 ICON "Bemo.ico"; Resources\Bemo.ico is the same
-         picture and is still in the repository). -->
     <ApplicationIcon>Resources\Bemo.ico</ApplicationIcon>
-    <Win32Manifest>app.manifest</Win32Manifest>
-    <TargetFSharpCoreVersion>2.3.0.0</TargetFSharpCoreVersion>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-    <!-- Suppress satellite resource assembly generation (language folders) -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+    <NoWarn>0040;0046;0058;0064;0760;1182;1183;2009;FS0064;WFO1000</NoWarn>
+    <!-- The DPI awareness in app.manifest is what keeps the layered tab strips
+         on their monitor's real pixel grid; see the manifest for why there is
+         deliberately no <compatibility> block in it. -->
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>TRACE;DEBUG</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <NoWarn>0040,0058,0046,0760,1183</NoWarn>
-    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
-    <StartArguments>
-    </StartArguments>
-    <OtherFlags>
-    </OtherFlags>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugType>portable</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\Release</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <OtherFlags>--staticlink:Win32 --staticlink:Newtonsoft.Json --staticlink:Aga.Controls --staticlink:Interop.SHDocVw --staticlink:Interop.Shell32</OtherFlags>
-    <NoWarn>0058,2009,0760,1183, 0046</NoWarn>
   </PropertyGroup>
-  <Choose>
-    <When Condition="'$(VisualStudioVersion)' == '11.0'">
-      <PropertyGroup>
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </When>
-    <Otherwise>
-      <PropertyGroup>
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </Otherwise>
-  </Choose>
-  <Import Project="$(FSharpTargetsPath)" Condition="Exists('$(FSharpTargetsPath)')" />
-  <PropertyGroup>
-    <PostBuildEvent>echo ===== Removing language resource folders =====
-for %%d in (cs de en es fr it ja ja-JP ko pl pt-BR ru tr zh-Hans zh-Hant) do (
-  if exist "$(TargetDir)%%d" (
-    echo Removing $(TargetDir)%%d
-    rmdir /s /q "$(TargetDir)%%d"
-  )
-)
 
-echo ===== Copying Settings files =====
-if exist "$(TargetDir)Language" (
-  echo Removing the old Language folder - languages now ship under Settings\Language...
-  rmdir /s /q "$(TargetDir)Language"
-)
-if exist "$(TargetDir)Settings" (
-  echo Removing existing Settings folder...
-  rmdir /s /q "$(TargetDir)Settings"
-)
-mkdir "$(TargetDir)Settings\Language"
-copy /y "$(ProjectDir)Settings\*.json" "$(TargetDir)Settings\"
-copy /y "$(ProjectDir)Settings\Language\*.json" "$(TargetDir)Settings\Language\"
-
-if $(ConfigurationName) == Release (
-  echo ===== ILRepack merge starting =====
-
-  if not exist "$(ProjectDir)..\packages\ILRepack.2.0.18\tools\ILRepack.exe" (
-    echo ILRepack.exe not found
-    exit /b 0
-  )
-
-  echo Backing up the original exe...
-  copy "$(TargetPath)" "$(TargetDir)WindowTabs_original.exe"
-
-  echo Merging DLLs with ILRepack...
-  "$(ProjectDir)..\packages\ILRepack.2.0.18\tools\ILRepack.exe" /parallel /internalize /target:winexe /out:"$(TargetDir)WindowTabs_packed.exe" "$(TargetDir)WindowTabs_original.exe" "$(TargetDir)Win32.dll" "$(TargetDir)Aga.Controls.dll" "$(TargetDir)Newtonsoft.Json.dll" "$(TargetDir)FSharp.Core.dll" "$(TargetDir)FSharp.PowerPack.dll" "$(TargetDir)FSharp.PowerPack.Linq.dll" "$(TargetDir)FSharp.PowerPack.Metadata.dll" "$(TargetDir)FSharp.PowerPack.Parallel.Seq.dll" "$(TargetDir)Interop.SHDocVw.dll" "$(TargetDir)Interop.Shell32.dll"
-
-  if exist "$(TargetDir)WindowTabs_packed.exe" (
-    echo Merge succeeded
-    del "$(TargetPath)"
-    move "$(TargetDir)WindowTabs_packed.exe" "$(TargetPath)"
-    del "$(TargetDir)WindowTabs_original.exe"
-  ) else (
-    echo Merge failed - keeping the original
-    move "$(TargetDir)WindowTabs_original.exe" "$(TargetPath)"
-  )
-)
-    </PostBuildEvent>
-  </PropertyGroup>
+  <!-- F# compiles in order: this list is the build, not a view of a folder. -->
   <ItemGroup>
     <Compile Include="Localization\Localization_English.fs" />
     <Compile Include="Localization\JsoncHelper.fs" />
-    <!-- Keep this early compile order while placing the shared source under
-         Localization in the Visual Studio project tree. This avoids the legacy
-         F# project-system load failure caused by its physical folder ordering. -->
-    <Compile Include="Shared\UserOverrides.fs">
-      <Link>Localization\UserOverrides.fs</Link>
-    </Compile>
+    <!-- Shared source kept early in the order; the legacy project linked it
+         under Localization to work around a project-system load failure. -->
+    <Compile Include="Shared\UserOverrides.fs" />
     <Compile Include="Localization\Localization.fs" />
-    <Compile Include="Shared/Operators.fs" />
-    <Compile Include="Shared/Dynamic.fs" />
-    <Compile Include="Shared/Observable.fs" />
-    <Compile Include="Shared/Blackboard.fs" />
-    <Compile Include="Shared/Invoker.fs" />
-    <Compile Include="Shared/DialogState.fs" />
-    <Compile Include="Shared/Cell.fs" />
-    <Compile Include="Shared/Drawing.fs" />
-    <Compile Include="Shared/Sprite.fs" />
+    <Compile Include="Shared\Operators.fs" />
+    <Compile Include="Shared\Dynamic.fs" />
+    <Compile Include="Shared\Observable.fs" />
+    <Compile Include="Shared\Blackboard.fs" />
+    <Compile Include="Shared\Invoker.fs" />
+    <Compile Include="Shared\DialogState.fs" />
+    <Compile Include="Shared\Cell.fs" />
+    <Compile Include="Shared\Drawing.fs" />
+    <Compile Include="Shared\Sprite.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
-    <Compile Include="Shared/TabOrder.fs" />
-    <Compile Include="Shared/SavedTabState.fs" />
-    <Compile Include="Shared/SavedSession.fs" />
-    <Compile Include="Shared/Regroup.fs" />
-    <Compile Include="Shared/AppPath.fs" />
-    <Compile Include="Shared/AppPathSettings.fs" />
-    <Compile Include="Shared/TabBehaviorPolicy.fs" />
-    <Compile Include="Shared/HotKeyPolicy.fs" />
-    <Compile Include="Shared/LaunchPath.fs" />
-    <Compile Include="Shared/Dpi.fs" />
-    <Compile Include="Shared/Win32.fs" />
+    <Compile Include="Shared\TabOrder.fs" />
+    <Compile Include="Shared\SavedTabState.fs" />
+    <Compile Include="Shared\SavedSession.fs" />
+    <Compile Include="Shared\Regroup.fs" />
+    <Compile Include="Shared\AppPath.fs" />
+    <Compile Include="Shared\AppPathSettings.fs" />
+    <Compile Include="Shared\TabBehaviorPolicy.fs" />
+    <Compile Include="Shared\HotKeyPolicy.fs" />
+    <Compile Include="Shared\LaunchPath.fs" />
+    <Compile Include="Shared\Dpi.fs" />
+    <Compile Include="Shared\Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />
-    <Compile Include="Shared/DragDrop.fs" />
-    <Compile Include="Shared/Serialize.fs" />
-    <Compile Include="Shared/DarkMode.fs" />
-    <Compile Include="Shared/Win32Menu.fs" />
-    <Compile Include="Shared/Services.fs" />
-    <Compile Include="Shared/SettingsTiming.fs" />
-    <Compile Include="Shared/AnimationWindow.fs" />
-    <Compile Include="Shared/Forms.fs" />
-    <Compile Include="Shared/Json.fs" />
-    <Compile Include="Shared/Shell.fs" />
-    <Compile Include="Shared/Model.fs" />
+    <Compile Include="Shared\DragDrop.fs" />
+    <Compile Include="Shared\Serialize.fs" />
+    <Compile Include="Shared\DarkMode.fs" />
+    <Compile Include="Shared\Win32Menu.fs" />
+    <Compile Include="Shared\Services.fs" />
+    <Compile Include="Shared\SettingsTiming.fs" />
+    <Compile Include="Shared\AnimationWindow.fs" />
+    <Compile Include="Shared\Forms.fs" />
+    <Compile Include="Shared\Json.fs" />
+    <Compile Include="Shared\Shell.fs" />
+    <Compile Include="Shared\Model.fs" />
     <Compile Include="Shared\UIHelper.fs" />
     <Compile Include="Shared\AppDialog.fs" />
     <Compile Include="NewWindowLaunch.fs" />
@@ -174,8 +84,8 @@ if $(ConfigurationName) == Release (
     <Compile Include="OleDropTarget.fs" />
     <Compile Include="WindowGroup.fs" />
     <Compile Include="TabStripDecorator.fs" />
-    <Compile Include="GroupPlugins/SuperBarPlugin.fs" />
-    <Compile Include="GroupPlugins/HideTabsOnInactiveGroupPlugin.fs" />
+    <Compile Include="GroupPlugins\SuperBarPlugin.fs" />
+    <Compile Include="GroupPlugins\HideTabsOnInactiveGroupPlugin.fs" />
     <Compile Include="Desktop.fs" />
     <Compile Include="Launcher.fs" />
     <Compile Include="Workspace\WorkspaceModel.fs" />
@@ -189,70 +99,65 @@ if $(ConfigurationName) == Release (
     <Compile Include="ManagerViewService\DesktopManagerForm.fs" />
     <Compile Include="ManagerViewService\ManagerViewService.fs" />
     <Compile Include="FilterService.fs" />
-    <Compile Include="DesktopPlugins/NotifyIconPlugin.fs" />
-    <Compile Include="DesktopPlugins/ExceptionHandlerPlugin.fs" />
-    <Compile Include="ManagerViewService/SettingsBenchmark.fs" />
+    <Compile Include="DesktopPlugins\NotifyIconPlugin.fs" />
+    <Compile Include="DesktopPlugins\ExceptionHandlerPlugin.fs" />
+    <Compile Include="ManagerViewService\SettingsBenchmark.fs" />
     <Compile Include="Program.fs" />
-    <EmbeddedResource Include="Resources\Bemo.ico" />
-    <EmbeddedResource Include="Resources\workspace.png" />
-    <EmbeddedResource Include="Resources\add.png" />
-    <EmbeddedResource Include="Resources\delete.png" />
-    <EmbeddedResource Include="Resources\edit.ico" />
-    <EmbeddedResource Include="Resources\edit.png" />
-    <EmbeddedResource Include="Resources\group.png" />
-    <EmbeddedResource Include="Resources\group-closed.png" />
-    <EmbeddedResource Include="Resources\restore.png" />
-    <EmbeddedResource Include="Resources\window.png" />
-    <None Include="app.manifest" />
-    <None Include="App.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <Content Include="packages.config" />
   </ItemGroup>
+
+  <!-- LogicalName on every one of these is load-bearing. The code asks for
+       them by bare file name (Services.openIcon "Bemo.ico"), which is what the
+       legacy F# project system produced. SDK-style projects would otherwise
+       prefix the manifest name with the namespace and folder
+       (WindowTabs.Resources.Bemo.ico) and every icon and image would come back
+       as a null stream at run time. -->
   <ItemGroup>
-    <Reference Include="Aga.Controls">
-      <HintPath>..\Aga.Controls.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.Core, Version=4.6.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-      <HintPath>..\packages\FSharp.Core.4.6.2\lib\net45\FSharp.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.PowerPack">
-      <HintPath>..\packages\FSPowerPack.Core.Community.3.0.0.0\lib\Net40\FSharp.PowerPack.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.PowerPack.Linq">
-      <HintPath>..\packages\FSPowerPack.Linq.Community.3.0.0.0\lib\Net40\FSharp.PowerPack.Linq.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.PowerPack.Metadata">
-      <HintPath>..\packages\FSPowerPack.Metadata.Community.3.0.0.0\lib\Net40\FSharp.PowerPack.Metadata.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.PowerPack.Parallel.Seq">
-      <HintPath>..\packages\FSPowerPack.Parallel.Seq.Community.3.0.0.0\lib\Net40\FSharp.PowerPack.Parallel.Seq.dll</HintPath>
-    </Reference>
+    <EmbeddedResource Include="Resources\Bemo.ico" LogicalName="Bemo.ico" />
+    <EmbeddedResource Include="Resources\workspace.png" LogicalName="workspace.png" />
+    <EmbeddedResource Include="Resources\add.png" LogicalName="add.png" />
+    <EmbeddedResource Include="Resources\delete.png" LogicalName="delete.png" />
+    <EmbeddedResource Include="Resources\edit.ico" LogicalName="edit.ico" />
+    <EmbeddedResource Include="Resources\edit.png" LogicalName="edit.png" />
+    <EmbeddedResource Include="Resources\group.png" LogicalName="group.png" />
+    <EmbeddedResource Include="Resources\group-closed.png" LogicalName="group-closed.png" />
+    <EmbeddedResource Include="Resources\restore.png" LogicalName="restore.png" />
+    <EmbeddedResource Include="Resources\window.png" LogicalName="window.png" />
+  </ItemGroup>
+
+  <!-- Shipped defaults that UserOverrides lays the user's own copy over.
+       Replaces the copy step the legacy PostBuildEvent did by hand. -->
+  <ItemGroup>
+    <Content Include="Settings\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="app.manifest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="9.0.100" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <!-- The committed interop assemblies, kept rather than regenerated with
+       <COMReference>: that route needs the ResolveComReference task, which
+       only the .NET Framework MSBuild has, so it would have made `dotnet
+       build` impossible. These are pure type definitions with no framework
+       dependency of their own and load fine on .NET 10 (verified by loading
+       SHDocVw.ShellWindowsClass and Shell32.IShellFolderViewDual and
+       instantiating the former). Only Shell.fs uses them, to find the folder
+       an Explorer window is showing. -->
+  <ItemGroup>
     <Reference Include="Interop.SHDocVw">
       <HintPath>..\Interop.SHDocVw.dll</HintPath>
+      <Private>true</Private>
     </Reference>
     <Reference Include="Interop.Shell32">
       <HintPath>..\Interop.Shell32.dll</HintPath>
+      <Private>true</Private>
     </Reference>
-    <Reference Include="mscorlib" />
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Windows.Forms" />
-    <ProjectReference Include="..\Win32\Win32.csproj">
-      <Name>Win32</Name>
-      <Project>{08d5e815-cc69-4d6e-83bd-ef119618ea9c}</Project>
-      <Private>True</Private>
-    </ProjectReference>
   </ItemGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-	     Other similar extension points exist, see Microsoft.Common.targets.
-	<Target Name="BeforeBuild">
-	</Target>
-	<Target Name="AfterBuild">
-	</Target>
-	-->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Win32\Win32.csproj" />
+    <ProjectReference Include="..\treeviewadv\Aga.Controls\Aga.Controls.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -475,9 +475,15 @@ type Program() as this =
     let periodicSaveTimer = new System.Windows.Forms.Timer(Interval = 10000)
     // Title polling for the closed-tab late restore. A title change alone fires
     // no shell event, so without this the restore could wait for the next event.
-    // Cheap: GetWindowText on another process's window is a cached read (no
-    // message is sent), and only grouped windows are scanned.
-    let titleSyncTimer = new System.Windows.Forms.Timer(Interval = 1000)
+    // Only grouped windows are scanned, and GetWindowText on another process's
+    // window is usually a cached read - but "usually" is not "always": the read
+    // is still a cross-process call, and one hung application in a group stalls
+    // the whole pass, on the UI thread, once per tick. At 1 s that pass was the
+    // most frequent thing on the UI thread; 3 s keeps the late restore prompt
+    // enough (it is a fallback for a title that settles late, not a live
+    // refresh - syncWindowTitles also runs from every updateAppWindows) while
+    // giving that stall a third of the chances to happen.
+    let titleSyncTimer = new System.Windows.Forms.Timer(Interval = 3000)
    
     let isFirstRun = settingsManager.fileExists.not
 

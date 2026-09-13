@@ -199,7 +199,6 @@ and TaskbarTab(parent:TaskBarButton, config,size) =
                     let msgWindow = os.windowFromHwnd(msg.hwnd)
                     config().preview(true).iter <| fun img ->
                         msgWindow.dwmSetIconicThumbnail(img.resize(msg.lParam.size))
-                    GC.Collect()
                     msg.def()
                 | WindowMessages.WM_DWMSENDICONICLIVEPREVIEWBITMAP ->
                     let msgWindow = os.windowFromHwnd(msg.hwnd)
@@ -207,7 +206,6 @@ and TaskbarTab(parent:TaskBarButton, config,size) =
                     //a certain size determined by the workspace - this happens when the window is maximized
                     config().preview(false).iter <| fun img ->
                         msgWindow.dwmSetIconicLivePreview(img.crop(size()))
-                    GC.Collect()
                     msg.def()
                 // a ghost window is shown during peek preview if this isn't here
                 | WindowMessages.WM_NCCALCSIZE -> 0

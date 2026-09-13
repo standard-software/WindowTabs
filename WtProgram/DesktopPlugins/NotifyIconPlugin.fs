@@ -285,10 +285,15 @@ type NotifyIconPlugin() as this =
         notifyIcon.Visible <- true
         notifyIcon.Text <- "WindowTabs version " + Services.program.version
         notifyIcon.Icon <- Services.openIcon("Bemo.ico")
-        let contextMenu = new ContextMenu()
+        // ContextMenuStrip, not ContextMenu: the old Menu/MenuItem family was
+        // removed from WinForms in .NET Core and does not exist on .NET 10.
+        // The strip equivalents render the same tray menu; the differences that
+        // mattered here are noted at each site below.
+        let contextMenu = new ContextMenuStrip()
 
         // Apply dark mode setting and update menu texts when menu is about to be shown
-        contextMenu.Popup.Add <| fun _ ->
+        // (Popup on the old menu; Opening on the strip.)
+        contextMenu.Opening.Add <| fun _ ->
             let dialogBusy = DialogState.isBusy()
             let darkModeEnabled =
                 try
@@ -299,53 +304,62 @@ type NotifyIconPlugin() as this =
                 with | _ -> false
             DarkMode.setDarkModeForMenus(darkModeEnabled)
 
-            // Update all menu item texts by checking their Tags
-            for i in 0 .. contextMenu.MenuItems.Count - 1 do
-                let menuItem = contextMenu.MenuItems.[i]
-                match menuItem.Tag with
-                | :? string as tag ->
-                    match tag with
-                    | "Settings" -> menuItem.Text <- Localization.getString("Settings")
-                    | "CheckForUpdates" -> menuItem.Text <- Localization.getString("CheckForUpdates")
-                    | "Language" ->
-                        menuItem.Text <- Localization.getString("Language")
-                        // Update language menu checkmarks using current language from Localization module
-                        let currentLanguage = Localization.currentLanguage
+            // Update all menu item texts by checking their Tags.
+            // Items holds ToolStripItem, whose separators have no Checked or
+            // DropDownItems, so each entry is matched as a ToolStripMenuItem
+            // first - the separators simply fall through.
+            for i in 0 .. contextMenu.Items.Count - 1 do
+                match contextMenu.Items.[i] with
+                | :? ToolStripMenuItem as menuItem ->
+                    match menuItem.Tag with
+                    | :? string as tag ->
+                        match tag with
+                        | "Settings" -> menuItem.Text <- Localization.getString("Settings")
+                        | "CheckForUpdates" -> menuItem.Text <- Localization.getString("CheckForUpdates")
+                        | "Language" ->
+                            menuItem.Text <- Localization.getString("Language")
+                            // Update language menu checkmarks using current language from Localization module
+                            let currentLanguage = Localization.currentLanguage
 
-                        for j in 0 .. menuItem.MenuItems.Count - 1 do
-                            let langItem = menuItem.MenuItems.[j]
-                            // Get language name from Tag (stored without .json extension)
-                            match langItem.Tag with
-                            | :? string as langName ->
-                                langItem.Checked <- (currentLanguage = langName)
-                                langItem.Enabled <- not dialogBusy && not (currentLanguage = langName)
-                            | _ -> ()
-                    | "Disable" ->
-                        menuItem.Text <- Localization.getString("Disable")
-                        // Update checkbox state
-                        menuItem.Checked <- Services.program.isDisabled
-                    | "RestartWindowTabs" -> menuItem.Text <- Localization.getString("RestartWindowTabs")
-                    | "CloseWindowTabs" -> menuItem.Text <- Localization.getString("CloseWindowTabs")
+                            for j in 0 .. menuItem.DropDownItems.Count - 1 do
+                                match menuItem.DropDownItems.[j] with
+                                | :? ToolStripMenuItem as langItem ->
+                                    // Get language name from Tag (stored without .json extension)
+                                    match langItem.Tag with
+                                    | :? string as langName ->
+                                        langItem.Checked <- (currentLanguage = langName)
+                                        langItem.Enabled <- not dialogBusy && not (currentLanguage = langName)
+                                    | _ -> ()
+                                | _ -> ()
+                        | "Disable" ->
+                            menuItem.Text <- Localization.getString("Disable")
+                            // Update checkbox state
+                            menuItem.Checked <- Services.program.isDisabled
+                        | "RestartWindowTabs" -> menuItem.Text <- Localization.getString("RestartWindowTabs")
+                        | "CloseWindowTabs" -> menuItem.Text <- Localization.getString("CloseWindowTabs")
+                        | _ -> ()
                     | _ -> ()
                 | _ -> ()
 
             // Block all tray commands while a dialog session is active.
-            for i in 0 .. contextMenu.MenuItems.Count - 1 do
-                let menuItem = contextMenu.MenuItems.[i]
+            for i in 0 .. contextMenu.Items.Count - 1 do
+                let menuItem = contextMenu.Items.[i]
                 match menuItem.Tag with
                 | :? string as tag ->
                     menuItem.Enabled <- DialogState.canUseTrayCommand tag Services.program.isDisabled
                 | _ -> ()
 
-        notifyIcon.ContextMenu <- contextMenu
+        notifyIcon.ContextMenuStrip <- contextMenu
         notifyIcon.DoubleClick.Add <| fun _ ->
             if not (DialogState.isBusy()) then Services.managerView.show()
         notifyIcon
 
-    member this.contextMenuItems = this.icon.ContextMenu.MenuItems
+    member this.contextMenuItems = this.icon.ContextMenuStrip.Items
 
-    member this.addItem(text, handler) =
-        this.contextMenuItems.Add(text, EventHandler(fun obj (e:EventArgs) -> handler())) |> ignore
+    member this.addItem(text: string, handler) =
+        let item = new ToolStripMenuItem(text)
+        item.Click.Add(fun _ -> handler())
+        this.contextMenuItems.Add(item) |> ignore
 
     member this.onNewVersion() =
         this.icon.ShowBalloonTip(
@@ -457,16 +471,16 @@ type NotifyIconPlugin() as this =
         if languages.IsEmpty then
             None
         else
-            let languageMenu = new MenuItem(Localization.getString("Language"))
+            let languageMenu = new ToolStripMenuItem(Localization.getString("Language"))
             let currentLanguage = Localization.currentLanguage
 
             for (displayName, fileName) in languages do
-                let langItem = new MenuItem(displayName)
+                let langItem = new ToolStripMenuItem(displayName)
                 langItem.Checked <- (currentLanguage = fileName)
                 langItem.Enabled <- not (currentLanguage = fileName)
                 langItem.Tag <- box(fileName)  // Store fileName (without .json) in Tag for language switching
                 langItem.Click.Add <| fun _ -> this.changeLanguage(displayName, fileName)
-                languageMenu.MenuItems.Add(langItem) |> ignore
+                languageMenu.DropDownItems.Add(langItem) |> ignore
 
             Some(languageMenu)
 
@@ -492,21 +506,23 @@ type NotifyIconPlugin() as this =
         member this.init() =
             AppDialog.initialize()
             let notifyIcon = this.icon
-            let contextMenu = notifyIcon.ContextMenu
+            let contextMenu = notifyIcon.ContextMenuStrip
 
             // Create menu items
             // Non-clickable caption showing the running version
-            let versionMenuItem = new MenuItem("version " + Services.program.version)
+            let versionMenuItem = new ToolStripMenuItem("version " + Services.program.version)
             versionMenuItem.Enabled <- false
             this.contextMenuItems.Add(versionMenuItem) |> ignore
 
-            this.contextMenuItems.Add("-") |> ignore
+            this.contextMenuItems.Add(new ToolStripSeparator()) |> ignore
 
-            let settingsMenuItem = new MenuItem(Localization.getString("Settings"))
+            let settingsMenuItem = new ToolStripMenuItem(Localization.getString("Settings"))
             settingsMenuItem.Click.Add <| fun _ -> Services.managerView.show()
             settingsMenuItem.Tag <- box("Settings")
-            // Bold: matches the tray icon double-click default action
-            settingsMenuItem.DefaultItem <- true
+            // Bold: matches the tray icon double-click default action.
+            // ToolStripMenuItem has no DefaultItem, so the bold is set directly
+            // - which is all DefaultItem did to the old menu anyway.
+            settingsMenuItem.Font <- new System.Drawing.Font(settingsMenuItem.Font, System.Drawing.FontStyle.Bold)
             this.contextMenuItems.Add(settingsMenuItem) |> ignore
 
             // Only add Language menu if FileList.json exists and is not empty
@@ -517,9 +533,9 @@ type NotifyIconPlugin() as this =
             | None -> ()
 
             //this.addItem(Localization.getString("Feedback"), Forms.openFeedback) // 404 Not Found.
-            this.contextMenuItems.Add("-") |> ignore
+            this.contextMenuItems.Add(new ToolStripSeparator()) |> ignore
 
-            let disableMenuItem = new MenuItem(Localization.getString("Disable"))
+            let disableMenuItem = new ToolStripMenuItem(Localization.getString("Disable"))
             disableMenuItem.Click.Add <| fun _ ->
                 if not (DialogState.isBusy()) then
                     let newState = not Services.program.isDisabled
@@ -527,23 +543,23 @@ type NotifyIconPlugin() as this =
             disableMenuItem.Tag <- box("Disable")
             this.contextMenuItems.Add(disableMenuItem) |> ignore
 
-            this.contextMenuItems.Add("-") |> ignore
+            this.contextMenuItems.Add(new ToolStripSeparator()) |> ignore
 
-            let updateMenuItem = new MenuItem(Localization.getString("CheckForUpdates"))
+            let updateMenuItem = new ToolStripMenuItem(Localization.getString("CheckForUpdates"))
             updateMenuItem.Click.Add <| fun _ -> this.checkForUpdates()
             updateMenuItem.Tag <- box("CheckForUpdates")
             this.contextMenuItems.Add(updateMenuItem) |> ignore
 
             // Both ask first: a slip on the tray menu would otherwise take
             // every tab strip down with it. Cancel is the default.
-            let restartMenuItem = new MenuItem(Localization.getString("RestartWindowTabs"))
+            let restartMenuItem = new ToolStripMenuItem(Localization.getString("RestartWindowTabs"))
             restartMenuItem.Click.Add <| fun _ ->
                 if AppDialog.confirm "WindowTabs" (Localization.getString("RestartConfirm")) then
                     this.restartApplication()
             restartMenuItem.Tag <- box("RestartWindowTabs")
             this.contextMenuItems.Add(restartMenuItem) |> ignore
 
-            let closeMenuItem = new MenuItem(Localization.getString("CloseWindowTabs"))
+            let closeMenuItem = new ToolStripMenuItem(Localization.getString("CloseWindowTabs"))
             closeMenuItem.Click.Add <| fun _ ->
                 if AppDialog.confirm "WindowTabs" (Localization.getString("CloseConfirm")) then
                     Services.program.shutdown()

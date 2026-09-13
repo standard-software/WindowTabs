@@ -27,14 +27,14 @@ type ModelObject() as this =
             null
 
     member this.remove(key) = this.set(key, null)
-    member this.removeAll() = this.keys.list.iter(this.remove)
+    member this.removeAll() = List2(this.keys).iter(this.remove)
     member this.changed = changedEvent.Publish
 
     
 type ModelCollection() as this =
     inherit ModelObject()
         
-    member this.indicies = this.keys.list.map(int)
+    member this.indicies = List2(this.keys).map(int)
     member this.length = 
         if this.indicies.isEmpty then 0 else this.indicies.maxBy 0 id + 1
     

@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Reflection;
 using System.ComponentModel;
-using System.Drawing.Design;
 
 namespace Aga.Controls.Tree.NodeControls
 {
@@ -31,7 +30,7 @@ namespace Aga.Controls.Tree.NodeControls
 
 		private List<object> _dropDownItems;
 		[System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1002:DoNotExposeGenericLists")]
-		[Editor(typeof(StringCollectionEditor), typeof(UITypeEditor)), DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
 		public List<object> DropDownItems
 		{
 			get { return _dropDownItems; }
