@@ -36,7 +36,12 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
+    <!-- Optimize is on in Debug too. The F# compiler shipped with Visual Studio 18.7 no longer
+         inlines FSharp.Core 4.6.2 operators (bitwise or/and, shifts) when optimization is off,
+         so they compile to calls that throw NotSupportedException (Dynamic invocation of
+         op_BitwiseOr is not supported) at startup. Breakpoints and stepping still work;
+         some locals may be optimized away. -->
+    <Optimize>true</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>TRACE;DEBUG</DefineConstants>
