@@ -9,6 +9,15 @@ open System.IO
 open System.Windows.Forms
 open Bemo.Win32.Forms
 
+// Keep tooltip display and mouse interaction from activating the window.
+type TabTooltipForm() =
+    inherit Form()
+    override this.ShowWithoutActivation = true
+    override this.CreateParams =
+        let parameters = base.CreateParams
+        parameters.ExStyle <- parameters.ExStyle ||| WindowsExtendedStyles.WS_EX_NOACTIVATE
+        parameters
+
 type ITabStripMonitor =
     abstract member tabClick : (MouseButton * Tab * TabPart * MouseAction * Pt) -> unit
     abstract member tabActivate : (Tab) -> unit
@@ -85,7 +94,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let hwndRef = ref IntPtr.Zero
     let isShrunkCell = Cell.create(false)
     // Tooltip implementation
-    let tooltipForm = new Form()
+    let tooltipForm = new TabTooltipForm()
     let tooltipLabel = new Label()
     let tooltipTimer = new Timer(Interval = 500)
     // Polling fallback for stuck tooltips: WM_MOUSELEAVE does not always fire
@@ -122,7 +131,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // Size and font are computed in device pixels for the strip's monitor;
         // WinForms must not apply its own scaling on top of them.
         tooltipForm.AutoScaleMode <- AutoScaleMode.None
-        tooltipForm.TopMost <- true
+        // Form.TopMost makes Framework SetVisibleCore explicitly focus the form.
+        // Raise it through native makeTopMost instead, which uses SWP_NOACTIVATE.
         // Set form opacity for modern look
         tooltipForm.Opacity <- 0.95
         
@@ -378,7 +388,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 if formBottom > work.bottom then
                     tooltipForm.Location <- new Point(tooltipForm.Location.X, tabScreenY - tooltipForm.Height - scaled 5))
 
-            tooltipForm.BringToFront()
+            // BringToFront activates top-level forms; preserve the application's focus.
+            _os.windowFromHwnd(tooltipForm.Handle).makeTopMost()
 
     member private this.processMouse(mouse) =
         match mouse with
