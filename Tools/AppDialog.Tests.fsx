@@ -1,6 +1,10 @@
 // Run with Visual Studio's .NET Framework fsi.exe after a normal Debug build.
 // See SettingsTests.md. No windows are shown.
 #r "System.Windows.Forms"
+#r "../WtProgram/bin/Debug/FSharp.PowerPack.dll"
+#r "../WtProgram/bin/Debug/Aga.Controls.dll"
+#r "../WtProgram/bin/Debug/Win32.dll"
+#r "../WtProgram/bin/Debug/Newtonsoft.Json.dll"
 #r "../WtProgram/bin/Debug/WindowTabs.exe"
 
 open System

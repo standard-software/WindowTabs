@@ -4,6 +4,8 @@
 #r "System.Windows.Forms"
 #r "../Newtonsoft.Json.dll"
 #r "../WtProgram/bin/Debug/FSharp.PowerPack.dll"
+#r "../WtProgram/bin/Debug/Aga.Controls.dll"
+#r "../WtProgram/bin/Debug/Newtonsoft.Json.dll"
 #r "../WtProgram/bin/Debug/WindowTabs.exe"
 #r "../WtProgram/bin/Debug/Win32.dll"
 open System
