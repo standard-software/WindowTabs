@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "全螢幕視窗時隱藏分頁",
   "HideTabsWhileMoving": "移動視窗時隱藏分頁",
+  "LockWindowPosition": "禁止移動分頁視窗",
   "SnapTabHeightMargin": "吸附時為分頁高度留出邊距",
   "NextTab": "下一個分頁",
   "PrevTab": "上一個分頁",

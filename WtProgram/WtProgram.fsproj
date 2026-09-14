@@ -151,6 +151,9 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/AppPath.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
     <Compile Include="Shared/TabBehaviorPolicy.fs" />
+    <Compile Include="Shared/CaptionDragPolicy.fs" />
+    <Compile Include="Shared/CaptionDragFallback.fs" />
+    <Compile Include="Shared/CaptionDragTargets.fs" />
     <Compile Include="Shared/HotKeyPolicy.fs" />
     <Compile Include="Shared/LaunchPath.fs" />
     <Compile Include="Shared/Dpi.fs" />
@@ -196,6 +199,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="FilterService.fs" />
     <Compile Include="DesktopPlugins/NotifyIconPlugin.fs" />
     <Compile Include="DesktopPlugins/ExceptionHandlerPlugin.fs" />
+    <Compile Include="DesktopPlugins/CaptionDragPlugin.fs" />
     <Compile Include="ManagerViewService/SettingsBenchmark.fs">
       <Link>SettingsBenchmark.fs</Link>
     </Compile>

@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "Masquer les onglets quand la fenêtre est en plein écran",
   "HideTabsWhileMoving": "Masquer les onglets pendant le déplacement d'une fenêtre",
+  "LockWindowPosition": "Empêcher le déplacement des fenêtres à onglets",
   "SnapTabHeightMargin": "Ajouter une marge de hauteur d'onglet lors de l'ancrage",
   "NextTab": "Onglet suivant",
   "PrevTab": "Onglet précédent",

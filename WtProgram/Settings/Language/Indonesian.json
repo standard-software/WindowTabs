@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "Sembunyikan tab saat jendela layar penuh",
   "HideTabsWhileMoving": "Sembunyikan tab saat memindahkan jendela",
+  "LockWindowPosition": "Cegah pemindahan jendela bertab",
   "SnapTabHeightMargin": "Tambahkan margin tinggi tab saat snap",
   "NextTab": "Tab Berikutnya",
   "PrevTab": "Tab Sebelumnya",

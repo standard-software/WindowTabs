@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next2
+
+- Add an option to prevent moving tabbed windows by dragging their title bars, while keeping resizing available. Some custom title bars may not be supported.
+
 ## version ss_2026.09.12_next1
 
 - Fix tab title tooltips taking keyboard focus away from the active application when hovering over tabs.

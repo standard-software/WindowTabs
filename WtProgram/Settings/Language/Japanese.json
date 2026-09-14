@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示",
   "HideTabsWhileMoving": "ウィンドウ移動時はタブを非表示",
+  "LockWindowPosition": "タブ化したウィンドウを移動させない",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあける",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",

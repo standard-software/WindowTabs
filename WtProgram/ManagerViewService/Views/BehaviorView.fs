@@ -215,6 +215,7 @@ type HotKeyView() =
                 combo.SelectedIndex <- if direction = TabBehaviorPolicy.verticalAlwaysDown then 1 else 0)
             combo
 
+        let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
             ("RunAtStartup", settingsCheckbox "runAtStartup")
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
@@ -228,6 +229,7 @@ type HotKeyView() =
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
+            ("LockWindowPosition", lockPositionCheckbox)
         ])
 
         let formPanel = UIHelper.form fields
@@ -241,7 +243,7 @@ type HotKeyView() =
         //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
         //            6=tabVerticalDirection, 7=hideTabsWhenDown,
         //            8=hideTabsOnFullscreen, 9=hideTabsWhileMoving,
-        //            10=snapTabHeightMargin
+        //            10=snapTabHeightMargin, 11=lockWindowPosition
         let hideTabsRowIndex = 7
 
         // Let the radio-group row auto-size based on content.

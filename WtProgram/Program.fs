@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next1"
+    let version = "ss_2026.09.12_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2953,6 +2953,7 @@ let main argv =
 
     let program = Program()
     program.run(List2<obj>([
+        CaptionDragPlugin()
         NotifyIconPlugin()
         ExceptionHandlerPlugin()
     ]).map(fun o -> o.cast<IPlugin>()))
