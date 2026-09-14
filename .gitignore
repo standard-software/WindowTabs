@@ -13,6 +13,7 @@ packages/
 **/obj/
 **/bin/Debug/
 **/bin/Release/
+**/bin/Stage/
 *.pdb
 /exe/
 
