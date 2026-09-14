@@ -151,6 +151,9 @@ type AppearanceView() as this =
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
+        // No default 3-px margin: captions start at the same 10 px / 15 px
+        // as the Behavior and Shortcut Keys tabs.
+        p.Margin <- Padding(0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- upperRowCount
         p.ColumnCount <- 3
@@ -178,11 +181,14 @@ type AppearanceView() as this =
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
+        // Half a row of space above the color theme, then the same row grid
+        // as the panel above.
+        p.Margin <- Padding(0, UIHelper.settingsRowHeightPx / 2, 0, 0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- colorGridRowCount
         p.ColumnCount <- 4
         List2([0..colorGridRowCount - 1]).iter <| fun _ ->
-            p.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)).ignore
+            p.RowStyles.Add(RowStyle(SizeType.Absolute, float32 UIHelper.settingsRowHeightPx)).ignore
         // Match upperPanel's first column width (250px)
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // State label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Tab color
@@ -216,7 +222,10 @@ type AppearanceView() as this =
     // AutoSize now, so without this a row would shrink to its tallest cell
     // (the reset Button, 24 px + 10 px of margin) and every 100% layout would
     // move. Scaled with everything else: Control.Scale multiplies MinimumSize.
-    let rowMinimumHeight (topMargin: int) (bottomMargin: int) = 35 - topMargin - bottomMargin
+    // About two characters of the settings font.
+    let colorCaptionIndentPx = 24
+
+    let rowMinimumHeight (topMargin: int) (bottomMargin: int) = UIHelper.settingsRowHeightPx - topMargin - bottomMargin
 
     // Helper to create and place an int property editor at a specific row in upperPanel
     let createIntEditorAt (prop: AppearanceProperty) (row: int) =
@@ -226,13 +235,13 @@ type AppearanceView() as this =
             label.Text <- Localization.getString(prop.displayText)
             label.TextAlign <- ContentAlignment.MiddleLeft
             label.Anchor <- AnchorStyles.Left
-            label.Margin <- Padding(0,5,0,5)
-            label.MinimumSize <- Size(0, rowMinimumHeight 5 5)
+            label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+            label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
             label
         let editor = IntEditor() :> IPropEditor
 
         editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
-        editor.control.Margin <- Padding(0,5,0,5)
+        editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         upperPanel.Controls.Add(label)
         upperPanel.Controls.Add(editor.control)
         upperPanel.SetRow(label, row)
@@ -245,7 +254,7 @@ type AppearanceView() as this =
             btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
             btn.Dock <- DockStyle.Fill
             btn.TextAlign <- ContentAlignment.MiddleLeft
-            btn.Margin <- Padding(5,5,0,5)
+            btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
             btn.Click.Add <| fun _ ->
                 suppressEvents <- true
                 let defaultValue = getDefaultValue prop.key
@@ -282,8 +291,8 @@ type AppearanceView() as this =
         label.Text <- Localization.getString("Pinned Tab Width")
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Anchor <- AnchorStyles.Left
-        label.Margin <- Padding(0,5,0,5)
-        label.MinimumSize <- Size(0, rowMinimumHeight 5 5)
+        label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
         upperPanel.Controls.Add(label)
         upperPanel.SetRow(label, pinnedWidthRow)
         upperPanel.SetColumn(label, 0)
@@ -298,7 +307,7 @@ type AppearanceView() as this =
         tbl.ColumnCount <- 3
         tbl.RowCount <- 1
         tbl.Dock <- DockStyle.Fill
-        tbl.Margin <- Padding(0,5,0,5)
+        tbl.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         // This is the ONLY cell in upperPanel whose content is a nested
         // container rather than a single control, and that is what makes
         // AutoSize on it mandatory. A TableLayoutPanel measuring an AutoSize
@@ -321,19 +330,23 @@ type AppearanceView() as this =
 
         pinnedWidthIconOnlyRadio.Text <- Localization.getString("PinnedWidthIconOnly")
         pinnedWidthIconOnlyRadio.AutoSize <- true
-        pinnedWidthIconOnlyRadio.Margin <- Padding(0,3,10,0)
+        // No vertical margins inside the row: the radios are centred in the
+        // row like the spinner beside them and the caption to the left.
+        // A 3-px bottom margin lifts the centred radio by about 1.5 px, which
+        // puts its text on the caption's line.
+        pinnedWidthIconOnlyRadio.Margin <- Padding(0,0,10,3)
         pinnedWidthIconOnlyRadio.Anchor <- AnchorStyles.Left
 
         pinnedWidthSpecifyRadio.Text <- Localization.getString("PinnedWidthSpecify")
         pinnedWidthSpecifyRadio.AutoSize <- true
-        pinnedWidthSpecifyRadio.Margin <- Padding(0,3,5,0)
+        pinnedWidthSpecifyRadio.Margin <- Padding(0,0,5,3)
         pinnedWidthSpecifyRadio.Anchor <- AnchorStyles.Left
 
         pinnedWidthNumeric.Minimum <- 50m
         pinnedWidthNumeric.Maximum <- 500m
         pinnedWidthNumeric.Value <- 90m
-        pinnedWidthNumeric.Dock <- DockStyle.Fill
-        pinnedWidthNumeric.Margin <- Padding(0,2,0,0)
+        pinnedWidthNumeric.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+        pinnedWidthNumeric.Margin <- Padding(0)
 
         tbl.Controls.Add(pinnedWidthIconOnlyRadio)
         tbl.SetRow(pinnedWidthIconOnlyRadio, 0)
@@ -356,7 +369,7 @@ type AppearanceView() as this =
         btn.Text <- sprintf "%s:%d" (Localization.getString("Reset")) defaultWidth
         btn.Dock <- DockStyle.Fill
         btn.TextAlign <- ContentAlignment.MiddleLeft
-        btn.Margin <- Padding(5,5,0,5)
+        btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         btn.Click.Add <| fun _ ->
             suppressEvents <- true
             pinnedWidthNumeric.Value <- decimal defaultWidth
@@ -429,8 +442,11 @@ type AppearanceView() as this =
             label.AutoSize <- true
             label.Text <- text
             label.TextAlign <- ContentAlignment.MiddleLeft
+            // Vertically centred in the row, like the int-editor captions.
+            // The caption column below the color theme is indented by about
+            // two characters; the column headers keep their left edge.
             label.Anchor <- AnchorStyles.Left
-            label.Margin <- Padding(0, 8, 0, 5)
+            label.Margin <- Padding((if col = 0 then colorCaptionIndentPx else 0), 0, 0, 0)
             colorPanel.Controls.Add(label)
             colorPanel.SetRow(label, colorHeaderRow)
             colorPanel.SetColumn(label, col)
@@ -446,8 +462,9 @@ type AppearanceView() as this =
             stateLabel.AutoSize <- true
             stateLabel.Text <- Localization.getString(stateName)
             stateLabel.TextAlign <- ContentAlignment.MiddleLeft
-            stateLabel.Anchor <- AnchorStyles.Left ||| AnchorStyles.Top
-            stateLabel.Margin <- Padding(0, 7, 0, 5)
+            // Centred in the row, on the same line as the color editors.
+            stateLabel.Anchor <- AnchorStyles.Left
+            stateLabel.Margin <- Padding(colorCaptionIndentPx, 0, 0, 0)
             colorPanel.Controls.Add(stateLabel)
             colorPanel.SetRow(stateLabel, row)
             colorPanel.SetColumn(stateLabel, 0)
@@ -459,10 +476,10 @@ type AppearanceView() as this =
                 // Dock.Fill so the textbox stretches across the whole cell
                 // and the rightmost editor's right edge sits at the panel's
                 // right edge (no large empty gap on the right side).
-                editor.control.Dock <- DockStyle.Fill
+                editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
                 let isLastCol = colIndex = lastColIndex
                 let rightMargin = if isLastCol then 0 else 20
-                editor.control.Margin <- Padding(0, 5, rightMargin, 5)
+                editor.control.Margin <- Padding(0, 0, rightMargin, 0)
                 colorPanel.Controls.Add(editor.control)
                 colorPanel.SetRow(editor.control, row)
                 colorPanel.SetColumn(editor.control, colIndex + 1)  // columns 1, 2, 3
@@ -484,8 +501,8 @@ type AppearanceView() as this =
         label.AutoSize <- true
         label.Text <- Localization.getString("DarkMode")
         label.TextAlign <- ContentAlignment.MiddleLeft
-        label.Margin <- Padding(0,8,0,5)
-        label.MinimumSize <- Size(0, rowMinimumHeight 8 5)
+        label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
         upperPanel.Controls.Add(label)
         upperPanel.SetRow(label, darkModeRow)
         upperPanel.SetColumn(label, 0)
@@ -493,7 +510,7 @@ type AppearanceView() as this =
 
     let darkModeCheckbox =
         let checkbox = settingsCheckboxBool "EnableDarkMode" false
-        checkbox.Margin <- Padding(0,5,0,5)
+        checkbox.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         // Every other control in the settings views either fills its cell
         // (Dock), stretches with it (Anchor Left|Right) or sizes itself to its
         // text (AutoSize). This one does none of those - a bare CheckBox with
@@ -1398,7 +1415,9 @@ type AppearanceView() as this =
         label.AutoSize <- true
         label.Text <- Localization.getString("ColorTheme")
         label.TextAlign <- ContentAlignment.MiddleLeft
-        label.Margin <- Padding(0, 10, 0, 5)  // Add top margin
+        // Centred in the row, on the same line as the theme combo box.
+        label.Anchor <- AnchorStyles.Left
+        label.Margin <- Padding(0)
         label
 
     // Color Theme dropdown and Save/Rename button (placed in colorPanel column 1)
@@ -1408,8 +1427,9 @@ type AppearanceView() as this =
         container.FlowDirection <- FlowDirection.LeftToRight
         container.AutoSize <- true
         container.WrapContents <- false
-        container.Dock <- DockStyle.Left
-        container.Margin <- Padding(0, 5, 0, 5)
+        // Centred in the row, on the same line as the theme caption.
+        container.Anchor <- AnchorStyles.Left
+        container.Margin <- Padding(0)
         container.Padding <- Padding(0, 0, 0, 0)
 
         // Configure saveBtn (for UnsavedCustom - Save As)
@@ -1582,7 +1602,7 @@ type AppearanceView() as this =
 
     do
         // Increase theme row height to prevent ComboBox from being cut off
-        colorPanel.RowStyles.[themeRow].Height <- 38.0f
+        colorPanel.RowStyles.[themeRow].Height <- float32 UIHelper.settingsRowHeightPx
 
         // Add theme controls to colorPanel (row 0)
         // themeLabel in column 0
@@ -1598,7 +1618,7 @@ type AppearanceView() as this =
         // Anchor.Right so it sits at the right edge of the cell — visually
         // pinned to the rightmost column boundary instead of floating mid-row.
         clipboardDropdownBtn.Anchor <- AnchorStyles.Right ||| AnchorStyles.Top
-        clipboardDropdownBtn.Margin <- Padding(0, 5, 0, 5)
+        clipboardDropdownBtn.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         colorPanel.Controls.Add(clipboardDropdownBtn)
         colorPanel.SetRow(clipboardDropdownBtn, themeRow)
         colorPanel.SetColumn(clipboardDropdownBtn, 3)

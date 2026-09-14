@@ -95,17 +95,19 @@ type HotKeyView() =
             table.AutoSize <- true
             table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
             table.Margin <- Padding(0)
-            // Keep the complete group on the outer 3 x 35-px grid. Start the
-            // radio controls slightly below the caption and keep their internal
-            // spacing compact; the remaining space stays below the last row.
-            table.Padding <- Padding(0, 6, 0, 15)
+            // The group still takes three settings rows, so the next setting
+            // stays on the grid. The first radio is on the caption's line; the
+            // radios are radioPitch apart (between the 24-px pack and the 32-px
+            // row), and the space this saves is left under the last one.
+            let radioPitch = 28
+            table.Padding <- Padding(0, 0, 0, 3 * UIHelper.settingsRowHeightPx - 3 * radioPitch)
             table.ColumnCount <- 3
             table.RowCount <- 3
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // RadioButton column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // Label column
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // TextBox column
             for _ in 1 .. 3 do
-                table.RowStyles.Add(RowStyle(SizeType.Absolute, 28.0f)) |> ignore
+                table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 radioPitch)) |> ignore
 
             let currentMode =
                 let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
@@ -119,7 +121,9 @@ type HotKeyView() =
             let radioNever = new RadioButton()
             radioNever.Text <- Localization.getString("HideTabsNever")
             radioNever.AutoSize <- true
-            radioNever.Margin <- Padding(0, 5, 0, 5)
+            radioNever.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
+            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
+            radioNever.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
             radioNever.Checked <- (currentMode = "never")
             radioNever.CheckedChanged.Add(fun _ ->
                 if radioNever.Checked then
@@ -130,7 +134,9 @@ type HotKeyView() =
             let radioDown = new RadioButton()
             radioDown.Text <- Localization.getString("HideTabsWhenDown")
             radioDown.AutoSize <- true
-            radioDown.Margin <- Padding(0, 5, 0, 5)
+            radioDown.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
+            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
+            radioDown.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
             radioDown.Checked <- (currentMode = "down")
             radioDown.CheckedChanged.Add(fun _ ->
                 if radioDown.Checked then
@@ -141,7 +147,9 @@ type HotKeyView() =
             let radioDoubleClick = new RadioButton()
             radioDoubleClick.Text <- Localization.getString("HideTabsOnClick")
             radioDoubleClick.AutoSize <- true
-            radioDoubleClick.Margin <- Padding(0, 5, 0, 5)
+            radioDoubleClick.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
+            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
+            radioDoubleClick.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
             radioDoubleClick.Checked <- (currentMode = "doubleclick")
             radioDoubleClick.CheckedChanged.Add(fun _ ->
                 if radioDoubleClick.Checked then
@@ -158,10 +166,13 @@ type HotKeyView() =
             let delayLabel = new Label()
             delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
             delayLabel.AutoSize <- true
-            delayLabel.Margin <- Padding(10, 5, 3, 0)  // Left margin to separate from radio, top margin to align with textbox
+            // Centred in the radio row, like the radio itself.
+            delayLabel.Anchor <- AnchorStyles.Left
+            delayLabel.Margin <- Padding(10, UIHelper.settingsRowMarginPx, 3, 0)  // Left margin to separate from radio, top margin to align with textbox
 
             hideTabsDelay.Width <- 60
-            hideTabsDelay.Margin <- Padding(0, 2, 0, 0)
+            hideTabsDelay.Anchor <- AnchorStyles.Left
+            hideTabsDelay.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
 
             // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
             table.Controls.Add(radioNever, 0, 0)
