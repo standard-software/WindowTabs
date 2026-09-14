@@ -107,6 +107,19 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let prevForegroundCell = ref None
     let isMinimized hwnd = this.os.windowFromHwnd(hwnd).isMinimized
     let hookCleanup = Cell.create(Map2<IntPtr, IDisposable>())
+    let captionDragOwner = obj()
+    // "Lock window position" fallback for drags the input hook could not stop
+    // (see CaptionDragFallback). The setting is mirrored here - read once in
+    // init, kept current by notifyValue - so a move/size start costs a field
+    // read while it is off. The armed session belongs to one window and to
+    // the press (sequence number) that armed it. (group-thread only)
+    let mutable captionDragEnabled = false
+    let mutable fallbackSession : CaptionDragFallback.Session option = None
+    let mutable fallbackHwnd = IntPtr.Zero
+    let mutable fallbackPressSequence = 0L
+    let mutable fallbackCorrections = 0
+    // One queued correction at a time; it reads the latest rectangle anyway.
+    let mutable fallbackCorrectionQueued = false
     let shellHookWindow = Cell.create(None)
     let winEventHandler = Cell.create(None)
     let isDraggingCell = Cell.create(false)
@@ -177,6 +190,10 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             with _ -> false
         perGroupSnapTabHeightMargin <- defaultSnapMargin
 
+        captionDragEnabled <-
+            try Services.settings.getValue("lockWindowPosition") :?> bool
+            with _ -> false
+
         // Apply default setting for hiding tabs when inside
         let hideTabsMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
         match hideTabsMode with
@@ -226,6 +243,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         Services.settings.notifyValue "snapTabHeightMargin" <| fun value ->
             this.invokeAsync <| fun() ->
                 perGroupSnapTabHeightMargin <- unbox<bool>(value)
+
+        // Turning "lock window position" off drops an armed fallback at once,
+        // even in the middle of a drag.
+        Services.settings.notifyValue "lockWindowPosition" <| fun value ->
+            this.invokeAsync <| fun() ->
+                captionDragEnabled <- unbox<bool>(value)
+                if not captionDragEnabled then this.endCaptionDragFallback "setting turned off"
 
         // Listen for hideTabsWhenDownByDefault changes
         Services.settings.notifyValue "hideTabsWhenDownByDefault" <| fun value ->
@@ -518,7 +542,11 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member private this.saveZorder() =
         this.setZorder(this.inZorder(this.windows.items))
 
-    member private this.setWindows(newWindows) =
+    member private this.setWindows(newWindows: Set2<IntPtr>) =
+        // Publish membership without cross-thread service calls in the input hook.
+        this.windows.items.iter (fun hwnd ->
+            if not (newWindows.contains hwnd) then CaptionDragTargets.remove captionDragOwner hwnd)
+        newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
         windowsCell.set(newWindows)
         this.saveZorder()
         this.updateIsVisible()
@@ -988,6 +1016,120 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         Cell.endUpdate()
         
 
+    // ----- Lock window position: MOVESIZESTART fallback -----
+    //
+    // CaptionDragPlugin swallows a press on a managed window's caption, so no
+    // move loop starts (level 1). A loop that starts anyway came from a press
+    // the hook let through - a custom title bar answering HTCLIENT, a child
+    // window, a hit test that timed out, an app starting the loop itself - and
+    // here the window is put back on every rectangle change for as long as the
+    // loop runs (level 2). The decisions are in CaptionDragFallback.
+    //
+    // Scope:
+    //  - Only a loop the hook saw the press for. Keyboard move/size
+    //    (Alt+Space) and touch/pen drags that bypass the mouse hook are not
+    //    locked; neither is a window that enters a loop before WindowTabs
+    //    watches it (a Chrome tab torn off into a new window).
+    //  - A maximized window's drag-to-restore is not undone here (undoing it
+    //    means maximizing again, not moving back). The hook blocks it for
+    //    standard captions; for custom ones it passes.
+    //  - Moves that never enter a loop - the tab strip's drag and drop, its
+    //    Move/Snap menu commands, workspace restore, Win+arrow, siblings
+    //    following the top window - never arm anything.
+
+    member private this.fallbackNowMs = Stopwatch.GetTimestamp() * 1000L / Stopwatch.Frequency
+
+    member private this.fallbackBoxOf (r: Rect) = CaptionDragFallback.box r.x r.y r.width r.height
+
+    // Called from the WinEventProc of EVENT_SYSTEM_MOVESIZESTART, before the
+    // event is queued: the held-button test must see the button as it is
+    // when the loop starts. It sends no message to the window, so the
+    // callback cannot be re-entered while it waits. The result travels with
+    // the queued event. Costs one field read while the setting is off.
+    member private this.captureCaptionDragFallback(hwnd: IntPtr) =
+        if not captionDragEnabled || not (this.isTop hwnd) then None
+        else
+            match CaptionDragTargets.currentPress() with
+            | Some press when press.hwnd = hwnd ->
+                let window = this.os.windowFromHwnd(hwnd)
+                if not window.isWindow || window.isMinimized || window.isMaximized then None
+                else
+                    let held = Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
+                    let current = this.fallbackBoxOf window.bounds
+                    if not (CaptionDragFallback.pressApplies held (Environment.TickCount - press.tick) press.bounds current) then None
+                    else
+                        let band = CaptionDragFallback.edgeBand (int (WinUserApi.GetDpiForWindow(hwnd)))
+                        Some(press, CaptionDragFallback.grabOfPress press.rootHit press.bounds press.x press.y band)
+            | _ -> None
+
+    member private this.endCaptionDragFallback(reason: string) =
+        if fallbackSession.IsSome && fallbackCorrections > 0 then
+            Debug.WriteLine(sprintf "[CaptionDrag] fallback ended hwnd=%X corrections=%d (%s)" (int64 fallbackHwnd) fallbackCorrections reason)
+        fallbackSession <- None
+        fallbackCorrections <- 0
+
+    // Queued START handler. A new loop always replaces a session that is
+    // still settling from the previous one.
+    member private this.beginCaptionDragFallback(hwnd: IntPtr, armed: (CaptionDragTargets.Press * CaptionDragFallback.Grab) option) =
+        this.endCaptionDragFallback "new loop"
+        match armed with
+        | Some(press, grab) when captionDragEnabled ->
+            match CaptionDragFallback.start grab press.bounds with
+            | Some(session) ->
+                fallbackSession <- Some(session)
+                fallbackHwnd <- hwnd
+                fallbackPressSequence <- press.sequence
+                Debug.WriteLine(sprintf "[CaptionDrag] fallback armed hwnd=%X grab=%A rootHit=%A" (int64 hwnd) grab press.rootHit)
+            | None -> ()
+        | _ -> ()
+
+    member private this.finishCaptionDragFallback() =
+        match fallbackSession with
+        | Some(session) ->
+            match CaptionDragFallback.finish this.fallbackNowMs session with
+            | Some(settling) -> fallbackSession <- Some(settling)
+            | None -> this.endCaptionDragFallback "loop ended"
+        | None -> ()
+
+    member private this.isCaptionDragFallbackArmedFor(hwnd: IntPtr) =
+        fallbackSession.IsSome && fallbackHwnd = hwnd
+
+    // Observe the armed window once and put it back if the drag moved it.
+    // Runs for its LOCATIONCHANGEs (see addWindow) and once more at
+    // MOVESIZEEND, always before the placement the tab strip and the sibling
+    // windows follow is saved.
+    member private this.enforceCaptionDragFallback(hwnd: IntPtr) =
+        match fallbackSession with
+        | Some(session) when fallbackHwnd = hwnd ->
+            if not captionDragEnabled || not (this.windows.contains hwnd) || not (this.isTop hwnd) then
+                this.endCaptionDragFallback "window left the top of the group"
+            else
+                let window = this.os.windowFromHwnd(hwnd)
+                let isNormal = window.isWindow && not window.isMinimized && not window.isMaximized
+                let newerPress = CaptionDragTargets.pressSequence() <> fallbackPressSequence
+                let next, correction =
+                    CaptionDragFallback.observe this.fallbackNowMs isNormal newerPress session (this.fallbackBoxOf window.bounds)
+                if correction <> CaptionDragFallback.NoCorrection then
+                    if fallbackCorrections = 0 then
+                        let count = CaptionDragTargets.noteFallback()
+                        Debug.WriteLine(sprintf "[CaptionDrag] fallback engaged #%d hwnd=%X grab=%A" count (int64 hwnd) session.grab)
+                    fallbackCorrections <- fallbackCorrections + 1
+                match next with
+                | Some(s) -> fallbackSession <- Some(s)
+                | None -> this.endCaptionDragFallback "observed the end"
+                // Synchronous, like every other placement call here: the
+                // window's thread is pumping inside its move loop. The move it
+                // causes comes back as a LOCATIONCHANGE that matches the anchor.
+                match correction with
+                | CaptionDragFallback.NoCorrection -> ()
+                | CaptionDragFallback.RestorePosition(x, y) -> window.setPositionOnly x y
+                | CaptionDragFallback.RestoreBounds(b) -> window.move(Rect(Pt(b.x, b.y), Sz(b.width, b.height)))
+        | Some(_) ->
+            // Another window of the group changed. If the armed one is no
+            // longer on top (a tab switch mid-drag), nothing is left to hold.
+            if not (this.isTop fallbackHwnd) then this.endCaptionDragFallback "tab switched"
+        | None -> ()
+
     member this.onEnterMoveSize() =
         inMoveSizeSnapshot <- true
         inMoveSize.set(true)
@@ -997,6 +1139,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         this.updateIsVisible()
 
     member this.onExitMoveSize() =
+        // However the loop ended - MOVESIZEEND, or CASE 777 where the window
+        // leaves the group inside it - the fallback settles or goes.
+        this.finishCaptionDragFallback()
         inMoveSizeSnapshot <- false
         inMoveSize.set(false)
         this.saveTopWindowPlacement()
@@ -1010,7 +1155,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
     member this.shouldShowTabs = shouldShowTabStrip()
 
-    member this.main(hwnd, evt) = this.invokeAsync <| fun() -> this.withUpdate <| fun() ->
+    member this.main(hwnd, evt) =
+        let fallbackPress =
+            if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART then this.captureCaptionDragFallback(hwnd) else None
+        this.dispatchEvent(hwnd, evt, fallbackPress)
+
+    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() ->
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then
@@ -1064,10 +1214,14 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                 this.setTabInfo hwnd
         | WinEvent.EVENT_SYSTEM_MOVESIZESTART ->
             if this.isTop(hwnd) then
+                this.beginCaptionDragFallback(hwnd, fallbackPress)
                 this.onEnterMoveSize()
 
         | WinEvent.EVENT_SYSTEM_MOVESIZEEND ->
-            if this.isTop(hwnd) then 
+            if this.isTop(hwnd) then
+                // Last correction inside the loop, before onExitMoveSize saves
+                // the placement the siblings follow.
+                this.enforceCaptionDragFallback(hwnd)
                 this.onExitMoveSize()
 
         //this is here to detect transitions between maximized and
@@ -1077,6 +1231,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         //so make sure that the window HAD focus before reapplying it
         | WinEvent.EVENT_OBJECT_LOCATIONCHANGE ->
             if this.isTop(hwnd) then
+                // Before either branch saves the placement. Outside the loop
+                // this is the settle time after MOVESIZEEND.
+                this.enforceCaptionDragFallback(hwnd)
                 if inMoveSize.value then
                     // During move/size, update tab position to follow the window
                     this.saveTopWindowPlacement()
@@ -1167,7 +1324,21 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
                         // coalescing) don't need the trailing edge.
                         match evt with
                         | WinEvent.EVENT_OBJECT_LOCATIONCHANGE ->
-                            Helper.conflateWithTrailing interval handler
+                            let throttled = Helper.conflateWithTrailing interval handler
+                            fun() ->
+                                // A window held by the lock fallback is corrected
+                                // on every change, not on the 50 ms throttle, or it
+                                // visibly follows the cursor before jumping back.
+                                // Queued, so the correction's synchronous
+                                // SetWindowPos cannot re-enter this callback, and
+                                // at most one is waiting. Nothing is armed while
+                                // the setting is off.
+                                if this.isCaptionDragFallbackArmedFor(hwnd) && not fallbackCorrectionQueued then
+                                    fallbackCorrectionQueued <- true
+                                    this.invokeAsync <| fun() ->
+                                        fallbackCorrectionQueued <- false
+                                        this.enforceCaptionDragFallback(hwnd)
+                                throttled()
                         | _ -> Helper.conflate interval handler
                     | None -> handler
                 window.setWinEventHook evt handler
@@ -1288,6 +1459,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.destroy() =
         if isDestroyed.value.not then
             isDestroyed.set(true)
+            this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
             this.ts.destroy()
             shellHookWindow.value.iter <| fun d -> d.Dispose()
             winEventHandler.value.iter <| fun d -> d.Dispose()

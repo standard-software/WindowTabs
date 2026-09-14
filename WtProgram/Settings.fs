@@ -593,6 +593,7 @@ type Settings(isStandAlone) as this =
                         hideTabsDelayMilliseconds = settingsJson.getInt32("HideTabsDelayMilliseconds").def(3000)
                         hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
                         hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
+                        lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
                         snapTabHeightMargin = settingsJson.getBool("SnapTabHeightMargin").def(false)
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
                         version = settingsJson.getString("Version").def(String.Empty)
@@ -636,6 +637,7 @@ type Settings(isStandAlone) as this =
                         hideTabsDelayMilliseconds = 3000
                         hideTabsOnFullscreen = true
                         hideTabsWhileMoving = false
+                        lockWindowPosition = false
                         snapTabHeightMargin = false
                         changeTabPositionOnSnap = "change"
                         version = String.Empty
@@ -670,6 +672,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setInt32("HideTabsDelayMilliseconds", settings.hideTabsDelayMilliseconds)
             settingsJson.setBool("HideTabsOnFullscreen", settings.hideTabsOnFullscreen)
             settingsJson.setBool("HideTabsWhileMoving", settings.hideTabsWhileMoving)
+            settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
             settingsJson.setBool("SnapTabHeightMargin", settings.snapTabHeightMargin)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

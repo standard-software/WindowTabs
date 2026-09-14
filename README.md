@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.12_next1**
+Latest version: **ss_2026.09.12_next2**
 
 See [version.md](version.md) for details.
 
@@ -386,6 +386,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Tab position on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - **Vertical tab direction**: choose "Up, or down when it would be off-screen" (default) or "Always down".
 - Configure hiding tabs for full-screen windows, while moving windows, and when tabs face downward.
+- Prevent moving tabbed windows by dragging their title bars, without disabling resizing. Some custom title bars may not be supported.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 

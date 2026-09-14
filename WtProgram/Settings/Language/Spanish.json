@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "Ocultar pestañas cuando la ventana está en pantalla completa",
   "HideTabsWhileMoving": "Ocultar pestañas al mover una ventana",
+  "LockWindowPosition": "Impedir mover ventanas con pestañas",
   "SnapTabHeightMargin": "Agregar margen de alto de pestaña al acoplar",
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",

@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "Ukrywaj karty, gdy okno jest w trybie pełnoekranowym",
   "HideTabsWhileMoving": "Ukrywaj karty podczas przenoszenia okna",
+  "LockWindowPosition": "Blokuj przesuwanie okien z kartami",
   "SnapTabHeightMargin": "Dodaj margines wysokości karty przy przyciąganiu",
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",

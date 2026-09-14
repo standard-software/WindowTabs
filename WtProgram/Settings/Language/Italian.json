@@ -67,6 +67,7 @@
 
   "HideTabsOnFullscreen": "Nascondi le schede quando la finestra è a schermo intero",
   "HideTabsWhileMoving": "Nascondi le schede durante lo spostamento di una finestra",
+  "LockWindowPosition": "Impedisci lo spostamento delle finestre con schede",
   "SnapTabHeightMargin": "Aggiungi margine per l'altezza delle schede all'aggancio",
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",
