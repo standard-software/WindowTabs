@@ -32,7 +32,7 @@ type ShortcutKeysView() =
 
     let hotKeyEditor () =
         let editor = HotKeyEditor() :> IPropEditor
-        editor.control.Margin <- Padding(0, 5, 0, 5)
+        editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         editor
 
     // A hot key field that reads and writes one settings key. The value is
@@ -134,28 +134,26 @@ type ShortcutKeysView() =
         for _ in 1 .. 3 do
             table.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore          // number
             table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)) |> ignore   // field
-        for _ in 1 .. 3 do
-            table.RowStyles.Add(RowStyle(SizeType.Absolute, 35.0f)) |> ignore
-        // Five pixels of section space above Ctrl and below Alt. The margins
-        // and row heights grow together so neither caption is clipped.
-        table.RowStyles.Add(RowStyle(SizeType.Absolute, 40.0f)) |> ignore
-        table.RowStyles.Add(RowStyle(SizeType.Absolute, 40.0f)) |> ignore
+        // Five 35-px rows, the same grid as every other settings tab, so the
+        // shortcut rows below line up with the Behavior tab's rows 6, 7 and 8.
+        for _ in 1 .. 5 do
+            table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 UIHelper.settingsRowHeightPx)) |> ignore
         for (n, editor) in numberEditors do
             let row = (n - 1) / 3
             let column = ((n - 1) % 3) * 2
             let label = UIHelper.label (string n)
             label.Anchor <- AnchorStyles.Left
-            label.Margin <- Padding(0, 5, 6, 5)
+            label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 6, UIHelper.settingsRowMarginPx)
             editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
-            editor.control.Margin <- Padding(0, 5, 12, 5)
+            editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 12, UIHelper.settingsRowMarginPx)
             table.Controls.Add(label, column, row)
             table.Controls.Add(editor.control, column + 1, row)
         table.Controls.Add(ctrlCheck, 0, 3)
         table.SetColumnSpan(ctrlCheck, 6)
-        ctrlCheck.Margin <- Padding(0, 10, 0, 5)
+        ctrlCheck.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         table.Controls.Add(altCheck, 0, 4)
         table.SetColumnSpan(altCheck, 6)
-        altCheck.Margin <- Padding(0, 5, 0, 10)
+        altCheck.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         table
 
     do
@@ -191,7 +189,8 @@ type ShortcutKeysView() =
             ]))
         // The nested table itself owns five complete 35-px rows. An additional
         // outer margin would make the following shortcut start off-grid.
-        activateTabPanel.Margin <- Padding(0)
+        // Half a settings row of space before Next Tab.
+        activateTabPanel.Margin <- Padding(0, 0, 0, UIHelper.settingsRowHeightPx / 2)
         form.Dock <- DockStyle.Fill
         // Same padding as the Appearance and Behavior tabs.
         form.Padding <- Padding(10)

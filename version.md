@@ -5,6 +5,7 @@
 ## version ss_2026.09.12_next3
 
 - Add an option to snap a window to half of the display when a tab is dragged out of its group: the side of the display's diagonals the drop lands on picks left, right, top or bottom.
+- Align the settings tabs on one row grid: the same margins and row height on the Appearance, Behavior and Shortcut Keys tabs, with captions centred on their inputs.
 
 ## version ss_2026.09.12_next2
 

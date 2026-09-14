@@ -557,7 +557,12 @@ module UIHelper =
     // either.
     // AppearanceView uses 25 px of content plus 5 px above and below. Keep
     // forms on that same 35-px vertical grid.
-    let private rowContentHeightPx = 25
+    // Settings rows: every tab lays its rows out on this vertical grid
+    // (design pixels at 96 DPI). A row is its content height plus the same
+    // top and bottom margin on every caption and input.
+    let settingsRowHeightPx = 32
+    let settingsRowMarginPx = 4
+    let private rowContentHeightPx = settingsRowHeightPx - 2 * settingsRowMarginPx
 
     // centerRows: label and input centred on the same line. The settings tabs
     // keep the old layout (label held down by a top margin, input at the top
@@ -600,9 +605,9 @@ module UIHelper =
                 // multi-row option group: its caption belongs beside the first
                 // option, not vertically centred beside the whole group.
                 label.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left
-                label.Margin <- Padding(0,5,0,5)
+                label.Margin <- Padding(0, settingsRowMarginPx, 0, settingsRowMarginPx)
                 control.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right
-                control.Margin <- Padding(0,5,0,5)
+                control.Margin <- Padding(0, settingsRowMarginPx, 0, settingsRowMarginPx)
             // Keep the historical 35-px minimum row height. Wrapped labels can
             // still make an AutoSize row taller.
             label.MinimumSize <- Size(0, rowContentHeightPx)
