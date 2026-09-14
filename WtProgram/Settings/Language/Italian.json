@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Nascondi le schede durante lo spostamento di una finestra",
   "LockWindowPosition": "Impedisci lo spostamento delle finestre con schede",
   "SnapTabHeightMargin": "Aggiungi margine per l'altezza delle schede all'aggancio",
+  "SnapOnDragDetach": "Aggancia al bordo dello schermo trascinando una scheda in una nuova finestra",
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",
 

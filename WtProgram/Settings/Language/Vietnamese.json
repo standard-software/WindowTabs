@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Ẩn thẻ khi di chuyển cửa sổ",
   "LockWindowPosition": "Ngăn di chuyển cửa sổ có thẻ",
   "SnapTabHeightMargin": "Thêm lề bằng chiều cao thẻ khi ghép",
+  "SnapOnDragDetach": "Ghép vào cạnh màn hình khi kéo thẻ ra thành cửa sổ mới",
   "NextTab": "Thẻ tiếp theo",
   "PrevTab": "Thẻ trước",
 

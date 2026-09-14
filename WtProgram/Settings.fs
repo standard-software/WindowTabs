@@ -596,6 +596,7 @@ type Settings(isStandAlone) as this =
                         lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
                         snapTabHeightMargin = settingsJson.getBool("SnapTabHeightMargin").def(false)
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
+                        snapOnDragDetach = settingsJson.getBool("SnapOnDragDetach").def(false)
                         version = settingsJson.getString("Version").def(String.Empty)
                         tabAppearance =
                             try
@@ -640,6 +641,7 @@ type Settings(isStandAlone) as this =
                         lockWindowPosition = false
                         snapTabHeightMargin = false
                         changeTabPositionOnSnap = "change"
+                        snapOnDragDetach = false
                         version = String.Empty
                         tabAppearance = this.defaultTabAppearance
                     }
@@ -675,6 +677,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
             settingsJson.setBool("SnapTabHeightMargin", settings.snapTabHeightMargin)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
+            settingsJson.setBool("SnapOnDragDetach", settings.snapOnDragDetach)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)
             settingsJson.setStringArray("ExcludedPaths", settings.excludedPaths.items)
             settingsJson.setStringArray("AutoGroupingPaths", settings.autoGroupingPaths.items)

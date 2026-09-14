@@ -3097,10 +3097,10 @@ namespace Bemo
         public static extern int GetDpiForSystem();
         
         [DllImport("user32.dll")]
-        public static extern int GetWindowDpiAwarenessContext(IntPtr hwnd);
+        public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hwnd);
         
         [DllImport("user32.dll")]
-        public static extern int GetAwarenessFromDpiAwarenessContext(int dpiContext);
+        public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr dpiContext);
         
         [DllImport("shcore.dll")]
         public static extern int GetProcessDpiAwareness(IntPtr hprocess, out int awareness);

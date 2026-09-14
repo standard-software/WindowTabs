@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Ukrywaj karty podczas przenoszenia okna",
   "LockWindowPosition": "Blokuj przesuwanie okien z kartami",
   "SnapTabHeightMargin": "Dodaj margines wysokości karty przy przyciąganiu",
+  "SnapOnDragDetach": "Przyciągaj do krawędzi ekranu przy przeciąganiu karty do nowego okna",
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",
 

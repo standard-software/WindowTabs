@@ -154,6 +154,8 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/CaptionDragPolicy.fs" />
     <Compile Include="Shared/CaptionDragFallback.fs" />
     <Compile Include="Shared/CaptionDragTargets.fs" />
+    <Compile Include="Shared/SnapGeometry.fs" />
+    <Compile Include="Shared/SnapDrop.fs" />
     <Compile Include="Shared/HotKeyPolicy.fs" />
     <Compile Include="Shared/LaunchPath.fs" />
     <Compile Include="Shared/Dpi.fs" />

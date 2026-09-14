@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Pencere taşınırken sekmeleri gizle",
   "LockWindowPosition": "Sekmeli pencerelerin taşınmasını engelle",
   "SnapTabHeightMargin": "Yaslarken sekme yüksekliği kadar boşluk ekle",
+  "SnapOnDragDetach": "Sekmeyi yeni pencereye sürükleyip ayırırken ekran kenarına yasla",
   "NextTab": "Sonraki Sekme",
   "PrevTab": "Önceki Sekme",
 

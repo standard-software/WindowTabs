@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next3
+
+- Add an option to snap a window to half of the display when a tab is dragged out of its group: the side of the display's diagonals the drop lands on picks left, right, top or bottom.
+
 ## version ss_2026.09.12_next2
 
 - Add an option to prevent moving tabbed windows by dragging their title bars, while keeping resizing available. Some custom title bars may not be supported.

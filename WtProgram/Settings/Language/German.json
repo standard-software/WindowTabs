@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Tabs beim Verschieben eines Fensters ausblenden",
   "LockWindowPosition": "Verschieben von Fenstern mit Tabs verhindern",
   "SnapTabHeightMargin": "Beim Andocken Rand für Tab-Höhe hinzufügen",
+  "SnapOnDragDetach": "Beim Herausziehen eines Tabs in ein neues Fenster am Bildschirmrand andocken",
   "NextTab": "Nächster Tab",
   "PrevTab": "Vorheriger Tab",
 

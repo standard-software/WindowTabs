@@ -22,6 +22,15 @@ and TabDragInfo = {
     // the selected tabs across along with the dragged tab.
     sourceGroupHwnd: IntPtr
     selectedHwnds: List<IntPtr>
+    // Snap on drag-detach (Desktop.dragDrop): what the source group knew at
+    // drag start. dragExit removes the tabs from the source before the drop,
+    // and a source whose tabs all left may already be gone by then.
+    //   sourceSnapTabHeightMargin: the source group's per-group snap margin.
+    //   sourceTabAligns: alignment of the dragged tab and each selected tab.
+    // Capture the restore dimensions before dragExit parks/restores the window.
+    sourceRestoreSize: Sz
+    sourceSnapTabHeightMargin: bool
+    sourceTabAligns: List<TabAlign>
     }
 
 and TabStripPlacment = {

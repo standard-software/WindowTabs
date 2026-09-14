@@ -1091,50 +1091,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         with | _ -> 0
 
     member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle) =
-        let tabHeight = this.getTabHeightForSnap()
-        if tabHeight > 0 then
-            System.Drawing.Rectangle(workArea.X, workArea.Y + tabHeight, workArea.Width, workArea.Height - tabHeight)
-        else
-            workArea
+        let (x, y, width, height) =
+            SnapGeometry.reserveTabHeight (this.getTabHeightForSnap()) (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+        System.Drawing.Rectangle(x, y, width, height)
 
     member private this.calculateSnapBounds(
         snapDirection: string,
         workArea: System.Drawing.Rectangle,
         currentWidth: int,
         currentHeight: int) : (int * int * int * int) =
-        // Returns (x, y, width, height) for snap position
-        // Snap right/left: maintain width, expand height to full
-        // Snap top/bottom: maintain height, expand width to full
+        // Keep-size menu geometry, also used for the drag staging position.
+        // Variant B uses the percentage helper below for its final rectangle.
         let workArea = this.adjustWorkAreaForTabHeight(workArea)
-        let clampedWidth = min currentWidth workArea.Width
-        let clampedHeight = min currentHeight workArea.Height
-        match snapDirection with
-        | "snapright" ->
-            let newWidth = clampedWidth
-            let newHeight = workArea.Height
-            let x = workArea.Right - newWidth
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapleft" ->
-            let newWidth = clampedWidth
-            let newHeight = workArea.Height
-            let x = workArea.Left
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snaptop" ->
-            let newWidth = workArea.Width
-            let newHeight = clampedHeight
-            let x = workArea.Left
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapbottom" ->
-            let newWidth = workArea.Width
-            let newHeight = clampedHeight
-            let x = workArea.Left
-            let y = workArea.Bottom - newHeight
-            (x, y, newWidth, newHeight)
-        | _ ->
-            (workArea.Left, workArea.Top, clampedWidth, clampedHeight)
+        SnapGeometry.snapBounds snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
 
     member private this.calculateSnapBoundsWithPercent(
         snapDirection: string,
@@ -1148,78 +1117,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 this.adjustWorkAreaForTabHeight(System.Windows.Forms.SystemInformation.VirtualScreen)
             else
                 this.adjustWorkAreaForTabHeight(workArea)
-        let percentFloat = float(percent) / 100.0
-        match snapDirection with
-        | "snapright" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = workArea.Height
-            let x = workArea.Right - newWidth
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapleft" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = workArea.Height
-            let x = workArea.Left
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snaptop" ->
-            let newWidth = workArea.Width
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapbottom" ->
-            let newWidth = workArea.Width
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left
-            let y = workArea.Bottom - newHeight
-            (x, y, newWidth, newHeight)
-        | "snaptopleft" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snaptopright" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Right - newWidth
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapbottomleft" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left
-            let y = workArea.Bottom - newHeight
-            (x, y, newWidth, newHeight)
-        | "snapbottomright" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Right - newWidth
-            let y = workArea.Bottom - newHeight
-            (x, y, newWidth, newHeight)
-        | "snapcenter" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left + (workArea.Width - newWidth) / 2
-            let y = workArea.Top + (workArea.Height - newHeight) / 2
-            (x, y, newWidth, newHeight)
-        | "snapcenterhorizontal" ->
-            let newWidth = int(float(workArea.Width) * percentFloat)
-            let newHeight = workArea.Height
-            let x = workArea.Left + (workArea.Width - newWidth) / 2
-            let y = workArea.Top
-            (x, y, newWidth, newHeight)
-        | "snapcentervertical" ->
-            let newWidth = workArea.Width
-            let newHeight = int(float(workArea.Height) * percentFloat)
-            let x = workArea.Left
-            let y = workArea.Top + (workArea.Height - newHeight) / 2
-            (x, y, newWidth, newHeight)
-        | "snapmaximizedisplay" | "snapmaximizedesktop" ->
-            (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
-        | _ ->
-            (workArea.Left, workArea.Top, workArea.Width, workArea.Height)
+        SnapGeometry.calculateSnapBoundsWithPercent snapDirection percent
+            (workArea.X, workArea.Y, workArea.Width, workArea.Height)
 
     member private this.detachTabToSnap(hwnd: IntPtr, snapDirection: string) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
@@ -1496,19 +1395,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // alignment (in-place group snap updates the visible tabs; detach persists
     // it so the freshly formed group inherits it). tabHwnds are read from the
     // current group for the uniformity check, so this must run before detaching.
+    // The rule itself is SnapGeometry.realignment, shared with Desktop.dragDrop.
     member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
         if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
-            let desiredOpt =
-                match snapDirection with
-                | "snapleft" -> Some TopLeft
-                | "snapright" -> Some TopRight
-                | _ -> None
-            match desiredOpt with
-            | Some desired ->
-                let allLeft = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
-                let allRight = tabHwnds |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
-                if allLeft || allRight then
-                    setAlignAll tabHwnds desired
+            let alignments = tabHwnds |> List.map group.getTabAlign
+            match SnapGeometry.realignment true snapDirection alignments TopLeft TopRight with
+            | Some desired -> setAlignAll tabHwnds desired
             | None -> ()
 
     // Realign the whole current group after an in-place left/right snap.
@@ -3190,7 +3082,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                       imageOffset = imageOffset
                                       tabInfo = tabInfo
                                       sourceGroupHwnd = group.hwnd
-                                      selectedHwnds = selectedSnapshot })
+                                      selectedHwnds = selectedSnapshot
+                                      sourceRestoreSize =
+                                          let window = os.windowFromHwnd(hwnd)
+                                          if window.isMaximized || window.isMinimized then window.placement.rcNormalPosition.size
+                                          else window.bounds.size
+                                      sourceSnapTabHeightMargin = group.snapTabHeightMargin
+                                      sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign })
                             Services.dragDrop.beginDrag(this.ts.hwnd, dragImage, imageOffset, ptScreen, dragInfo)
                 | MouseMiddle ->
                     group.clearSelected()
