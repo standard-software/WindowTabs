@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "移动窗口时隐藏标签页",
   "LockWindowPosition": "禁止移动标签窗口",
   "SnapTabHeightMargin": "吸附时为标签页高度留出边距",
+  "SnapOnDragDetach": "拖出标签页创建新窗口时，按放下位置吸附到屏幕边缘",
   "NextTab": "下一个标签页",
   "PrevTab": "上一个标签页",
 

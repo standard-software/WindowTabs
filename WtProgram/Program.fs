@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next2"
+    let version = "ss_2026.09.12_next3"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -318,6 +318,7 @@ type Program() as this =
     let inSessionEnd = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
+    let pendingDragSnapMargins = Cell.create(Map2<IntPtr, bool>())
     // Case C: hwnds recently placed into a group via the multi-select
     // drag-detach path. removeUntabableWindows skips these for a short
     // grace period so the dragExit off-screen parking doesn't cause the
@@ -1754,6 +1755,11 @@ type Program() as this =
         //need to add this now so we don't end up creating another group for it while waiting for the WgnWindowAdded notification
         isDroppedAndAwaitingGrouping.map(fun s -> s.remove hwnd)
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
+        // Consume only the snap-drag metadata; keep the normal drop/regroup,
+        // closed-tab and saved-alignment path for single-tab detach.
+        let snapMargin = pendingDragSnapMargins.value.tryFind(hwnd)
+        pendingDragSnapMargins.map(fun m -> m.remove hwnd)
+        if isNewGroup then snapMargin |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
         group.addWindow(hwnd, withDelay)
 
         // Check if this is a "New Tab" launch - position after the invoking tab
@@ -2836,8 +2842,12 @@ type Program() as this =
                 hwnds |> List.fold (fun acc h -> acc.add h now) m)
 
     interface IDesktopNotification with
-        member x.dragDrop(hwnd) =
+        member x.dragDrop(hwnd, snapMargin) =
             DragTrace.log (fun () -> sprintf "Program.dragDrop: hwnd=%X" (hwnd.ToInt64()))
+            pendingDragSnapMargins.map <| fun m ->
+                match snapMargin with
+                | Some margin -> m.add hwnd margin
+                | None -> m.remove hwnd
             isDroppedAndAwaitingGrouping.map <| fun s -> s.add hwnd
 
         member x.dragEnd() = 

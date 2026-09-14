@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "Ocultar pestañas al mover una ventana",
   "LockWindowPosition": "Impedir mover ventanas con pestañas",
   "SnapTabHeightMargin": "Agregar margen de alto de pestaña al acoplar",
+  "SnapOnDragDetach": "Acoplar al borde de la pantalla al arrastrar una pestaña a una nueva ventana",
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",
 

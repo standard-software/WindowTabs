@@ -69,6 +69,7 @@
   "HideTabsWhileMoving": "ウィンドウ移動中はタブを非表示にするで",
   "LockWindowPosition": "タブ化したウィンドウを移動させへん",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあけるで",
+  "SnapOnDragDetach": "タブ分離したとき落とした位置でスナップするで",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
 

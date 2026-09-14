@@ -73,6 +73,7 @@ module Localization_English =
         ("HideTabsWhileMoving", "Hide tabs while moving a window")
         ("LockWindowPosition", "Prevent moving tabbed windows")
         ("SnapTabHeightMargin", "Add tab height margin when snapping")
+        ("SnapOnDragDetach", "Snap detached tabs by drop position")
         ("NextTab", "Next Tab")
         ("PrevTab", "Previous Tab")
 

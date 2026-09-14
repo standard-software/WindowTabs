@@ -34,7 +34,7 @@ let defaults =
     FSharpValue.MakeRecord(typeof<TabAppearanceInfo>, fields) :?> TabAppearanceInfo
 let mutable appearance = defaults
 for name in ["runAtStartup"; "hideInactiveTabs"; "enableHoverActivate";
-             "hideTabsOnFullscreen"; "hideTabsWhileMoving"; "lockWindowPosition"; "snapTabHeightMargin";
+             "hideTabsOnFullscreen"; "hideTabsWhileMoving"; "lockWindowPosition"; "snapTabHeightMargin"; "snapOnDragDetach";
              "enableCtrlNumberHotKey"; "enableAltNumberHotKey"] do values.[name] <- box false
 for name, value in ["tabPositionByDefault", "TopLeft"; "hideTabsWhenDownByDefault", "never";
                     "changeTabPositionOnSnap", "change"; "tabVerticalDirection", "auto"] do
@@ -119,10 +119,11 @@ check "dependent controls return to disabled/custom states" (not (behaviorContro
 check "return refresh remains read-only" (writes = baselineWrites)
 // Check every Behavior row, not just one representative checkbox.
 let behaviorTable = (behavior :> ISettingsView).control :?> TableLayoutPanel
-check "Behavior contains the audited twelve rows" (behaviorTable.RowCount = 12)
+check "Behavior contains the audited thirteen rows" (behaviorTable.RowCount = 13)
 let boolRows = [0, "runAtStartup"; 1, "hideInactiveTabs"; 2, "filter";
                 3, "enableHoverActivate"; 8, "hideTabsOnFullscreen";
-                9, "hideTabsWhileMoving"; 10, "snapTabHeightMargin"; 11, "lockWindowPosition"]
+                9, "hideTabsWhileMoving"; 10, "snapTabHeightMargin"; 11, "lockWindowPosition";
+                12, "snapOnDragDetach"]
 for row, key in boolRows do
     let checkbox = behaviorTable.GetControlFromPosition(1, row) :?> CheckBox
     for expected in [false; true; false] do

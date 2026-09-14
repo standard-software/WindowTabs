@@ -230,6 +230,7 @@ type HotKeyView() =
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
             ("LockWindowPosition", lockPositionCheckbox)
+            ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
         ])
 
         let formPanel = UIHelper.form fields
@@ -243,7 +244,8 @@ type HotKeyView() =
         //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
         //            6=tabVerticalDirection, 7=hideTabsWhenDown,
         //            8=hideTabsOnFullscreen, 9=hideTabsWhileMoving,
-        //            10=snapTabHeightMargin, 11=lockWindowPosition
+        //            10=snapTabHeightMargin, 11=lockWindowPosition,
+        //            12=snapOnDragDetach
         let hideTabsRowIndex = 7
 
         // Let the radio-group row auto-size based on content.

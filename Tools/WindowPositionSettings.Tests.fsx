@@ -34,7 +34,7 @@ let defaults =
     FSharpValue.MakeRecord(typeof<TabAppearanceInfo>, fields) :?> TabAppearanceInfo
 let mutable appearance = defaults
 for name in ["runAtStartup"; "hideInactiveTabs"; "enableHoverActivate";
-             "hideTabsOnFullscreen"; "hideTabsWhileMoving"; "lockWindowPosition"; "snapTabHeightMargin";
+             "hideTabsOnFullscreen"; "hideTabsWhileMoving"; "lockWindowPosition"; "snapTabHeightMargin"; "snapOnDragDetach";
              "enableCtrlNumberHotKey"; "enableAltNumberHotKey"] do values.[name] <- box false
 for name, value in ["tabPositionByDefault", "TopLeft"; "hideTabsWhenDownByDefault", "never";
                     "changeTabPositionOnSnap", "change"; "tabVerticalDirection", "auto"] do
@@ -76,7 +76,7 @@ let behavior = HotKeyView()
 let table = (behavior :> ISettingsView).control :?> TableLayoutPanel
 let checkbox = table.GetControlFromPosition(1, 11) :?> CheckBox
 check "lock position checkbox defaults to OFF" (not checkbox.Checked)
-check "behavior has twelve rows" (table.RowCount = 12)
+check "behavior has thirteen rows (lock position at 11, detach snap at 12)" (table.RowCount = 13)
 let beforeRefresh = writes
 values.["lockWindowPosition"] <- box true
 behavior.refresh()
