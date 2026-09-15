@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next8
+
+- Keep the tab groups across a spell of being disabled: the ten-second save no longer writes an empty desktop over the record of them while WindowTabs is off, switching it back on rebuilds them from that record after a restart, and a start-up with the box ticked no longer rebuilds them behind it.
+
 ## version ss_2026.09.12_next7
 
 - Keep a tab menu open when an item that only opens a submenu is clicked: on a menu whose group is not the active window, that click left the desktop with no foreground window and Windows took the whole menu down at the next submenu. Such clicks, and right-clicks anywhere on the menu, are dropped - neither does anything in a menu.

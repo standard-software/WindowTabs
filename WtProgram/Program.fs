@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next7"
+    let version = "ss_2026.09.12_next8"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -1386,8 +1386,11 @@ type Program() as this =
                 DragTrace.log (fun () -> sprintf "updateAppWindows #%d: isDragging=%b suspended=%b disabled=%b shutdown=%b restorePending=%b"
                                               updateTraceCount this.desktop.isDragging this.isTabMonitoringSuspended isDisabledCell.value inShutdown.value needsRestoreOnStartup.value)
         if this.desktop.isDragging.not then
-            // If restoration is needed on startup, do it first before auto-grouping
-            if needsRestoreOnStartup.value then
+            // If restoration is needed on startup, do it first before auto-grouping.
+            // Not while disabled: the snapshot is kept for the moment the user
+            // switches WindowTabs back on, and rebuilding the groups behind a
+            // ticked "disable" box is exactly what the switch is there to prevent.
+            if needsRestoreOnStartup.value && isDisabledCell.value.not then
                 this.restoreTabGroupsFromSettings()
                 needsRestoreOnStartup.set(false)
 
@@ -2203,6 +2206,11 @@ type Program() as this =
                  align = windowAlignment.value.tryFind(hwnd) |> Option.map savedAlignOfTabAlign }
 
     member this.saveTabGroupsToSettings() =
+        // Nothing is grouped while WindowTabs is disabled, so a save here would
+        // replace the record of the user's groups with an empty desktop - and
+        // that record is all that is left to rebuild them from after a restart.
+        // The last snapshot from before the switch stays frozen instead.
+        if isDisabledCell.value then () else
         try
             let json = settingsManager.settingsJson
             let saveNow = DateTime.Now
@@ -2745,6 +2753,13 @@ type Program() as this =
 
                 // Suspend tab monitoring to prevent auto-grouping during restore
                 this.isTabMonitoringSuspended <- true
+
+                // After a restart there is nothing in memory to restore from -
+                // the switch was thrown in an earlier run - so the groups come
+                // back from the frozen snapshot in the settings, the same way
+                // they do when WindowTabs starts.
+                if savedTabGroups.value.length = 0 then
+                    this.restoreTabGroupsFromSettings()
 
                 // Restore saved tab groups
                 savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, pinnedHwnds) ->
