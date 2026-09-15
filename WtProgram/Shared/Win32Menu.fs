@@ -263,18 +263,51 @@ module Win32Menu =
             |> Map.exists (fun _ w ->
                 let r = windowRect w
                 x >= r.Left && x < r.Right && y >= r.Top && y < r.Bottom)
+
+        // Is the point on an item that only opens a submenu? Such an item does
+        // nothing when clicked - hovering opens it - so the press can be
+        // dropped, and dropping it is what keeps Windows from losing the
+        // foreground window under a menu whose owner is not the active window.
+        let pointOverSubMenuParent (x: int) (y: int) =
+            visibleMenuWindows()
+            |> Map.exists (fun hMenu w ->
+                let r = windowRect w
+                if x < r.Left || x >= r.Right || y < r.Top || y >= r.Bottom then false
+                else
+                    let count = WinUserApi.GetMenuItemCount(hMenu)
+                    seq { 0 .. count - 1 }
+                    |> Seq.exists (fun i ->
+                        let mutable ir = RECT()
+                        WinUserApi.GetMenuItemRect(hwnd, hMenu, i, &ir)
+                        && x >= ir.Left && x < ir.Right && y >= ir.Top && y < ir.Bottom
+                        && WinUserApi.GetSubMenu(hMenu, i) <> IntPtr.Zero))
+        // A right-click ON the menu does nothing in Windows menus, but on a menu
+        // whose owner is not the foreground window it puts the desktop into
+        // "no foreground window" - and the next submenu to open from there is
+        // taken down together with the whole menu. The press is swallowed
+        // instead, so that state is never entered.
         let mouseHookProc = HOOKPROC(fun nCode wParam lParam ->
+            let mutable swallow = false
             if nCode >= 0 then
                 try
                     let msg = wParam.ToInt32()
-                    // WM_LBUTTONDOWN, WM_RBUTTONDOWN, WM_MBUTTONDOWN, WM_XBUTTONDOWN
-                    if msg = 0x0201 || msg = 0x0204 || msg = 0x0207 || msg = 0x020B then
-                        // MSLLHOOKSTRUCT starts with the point, in physical pixels
-                        let x = Marshal.ReadInt32(lParam, 0)
-                        let y = Marshal.ReadInt32(lParam, 4)
+                    // MSLLHOOKSTRUCT starts with the point, in physical pixels
+                    let x = Marshal.ReadInt32(lParam, 0)
+                    let y = Marshal.ReadInt32(lParam, 4)
+                    // WM_RBUTTONDOWN, WM_RBUTTONUP, WM_RBUTTONDBLCLK
+                    if msg = 0x0204 || msg = 0x0205 || msg = 0x0206 then
+                        if pointOverMenu x y then swallow <- true
+                        elif msg = 0x0204 then EndMenu() |> ignore
+                    // WM_LBUTTONDOWN, WM_LBUTTONUP, WM_LBUTTONDBLCLK
+                    elif msg = 0x0201 || msg = 0x0202 || msg = 0x0203 then
+                        if pointOverSubMenuParent x y then swallow <- true
+                        elif msg = 0x0201 && not (pointOverMenu x y) then EndMenu() |> ignore
+                    // WM_MBUTTONDOWN, WM_XBUTTONDOWN
+                    elif msg = 0x0207 || msg = 0x020B then
                         if not (pointOverMenu x y) then EndMenu() |> ignore
                 with _ -> ()
-            WinUserApi.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam))
+            if swallow then 1
+            else WinUserApi.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam))
         let mouseHookProcHandle = GCHandle.Alloc(mouseHookProc)
 
         // Timer to cache cursor position and item rects while menu is displayed

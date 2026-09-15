@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next7
+
+- Keep a tab menu open when an item that only opens a submenu is clicked: on a menu whose group is not the active window, that click left the desktop with no foreground window and Windows took the whole menu down at the next submenu. Such clicks, and right-clicks anywhere on the menu, are dropped - neither does anything in a menu.
+
 ## version ss_2026.09.12_next6
 
 - Keep a tab menu open when a submenu is opened from its parent item: Windows reports no foreground window for a moment there, which was read as a switch to another window.
