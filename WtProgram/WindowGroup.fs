@@ -360,10 +360,16 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // return different scales. Callers name the scale they mean.)
 
     member private this.withUpdate f =
-        Cell.beginUpdate()
-        let result = f()
-        Cell.endUpdate()
-        result
+        let run () =
+            Cell.beginUpdate()
+            let result = f()
+            Cell.endUpdate()
+            result
+        // The strip keeps its own cell scope; hold its renders back as well,
+        // so everything this update pushes into it is drawn once at the end.
+        match !_ts with
+        | Some(ts: TabStrip) -> ts.batch run
+        | None -> run()
 
     member this.invokeSync f =
         invoker.invoke (fun() -> this.withUpdate f)

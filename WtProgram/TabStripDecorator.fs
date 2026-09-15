@@ -157,6 +157,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let iconClickProtectUntil = ref System.DateTime.MinValue
     let iconClickHideProtection = System.TimeSpan.FromSeconds(1.0)
     let firstClickTab = ref None  // Track the tab that was clicked first in potential double-click
+    // What the last groupInfos entry was built from, so the periodic refresh
+    // rebuilds the icon bitmaps only when the tabs actually changed.
+    let mutable groupInfoSource : (IntPtr list * string list * obj * obj) option = None
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
@@ -191,37 +194,50 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     tabs.list |> List.map (fun (Tab(hwnd)) -> hwnd)
                 let firstTabInfo =
                     if tabs.count > 0 then Some(this.ts.tabInfo(tabs.at(0))) else None
-                // 32 px, for menus drawn above 100%. Win32Menu resizes this to
-                // 16 px * the menu monitor's scale, so a scaled menu SHRINKS a
-                // large picture instead of stretching a 16 px one - which is
-                // precisely the blur this change removes everywhere else.
-                let firstTabIcon =
-                    firstTabInfo |> Option.bind (fun info ->
-                        try
-                            let source =
-                                if Object.ReferenceEquals(info.iconBig, SystemIcons.Application)
-                                then info.iconSmall else info.iconBig
-                            Some(ScaledIcon.at source 32 |> fun i -> i.ToBitmap().img.resize(Sz(32,32)))
-                        with _ -> None)
-                // The unchanged, pre-DPI-work expression. A 100% monitor must
-                // show the icon the application actually drew for 16 px, not a
-                // 32 px picture reduced to 16 - many applications simplify
-                // their small icon rather than scale it down, so the two are
-                // visibly different pictures, and "100% is untouched" has to
-                // hold for the context menu as well as for the strip.
-                let firstTabIconSmall =
-                    firstTabInfo |> Option.bind (fun info ->
-                        try Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
-                        with _ -> None)
-                let info = {
-                    hwnd = group.hwnd
-                    tabNames = tabNames
-                    tabCount = tabs.count
-                    firstTabIcon = firstTabIcon
-                    firstTabIconSmall = firstTabIconSmall
-                    tabHwnds = tabHwnds
-                }
-                lock groupInfos (fun () -> groupInfos.[group.hwnd] <- info)
+                let source =
+                    tabHwnds, tabNames,
+                    (firstTabInfo |> Option.map (fun info -> box info.iconSmall) |> Option.toObj),
+                    (firstTabInfo |> Option.map (fun info -> box info.iconBig) |> Option.toObj)
+                let unchanged =
+                    match groupInfoSource with
+                    | Some(hwnds, names, small, big) ->
+                        let (h, n, s, b) = source
+                        hwnds = h && names = n && Object.ReferenceEquals(small, s) && Object.ReferenceEquals(big, b)
+                        && lock groupInfos (fun () -> groupInfos.ContainsKey(group.hwnd))
+                    | None -> false
+                if not unchanged then
+                    groupInfoSource <- Some(source)
+                    // 32 px, for menus drawn above 100%. Win32Menu resizes this to
+                    // 16 px * the menu monitor's scale, so a scaled menu SHRINKS a
+                    // large picture instead of stretching a 16 px one - which is
+                    // precisely the blur this change removes everywhere else.
+                    let firstTabIcon =
+                        firstTabInfo |> Option.bind (fun info ->
+                            try
+                                let source =
+                                    if Object.ReferenceEquals(info.iconBig, SystemIcons.Application)
+                                    then info.iconSmall else info.iconBig
+                                Some(ScaledIcon.at source 32 |> fun i -> i.ToBitmap().img.resize(Sz(32,32)))
+                            with _ -> None)
+                    // The unchanged, pre-DPI-work expression. A 100% monitor must
+                    // show the icon the application actually drew for 16 px, not a
+                    // 32 px picture reduced to 16 - many applications simplify
+                    // their small icon rather than scale it down, so the two are
+                    // visibly different pictures, and "100% is untouched" has to
+                    // hold for the context menu as well as for the strip.
+                    let firstTabIconSmall =
+                        firstTabInfo |> Option.bind (fun info ->
+                            try Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
+                            with _ -> None)
+                    let info = {
+                        hwnd = group.hwnd
+                        tabNames = tabNames
+                        tabCount = tabs.count
+                        firstTabIcon = firstTabIcon
+                        firstTabIconSmall = firstTabIconSmall
+                        tabHwnds = tabHwnds
+                    }
+                    lock groupInfos (fun () -> groupInfos.[group.hwnd] <- info)
         with _ -> ()
 
     member private this.init() =
@@ -235,6 +251,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         dropTarget.set(Some(OleDropTarget(this.ts)))
         
         this.initAutoHide()
+
+        // Other groups' tab menus list this group by the names and icon in
+        // groupInfos. Refreshing the entry here, on this group's own thread,
+        // lets a menu read it at once; the menu used to wait on every other
+        // group's thread while it was being built. Up to a second stale is
+        // fine for a menu label.
+        this.updateGroupInfo()
+        let groupInfoTimer = new System.Windows.Forms.Timer(Interval = 1000)
+        groupInfoTimer.Tick.Add(fun _ -> this.updateGroupInfo())
+        groupInfoTimer.Start()
+        group.exited.Add <| fun() -> groupInfoTimer.Stop()
 
         let capturedHwnd = ref None
 
@@ -317,7 +344,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.updateTsSlide() =
         this.ts.slide <- this.tabSlide
 
-    member private this.updateTsPlacement() =
+    member private this.updateTsPlacement() = this.ts.batch <| fun () ->
         if group.bounds.value.IsNone then
             this.ts.visible <- false
         else
@@ -1788,27 +1815,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Item 3: "New window (link to group)" submenu — launch as a new tab docked into an existing other group
         let newWindowLinkGroupItem =
-            let allDecorators = lock decorators (fun () ->
-                decorators.Values
-                |> List.ofSeq
-                |> List.filter (fun d ->
-                    try
-                        d.ts.hwnd <> IntPtr.Zero &&
-                        WinUserApi.IsWindow(d.group.hwnd) &&
-                        WinUserApi.IsWindow(d.ts.hwnd)
-                    with _ -> false))
+            // Other groups refresh their own entries (the timer in init);
+            // only this group's is brought up to date here.
             this.updateGroupInfo()
-            let updateTasks =
-                allDecorators
-                |> List.filter (fun d -> d.group.hwnd <> group.hwnd)
-                |> List.map (fun d ->
-                    async {
-                        try
-                            if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
-                                d.group.invokeSync(fun () -> d.updateGroupInfo())
-                        with _ -> ()
-                    })
-            updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
             let otherGroupInfos = lock groupInfos (fun () ->
                 groupInfos.Values
                 |> List.ofSeq
@@ -2546,39 +2555,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 }) ]
 
         let moveTabGroupToGroupMenu =
-            // Update all group infos before building menu (same as moveTabMenu)
-            let allDecorators = lock decorators (fun () ->
-                decorators.Values
-                |> List.ofSeq
-                |> List.filter (fun d ->
-                    // Filter out invalid decorators
-                    try
-                        d.ts.hwnd <> IntPtr.Zero &&
-                        WinUserApi.IsWindow(d.group.hwnd) &&
-                        WinUserApi.IsWindow(d.ts.hwnd)
-                    with _ -> false
-                )
-            )
-
-            // First, update the current group's info synchronously
+            // Other groups refresh their own entries (the timer in init);
+            // only this group's is brought up to date here.
             this.updateGroupInfo()
-
-            // Update all other decorators' group info and wait for completion
-            let updateTasks =
-                allDecorators
-                |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
-                |> List.map (fun d ->
-                    async {
-                        try
-                            // Double check the window is still valid
-                            if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
-                                d.group.invokeSync(fun () -> d.updateGroupInfo())
-                        with _ -> ()
-                    }
-                )
-
-            // Wait for all updates to complete
-            updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
 
             // Now get the updated group infos
             let allGroupInfos = lock groupInfos (fun () ->
@@ -2691,39 +2670,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (
-                // Update all group infos before building menus (shared by moveTabMenu and split menus)
-                let allDecorators = lock decorators (fun () ->
-                    decorators.Values
-                    |> List.ofSeq
-                    |> List.filter (fun d ->
-                        // Filter out invalid decorators
-                        try
-                            d.ts.hwnd <> IntPtr.Zero &&
-                            WinUserApi.IsWindow(d.group.hwnd) &&
-                            WinUserApi.IsWindow(d.ts.hwnd)
-                        with _ -> false
-                    )
-                )
-
-                // First, update the current group's info synchronously
+                // Other groups refresh their own entries (the timer in init);
+                // only this group's is brought up to date here.
                 this.updateGroupInfo()
-
-                // Update all other decorators' group info and wait for completion
-                let updateTasks =
-                    allDecorators
-                    |> List.filter (fun d -> d.group.hwnd <> group.hwnd)  // Skip current group (already updated)
-                    |> List.map (fun d ->
-                        async {
-                            try
-                                // Double check the window is still valid
-                                if WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) then
-                                    d.group.invokeSync(fun () -> d.updateGroupInfo())
-                            with _ -> ()
-                        }
-                    )
-
-                // Wait for all updates to complete
-                updateTasks |> Async.Parallel |> Async.RunSynchronously |> ignore
 
                 // Now get the updated group infos (shared by all menus that need group info)
                 let allGroupInfos = lock groupInfos (fun () ->
@@ -3001,7 +2950,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 group.flashTab(tab, false)
                 match btn with
                 | MouseRight ->
-                    os.windowFromHwnd(group.topWindow).setForeground(false)
+                    // A right-click only opens the menu. Bringing the group
+                    // forward changed the foreground window, which every group
+                    // reacts to, and the menu waited behind all of that.
+                    ()
                 | MouseLeft ->
                     // Read modifier keys at click time for multi-tab selection.
                     //   plain   : Explorer-like behavior (see below)
