@@ -71,7 +71,7 @@ module Localization_English =
 
         ("HideTabsOnFullscreen", "Hide tabs when window is fullscreen")
         ("HideTabsWhileMoving", "Hide tabs while moving a window")
-        ("LockWindowPosition", "Prevent moving tabbed windows")
+        ("LockWindowPosition", "Prevent moving windows and resizing them from the top")
         ("SnapTabHeightMargin", "Add tab height margin when snapping")
         ("SnapOnDragDetach", "Snap detached tabs by drop position")
         ("NextTab", "Next Tab")

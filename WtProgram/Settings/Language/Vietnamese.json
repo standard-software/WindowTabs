@@ -67,7 +67,7 @@
 
   "HideTabsOnFullscreen": "Ẩn thẻ khi cửa sổ ở chế độ toàn màn hình",
   "HideTabsWhileMoving": "Ẩn thẻ khi di chuyển cửa sổ",
-  "LockWindowPosition": "Ngăn di chuyển cửa sổ có thẻ",
+  "LockWindowPosition": "Ngăn di chuyển cửa sổ và thay đổi kích thước từ cạnh trên",
   "SnapTabHeightMargin": "Thêm lề bằng chiều cao thẻ khi ghép",
   "SnapOnDragDetach": "Ghép vào cạnh màn hình khi kéo thẻ ra thành cửa sổ mới",
   "NextTab": "Thẻ tiếp theo",

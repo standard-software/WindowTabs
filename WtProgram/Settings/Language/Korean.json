@@ -67,7 +67,7 @@
 
   "HideTabsOnFullscreen": "창이 전체 화면일 때 탭 숨기기",
   "HideTabsWhileMoving": "창을 이동하는 동안 탭 숨기기",
-  "LockWindowPosition": "탭 창 이동 방지",
+  "LockWindowPosition": "창 이동 및 위쪽 가장자리 크기 조절 방지",
   "SnapTabHeightMargin": "스냅 시 탭 높이만큼 여백 추가",
   "SnapOnDragDetach": "탭을 끌어 새 창으로 분리할 때 놓은 위치에 따라 화면 가장자리에 스냅",
   "NextTab": "다음 탭",

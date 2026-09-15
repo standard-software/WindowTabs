@@ -236,10 +236,29 @@ type CaptionDragPlugin() =
                         match CaptionDragPolicy.hitStep isRoot ownCaption parentOnSameThread code with
                         | CaptionDragPolicy.CaptionHit -> Some(window, hx, hy), rootHit
                         | CaptionDragPolicy.Climb -> walk parent (depth + 1)
-                        | CaptionDragPolicy.OtherHit 12 when isRoot && isNativeCaptionBoundary window x y ->
+                        // The top border of the managed window is swallowed
+                        // whether it is really the caption's first row
+                        // (isNativeCaptionBoundary) or a genuine resize edge:
+                        // with the window locked in place, a top-edge resize is
+                        // the other way the tab strip gets dragged by accident.
+                        | CaptionDragPolicy.OtherHit code when isRoot && CaptionDragPolicy.isTopBorder code ->
                             Some(window, hx, hy), rootHit
                         | CaptionDragPolicy.OtherHit _ -> None, rootHit
-            walk leaf 0
+            match walk leaf 0 with
+            | None, None ->
+                // The walk stopped at a child that answered for itself, so the
+                // top-level window was never asked - and that is where the
+                // resize borders live. Office (NetUIHWND), LINE and VS Code put
+                // a child over the top edge, and their windows kept resizing
+                // from it. Ask the root itself before letting the press pass.
+                let remaining = int ((deadline - Stopwatch.GetTimestamp()) * 1000L / Stopwatch.Frequency)
+                if remaining <= 0 then None, None
+                else
+                    match hitTest root x y (min hitTestTimeoutMs remaining) with
+                    | Some(code, hx, hy) when CaptionDragPolicy.isTopBorder code -> Some(root, hx, hy), Some code
+                    | Some(code, _, _) -> None, Some code
+                    | None -> None, None
+            | result -> result
 
         // Replacement for the activation the swallowed press would have done.
         // The press never reached any queue, so the foreground lock may refuse

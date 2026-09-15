@@ -18,6 +18,15 @@ module CaptionDragPolicy =
 
     let hitTransparent = -1
     let hitCaption = 2
+    // HTTOP, HTTOPLEFT, HTTOPRIGHT. Dragging any of these resizes the window by
+    // its top edge, which is right where the tab strip sits: aiming at a tab
+    // and missing by a pixel resized the window instead. The setting that stops
+    // the window being moved stops this too. The left, right and bottom borders
+    // resize as before - they never overlap the tabs.
+    let hitTop = 12
+    let hitTopLeft = 13
+    let hitTopRight = 14
+    let isTopBorder (hit: int) = hit = hitTop || hit = hitTopLeft || hit = hitTopRight
 
     // Only used for a standard non-client title bar. A custom frame
     // may deliberately resize inside its reported caption, so callers must
