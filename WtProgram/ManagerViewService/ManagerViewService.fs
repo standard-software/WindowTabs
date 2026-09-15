@@ -38,7 +38,9 @@ type ManagerViewService() =
     // from any of those destroys a window from a foreign thread, which throws
     // "Cross-thread operation not valid" under a debugger and is invalid even
     // when the check is off. The form is left to the loop that owns it - the
-    // main thread's, which ends last.
+    // main thread's, which ends last. If that loop ever ends without raising
+    // (a forced exit), the form is never disposed: the process is going away
+    // at that point anyway, and a cross-thread destroy is the worse of the two.
     let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
 
     do Application.ApplicationExit.Add(fun _ ->

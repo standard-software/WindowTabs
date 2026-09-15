@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next6
+
+- Keep a tab menu open when a submenu is opened from its parent item: Windows reports no foreground window for a moment there, which was read as a switch to another window.
+- Take the menu's mouse and CBT hooks off however the menu ends, one step at a time, so no step can skip the ones after it.
+
 ## version ss_2026.09.12_next5
 
 - Dispose the cached settings dialog only on the thread that created it, so exiting no longer destroys its window from a tab group's or the caption-drag thread.
