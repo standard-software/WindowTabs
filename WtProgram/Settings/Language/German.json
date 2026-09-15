@@ -67,7 +67,7 @@
 
   "HideTabsOnFullscreen": "Tabs im Vollbildmodus ausblenden",
   "HideTabsWhileMoving": "Tabs beim Verschieben eines Fensters ausblenden",
-  "LockWindowPosition": "Verschieben von Fenstern mit Tabs verhindern",
+  "LockWindowPosition": "Verschieben von Fenstern und Größenänderung an der Oberkante verhindern",
   "SnapTabHeightMargin": "Beim Andocken Rand für Tab-Höhe hinzufügen",
   "SnapOnDragDetach": "Beim Herausziehen eines Tabs in ein neues Fenster am Bildschirmrand andocken",
   "NextTab": "Nächster Tab",

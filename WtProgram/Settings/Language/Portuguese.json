@@ -67,7 +67,7 @@
 
   "HideTabsOnFullscreen": "Ocultar guias quando a janela estiver em tela cheia",
   "HideTabsWhileMoving": "Ocultar guias ao mover uma janela",
-  "LockWindowPosition": "Impedir mover janelas com abas",
+  "LockWindowPosition": "Impedir mover janelas e redimensioná-las pela borda superior",
   "SnapTabHeightMargin": "Adicionar margem da altura da guia ao ajustar",
   "SnapOnDragDetach": "Ajustar à borda da tela ao arrastar uma guia para uma nova janela",
   "NextTab": "Próxima guia",

@@ -111,6 +111,10 @@ module CaptionDragFallback =
     type Verdict =
         | Undecided
         | Moving
+        // The top edge is being dragged. The strip sits on that edge, so the
+        // window's vertical extent is put back while the drag continues; a
+        // width change from a top corner is left alone.
+        | TopResizing
         | Resizing
 
     type Session =
@@ -150,8 +154,16 @@ module CaptionDragFallback =
     // Known weak spot: a snap that keeps one edge per axis (a window at the
     // work-area origin snapped to the left half) as the first change counts
     // as a resize. A real drag reports small moves long before that.
+    // A resize by the top border or a top corner: the top edge moved and the
+    // bottom stayed where it was. A move changes the top too, so the size must
+    // have changed; a move that also resizes (a drag onto another monitor)
+    // moves the bottom edge as well and is left to the move rules.
+    let isTopResize (anchor: Box) (current: Box) =
+        not (sameSize anchor current) && current.y <> anchor.y && current.bottom = anchor.bottom
+
     let decideFromGeometry (anchor: Box) (current: Box) =
         if sameSize anchor current then Moving
+        elif isTopResize anchor current then TopResizing
         elif isEdgeAnchored anchor current then Resizing
         else Moving
 
@@ -182,19 +194,28 @@ module CaptionDragFallback =
                 | Undecided ->
                     match session.grab with
                     | CaptionGrab -> Moving
-                    // Custom drag surfaces can answer a sizing hit. Only a
-                    // same-size translation is blocked; all actual resizes pass.
-                    | BorderGrab -> if sameSize session.anchor current then Moving else Resizing
+                    // Custom drag surfaces can answer a sizing hit. A same-size
+                    // translation is blocked, a drag of the top edge is put
+                    // back vertically, and every other resize passes.
+                    | BorderGrab ->
+                        if sameSize session.anchor current then Moving
+                        elif isTopResize session.anchor current then TopResizing
+                        else Resizing
                     | _ -> decideFromGeometry session.anchor current
                 | decided -> decided
             match verdict with
             | Moving -> Some { session with verdict = Moving }, correctionFor session.anchor current
+            | TopResizing ->
+                // Keep what the drag did horizontally; give back the top edge
+                // and the height that belongs with it.
+                Some { session with verdict = TopResizing },
+                RestoreBounds { current with y = session.anchor.y; height = session.anchor.height }
             | _ -> None, NoCorrection
 
     // The loop ended. A session that never corrected anything (a click, the
     // first half of a double-click) leaves nothing behind.
     let finish (nowMs: int64) (session: Session) : Session option =
         match session.verdict, session.settleUntil with
-        | Moving, None -> Some { session with settleUntil = Some(nowMs + settleMilliseconds) }
-        | Moving, Some(_) -> Some session
+        | (Moving | TopResizing), None -> Some { session with settleUntil = Some(nowMs + settleMilliseconds) }
+        | (Moving | TopResizing), Some(_) -> Some session
         | _ -> None

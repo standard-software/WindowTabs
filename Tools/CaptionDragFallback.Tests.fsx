@@ -107,24 +107,37 @@ check "inside the loop a newer press does not end the lock"
 check "unknown: a pure move is put back"
     (snd (observe 0L true false unknown (box 90 100 800 600)) = RestorePosition(100, 100))
 for dx, dy, dw, dh, name in
-        [ 0, 0, 30, 0, "right"; -30, 0, 30, 0, "left"; 0, -30, 0, 30, "top"; 0, 0, 0, 30, "bottom"
-          -30, -30, 30, 30, "top-left"; 0, -30, 30, 30, "top-right"
+        [ 0, 0, 30, 0, "right"; -30, 0, 30, 0, "left"; 0, 0, 0, 30, "bottom"
           -30, 0, 30, 30, "bottom-left"; 0, 0, 30, 30, "bottom-right"
-          0, 0, -30, -30, "shrinking bottom-right"; 30, 30, -30, -30, "shrinking top-left" ] do
+          0, 0, -30, -30, "shrinking bottom-right" ] do
     let r = box (anchor.x + dx) (anchor.y + dy) (anchor.width + dw) (anchor.height + dh)
     check (sprintf "unknown: %s border resize is left alone and ends the lock" name)
         (observe 0L true false unknown r = (None, NoCorrection))
+// The tab strip sits on the top edge, so a drag of the top border or a top
+// corner gives the vertical extent back and keeps the lock; the width a top
+// corner changed stands.
+for dx, dy, dw, dh, name in
+        [ 0, -30, 0, 30, "top"; -30, -30, 30, 30, "top-left"; 0, -30, 30, 30, "top-right"
+          30, 30, -30, -30, "shrinking top-left" ] do
+    let r = box (anchor.x + dx) (anchor.y + dy) (anchor.width + dw) (anchor.height + dh)
+    check (sprintf "unknown: %s border resize gives the top edge back" name)
+        (snd (observe 0L true false unknown r) = RestoreBounds { r with y = anchor.y; height = anchor.height })
 check "unknown: move plus 1 px resize is still a move (no edge standing)"
     (snd (observe 0L true false unknown (box 200 200 801 600)) = RestoreBounds anchor)
 check "unknown: a size change keeping one edge per axis counts as a resize"
-    (decideFromGeometry anchor (box 100 50 900 650) = Resizing)
+    (decideFromGeometry anchor (box 100 100 900 650) = Resizing)
+check "unknown: a size change that moved the top edge is a top resize"
+    (decideFromGeometry anchor (box 100 50 900 650) = TopResizing)
 // The counter-example raised against geometry alone: a resize that keeps its
 // centre looks like a move. A border grab must still allow that size change.
 check "centre-keeping resize from a side-band press is allowed"
     (let s = (start (grabOfPress (Some 1) anchor (anchor.x + 3) 400 (edgeBand 96)) anchor).Value
      observe 0L true false s (box 90 90 820 620) = (None, NoCorrection))
-check "border: moving the top edge during resizing remains allowed"
-    (observe 0L true false (start BorderGrab anchor).Value (box 100 70 800 630) = (None, NoCorrection))
+check "border: a drag of the top edge gives the vertical extent back"
+    (snd (observe 0L true false (start BorderGrab anchor).Value (box 100 70 800 630))
+        = RestoreBounds (box 100 100 800 600))
+check "border: a drag of the bottom edge still resizes freely"
+    (observe 0L true false (start BorderGrab anchor).Value (box 100 100 800 630) = (None, NoCorrection))
 check "Terminal HTTOP same-size translation from the recorded incident is restored"
     (let a = box -1920 24 1497 1008
      let grab = grabOfPress (Some 12) a -1718 32 (edgeBand 96)

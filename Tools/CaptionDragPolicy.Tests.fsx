@@ -163,4 +163,12 @@ check "VSCode custom title bar is not corrected" (not (nativeCaptionBoundary 12 
 check "Excel custom title bar is not corrected" (not (nativeCaptionBoundary 12 true true customFrame customTitle 25 customButtons 500 32))
 check "Chrome missing native title rectangle is not corrected" (not (nativeCaptionBoundary 12 true true customFrame { customTitle with bottom = 0; top = 0 } 24 customButtons 500 32))
 check "Native frame without an app name is corrected" (nativeCaptionBoundary 12 true true frame title 211 buttons -1200 188)
+
+// The top border resizes the window from the edge the tab strip sits on, so a
+// locked window blocks it; the other borders keep resizing.
+check "HTTOP is a top border" (isTopBorder 12)
+check "HTTOPLEFT is a top border" (isTopBorder 13)
+check "HTTOPRIGHT is a top border" (isTopBorder 14)
+for hit, name in [1, "HTCLIENT"; 10, "HTLEFT"; 11, "HTRIGHT"; 15, "HTBOTTOM"; 16, "HTBOTTOMLEFT"; 17, "HTBOTTOMRIGHT"] do
+    check (sprintf "%s is not a top border" name) (not (isTopBorder hit))
 printfn "All %d checks passed" checks

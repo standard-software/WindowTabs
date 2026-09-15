@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next9
+
+- "Prevent moving windows" now also stops them being resized from the top edge, where the tabs are: aiming at a tab and missing by a pixel used to resize the window. The left, right and bottom edges resize as before. Windows that resize themselves rather than through the system loop (LINE) are not covered.
+
 ## version ss_2026.09.12_next8
 
 - Keep the tab groups across a spell of being disabled: the ten-second save no longer writes an empty desktop over the record of them while WindowTabs is off, switching it back on rebuilds them from that record after a restart, and a start-up with the box ticked no longer rebuilds them behind it.
