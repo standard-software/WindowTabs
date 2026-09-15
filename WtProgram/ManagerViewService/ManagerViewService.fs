@@ -31,7 +31,18 @@ type ManagerViewService() =
             finally
                 preparing <- false
 
+    // The thread this service - and with it the settings form it caches - was
+    // created on. ApplicationExit is process-wide and fires on whichever
+    // thread's message loop is ending, and WindowTabs runs several: one per tab
+    // group (Invoker) and one for the caption-drag hook. Disposing the form
+    // from any of those destroys a window from a foreign thread, which throws
+    // "Cross-thread operation not valid" under a debugger and is invalid even
+    // when the check is off. The form is left to the loop that owns it - the
+    // main thread's, which ends last.
+    let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
+
     do Application.ApplicationExit.Add(fun _ ->
+      if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then
 #if DEBUG
         DesktopManagerFormState.log "shutdown: cached settings disposal begin"
 #endif

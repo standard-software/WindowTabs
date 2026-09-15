@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next5
+
+- Dispose the cached settings dialog only on the thread that created it, so exiting no longer destroys its window from a tab group's or the caption-drag thread.
+
 ## version ss_2026.09.12_next4
 
 - Open a tab's context menu at once: right-clicking no longer brings its group forward first, so the menu does not wait for every group to react to the foreground change.
