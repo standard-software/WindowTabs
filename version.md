@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next10
+
+- Leave the controls in Office's title bar working while windows are locked in place: the search box, the file-name menu and the account button share one child window that reports the whole band as the caption, so a press there is delivered and a drag started from it is undone afterwards instead.
+
 ## version ss_2026.09.12_next9
 
 - "Prevent moving windows" now also stops them being resized from the top edge, where the tabs are: aiming at a tab and missing by a pixel used to resize the window. The left, right and bottom edges resize as before. Windows that resize themselves rather than through the system loop (LINE) are not covered.

@@ -111,15 +111,29 @@ module CaptionDragPolicy =
         | OtherHit of int
 
     // A child that answers HTCAPTION is a drag surface of its top-level window
-    // (Windows Terminal's drag bar), unless it has a caption of its own: an
-    // MDI child's title bar moves the child inside its parent, which is not
-    // the tabbed window's position. HTTRANSPARENT is followed only to a
-    // parent on the same thread, as the system itself does.
-    let hitStep (isRoot: bool) (hasOwnCaption: bool) (parentOnSameThread: bool) (hit: int) =
+    // (Windows Terminal's drag bar, VS Code's title bar), unless it has a
+    // caption of its own: an MDI child's title bar moves the child inside its
+    // parent, which is not the tabbed window's position. HTTRANSPARENT is
+    // followed only to a parent on the same thread, as the system itself does.
+    //
+    // `hostsControls` is the exception: Office draws the search box, the
+    // file-name menu and the account button inside one child (NetUIHWND) that
+    // answers HTCAPTION for all of it, so swallowing the press took those
+    // clicks away with the drag. Such a press goes through and the fallback
+    // puts the window back if it starts moving - level 2 instead of level 1,
+    // for that band only.
+    let hitStep (isRoot: bool) (hasOwnCaption: bool) (hostsControls: bool) (parentOnSameThread: bool) (hit: int) =
         if hit = hitCaption then
-            if isRoot || not hasOwnCaption then CaptionHit else OtherHit hit
+            if isRoot then CaptionHit
+            elif hasOwnCaption || hostsControls then OtherHit hit
+            else CaptionHit
         elif hit = hitTransparent && not isRoot && parentOnSameThread then Climb
         else OtherHit hit
+
+    // Window classes whose caption band is full of controls (see hitStep).
+    // Office's ribbon/title host is the one case seen so far.
+    let captionHostsControls (className: string) =
+        className = "NetUIHWND"
 
     // What the hook thread should do with its hook and timer.
     type HookPlan =

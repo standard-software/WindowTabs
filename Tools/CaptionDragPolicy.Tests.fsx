@@ -76,16 +76,22 @@ check "Virtualized caption answer without a client origin is not trusted" (not (
 check "Per-monitor caption answer inside a custom frame's client area is trusted" (trustCaption awarenessPerMonitor 400 None)
 
 // ----- hit walk from the window under the cursor -----
-check "Top-level caption is swallowed" (hitStep true false false hitCaption = CaptionHit)
+check "Top-level caption is swallowed" (hitStep true false false false hitCaption = CaptionHit)
 check "Border, corner, client, buttons and system menu of the top-level window pass"
     ([-2; 0; 1; 3; 4; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17; 18; 20; 21]
-     |> List.forall (fun hit -> hitStep true false false hit = OtherHit hit))
-check "Captionless child answering HTCAPTION (drag bar) is swallowed" (hitStep false false false hitCaption = CaptionHit)
-check "MDI-style child with its own caption passes" (hitStep false true false hitCaption = OtherHit hitCaption)
-check "Transparent child climbs to a same-thread parent" (hitStep false false true hitTransparent = Climb)
-check "Transparent child of another thread stops the walk" (hitStep false false false hitTransparent = OtherHit hitTransparent)
-check "Transparent top-level window does not climb" (hitStep true false true hitTransparent = OtherHit hitTransparent)
-check "Child client area passes" (hitStep false false true 1 = OtherHit 1)
+     |> List.forall (fun hit -> hitStep true false false false hit = OtherHit hit))
+check "Captionless child answering HTCAPTION (drag bar) is swallowed" (hitStep false false false false hitCaption = CaptionHit)
+check "MDI-style child with its own caption passes" (hitStep false true false false hitCaption = OtherHit hitCaption)
+// Office draws the search box, the file-name menu and the account button in
+// one child that answers HTCAPTION for the whole band: those clicks must
+// arrive, and a drag started there is undone by the fallback instead.
+check "A child whose caption band holds controls passes" (hitStep false false true false hitCaption = OtherHit hitCaption)
+check "Office's caption host is known" (captionHostsControls "NetUIHWND")
+check "Other caption children are not" (not (captionHostsControls "Chrome_RenderWidgetHostHWND"))
+check "Transparent child climbs to a same-thread parent" (hitStep false false false true hitTransparent = Climb)
+check "Transparent child of another thread stops the walk" (hitStep false false false false hitTransparent = OtherHit hitTransparent)
+check "Transparent top-level window does not climb" (hitStep true false false true hitTransparent = OtherHit hitTransparent)
+check "Child client area passes" (hitStep false false false true 1 = OtherHit 1)
 
 // ----- hook lifecycle -----
 check "Stopping wins over everything" (plan true true true true true = Exit)
