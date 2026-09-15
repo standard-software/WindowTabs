@@ -261,7 +261,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let groupInfoTimer = new System.Windows.Forms.Timer(Interval = 1000)
         groupInfoTimer.Tick.Add(fun _ -> this.updateGroupInfo())
         groupInfoTimer.Start()
-        group.exited.Add <| fun() -> groupInfoTimer.Stop()
+        // Stop and release the timer with the group: it owns a window of this
+        // group's thread, which goes away with the group.
+        group.exited.Add <| fun() ->
+            groupInfoTimer.Stop()
+            groupInfoTimer.Dispose()
 
         let capturedHwnd = ref None
 
