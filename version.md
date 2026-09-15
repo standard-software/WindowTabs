@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.12_next4
+
+- Open a tab's context menu at once: right-clicking no longer brings its group forward first, so the menu does not wait for every group to react to the foreground change.
+- Draw a tab strip once per update, and only when something it shows has actually changed.
+- Close an open tab menu when another group's menu opens, and when a mouse press lands outside it.
+
 ## version ss_2026.09.12_next3
 
 - Add an option to snap a window to half of the display when a tab is dragged out of its group: the side of the display's diagonals the drop lands on picks left, right, top or bottom.
