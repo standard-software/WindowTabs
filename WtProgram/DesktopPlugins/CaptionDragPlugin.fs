@@ -229,11 +229,14 @@ type CaptionDragPlugin() =
                         let rootHit = if isRoot then Some code else None
                         let parent = if isRoot then IntPtr.Zero else CaptionDragNative.GetAncestor(window, 1u (* GA_PARENT *))
                         let ownCaption = not isRoot && code = CaptionDragPolicy.hitCaption && hasOwnCaption window
+                        let hostsControls =
+                            not isRoot && code = CaptionDragPolicy.hitCaption &&
+                            (try CaptionDragPolicy.captionHostsControls (Win32Helper.GetClassName(window)) with _ -> false)
                         let parentOnSameThread =
                             not isRoot && code = CaptionDragPolicy.hitTransparent && parent <> IntPtr.Zero &&
                             CaptionDragNative.GetWindowThreadProcessId(window, IntPtr.Zero) =
                                 CaptionDragNative.GetWindowThreadProcessId(parent, IntPtr.Zero)
-                        match CaptionDragPolicy.hitStep isRoot ownCaption parentOnSameThread code with
+                        match CaptionDragPolicy.hitStep isRoot ownCaption hostsControls parentOnSameThread code with
                         | CaptionDragPolicy.CaptionHit -> Some(window, hx, hy), rootHit
                         | CaptionDragPolicy.Climb -> walk parent (depth + 1)
                         // The top border of the managed window is swallowed
