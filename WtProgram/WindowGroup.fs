@@ -995,7 +995,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         // avoids issuing a monitor DPI query for it.
         this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearanceRaw.tabFlashTabColor) else None)
         
-    member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() ->
+    member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() -> PerfTrace.time (sprintf "group.shell.%O" evt) <| fun () ->
         Cell.beginUpdate()
         match evt with
         | ShellEvent.HSHELL_FLASH ->
@@ -1166,7 +1166,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART then this.captureCaptionDragFallback(hwnd) else None
         this.dispatchEvent(hwnd, evt, fallbackPress)
 
-    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() ->
+    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then

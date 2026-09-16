@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next10"
+    let version = "ss_2026.09.12_next11_build1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -540,6 +540,7 @@ type Program() as this =
 
     let registerShellHooks =
         os.registerShellHooks <| fun (hwnd, shellEvent) ->
+            PerfTrace.count (sprintf "shell.%O" shellEvent)
             match shellEvent with
             | ShellEvent.HSHELL_WINDOWCREATED ->
                 if shellTraceCount < 60 then
@@ -569,6 +570,8 @@ type Program() as this =
     // Retry of refused registrations while the same window stays in front.
     // See the hot keys section (scheduleHotKeyRetry).
     let hotKeyRetryTimer = new System.Windows.Forms.Timer(Interval = 1000)
+    // TEMPORARY: perf trace flush
+    let perfTraceTimer = new System.Windows.Forms.Timer(Interval = 1000)
     let hotKeyRetryLimit = 10
     let mutable hotKeyRetriesLeft = hotKeyRetryLimit
     // The fields dropped as duplicates at the last sync, so the Debug line
@@ -588,6 +591,12 @@ type Program() as this =
         // set is held the moment a tabbed window is back in front - the
         // dialog need not be closed.
         hotKeyRetryTimer.Tick.Add <| fun _ -> this.retryHotKeys()
+        // TEMPORARY: one perf line per second (see Shared/PerfTrace.fs)
+        perfTraceTimer.Tick.Add <| fun _ ->
+            // Groups and tabs describe the state a leak would show up in: both
+            // should come back down when windows close.
+            PerfTrace.flush version
+        perfTraceTimer.Start()
         foregroundHotKeyHook <- Some(
             os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> this.onForegroundChanged()))
         Services.settings.notifyValue HotKeyPolicy.enableCtrlNumberSetting (fun _ -> this.syncHotKeys())
@@ -1378,7 +1387,7 @@ type Program() as this =
                     | None -> ()
         with _ -> ()
 
-    member this.updateAppWindows() =
+    member this.updateAppWindows() = PerfTrace.time "updateAppWindows" <| fun () ->
         this.expireStaleTabMonitoringSuspension()
         if updateTraceCount < 60 || this.desktop.isDragging || this.isTabMonitoringSuspended then
             updateTraceCount <- updateTraceCount + 1
@@ -1395,13 +1404,19 @@ type Program() as this =
                 needsRestoreOnStartup.set(false)
 
             if inShutdown.value.not && isDisabledCell.value.not then
-                os.windowsInZorder.iter <| fun window ->
+                let windows = PerfTrace.time "windowsInZorder" (fun () -> os.windowsInZorder)
+                PerfTrace.count (sprintf "windowsScanned.%d" (windows.count / 50 * 50))
+                windows.iter <| fun window ->
                     this.ensureWindowIsSubscribed(window)
                     if this.isTabMonitoringSuspended.not then
                         this.ensureWindowIsGrouped(window)
-                this.syncWindowTitles()
+                PerfTrace.time "syncWindowTitles" (fun () -> this.syncWindowTitles())
             this.destroyEmptyGroups()
             this.removeUntabableWindows()
+            // Groups and tabs describe the state a leak would show up in: both
+            // should come back down when windows close.
+            PerfTrace.gauge "groups" this.desktop.groups.length
+            PerfTrace.gauge "tabs" (this.desktop.groups.fold 0 (fun n g -> n + g.windows.count))
 
         // Group membership may have changed above - a window grouped after
         // it came to the front, a group destroyed under the foreground
@@ -2085,7 +2100,7 @@ type Program() as this =
         hotKeyRetriesLeft <- hotKeyRetriesLeft - 1
         this.syncHotKeys()
 
-    member private this.onForegroundChanged() =
+    member private this.onForegroundChanged() = PerfTrace.time "onForegroundChanged" <| fun () ->
         hotKeyRetriesLeft <- hotKeyRetryLimit
         this.syncHotKeys()
 
