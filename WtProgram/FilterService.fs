@@ -18,6 +18,9 @@ type FilterService() as this =
         and set(value) = 
             Services.settings.setValue("enableTabbingByDefault", box(value))
             Services.program.refresh().ignore
+            // The set of tabbed applications has changed wholesale; whatever
+            // has dropped out of it leaves no closed tabs behind.
+            Services.program.forgetClosedTabsOfUntabbedApps()
 
     member this.isBanned (window:Window) =
         blackListedExeNames.contains(window.pid.exeName)
@@ -109,6 +112,9 @@ type FilterService() as this =
                 this.includedPaths <- setTo this.includedPaths enabled
                 
             Services.program.refresh().ignore
+            // Switching an application off means it has no tabs, not that its
+            // tabs were closed: its closed-tab records go with it.
+            Services.program.forgetClosedTabsOfUntabbedApps()
 
         member x.getIsTabbingEnabledForProcess(processPath) = 
             this.getIsTabbingEnabledForProcess(processPath)

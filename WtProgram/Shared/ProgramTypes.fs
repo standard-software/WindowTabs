@@ -153,6 +153,10 @@ type IProgram =
     // postAction runs after the new window has been added to its new group.
     abstract member launchStandaloneWindow : string -> (IntPtr -> unit) -> unit
     abstract member getAllConfiguredProcessPaths : unit -> List2<string>
+    // Called after tabbing has been switched off for an application: the
+    // closed-tab records of anything no longer tabbed are dropped, so that
+    // switching it back on later starts clean.
+    abstract member forgetClosedTabsOfUntabbedApps : unit -> unit
     abstract member removeProcessSettings : string -> unit
     // Mark hwnds as just-placed-into-a-group so the next
     // removeUntabableWindows pass spares them even if their bounds are
