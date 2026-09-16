@@ -160,6 +160,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/HotKeyPolicy.fs" />
     <Compile Include="Shared/LaunchPath.fs" />
     <Compile Include="Shared/Dpi.fs" />
+    <Compile Include="Shared/OffScreenTrap.fs" />
     <Compile Include="Shared/Win32.fs" />
     <Compile Include="Shared\ProgramTypes.fs" />
     <Compile Include="Shared/DragDrop.fs" />
