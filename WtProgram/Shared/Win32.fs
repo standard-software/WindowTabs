@@ -539,6 +539,7 @@ and
                 Marshal.SizeOf(typeof<int>)) |> ignore
 
     member this.move (bounds:Rect) =
+        OffScreenTrap.check "move" hwnd bounds
         WinUserApi.MoveWindow(
             hwnd,
             bounds.x,
@@ -548,6 +549,7 @@ and
             true) |> ignore
 
     member this.setPositionOnly (x:int) (y:int) =
+        OffScreenTrap.check "setPositionOnly" hwnd (Rect(Pt(x, y), this.size))
         // Move position only without changing size to avoid DPI scaling
         WinUserApi.SetWindowPos(
             hwnd,
