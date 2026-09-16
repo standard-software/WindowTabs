@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next15_build11"
+    let version = "ss_2026.09.12_next15_build13"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -573,8 +573,9 @@ type Program() as this =
     // Retry of refused registrations while the same window stays in front.
     // See the hot keys section (scheduleHotKeyRetry).
     let hotKeyRetryTimer = new System.Windows.Forms.Timer(Interval = 1000)
-    // TEMPORARY: perf trace flush
-    let perfTraceTimer = new System.Windows.Forms.Timer(Interval = 1000)
+    // Once a second: the window pass a move/size loop put off, and the perf
+    // line of a Debug build (see Shared/PerfTrace.fs).
+    let catchUpTimer = new System.Windows.Forms.Timer(Interval = 1000)
     let hotKeyRetryLimit = 10
     let mutable hotKeyRetriesLeft = hotKeyRetryLimit
     // The fields dropped as duplicates at the last sync, so the Debug line
@@ -594,15 +595,14 @@ type Program() as this =
         // set is held the moment a tabbed window is back in front - the
         // dialog need not be closed.
         hotKeyRetryTimer.Tick.Add <| fun _ -> this.retryHotKeys()
-        // TEMPORARY: one perf line per second (see Shared/PerfTrace.fs)
-        perfTraceTimer.Tick.Add <| fun _ ->
+        catchUpTimer.Tick.Add <| fun _ ->
             // Groups and tabs describe the state a leak would show up in: both
             // should come back down when windows close.
             PerfTrace.flush version
             // A pass put off during a move/size loop is made up for here, as
             // soon as no group is in one.
             this.catchUpDeferredWindowPass()
-        perfTraceTimer.Start()
+        catchUpTimer.Start()
         foregroundHotKeyHook <- Some(
             os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> this.onForegroundChanged()))
         Services.settings.notifyValue HotKeyPolicy.enableCtrlNumberSetting (fun _ -> this.syncHotKeys())

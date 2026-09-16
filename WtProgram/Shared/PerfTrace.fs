@@ -1,14 +1,21 @@
-namespace Bemo
+﻿namespace Bemo
 open System
+#if DEBUG
 open System.Collections.Generic
 open System.Diagnostics
+#endif
 
-// TEMPORARY: what this process spends its time on, one line per second in
+// What this process spends its time on, one line per second in
 // %APPDATA%\WindowTabs\perf_trace.log. Counters are named by the caller;
 // `time` adds both a count and the milliseconds spent. The line also carries
 // the process's own CPU, memory and handle figures, so a run that grows over
 // hours is visible in the same file.
+//
+// A Debug build only: a shipped copy measures nothing and writes nothing. The
+// calls stay where they are, so measuring a run again needs no more than a
+// Debug build.
 module PerfTrace =
+#if DEBUG
     [<System.Runtime.InteropServices.DllImport("user32.dll")>]
     extern uint32 GetGuiResources(nativeint hProcess, uint32 uiFlags)
 
@@ -100,3 +107,9 @@ module PerfTrace =
                         (int (GetGuiResources(proc.Handle, 1u)))
                         line)
         with _ -> ()
+#else
+    let count (_name: string) = ()
+    let time (_name: string) (f: unit -> 'a) = f()
+    let gauge (_name: string) (_value: int) = ()
+    let flush (_version: string) = ()
+#endif

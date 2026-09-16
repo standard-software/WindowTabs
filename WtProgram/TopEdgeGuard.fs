@@ -219,18 +219,13 @@ type TopEdgeGuard(os: OS) =
                 // (Windows Terminal) leaves a gap next to it either way.
                 // A window with a margin (LINE) has its own frame all the way
                 // across the band, buttons included, and its buttons sit below
-                // it: that one is covered to the right edge.
+                // it: that one is covered to the right edge. Measuring it
+                // instead would make things worse - it names no button in the
+                // band's row, and DWM then answers with the system frame's
+                // rectangle, which ends a hundred and fifty pixels short of
+                // the right edge and leaves that much of the frame reachable.
                 let width =
-                    if marginTop > 0 then
-                        (try
-                            let exe = try target.pid.exeName with _ -> "?"
-                            let path = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs", "guard_width.log")
-                            IO.File.AppendAllText(path,
-                                sprintf "%s %-24s %-16s cut=%d of %d (margin %d)\r\n"
-                                    (DateTime.Now.ToString("HH:mm:ss.fff")) exe "margin override"
-                                    bounds.size.width bounds.size.width marginTop)
-                         with _ -> ())
-                        bounds.size.width
+                    if marginTop > 0 then bounds.size.width
                     else this.widthBeforeButtons(ownerHwnd, bounds, height, mayScan)
                 // With a margin the band has to start above the window's own
                 // rectangle, where that application's frame windows are, and
