@@ -160,6 +160,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // What the last groupInfos entry was built from, so the periodic refresh
     // rebuilds the icon bitmaps only when the tabs actually changed.
     let mutable groupInfoSource : (IntPtr list * string list * obj * obj) option = None
+    let topEdgeGuard = TopEdgeGuard(os)
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
@@ -337,8 +338,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeAsync <| fun() ->
                 this.updateTsPlacement()
 
+        Services.settings.notifyValue "lockWindowPosition" <| fun(_) ->
+            this.invokeAsync <| fun() ->
+                this.updateTopEdgeGuard()
+
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
+            topEdgeGuard.dispose()
     
 
     member private this.tabSlide =
@@ -347,6 +353,40 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.updateTsSlide() =
         this.ts.slide <- this.tabSlide
+
+    // The invisible sliver over the window's top border (see TopEdgeGuard).
+    // It follows the same events as the strip, so it is updated from the same
+    // place, and it is only wanted while the setting is on and the tabs are
+    // drawn above the window rather than inside it.
+    member private this.updateTopEdgeGuard() =
+        try
+            let wanted =
+                (try Services.settings.getValue("lockWindowPosition") :?> bool with _ -> false) &&
+                group.bounds.value.IsSome &&
+                not this.ts.showInside
+            // Only the window in front decides the band: its own margin, not
+            // the group's. A group holding LINE and Chrome guards LINE's outer
+            // frame while LINE shows, and just Chrome's top border while
+            // Chrome does - Chrome is above LINE's frame windows then, so they
+            // cannot be reached anyway.
+            let marginTop =
+                match group.bounds.value with
+                | Some(b) ->
+                    (try
+                        let (top, _, _, _) = group.getExeMargin(group.topWindow, b)
+                        max 0 top
+                     with _ -> 0)
+                | None -> 0
+            // A UWP window (ApplicationFrameWindow) draws above ordinary owned
+            // windows, so the strip is made topmost while one of them is in
+            // front - see updateTsPlacement - and the band has to follow the
+            // same rule or it sinks behind the window it guards.
+            let uwpInFront =
+                group.windows.items.any(fun hwnd ->
+                    let window = os.windowFromHwnd(hwnd)
+                    window.className = "ApplicationFrameWindow" && hwnd = os.foreground.hwnd)
+            topEdgeGuard.update(wanted, group.topWindow, group.bounds.value, marginTop, uwpInFront)
+        with _ -> ()
 
     member private this.updateTsPlacement() = this.ts.batch <| fun () ->
         if group.bounds.value.IsNone then
@@ -385,6 +425,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     tsWindow.makeNotTopMost()
             else
                 tsWindow.makeNotTopMost()
+
+            this.updateTopEdgeGuard()
 
     member private this.invokeAsync f = group.invokeAsync f
     member private this.invokeSync f = group.invokeSync f
