@@ -6,6 +6,7 @@
 
 - The invisible band alone now stops a top-edge resize: the input hook no longer swallows the press, and a resize that slipped through is no longer undone afterwards.
 - Resizing a tabbed window is smooth again. The input hook comes off for the length of the drag, and much less work is done on every frame of one.
+- Switching tabbing off for an application now also drops its closed-tab records, so switching it back on later starts with a clean tab rather than the name, colours and pin the old one had. Every record is looked at, not only the application just switched.
 - A window left outside every monitor is brought back by the periodic scan, whatever put it there - a drag parks the windows behind the one being dragged just past the desktop, and a park that was never undone used to leave one out there for good.
 
 ## version ss_2026.09.12_next14

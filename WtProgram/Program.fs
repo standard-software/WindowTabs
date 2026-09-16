@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next15_build14"
+    let version = "ss_2026.09.12_next15_build15"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2184,6 +2184,29 @@ type Program() as this =
 
     member this.refresh() = this.receive(Timer)
 
+    /// Drops the closed-tab records of applications that tabbing is now off
+    /// for. Switching an application off is not the same as closing its tabs:
+    /// it is no longer an application with tabs at all, and a record left
+    /// behind would hand the old tab name, colours, pin and position back the
+    /// day the user switches it on again. Every record is looked at rather
+    /// than only the application just switched, so anything left by an earlier
+    /// change goes too.
+    member this.forgetClosedTabsOfUntabbedApps() =
+        let stillTabbed (info: ClosedTabInfo) =
+            // A path that cannot be judged is kept: losing a record is worse
+            // than keeping one a moment too long.
+            try Services.filter.getIsTabbingEnabledForProcess info.exePath with _ -> true
+        if closedTabCache.value |> List.exists (stillTabbed >> not) then
+            let dropped = closedTabCache.value |> List.filter (stillTabbed >> not)
+            RestoreTrace.log (fun () ->
+                sprintf "forget %d closed tab(s) of applications tabbing is off for: %s"
+                        dropped.Length
+                        (dropped |> List.map (fun e -> e.exePath) |> List.distinct |> String.concat ", "))
+            closedTabCache.map(List.filter stillTabbed)
+            // The file is written from this cache, so the records only leave
+            // it for good once it is saved.
+            this.saveTabGroupsToSettings()
+
     // Save tab group configuration to settings file for restoration on next
     // startup.
     //
@@ -2893,6 +2916,8 @@ type Program() as this =
             // in several of these under different spellings if the settings
             // predate AppPath and have not been collapsed yet.
             List2(AppPath.canonicalise paths)
+
+        member x.forgetClosedTabsOfUntabbedApps() = this.forgetClosedTabsOfUntabbedApps()
 
         member x.removeProcessSettings(procPath) =
             // Remove from includedPaths, excludedPaths, autoGroupingPaths
