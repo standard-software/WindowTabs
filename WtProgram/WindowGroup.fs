@@ -169,6 +169,8 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     // Track the margin-shrunk size for each hwnd, so we know when to compensate on read
     // Key: hwnd, Value: (shrunkWidth, shrunkHeight) that was last applied
     let marginShrunkSizes = Cell.create(Map.empty<IntPtr, (int * int)>)
+    // Where each window was before hideChildWindows parked it off screen.
+    let mutable parkedBounds : Map<IntPtr, Rect> = Map.empty
 
     member this.isSuperBarEnabled = enableSuperBar
 
@@ -535,8 +537,42 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
             window.setForeground(false)
         | None -> ()
 
+    // While the top window is in a move/size loop the other windows of the
+    // group are parked outside every monitor, and adjustChildWindows brings
+    // them back with it. That path does nothing when the top window has no
+    // usable rectangle just then (minimized, or being torn down), and windows
+    // parked in that moment were left outside the desktop with no way back -
+    // which is how a whole group of windows disappeared. Where each of them
+    // came from is remembered here so they can be put back regardless.
     member private this.hideChildWindows() =
-        zorderCell.value.tail.where(isMinimized >> not).iter(fun window -> this.os.windowFromHwnd(window).hideOffScreen(None))
+        zorderCell.value.tail.where(isMinimized >> not).iter(fun hwnd ->
+            let window = this.os.windowFromHwnd(hwnd)
+            (try
+                let bounds = window.bounds
+                if bounds.width > 0 && bounds.height > 0 then
+                    parkedBounds <- parkedBounds.Add(hwnd, bounds)
+             with _ -> ())
+            window.hideOffScreen(None))
+
+    /// Puts back anything hideChildWindows parked that is still outside every
+    /// monitor. Called after the move/size loop, whatever adjustChildWindows
+    /// decided to do.
+    member private this.restoreParkedWindows() =
+        if not parkedBounds.IsEmpty then
+            let parked = parkedBounds
+            parkedBounds <- Map.empty
+            for entry in parked do
+                try
+                    let window = this.os.windowFromHwnd(entry.Key)
+                    if window.isWindow && not window.isMinimized then
+                        let bounds = window.bounds
+                        let onScreen =
+                            Mon.all.any(fun mon ->
+                                let r = mon.displayRect
+                                bounds.x < r.x + r.width && bounds.x + bounds.width > r.x &&
+                                bounds.y < r.y + r.height && bounds.y + bounds.height > r.y)
+                        if not onScreen then window.move(entry.Value)
+                with _ -> ()
 
     member private this.inZorder(windows:List2<IntPtr>) = this.windows.items.sortBy(fun hwnd -> this.os.windowFromHwnd(hwnd).zorder)
 
@@ -1152,6 +1188,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         inMoveSize.set(false)
         this.saveTopWindowPlacement()
         this.adjustChildWindows()
+        this.restoreParkedWindows()
         this.makeTopWindowForeground()
         this.updateIsVisible()
         updateTabVisibility()

@@ -184,6 +184,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="WindowDecorator.fs" />
     <Compile Include="OleDropTarget.fs" />
     <Compile Include="WindowGroup.fs" />
+    <Compile Include="TopEdgeGuard.fs" />
     <Compile Include="TabStripDecorator.fs" />
     <Compile Include="GroupPlugins/SuperBarPlugin.fs" />
     <Compile Include="GroupPlugins/HideTabsOnInactiveGroupPlugin.fs" />
