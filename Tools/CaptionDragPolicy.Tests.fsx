@@ -1,4 +1,4 @@
-// Self-checks for the input hook's decisions (WtProgram/Shared/CaptionDragPolicy.fs)
+﻿// Self-checks for the input hook's decisions (WtProgram/Shared/CaptionDragPolicy.fs)
 // and the shared registry (CaptionDragTargets.fs). Pure: no hook, no window.
 // Run from the repository root:
 //   fsi.exe --exec .\Tools\CaptionDragPolicy.Tests.fsx
@@ -177,4 +177,20 @@ check "HTTOPLEFT is a top border" (isTopBorder 13)
 check "HTTOPRIGHT is a top border" (isTopBorder 14)
 for hit, name in [1, "HTCLIENT"; 10, "HTLEFT"; 11, "HTRIGHT"; 15, "HTBOTTOM"; 16, "HTBOTTOMLEFT"; 17, "HTBOTTOMRIGHT"] do
     check (sprintf "%s is not a top border" name) (not (isTopBorder hit))
+// A press that starts a resize takes the hook off until the button comes up.
+for hit, name in [4, "HTSIZE"; 10, "HTLEFT"; 11, "HTRIGHT"; 12, "HTTOP"; 13, "HTTOPLEFT";
+                  14, "HTTOPRIGHT"; 15, "HTBOTTOM"; 16, "HTBOTTOMLEFT"; 17, "HTBOTTOMRIGHT"] do
+    check (sprintf "%s is a sizing hit" name) (isSizingHit hit)
+    check (sprintf "%s suspends the hook" name) (suspendsHook false (Some hit))
+    check (sprintf "%s does not suspend it once swallowed" name) (not (suspendsHook true (Some hit)))
+for hit, name in [1, "HTCLIENT"; 2, "HTCAPTION"; 3, "HTSYSMENU"; 8, "HTMINBUTTON";
+                  9, "HTMAXBUTTON"; 18, "HTBORDER"; 20, "HTCLOSE"] do
+    check (sprintf "%s is not a sizing hit" name) (not (isSizingHit hit))
+    check (sprintf "%s leaves the hook in place" name) (not (suspendsHook false (Some hit)))
+check "An unanswered press leaves the hook in place" (not (suspendsHook false None))
+suspendHookOnResizePress <- false
+check "The constant turns the suspend off" (not (suspendsHook false (Some 12)))
+suspendHookOnResizePress <- true
+check "The constant turns the suspend back on" (suspendsHook false (Some 12))
+
 printfn "All %d checks passed" checks

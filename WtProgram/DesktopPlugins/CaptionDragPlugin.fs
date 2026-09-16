@@ -103,6 +103,9 @@ module private CaptionDragNative =
 type CaptionDragPlugin() =
     let mutable enabled = 0
     let mutable stopping = 0
+    // Set by the hook when it passes a press that starts a resize; cleared
+    // when the button is found released (see CaptionDragPolicy.suspendsHook).
+    let mutable resizeSuspend = 0
     let mutable worker: Thread option = None
     let dispatchGate = obj()
     let mutable dispatch: (unit -> unit) option = None
@@ -311,6 +314,9 @@ type CaptionDragPlugin() =
             let started = Stopwatch.GetTimestamp()
             try
                 let mutable hitTestMs = 0.0
+                // What the top-level window answered for this press, kept for
+                // the hook-suspend decision below.
+                let mutable pressRootHit = None
                 let candidate =
                     if msg <> 0x201 then None
                     else
@@ -330,6 +336,7 @@ type CaptionDragPlugin() =
                                 let hitStarted = Stopwatch.GetTimestamp()
                                 let caption, rootHit = inspect leaf root x y
                                 hitTestMs <- elapsedMs hitStarted
+                                pressRootHit <- rootHit
                                 match caption with
                                 | Some(receiver, hx, hy) when Volatile.Read(&enabled) <> 0 && CaptionDragTargets.contains root ->
                                     CaptionDragTargets.setPress None
@@ -345,6 +352,13 @@ type CaptionDragPlugin() =
                                                    tick = Environment.TickCount
                                                    sequence = CaptionDragTargets.pressSequence() })
                                     None
+                if msg = 0x201 && CaptionDragPolicy.suspendsHook candidate.IsSome pressRootHit then
+                    // The press starts a resize: take the hook off for the
+                    // rest of the drag (see CaptionDragPolicy.suspendsHook).
+                    // synchronize, posted here, does the removal after this
+                    // callback has returned.
+                    Volatile.Write(&resizeSuspend, 1)
+                    wake()
                 let input = if msg = 0x202 then CaptionDragPolicy.Up else CaptionDragPolicy.Down candidate
                 let next, action = CaptionDragPolicy.step (CaptionDragNative.GetDoubleClickTime())
                                         (CaptionDragNative.GetSystemMetrics(36) / 2)
@@ -412,11 +426,14 @@ type CaptionDragPlugin() =
                     lastHookY <- cursor.y
                 true
 
-        let uninstall () =
+        let removeHook () =
             if hook <> IntPtr.Zero then
                 if not (CaptionDragNative.UnhookWindowsHookEx(hook)) then
                     Trace.WriteLine(sprintf "Caption drag hook removal failed: %d" (Marshal.GetLastWin32Error()))
                 hook <- IntPtr.Zero
+
+        let uninstall () =
+            removeHook()
             state <- CaptionDragPolicy.empty
             CaptionDragTargets.setPress None
 
@@ -429,7 +446,13 @@ type CaptionDragPlugin() =
             timer.Start()
 
         let synchronize() =
-            let isEnabled = Volatile.Read(&enabled) <> 0
+            // A drag that started from a resize border holds the hook off
+            // until the button comes back up. The release is no longer seen -
+            // there is no hook to see it - so it is polled for.
+            if Volatile.Read(&resizeSuspend) <> 0 && not (primaryButtonHeld()) then
+                Volatile.Write(&resizeSuspend, 0)
+            let suspended = Volatile.Read(&resizeSuspend) <> 0
+            let isEnabled = Volatile.Read(&enabled) <> 0 && not suspended
             if not isEnabled then
                 state <- fst (CaptionDragPolicy.step 0u 0 0 state CaptionDragPolicy.Disable)
             let plan =
@@ -459,6 +482,11 @@ type CaptionDragPlugin() =
             | CaptionDragPolicy.WaitForRelease ->
                 // Finish an already swallowed click, even if OFF or removal
                 // occurs between down/up. No new gesture is intercepted OFF.
+                startTimer releasePollMs
+            | CaptionDragPolicy.Remove when suspended ->
+                // The press that started the drag stays recorded: the
+                // fallback still watches the loop it belongs to.
+                removeHook()
                 startTimer releasePollMs
             | CaptionDragPolicy.Remove ->
                 uninstall()
