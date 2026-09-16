@@ -1,4 +1,4 @@
-namespace Bemo
+﻿namespace Bemo
 
 open System
 open System.Diagnostics
@@ -244,7 +244,9 @@ type CaptionDragPlugin() =
                         // (isNativeCaptionBoundary) or a genuine resize edge:
                         // with the window locked in place, a top-edge resize is
                         // the other way the tab strip gets dragged by accident.
-                        | CaptionDragPolicy.OtherHit code when isRoot && CaptionDragPolicy.isTopBorder code ->
+                        | CaptionDragPolicy.OtherHit code when
+                                isRoot && CaptionDragPolicy.blockTopBorderPress &&
+                                CaptionDragPolicy.isTopBorder code ->
                             Some(window, hx, hy), rootHit
                         | CaptionDragPolicy.OtherHit _ -> None, rootHit
             match walk leaf 0 with

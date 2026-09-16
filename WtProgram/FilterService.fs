@@ -55,10 +55,16 @@ type FilterService() as this =
         // Delphi and MFC have owner windows w/ zero size.
         else owner.bounds.width = 0
 
-    member this.screenRegion = os.screenRegion
-
     member this.isOnScreenOrMinimized(window:Window) =
-        window.isMinimized || this.screenRegion.containsRect(window.bounds)
+        // Rectangle arithmetic rather than a GDI region: this is asked for
+        // every window on every pass, and the regions were freed only by the
+        // garbage collector.
+        window.isMinimized ||
+        (let bounds = window.bounds
+         Mon.all.any(fun mon ->
+            let screen = mon.displayRect
+            min screen.right bounds.right > max screen.left bounds.left &&
+            min screen.bottom bounds.bottom > max screen.top bounds.top))
     
     // Asked by application, not by path: a Store application's path carries
     // its version and changes under us on every update. See AppPath.

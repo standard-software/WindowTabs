@@ -1,4 +1,4 @@
-namespace Bemo
+﻿namespace Bemo
 open System
 
 // A sliver of a window laid over the top border of a tabbed window while
@@ -28,7 +28,7 @@ type TopEdgeGuard(os: OS) =
     let mutable owner = IntPtr.Zero
     let mutable shown = false
     // (window, width, height, band) -> width of the band before the buttons
-    let mutable buttonScan : ((IntPtr * int * int * int) * int) option = None
+    let mutable buttonScan : ((IntPtr * int * int) * int) option = None
 
     // The strip of a window that starts a top resize: the sizing frame plus
     // the invisible padded border, as the system reports them.
@@ -46,18 +46,6 @@ type TopEdgeGuard(os: OS) =
             WinUserApi.SetCursor(WinUserApi.LoadCursor(IntPtr.Zero, CursorIds.IDC_ARROW)).ignore
             1
         | 0x0021 (* WM_MOUSEACTIVATE *) -> 3 (* MA_NOACTIVATE *)
-        // TEMPORARY: paint the band blue so it can be seen while it is tuned.
-        | 0x000F (* WM_PAINT *) ->
-            let mutable ps = PAINTSTRUCT()
-            let hdc = WinUserApi.BeginPaint(msg.hwnd, &ps)
-            (try
-                use g = Drawing.Graphics.FromHdc(hdc)
-                use brush = new Drawing.SolidBrush(Drawing.Color.Blue)
-                g.FillRectangle(brush, Drawing.Rectangle(0, 0,
-                    ps.rcPaint.Right - ps.rcPaint.Left, ps.rcPaint.Bottom - ps.rcPaint.Top))
-             with _ -> ())
-            WinUserApi.EndPaint(msg.hwnd, &ps).ignore
-            0
         | 0x0201 | 0x0204 | 0x0207 (* button down *) ->
             // The press is swallowed, but the window below it still comes to
             // the front, which is what clicking a title bar would have done.
@@ -78,8 +66,7 @@ type TopEdgeGuard(os: OS) =
                      WindowsExtendedStyles.WS_EX_NOACTIVATE)
             // Alpha 1: invisible to the eye, and still a window the mouse can
             // land on. Alpha 0 would let every press through to the border.
-            // TEMPORARY: blue at 160/255 while the band is being tuned.
-            WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, 160uy, 2 (* LWA_ALPHA *)).ignore
+            WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, 1uy, 2 (* LWA_ALPHA *)).ignore
             window <- Some(w)
             w
 
@@ -87,10 +74,18 @@ type TopEdgeGuard(os: OS) =
     // at points along the row the band covers, from the right edge inwards.
     // The answer only changes when the window is resized, so it is kept until
     // then: the scan is ~40 cross-process messages.
-    member private this.widthBeforeButtons(ownerHwnd: IntPtr, bounds: Rect, bandHeight: int) =
-        let key = ownerHwnd, bounds.size.width, bounds.size.height, bandHeight
+    member private this.widthBeforeButtons(ownerHwnd: IntPtr, bounds: Rect, bandHeight: int, mayScan: bool) =
+        // The buttons sit at the right edge, so only the width can move them:
+        // a resize from the top or the bottom changes the height every frame
+        // and must not set off the scan again. While the window is inside a
+        // move/size loop nothing is scanned at all - forty cross-process
+        // questions per frame is what made a top-edge resize crawl - and the
+        // last answer, or the full width, stands until the loop ends.
+        let key = ownerHwnd, bounds.size.width, bandHeight
         match buttonScan with
         | Some(cached, value) when cached = key -> value
+        | Some(_, value) when not mayScan -> value
+        | _ when not mayScan -> bounds.size.width
         | _ ->
             let isButton code = code = 3 (* HTSYSMENU *) || code = 8 (* HTMINBUTTON *) ||
                                 code = 9 (* HTMAXBUTTON *) || code = 20 (* HTCLOSE *) || code = 21 (* HTHELP *)
@@ -124,17 +119,6 @@ type TopEdgeGuard(os: OS) =
                     x <- x - 6
                 found
             let mutable leftMost = scanRow (List.head rows)
-            // TEMPORARY: which measurement each window ended up with,
-            // %APPDATA%\WindowTabs\guard_width.log
-            let logChoice (how: string) (cut: int) =
-                try
-                    let exe = try os.windowFromHwnd(ownerHwnd).pid.exeName with _ -> "?"
-                    let path = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs", "guard_width.log")
-                    IO.File.AppendAllText(path,
-                        sprintf "%s %-24s %-16s cut=%d of %d (band y=%d..%d)\r\n"
-                            (DateTime.Now.ToString("HH:mm:ss.fff")) exe how cut bounds.size.width
-                            bounds.location.y (bounds.location.y + bandHeight))
-                with _ -> ()
             let value =
                 match leftMost with
                 | Some(buttonX) ->
@@ -151,7 +135,6 @@ type TopEdgeGuard(os: OS) =
                         | _ -> low <- middle
                     let cut = high - bounds.location.x
                     let cut = if cut <= 0 then bounds.size.width else min cut bounds.size.width
-                    logChoice "hit-test scan" cut
                     cut
                 | None ->
                     // The window named nothing in the band's own row: it
@@ -179,10 +162,8 @@ type TopEdgeGuard(os: OS) =
                                 | _ -> low <- middle
                             let cut = high - bounds.location.x
                             let cut = if cut <= 0 then bounds.size.width else min cut bounds.size.width
-                            logChoice "hit-test row 2" cut
                             cut
                         | None ->
-                            logChoice "no buttons found" bounds.size.width
                             bounds.size.width
                     else
                         let real = try os.windowFromHwnd(ownerHwnd).bounds with _ -> bounds
@@ -194,7 +175,6 @@ type TopEdgeGuard(os: OS) =
                         let scale = try Dpi.scaleForRect bounds with _ -> 1.0
                         let cut = (real.location.x + buttons.Left + Dpi.px scale 9) - bounds.location.x
                         let cut = if cut <= 0 then bounds.size.width else min cut bounds.size.width
-                        logChoice "DWM caption" cut
                         cut
             buttonScan <- Some(key, value)
             value
@@ -216,7 +196,7 @@ type TopEdgeGuard(os: OS) =
     /// starts at the outer edge of that frame and is raised above it. Every
     /// other window keeps the plain band over its own top border, owned by it,
     /// so nothing of another application is ever covered.
-    member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, keepOnTop: bool) =
+    member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, keepOnTop: bool, mayScan: bool) =
         if not wanted || ownerHwnd = IntPtr.Zero || bounds.IsNone then this.hide()
         else
             let target = os.windowFromHwnd(ownerHwnd)
@@ -251,21 +231,25 @@ type TopEdgeGuard(os: OS) =
                                     bounds.size.width bounds.size.width marginTop)
                          with _ -> ())
                         bounds.size.width
-                    else this.widthBeforeButtons(ownerHwnd, bounds, height)
+                    else this.widthBeforeButtons(ownerHwnd, bounds, height, mayScan)
                 // With a margin the band has to start above the window's own
                 // rectangle, where that application's frame windows are, and
                 // be raised over them. They are ordinary windows, not topmost,
                 // so this only ever reaches over the application's own frame.
+                // A window with a margin keeps raising its own frame windows
+                // above everything of its own, so being merely at the top of
+                // the ordinary order is not enough while it is the tab in
+                // front: the band is topmost for as long as it shows, and goes
+                // back to ordinary the moment another tab does.
                 let insertAfter =
-                    if keepOnTop then WindowHandleTypes.HWND_TOPMOST
-                    elif marginTop > 0 then WindowHandleTypes.HWND_TOP
+                    if keepOnTop || marginTop > 0 then WindowHandleTypes.HWND_TOPMOST
                     else IntPtr.Zero
                 // Leaving topmost behind needs saying so explicitly, or the
                 // band stays above everything once a UWP window has been in
                 // front.
                 let insertAfter =
-                    if not keepOnTop && marginTop = 0 &&
-                       (os.windowFromHwnd(w.hwnd).isTopMost) then WindowHandleTypes.HWND_NOTOPMOST
+                    if insertAfter = IntPtr.Zero && os.windowFromHwnd(w.hwnd).isTopMost
+                    then WindowHandleTypes.HWND_NOTOPMOST
                     else insertAfter
                 let flags =
                     if insertAfter = IntPtr.Zero then
@@ -284,11 +268,6 @@ type TopEdgeGuard(os: OS) =
                 WinUserApi.SetWindowPos(w.hwnd, insertAfter,
                     bounds.location.x + leftGap, bounds.location.y, max 1 (width - leftGap), height,
                     flags).ignore
-                // TEMPORARY: the blue fill is only painted when something asks
-                // for it, and a plain move does not.
-                WinUserApi.RedrawWindow(w.hwnd, IntPtr.Zero, IntPtr.Zero,
-                    RedrawWindowFlags.RDW_INVALIDATE ||| RedrawWindowFlags.RDW_ERASE |||
-                    RedrawWindowFlags.RDW_UPDATENOW).ignore
                 if not shown then
                     WinUserApi.ShowWindow(w.hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE).ignore
                     shown <- true

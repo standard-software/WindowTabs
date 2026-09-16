@@ -11,10 +11,11 @@ type WindowDecorator = {
     decoratorIndentNormal : int
     } with
 
-    member private this.screenRegion =
-        this.monitorBounds.fold (Rgn()) <| fun screenRegion monitorBounds ->
-            let monitorRegion = Rgn(monitorBounds)
-            screenRegion.union(monitorRegion)
+    // (The screen region this type used to build with GDI regions is gone: the
+    // questions asked of it are rectangle arithmetic, and the regions were
+    // created on every placement update and freed only by the garbage
+    // collector - a drag of a window's top edge produced two thousand of them
+    // a second.)
 
     member private this.indent(isCentered) = if isCentered then this.decoratorIndentFlipped else this.decoratorIndentNormal
 
@@ -35,13 +36,20 @@ type WindowDecorator = {
         )
 
     member this.shouldShowInside =
-        let decoratorOutsideRegion = Rgn(this.outsideBounds)
-        let decoratorInsideRegion = Rgn(this.insideBounds)
+        // How much of the strip a monitor would show, inside the window versus
+        // above it. Plain rectangle intersection: the same answer the GDI
+        // regions gave, without a handle per call.
+        let overlapHeight (monitor: Rect) (strip: Rect) =
+            let top = max monitor.top strip.top
+            let bottom = min monitor.bottom strip.bottom
+            max 0 (bottom - top)
+        let inside = this.insideBounds
+        let outside = this.outsideBounds
         this.monitorBounds.any <| fun monitorBounds ->
-            let monitorRegion = Rgn(monitorBounds)
-            let onMonitorInsideRegion = monitorRegion.intersect(decoratorInsideRegion)
-            let onMonitorOutsideRegion = monitorRegion.intersect(decoratorOutsideRegion)
-            onMonitorInsideRegion.box.height > onMonitorOutsideRegion.box.height
+            let horizontal (strip: Rect) =
+                min monitorBounds.right strip.right > max monitorBounds.left strip.left
+            let heightOf strip = if horizontal strip then overlapHeight monitorBounds strip else 0
+            heightOf inside > heightOf outside
 
     member this.showInside(verticalDirection: string) =
         TabBehaviorPolicy.showInside verticalDirection this.shouldShowInside

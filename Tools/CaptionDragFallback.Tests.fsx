@@ -113,6 +113,16 @@ for dx, dy, dw, dh, name in
     let r = box (anchor.x + dx) (anchor.y + dy) (anchor.width + dw) (anchor.height + dh)
     check (sprintf "unknown: %s border resize is left alone and ends the lock" name)
         (observe 0L true false unknown r = (None, NoCorrection))
+// The top-edge rules are behind a switch (undoTopResize). It ships off - the
+// invisible band over the top border stops such a drag before it starts - so
+// the checks for them turn it on, and one check covers the shipped default.
+check "top resize is left alone while the switch is off"
+    (let saved = undoTopResize
+     undoTopResize <- false
+     let result = observe 0L true false (start BorderGrab anchor).Value (box 100 70 800 630)
+     undoTopResize <- saved
+     result = (None, NoCorrection))
+undoTopResize <- true
 // The tab strip sits on the top edge, so a drag of the top border or a top
 // corner gives the vertical extent back and keeps the lock; the width a top
 // corner changed stands.
@@ -284,5 +294,6 @@ let secondEnd =
     again.settleUntil = first.settleUntil
 check "a second end-of-loop report does not extend the settle time" secondEnd
 
+undoTopResize <- false
 if failed <> 0 then failwithf "%d of %d checks failed" failed (failed + passed)
 printfn "all %d checks passed" passed

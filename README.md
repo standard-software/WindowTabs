@@ -1,4 +1,4 @@
-<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
+﻿<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
 
 # WindowTabs
 
@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.12_next14_build9**
+Latest version: **ss_2026.09.12_next15_build10**
 
 See [version.md](version.md) for details.
 

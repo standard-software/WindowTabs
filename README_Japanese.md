@@ -1,4 +1,4 @@
-<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
+﻿<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
 
 # WindowTabs
 
@@ -115,7 +115,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.09.12_next14_build9**
+最新のバージョン: **ss_2026.09.12_next15_build10**
 
 詳細は [version_Japanese.md](version_Japanese.md) を参照してください。
 
