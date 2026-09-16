@@ -36,6 +36,33 @@ module CaptionDragPolicy =
     /// stays for the case where the band cannot be shown.
     let mutable blockTopBorderPress = false
 
+    // HTSIZE, and HTLEFT..HTBOTTOMRIGHT: the borders and corners that start a
+    // resize.
+    let hitGrowBox = 4
+    let hitLeft = 10
+    let hitBottomRight = 17
+    let isSizingHit (hit: int) = hit = hitGrowBox || (hit >= hitLeft && hit <= hitBottomRight)
+
+    /// A press the hook passed, on a resize border or corner of a managed
+    /// window. The window's own move/size loop follows and runs until the
+    /// button comes back up, and the hook has nothing left to decide in
+    /// between: it only watches for a press. Every mouse move of the drag
+    /// would still detour through this process, and that detour is what makes
+    /// a resize of a tabbed window lag. The hook comes off for the rest of the
+    /// drag and goes back on when the button is released, which a poll finds -
+    /// the release itself is no longer seen.
+    ///
+    /// Waiting for the system's MOVESIZESTART instead was tried and was too
+    /// late to make a difference: it arrives on a group's thread, several
+    /// frames into the drag.
+    let mutable suspendHookOnResizePress = true
+
+    /// swallowed: the press was taken for a caption drag, and its release is
+    /// still wanted. rootHit: what the top-level window answered.
+    let suspendsHook (swallowed: bool) (rootHit: int option) =
+        suspendHookOnResizePress && not swallowed &&
+        (match rootHit with Some code -> isSizingHit code | None -> false)
+
     // Only used for a standard non-client title bar. A custom frame
     // may deliberately resize inside its reported caption, so callers must
     // validate native rendering, DPI awareness and the geometry first.
