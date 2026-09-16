@@ -1,18 +1,27 @@
-namespace Bemo
+﻿namespace Bemo
 open System
 
-// TEMPORARY: catches the rare case of WindowTabs placing a window where no
-// monitor is, which has taken a whole group of windows out of sight more than
-// once. Every placement call checks its target; one that lands outside every
-// screen writes the rectangle and the call stack that produced it to
+// Catches the rare case of WindowTabs placing a window where no monitor is,
+// which has taken a whole group of windows out of sight more than once. Every
+// placement call checks its target; one that lands outside every screen writes
+// the rectangle and the call stack that produced it to
 // %APPDATA%\WindowTabs\offscreen_trap.log. Nothing is prevented - the point is
 // to learn which code path computes it.
+//
+// A Debug build only, so a shipped copy neither writes the file nor spends
+// anything per placement.
 module OffScreenTrap =
     let private path =
         IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "WindowTabs", "offscreen_trap.log")
 
     let mutable private written = 0
+
+    // hideOffScreen parks a window just past the bottom right corner of the
+    // desktop on purpose, and every drag does it: those calls say so, so that
+    // the log holds only the placements nobody asked for. A window left parked
+    // is found by the periodic scan instead (Program, "stranded").
+    let private parking = new Threading.ThreadLocal<bool>(fun () -> false)
 
     // The union of the monitors, read live: a rectangle with no overlap at all
     // is off screen. Fully outside, not partly - a window dragged half past an
@@ -27,12 +36,21 @@ module OffScreenTrap =
                 bounds.y >= r.Bottom || bounds.y + bounds.height <= r.Top)
         with _ -> false
 
+    /// Runs a placement that is meant to land off screen.
+    let parkingScope (f: unit -> 'a) =
+#if DEBUG
+        parking.Value <- true
+        try f() finally parking.Value <- false
+#else
+        f()
+#endif
+
     // Debug builds only: a release build must not write a file, or spend
     // anything, on every window placement.
     let check (caller: string) (hwnd: IntPtr) (bounds: Rect) =
 #if DEBUG
         try
-            if bounds.width > 0 && bounds.height > 0 && written < 200 && isOffScreen bounds then
+            if not parking.Value && bounds.width > 0 && bounds.height > 0 && written < 200 && isOffScreen bounds then
                 written <- written + 1
                 let title =
                     try Win32Helper.GetWindowText(hwnd) with _ -> ""

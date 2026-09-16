@@ -627,7 +627,8 @@ and
         if this.isMinimized || this.isMaximized then
             this.showWindow(ShowWindowCommands.SW_RESTORE)
 
-        this.setPositionOnly corner.x corner.y
+        // Deliberately outside the desktop; see OffScreenTrap.
+        OffScreenTrap.parkingScope (fun () -> this.setPositionOnly corner.x corner.y)
 
     override this.Equals(yobj) =
         match yobj with

@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next15_build13"
+    let version = "ss_2026.09.12_next15_build14"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -1645,14 +1645,28 @@ type Program() as this =
                 // a restore left it there (see the second pass of
                 // adjustChildWindows). Put it back rather than throw it out,
                 // which is how a tab and its window used to vanish together.
+                // Sitting outside every monitor is the other way a window is
+                // left behind. A group parks the windows it is not dragging
+                // just past the bottom right corner of the desktop, and so
+                // does a tab drag; a park that is never undone - the process
+                // was restarted or the group went away in between - leaves one
+                // out there for good, where the user cannot reach it. The same
+                // reseat brings it home.
+                let offEveryMonitor (b: Rect) =
+                    b.width > 0 && b.height > 0 &&
+                    not (Mon.all.any(fun mon ->
+                        let s = mon.displayRect
+                        min s.right b.right > max s.left b.left &&
+                        min s.bottom b.bottom > max s.top b.top))
                 let stranded =
                     untabbable &&
                     window.isWindow && window.isVisible && not window.isMinimized && not window.isCloaked &&
-                    (let b = window.bounds in b.x <= -30000 || b.y <= -30000) &&
+                    (let b = window.bounds in b.x <= -30000 || b.y <= -30000 || offEveryMonitor b) &&
                     (try Services.filter.getIsTabbingEnabledForProcess window.pid.processPath with _ -> false)
                 if stranded then
-                    RestoreTrace.log (fun () -> sprintf "reseat hwnd=%X group=%X (live window at the iconic position) title=%s"
+                    RestoreTrace.log (fun () -> sprintf "reseat hwnd=%X group=%X (live window left off screen at %A) title=%s"
                                                         (hwnd.ToInt64()) (try gi.hwnd.ToInt64() with _ -> 0L)
+                                                        (let b = window.bounds in (b.x, b.y))
                                                         (match windowInfoCache.value.tryFind(hwnd) with
                                                          | Some((_, t)) -> t
                                                          | None -> ""))
