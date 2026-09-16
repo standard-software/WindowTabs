@@ -234,7 +234,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.12_next14_build9"
+    let version = "ss_2026.09.12_next15_build10"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -265,6 +265,9 @@ type Program() as this =
     let isDisabledCell = Cell.create(false)
     let isRestoringTabGroups = Cell.create(false)
     let needsRestoreOnStartup = Cell.create(false)
+    // A window pass that was skipped because a group was being moved or
+    // resized, and has to be made up for once the loop ends.
+    let mutable deferredWindowPass = false
     let llMouseEvent = Event<_>()
 
     // case 727 outlook calendar items appear behind outlook main window
@@ -596,6 +599,9 @@ type Program() as this =
             // Groups and tabs describe the state a leak would show up in: both
             // should come back down when windows close.
             PerfTrace.flush version
+            // A pass put off during a move/size loop is made up for here, as
+            // soon as no group is in one.
+            this.catchUpDeferredWindowPass()
         perfTraceTimer.Start()
         foregroundHotKeyHook <- Some(
             os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> this.onForegroundChanged()))
@@ -1387,7 +1393,31 @@ type Program() as this =
                     | None -> ()
         with _ -> ()
 
+    /// Runs a window pass that a move/size loop had put off, once no group is
+    /// in one any more. Called once a second.
+    member this.catchUpDeferredWindowPass() =
+        if deferredWindowPass then
+            try
+                if not (this.desktop.groups.any(fun g -> g.isInMoveSizeThreadSafe)) then
+                    this.updateAppWindows()
+            with _ -> ()
+
     member this.updateAppWindows() = PerfTrace.time "updateAppWindows" <| fun () ->
+        // A pass over every window on the desktop takes a few hundred
+        // milliseconds when several hundred are open, and Office creates and
+        // destroys windows of its own throughout a resize - each one asking
+        // for another pass, which is what made dragging a group's top edge
+        // crawl. While a window of a group is in its move/size loop the pass
+        // is put off; the loop's end asks for it again (WindowGroup's
+        // onExitMoveSize reaches here through the placement update), and the
+        // ten-second timer is the backstop.
+        let inMoveSize =
+            try this.desktop.groups.any(fun g -> g.isInMoveSizeThreadSafe) with _ -> false
+        if inMoveSize then
+            PerfTrace.count "updateAppWindows.deferred"
+            deferredWindowPass <- true
+        else
+        deferredWindowPass <- false
         this.expireStaleTabMonitoringSuspension()
         if updateTraceCount < 60 || this.desktop.isDragging || this.isTabMonitoringSuspended then
             updateTraceCount <- updateTraceCount + 1

@@ -154,11 +154,19 @@ module CaptionDragFallback =
     // Known weak spot: a snap that keeps one edge per axis (a window at the
     // work-area origin snapped to the left half) as the first change counts
     // as a resize. A real drag reports small moves long before that.
+    /// Off: the band over the top border (TopEdgeGuard) stops such a resize
+    /// before it starts, so undoing one here would only show up as a window
+    /// that moves and then jumps back - and it would fight the top-left corner
+    /// the band leaves free on purpose. The code stays for the case where the
+    /// band cannot be shown.
+    let mutable undoTopResize = false
+
     // A resize by the top border or a top corner: the top edge moved and the
     // bottom stayed where it was. A move changes the top too, so the size must
     // have changed; a move that also resizes (a drag onto another monitor)
     // moves the bottom edge as well and is left to the move rules.
     let isTopResize (anchor: Box) (current: Box) =
+        undoTopResize &&
         not (sameSize anchor current) && current.y <> anchor.y && current.bottom = anchor.bottom
 
     let decideFromGeometry (anchor: Box) (current: Box) =

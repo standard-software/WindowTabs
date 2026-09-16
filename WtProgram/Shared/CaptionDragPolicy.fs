@@ -28,6 +28,14 @@ module CaptionDragPolicy =
     let hitTopRight = 14
     let isTopBorder (hit: int) = hit = hitTop || hit = hitTopLeft || hit = hitTopRight
 
+    /// Off: the invisible band over the top border (TopEdgeGuard) takes the
+    /// press before the window ever sees it, and it keeps the plain arrow
+    /// cursor while it is there - which swallowing the press in the hook never
+    /// could. Swallowing as well would only take the top-left corner, the one
+    /// place the band deliberately leaves free, away from the user. The code
+    /// stays for the case where the band cannot be shown.
+    let mutable blockTopBorderPress = false
+
     // Only used for a standard non-client title bar. A custom frame
     // may deliberately resize inside its reported caption, so callers must
     // validate native rendering, DPI awareness and the geometry first.

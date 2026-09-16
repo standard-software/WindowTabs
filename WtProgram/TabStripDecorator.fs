@@ -363,7 +363,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let wanted =
                 (try Services.settings.getValue("lockWindowPosition") :?> bool with _ -> false) &&
                 group.bounds.value.IsSome &&
-                not this.ts.showInside
+                not this.ts.showInside &&
+                // Nothing to guard during a move or resize - the drag is
+                // already under way - and following the window frame by frame
+                // (position, size, repaint, z-order) is what made a top-edge
+                // resize crawl. The band comes back when the loop ends.
+                not group.isInMoveSizeThreadSafe
             // Only the window in front decides the band: its own margin, not
             // the group's. A group holding LINE and Chrome guards LINE's outer
             // frame while LINE shows, and just Chrome's top border while
@@ -385,7 +390,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 group.windows.items.any(fun hwnd ->
                     let window = os.windowFromHwnd(hwnd)
                     window.className = "ApplicationFrameWindow" && hwnd = os.foreground.hwnd)
-            topEdgeGuard.update(wanted, group.topWindow, group.bounds.value, marginTop, uwpInFront)
+            topEdgeGuard.update(wanted, group.topWindow, group.bounds.value, marginTop, uwpInFront,
+                                not group.isInMoveSizeThreadSafe)
         with _ -> ()
 
     member private this.updateTsPlacement() = this.ts.batch <| fun () ->
