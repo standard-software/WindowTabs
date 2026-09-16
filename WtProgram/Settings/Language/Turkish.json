@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Sekmeyi etkinleştirmek için Ctrl+1, ...Ctrl+9 kısayollarını etkinleştir",
   "EnableHoverActivate": "Sekmeyi etkinleştirmek için fareyle üzerine gelmeyi etkinleştir",
 
-  "TabPositionByDefault": "Sekme konumu",
-  "ChangeTabPositionOnSnap": "Sola/sağa yaslamada sekme konumu",
+  "TabPositionByDefault": "Sekme yerleşimi",
+  "ChangeTabPositionOnSnap": "Sola/sağa yaslamada sekme yerleşimi",
   "ChangeTabPositionOnSnapWhenUniform": "Gruptaki tüm sekmeler aynı konumu paylaştığında değiştir",
   "ChangeTabPositionOnSnapNever": "Değiştirme",
   "TabVerticalDirection": "Sekmelerin dikey yönü",

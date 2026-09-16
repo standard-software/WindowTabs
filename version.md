@@ -4,6 +4,7 @@
 
 ## version ss_2026.09.12_next15
 
+- The behaviour tab reads in order now - where the tabs sit, what snapping does to them, what hides them, and last what the window itself may do - and the two combo boxes are labelled "tab placement" rather than "tab position".
 - The invisible band alone now stops a top-edge resize: the input hook no longer swallows the press, and a resize that slipped through is no longer undone afterwards.
 - Resizing a tabbed window is smooth again. The input hook comes off for the length of the drag, and much less work is done on every frame of one.
 - Switching tabbing off for an application now also drops its closed-tab records, so switching it back on later starts with a clean tab rather than the name, colours and pin the old one had. Every record is looked at, not only the application just switched.

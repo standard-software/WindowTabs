@@ -232,16 +232,18 @@ type HotKeyView() =
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
+            // Where the tabs sit, then what snapping does to them, then what
+            // hides them, and last what the window itself may do.
             ("TabPositionByDefault", defaultTabPositionCombo :> Control)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionCombo :> Control)
+            ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
+            ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
             ("TabVerticalDirection", tabVerticalDirectionCombo :> Control)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
             // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
-            ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
             ("LockWindowPosition", lockPositionCheckbox)
-            ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
         ])
 
         let formPanel = UIHelper.form fields
@@ -253,11 +255,11 @@ type HotKeyView() =
         // Adjust the row height for the remaining radio button group.
         // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled,
         //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
-        //            6=tabVerticalDirection, 7=hideTabsWhenDown,
-        //            8=hideTabsOnFullscreen, 9=hideTabsWhileMoving,
-        //            10=snapTabHeightMargin, 11=lockWindowPosition,
-        //            12=snapOnDragDetach
-        let hideTabsRowIndex = 7
+        //            6=snapTabHeightMargin, 7=snapOnDragDetach,
+        //            8=tabVerticalDirection, 9=hideTabsWhenDown,
+        //            10=hideTabsOnFullscreen, 11=hideTabsWhileMoving,
+        //            12=lockWindowPosition
+        let hideTabsRowIndex = 9
 
         // Let the radio-group row auto-size based on content.
         formPanel.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize

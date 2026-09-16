@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Włącz Ctrl+1, ...Ctrl+9 do aktywacji kart",
   "EnableHoverActivate": "Aktywuj kartę po wskazaniu myszą",
 
-  "TabPositionByDefault": "Pozycja kart",
-  "ChangeTabPositionOnSnap": "Pozycja kart przy przyciąganiu w lewo/prawo",
+  "TabPositionByDefault": "Rozmieszczenie kart",
+  "ChangeTabPositionOnSnap": "Rozmieszczenie kart przy przyciąganiu w lewo/prawo",
   "ChangeTabPositionOnSnapWhenUniform": "Zmieniaj, gdy wszystkie karty w grupie mają tę samą pozycję",
   "ChangeTabPositionOnSnapNever": "Nie zmieniaj",
   "TabVerticalDirection": "Pionowy kierunek kart",
