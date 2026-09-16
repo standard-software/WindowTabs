@@ -4,59 +4,25 @@
 
 ## version ss_2026.09.12_next15
 
-- The behaviour tab reads in order now - where the tabs sit, what snapping does to them, what hides them, and last what the window itself may do - and the two combo boxes are labelled "tab placement" rather than "tab position".
-- The invisible band alone now stops a top-edge resize: the input hook no longer swallows the press, and a resize that slipped through is no longer undone afterwards.
-- Resizing a tabbed window is smooth again. The input hook comes off for the length of the drag, and much less work is done on every frame of one.
-- Switching tabbing off for an application now also drops its closed-tab records, so switching it back on later starts with a clean tab rather than the name, colours and pin the old one had. Every record is looked at, not only the application just switched.
-- A window left outside every monitor is brought back by the periodic scan, whatever put it there - a drag parks the windows behind the one being dragged just past the desktop, and a park that was never undone used to leave one out there for good.
-
-## version ss_2026.09.12_next14
-
-- "Prevent moving windows and resizing them from the top" now covers the top border with an invisible band, so the resize cursor no longer appears there and an application that resizes itself rather than through the system loop (LINE) is stopped as well. The caption buttons and the top-left corner stay clear, measured per window.
-
-## version ss_2026.09.12_next10
-
-- Leave the controls in Office's title bar working while windows are locked in place: the search box, the file-name menu and the account button share one child window that reports the whole band as the caption, so a press there is delivered and a drag started from it is undone afterwards instead.
-
-## version ss_2026.09.12_next9
-
-- "Prevent moving windows" now also stops them being resized from the top edge, where the tabs are: aiming at a tab and missing by a pixel used to resize the window. The left, right and bottom edges resize as before. Windows that resize themselves rather than through the system loop (LINE) are not covered.
-
-## version ss_2026.09.12_next8
-
-- Keep the tab groups across a spell of being disabled: the ten-second save no longer writes an empty desktop over the record of them while WindowTabs is off, switching it back on rebuilds them from that record after a restart, and a start-up with the box ticked no longer rebuilds them behind it.
-
-## version ss_2026.09.12_next7
-
-- Keep a tab menu open when an item that only opens a submenu is clicked: on a menu whose group is not the active window, that click left the desktop with no foreground window and Windows took the whole menu down at the next submenu. Such clicks, and right-clicks anywhere on the menu, are dropped - neither does anything in a menu.
-
-## version ss_2026.09.12_next6
-
-- Keep a tab menu open when a submenu is opened from its parent item: Windows reports no foreground window for a moment there, which was read as a switch to another window.
-- Take the menu's mouse and CBT hooks off however the menu ends, one step at a time, so no step can skip the ones after it.
-
-## version ss_2026.09.12_next5
-
-- Dispose the cached settings dialog only on the thread that created it, so exiting no longer destroys its window from a tab group's or the caption-drag thread.
-
-## version ss_2026.09.12_next4
-
-- Open a tab's context menu at once: right-clicking no longer brings its group forward first, so the menu does not wait for every group to react to the foreground change.
-- Draw a tab strip once per update, and only when something it shows has actually changed.
-- Close an open tab menu when another group's menu opens, and when a mouse press lands outside it.
-
-## version ss_2026.09.12_next3
-
-- Add an option to snap a window to half of the display when a tab is dragged out of its group: the side of the display's diagonals the drop lands on picks left, right, top or bottom.
-- Align the settings tabs on one row grid: the same margins and row height on the Appearance, Behavior and Shortcut Keys tabs, with captions centred on their inputs.
-
-## version ss_2026.09.12_next2
-
-- Add an option to prevent moving tabbed windows by dragging their title bars, while keeping resizing available. Some custom title bars may not be supported.
-
-## version ss_2026.09.12_next1
-
-- Fix tab title tooltips taking keyboard focus away from the active application when hovering over tabs.
+- This version marks ten thousand downloads (or thereabouts).
+- Added "Prevent moving windows and resizing them from the top".
+  - The title bar no longer starts a drag, and the top edge no longer resizes.
+  - It keeps a window from moving or resizing while its tabs are being used.
+  - An invisible band over the top border keeps the resize cursor from appearing, so the edge cannot be grabbed.
+  - The caption buttons and the top-left corner stay usable, measured per window.
+  - Some applications still move when dragged; those are put back where they were.
+- Tab menus open faster
+  - Right-clicking a tab no longer brings its group forward first, so the menu does not wait for every group to react
+- Added "Snap detached tabs by drop position".
+  - The display is quartered along its diagonals, and where the drop lands snaps the window to that half of it
+- Tab groups survive a spell with WindowTabs switched off
+  - The record of them is no longer overwritten while it is off, and switching it back on rebuilds them, even after a restart
+  - A start-up with the box ticked no longer rebuilds them behind it
+- Switching tabbing off for an application clears what it left behind
+- Tab tooltips no longer take keyboard focus from the application
+- A tabbed window left outside every monitor is put back on screen
+- Exiting no longer destroys the settings dialog from a thread that did not create it
+- The settings tabs line up on one row grid, the behaviour tab reads in order, and "tab position" is now "tab placement"
 
 ## version ss_2026.09.12
 
