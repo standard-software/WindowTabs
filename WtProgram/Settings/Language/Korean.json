@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Ctrl+1, ...Ctrl+9로 탭 활성화",
   "EnableHoverActivate": "마우스 오버로 탭 활성화",
 
-  "TabPositionByDefault": "탭 위치",
-  "ChangeTabPositionOnSnap": "좌우 스냅 시 탭 위치",
+  "TabPositionByDefault": "탭 배치",
+  "ChangeTabPositionOnSnap": "좌우 스냅 시 탭 배치",
   "ChangeTabPositionOnSnapWhenUniform": "그룹의 모든 탭 위치가 같을 때 변경",
   "ChangeTabPositionOnSnapNever": "변경하지 않음",
   "TabVerticalDirection": "탭 상하 방향",

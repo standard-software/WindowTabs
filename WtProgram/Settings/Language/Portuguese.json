@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Habilitar Ctrl+1, ...Ctrl+9 para ativar guias",
   "EnableHoverActivate": "Ativar guia ao passar o mouse",
 
-  "TabPositionByDefault": "Posição das guias",
-  "ChangeTabPositionOnSnap": "Posição das guias ao ajustar à esquerda/direita",
+  "TabPositionByDefault": "Disposição das guias",
+  "ChangeTabPositionOnSnap": "Disposição das guias ao ajustar à esquerda/direita",
   "ChangeTabPositionOnSnapWhenUniform": "Alterar quando todas as guias do grupo compartilham a mesma posição",
   "ChangeTabPositionOnSnapNever": "Não alterar",
   "TabVerticalDirection": "Direção vertical das guias",

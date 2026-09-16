@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Ctrl+1...Ctrl+9 でタブをアクティブにする",
   "EnableHoverActivate": "マウスオーバーでタブをアクティブにする",
 
-  "TabPositionByDefault": "タブの位置",
-  "ChangeTabPositionOnSnap": "左右スナップ時のタブ位置",
+  "TabPositionByDefault": "タブの配置",
+  "ChangeTabPositionOnSnap": "左右スナップ時のタブ配置",
   "ChangeTabPositionOnSnapWhenUniform": "グループの全てのタブ位置が同じときに変更",
   "ChangeTabPositionOnSnapNever": "変更しない",
   "TabVerticalDirection": "タブの上下方向",

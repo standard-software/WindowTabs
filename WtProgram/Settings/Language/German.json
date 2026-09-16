@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Ctrl+1, ...Ctrl+9 zum Aktivieren von Tabs aktivieren",
   "EnableHoverActivate": "Tab durch Zeigen mit der Maus aktivieren",
 
-  "TabPositionByDefault": "Tab-Position",
-  "ChangeTabPositionOnSnap": "Tab-Position beim Andocken links/rechts",
+  "TabPositionByDefault": "Tab-Platzierung",
+  "ChangeTabPositionOnSnap": "Tab-Platzierung beim Andocken links/rechts",
   "ChangeTabPositionOnSnapWhenUniform": "Ändern, wenn alle Tabs der Gruppe dieselbe Position haben",
   "ChangeTabPositionOnSnapNever": "Nicht ändern",
   "TabVerticalDirection": "Vertikale Tab-Richtung",

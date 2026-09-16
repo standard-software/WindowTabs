@@ -52,8 +52,8 @@
   "EnableCtrlNumberHotKey": "Activer Ctrl+1, ...Ctrl+9 pour activer un onglet",
   "EnableHoverActivate": "Activer l'onglet au survol de la souris",
 
-  "TabPositionByDefault": "Position des onglets",
-  "ChangeTabPositionOnSnap": "Position des onglets lors de l'ancrage gauche/droite",
+  "TabPositionByDefault": "Placement des onglets",
+  "ChangeTabPositionOnSnap": "Placement des onglets lors de l'ancrage gauche/droite",
   "ChangeTabPositionOnSnapWhenUniform": "Changer quand tous les onglets du groupe partagent la même position",
   "ChangeTabPositionOnSnapNever": "Ne pas changer",
   "TabVerticalDirection": "Direction verticale des onglets",

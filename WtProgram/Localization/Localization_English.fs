@@ -56,8 +56,8 @@ module Localization_English =
         ("EnableCtrlNumberHotKey", "Enable Ctrl+1, ...Ctrl+9 to activate tab")
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
-        ("TabPositionByDefault", "Tab position")
-        ("ChangeTabPositionOnSnap", "Tab position on left/right snap")
+        ("TabPositionByDefault", "Tab placement")
+        ("ChangeTabPositionOnSnap", "Tab placement on left/right snap")
         ("ChangeTabPositionOnSnapWhenUniform", "Change when all tabs in the group share the same position")
         ("ChangeTabPositionOnSnapNever", "Don't change")
         ("TabVerticalDirection", "Vertical tab direction")
