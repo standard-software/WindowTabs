@@ -170,8 +170,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         )
 
         tooltipHideTimer.Tick.Add(fun _ ->
-            this.tryHideTooltipIfCursorLeft()
-            this.validateHoverAgainstCursor())
+            PerfTrace.time "tooltipHideTick" (fun () ->
+                this.tryHideTooltipIfCursorLeft()
+                this.validateHoverAgainstCursor()))
         tooltipHideTimer.Start()
         
         layeredWindowCell.value <-
@@ -525,7 +526,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     
     member private this.update() =
         if this.visible then
-            this.window.update(this.render, this.location, this.alpha)
+            PerfTrace.time "stripRender" (fun () -> this.window.update(this.render, this.location, this.alpha))
         else this.window.hide()
     
     // No draw correction any more. The former applyDrawCorrection pre-compressed
