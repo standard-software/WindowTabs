@@ -23,6 +23,18 @@ module private TopEdgeGuardNative =
     [<System.Runtime.InteropServices.DllImport("dwmapi.dll")>]
     extern int DwmGetWindowAttribute(nativeint hwnd, uint32 attribute, RECT& value, uint32 size)
 
+module TopEdgeGuardOptions =
+    /// Paint the band instead of leaving it invisible, so that where it sits
+    /// can be seen while it is being fitted to a window. Edit it here; there is
+    /// no setting for it.
+    ///
+    /// true: filled blue at alpha 160, and repainted on every move - a plain
+    /// move asks for no paint of its own, so without that the fill is left
+    /// behind where the band used to be.
+    /// false: alpha 1 - invisible to the eye, and still a window the mouse can
+    /// land on, which a fully transparent layered window would not be.
+    let showBand = false
+
 type TopEdgeGuard(os: OS) =
     let mutable window : IWindow option = None
     let mutable owner = IntPtr.Zero
@@ -46,6 +58,17 @@ type TopEdgeGuard(os: OS) =
             WinUserApi.SetCursor(WinUserApi.LoadCursor(IntPtr.Zero, CursorIds.IDC_ARROW)).ignore
             1
         | 0x0021 (* WM_MOUSEACTIVATE *) -> 3 (* MA_NOACTIVATE *)
+        | 0x000F (* WM_PAINT *) when TopEdgeGuardOptions.showBand ->
+            let mutable ps = PAINTSTRUCT()
+            let hdc = WinUserApi.BeginPaint(msg.hwnd, &ps)
+            (try
+                use g = Drawing.Graphics.FromHdc(hdc)
+                use brush = new Drawing.SolidBrush(Drawing.Color.Blue)
+                g.FillRectangle(brush, Drawing.Rectangle(0, 0,
+                    ps.rcPaint.Right - ps.rcPaint.Left, ps.rcPaint.Bottom - ps.rcPaint.Top))
+             with _ -> ())
+            WinUserApi.EndPaint(msg.hwnd, &ps).ignore
+            0
         | 0x0201 | 0x0204 | 0x0207 (* button down *) ->
             // The press is swallowed, but the window below it still comes to
             // the front, which is what clicking a title bar would have done.
@@ -66,7 +89,8 @@ type TopEdgeGuard(os: OS) =
                      WindowsExtendedStyles.WS_EX_NOACTIVATE)
             // Alpha 1: invisible to the eye, and still a window the mouse can
             // land on. Alpha 0 would let every press through to the border.
-            WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, 1uy, 2 (* LWA_ALPHA *)).ignore
+            let alpha = if TopEdgeGuardOptions.showBand then 160uy else 1uy
+            WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, alpha, 2 (* LWA_ALPHA *)).ignore
             window <- Some(w)
             w
 
@@ -263,6 +287,11 @@ type TopEdgeGuard(os: OS) =
                 WinUserApi.SetWindowPos(w.hwnd, insertAfter,
                     bounds.location.x + leftGap, bounds.location.y, max 1 (width - leftGap), height,
                     flags).ignore
+                if TopEdgeGuardOptions.showBand then
+                    // A plain move asks for no paint of its own.
+                    WinUserApi.RedrawWindow(w.hwnd, IntPtr.Zero, IntPtr.Zero,
+                        RedrawWindowFlags.RDW_INVALIDATE ||| RedrawWindowFlags.RDW_ERASE |||
+                        RedrawWindowFlags.RDW_UPDATENOW).ignore
                 if not shown then
                     WinUserApi.ShowWindow(w.hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE).ignore
                     shown <- true
