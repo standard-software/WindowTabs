@@ -46,6 +46,8 @@ type TopEdgeGuard(os: OS) =
     let mutable shown = false
     // (window, width, height, band) -> width of the band before the buttons
     let mutable buttonScan : ((IntPtr * int * int) * int) option = None
+    // (window, dpi) -> how far down its own top border reaches
+    let mutable borderScan : ((IntPtr * int) * int) option = None
 
     // The strip of a window that starts a top resize: the sizing frame plus
     // the invisible padded border, at that window's own scale.
@@ -55,6 +57,10 @@ type TopEdgeGuard(os: OS) =
     // has a taller resize border than it reports, and the band was short of
     // covering it: the rows it missed still answered "top border", and the
     // resize cursor came back over most of the width.
+    //
+    // Nothing is added on top of the measurement. The border is all the band is
+    // meant to own; a couple of pixels of slack reach past it into the window
+    // itself, which on Chrome is the top of its tabs.
     static member bandHeightForDpi (dpi: int) =
         let dpi = if dpi <= 0 then 96 else dpi
         let metric index =
@@ -63,7 +69,7 @@ type TopEdgeGuard(os: OS) =
             else
                 // Before Windows 10 1607, or a call that failed: scale the
                 // primary monitor's metric by hand, rounding up rather than
-                // down, since coming up short is the failure that shows.
+                // down for the same reason.
                 let plain = WinUserApi.GetSystemMetrics(index)
                 (plain * dpi + 95) / 96
         max 4 (metric SystemMetrics.SM_CYFRAME + metric 92 (* SM_CXPADDEDBORDER *))
@@ -112,6 +118,48 @@ type TopEdgeGuard(os: OS) =
             WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, alpha, 2 (* LWA_ALPHA *)).ignore
             window <- Some(w)
             w
+
+    // How far down the window's own top border reaches, asked of the window
+    // itself rather than computed. Applications disagree: at 100% Chrome
+    // answers "top border" for six pixels and Edge for eight, and the gap grows
+    // with the scale. A band built from the system metrics is right for one of
+    // them and wrong for the other, and being one pixel too tall puts it over
+    // the top of Chrome's tabs.
+    //
+    // The middle of the window is asked, away from the corners and the caption
+    // buttons. The answer only changes when the window moves to another display
+    // or its frame changes, so it is kept per window; a window inside a
+    // move/size loop is never asked (see widthBeforeButtons for why).
+    member private this.topBorderHeight(ownerHwnd: IntPtr, windowBounds: Rect, dpi: int, mayScan: bool) =
+        let fallback () = TopEdgeGuard.bandHeightForDpi dpi
+        let key = ownerHwnd, dpi
+        match borderScan with
+        | Some(cached, value) when cached = key -> value
+        | Some(_, value) when not mayScan -> value
+        | _ when not mayScan -> fallback ()
+        | _ ->
+            let x = windowBounds.location.x + windowBounds.size.width / 2
+            let top = windowBounds.location.y
+            // Twice the tallest border any scale asks for is enough to find the
+            // end of it, and short enough to stay cheap.
+            let reach = min 28 (max 1 (windowBounds.size.height / 2))
+            let mutable last = -1
+            let mutable y = 0
+            while y < reach do
+                let packed = (((top + y) &&& 0xffff) <<< 16) ||| (x &&& 0xffff)
+                let mutable result = IntPtr.Zero
+                let answered =
+                    try
+                        TopEdgeGuardNative.SendMessageTimeout(ownerHwnd, 0x0084u (* WM_NCHITTEST *),
+                            IntPtr.Zero, IntPtr(packed), 0x0002u (* SMTO_ABORTIFHUNG *), 60u, &result) <> IntPtr.Zero
+                    with _ -> false
+                if answered && result.ToInt32() = 12 (* HTTOP *) then last <- y
+                y <- y + 1
+            // Nothing named the border - a window that resizes itself (LINE), or
+            // one that was busy. The metrics are all there is to go on then.
+            let value = if last >= 0 then last + 1 else fallback ()
+            borderScan <- Some(key, value)
+            value
 
     // Where the caption buttons begin, measured by asking the window what is
     // at points along the row the band covers, from the right edge inwards.
@@ -253,10 +301,15 @@ type TopEdgeGuard(os: OS) =
                     // z-order and never covers anything in front of it.
                     os.windowFromHwnd(w.hwnd).setParent(target)
                 // The window's own scale, not the primary monitor's: the band
-                // has to be as tall as the resize border of the display this
+                // has to be as tall as the resize border of the monitor this
                 // window is on.
                 let dpi = try int (WinUserApi.GetDpiForWindow(ownerHwnd)) with _ -> 96
-                let band = TopEdgeGuard.bandHeightForDpi dpi
+                let band =
+                    // A window with a margin (LINE) hangs its own frame above
+                    // its rectangle and answers nothing useful inside it; the
+                    // metrics decide there.
+                    if marginTop > 0 then TopEdgeGuard.bandHeightForDpi dpi
+                    else this.topBorderHeight(ownerHwnd, target.bounds, dpi, mayScan)
                 let height = marginTop + band
                 // The minimize / maximize / close buttons reach the top edge,
                 // and they are not a resize border: the band stops short of
