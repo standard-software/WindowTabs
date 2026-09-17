@@ -23,6 +23,11 @@ module private TopEdgeGuardNative =
     [<System.Runtime.InteropServices.DllImport("dwmapi.dll")>]
     extern int DwmGetWindowAttribute(nativeint hwnd, uint32 attribute, RECT& value, uint32 size)
 
+    // GetSystemMetrics answers for the primary monitor's scale whatever the
+    // window's own scale is. This one answers for the scale it is given.
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern int GetSystemMetricsForDpi(int index, uint32 dpi)
+
 module TopEdgeGuardOptions =
     /// Paint the band instead of leaving it invisible, so that where it sits
     /// can be seen while it is being fitted to a window. Edit it here; there is
@@ -43,11 +48,25 @@ type TopEdgeGuard(os: OS) =
     let mutable buttonScan : ((IntPtr * int * int) * int) option = None
 
     // The strip of a window that starts a top resize: the sizing frame plus
-    // the invisible padded border, as the system reports them.
-    static member bandHeight =
-        let frame = WinUserApi.GetSystemMetrics(SystemMetrics.SM_CYFRAME)
-        let padded = WinUserApi.GetSystemMetrics(92 (* SM_CXPADDEDBORDER *))
-        max 4 (frame + padded)
+    // the invisible padded border, at that window's own scale.
+    //
+    // The scale has to be the window's. GetSystemMetrics answers for the
+    // primary monitor whatever the window sits on, so a window at 125% or more
+    // has a taller resize border than it reports, and the band was short of
+    // covering it: the rows it missed still answered "top border", and the
+    // resize cursor came back over most of the width.
+    static member bandHeightForDpi (dpi: int) =
+        let dpi = if dpi <= 0 then 96 else dpi
+        let metric index =
+            let scaled = try TopEdgeGuardNative.GetSystemMetricsForDpi(index, uint32 dpi) with _ -> 0
+            if scaled > 0 then scaled
+            else
+                // Before Windows 10 1607, or a call that failed: scale the
+                // primary monitor's metric by hand, rounding up rather than
+                // down, since coming up short is the failure that shows.
+                let plain = WinUserApi.GetSystemMetrics(index)
+                (plain * dpi + 95) / 96
+        max 4 (metric SystemMetrics.SM_CYFRAME + metric 92 (* SM_CXPADDEDBORDER *))
 
     member private this.wndProc (msg: Win32Message) =
         match msg.msg with
@@ -233,7 +252,12 @@ type TopEdgeGuard(os: OS) =
                     // Owned by the window it guards, so it follows it in the
                     // z-order and never covers anything in front of it.
                     os.windowFromHwnd(w.hwnd).setParent(target)
-                let height = marginTop + TopEdgeGuard.bandHeight
+                // The window's own scale, not the primary monitor's: the band
+                // has to be as tall as the resize border of the display this
+                // window is on.
+                let dpi = try int (WinUserApi.GetDpiForWindow(ownerHwnd)) with _ -> 96
+                let band = TopEdgeGuard.bandHeightForDpi dpi
+                let height = marginTop + band
                 // The minimize / maximize / close buttons reach the top edge,
                 // and they are not a resize border: the band stops short of
                 // them, so their top row still takes clicks. Where they start
@@ -280,7 +304,7 @@ type TopEdgeGuard(os: OS) =
                 // frame itself.
                 let leftGap =
                     let scale = try Dpi.scaleForRect bounds with _ -> 1.0
-                    max (Dpi.px scale 25) TopEdgeGuard.bandHeight
+                    max (Dpi.px scale 25) band
                 // `bounds` is the group's rectangle, which already includes the
                 // margin: the band starts there and reaches past the window's
                 // own top border.
