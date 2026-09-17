@@ -1,4 +1,4 @@
-﻿# WindowTabs Standard-Software Version
+# WindowTabs Standard-Software Version
 
 **Language:** [English](version.md)
 

@@ -1,4 +1,4 @@
-﻿# WindowTabs Standard-Software Version
+# WindowTabs Standard-Software Version
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
