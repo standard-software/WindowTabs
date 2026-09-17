@@ -2,13 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.12_next15
+## version ss_2026.09.12_next16
 
 - This version marks ten thousand downloads (or thereabouts).
 - Added "Prevent moving windows and resizing them from the top".
   - The title bar no longer starts a drag, and the top edge no longer resizes.
   - It keeps a window from moving or resizing while its tabs are being used.
   - An invisible band over the top border keeps the resize cursor from appearing, so the edge cannot be grabbed.
+  - Its height follows the scale of the display, so it still covers the border at 125% and above.
+  - Its height is measured from each window: how thick the border is differs between applications.
   - The caption buttons and the top-left corner stay usable, measured per window.
   - Some applications still move when dragged; those are put back where they were.
 - Tab menus open faster
