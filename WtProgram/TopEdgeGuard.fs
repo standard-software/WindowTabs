@@ -143,9 +143,14 @@ type TopEdgeGuard(os: OS) =
             // Twice the tallest border any scale asks for is enough to find the
             // end of it, and short enough to stay cheap.
             let reach = min 28 (max 1 (windowBounds.size.height / 2))
+            let started = Diagnostics.Stopwatch.GetTimestamp()
+            let elapsedMs () =
+                float (Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0
+                / float Diagnostics.Stopwatch.Frequency
             let mutable last = -1
             let mutable y = 0
-            while y < reach do
+            let mutable asking = true
+            while asking && y < reach do
                 let packed = (((top + y) &&& 0xffff) <<< 16) ||| (x &&& 0xffff)
                 let mutable result = IntPtr.Zero
                 let answered =
@@ -153,7 +158,16 @@ type TopEdgeGuard(os: OS) =
                         TopEdgeGuardNative.SendMessageTimeout(ownerHwnd, 0x0084u (* WM_NCHITTEST *),
                             IntPtr.Zero, IntPtr(packed), 0x0002u (* SMTO_ABORTIFHUNG *), 60u, &result) <> IntPtr.Zero
                     with _ -> false
-                if answered && result.ToInt32() = 12 (* HTTOP *) then last <- y
+                // The border runs from the top edge without a break, so the
+                // first row that is not it ends the measurement - there is
+                // nothing below it to find. A window that did not answer will
+                // not answer the next row either: asking it all twenty-eight
+                // rows would hold this thread for a second and a half.
+                if not answered then asking <- false
+                elif result.ToInt32() = 12 (* HTTOP *) then last <- y
+                else asking <- false
+                // However it behaves, the whole measurement is over quickly.
+                if elapsedMs () > 100.0 then asking <- false
                 y <- y + 1
             // Nothing named the border - a window that resizes itself (LINE), or
             // one that was busy. The metrics are all there is to go on then.
