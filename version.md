@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.12_next16
+## version ss_2026.09.18
 
 - This version marks ten thousand downloads (or thereabouts).
 - Added "Prevent moving windows and resizing them from the top".
