@@ -1,4 +1,4 @@
-﻿<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
+<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
 
 # WindowTabs
 
@@ -102,16 +102,16 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 </details>
 
 ## Index
-- [Version](#Version)
-- [Download](#Download)
-- [Installation](#Installation)
-- [Usage](#Usage)
-- [Features](#Features)
-- [Settings](#Settings)
-- [Building from Source](#Building-from-Source)
-- [Links](#Links)
-- [License](#License)
-- [Comments](#Comments)
+- [Version](#version)
+- [Download](#download)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Features](#features)
+- [Settings](#settings)
+- [Building from Source](#building-from-source)
+- [Links](#links)
+- [License](#license)
+- [Comments](#comments)
 
 ## Version
 
@@ -126,25 +126,17 @@ See [version.md](version.md) for details.
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 
-Download the installer or the zip containing the exe from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
-
-- **WtSetup.msi** - Windows Installer package with automatic installation and uninstallation support
-- **WindowTabs.zip** - Portable version that can be extracted and run from any location
+Download from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
 
 ## Installation
 
-### Using the MSI Installer (WtSetup.msi)
-
-Run `WtSetup.msi` and follow the installation wizard (default: `Program Files\WindowTabs`).
-
-### Using the Portable Version (WindowTabs.zip)
-
-Extract `WindowTabs.zip` to your preferred location and run `WindowTabs.exe`.
+- **WtSetup.msi** - installer. Run it and follow the wizard (default: `Program Files\WindowTabs`)
+- **WindowTabs.zip** - portable. Extract it anywhere and run `WindowTabs.exe`
 
 
 ## Usage
 
-- Right-click the tray icon, select "Settings" from the menu, then choose programs to tab in the "Programs" tab.
+- Right-click the tray icon, open "Settings", and choose the programs to tab in the "Programs" tab.
 - Drag and drop tabs to group them, and right-click for further actions.
 
 ![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
@@ -155,109 +147,126 @@ Extract `WindowTabs.zip` to your preferred location and run `WindowTabs.exe`.
 
 ### Multi-Select Tabs
 
-- Hold Ctrl and click tabs to add them to / remove them from the selection.
-- Hold Shift and click a tab to select the range from the active tab.
-- Once selected, the right-click context menu and tab drag operations act on the whole selection.
+- Ctrl + click to add to / remove from the selection, Shift + click to select the range from the active tab.
+- While tabs are selected, the context menu and drag operations act on the whole selection.
 
 ### Tab Drag and Drop
-- Drag tabs to reorder within the same group.
-  - Multi-select: the contiguous selected range (= active tab + adjacent selected tabs sharing the same pin state and alignment) moves together as a single block, preserving the normal Chrome-style overlap. Smart-pin auto-converts the group on zone entry; the selection persists across a successful drag.
-- Drag tabs to split into a new window or link to another group.
-  - Multi-select: the whole selection (active + selected tabs) travels together — either into the target group, or as a new tab group when detached.
+- Reorder within the same group (multi-select: the contiguous selected range moves together)
+- Split into a new window, or link to another group (multi-select: the whole selection travels together)
 
 ### Tab Context Menu
 
-- Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
-- New tab : execute (exe name)
-  - Right of this tab
-  - Position (same submenu as "Position Move")
-  - Link to another group
-- Position Move
-  - Snap Left / Snap Right / Snap Top / Snap Bottom
-  - Snap 90% / 70% / 50% / 30% (each)
-    - Left / Right / Top / Bottom
-    - Top Left / Top Right / Bottom Left / Bottom Right
-    - Center / Center Horizontally / Center Vertically
-  - Snap Display
-  - Snap Desktop (multi-monitor only)
-  - Move
-    - Left Edge / Right Edge / Top Edge / Bottom Edge
-    - Top Left / Top Right / Bottom Left / Bottom Right
-- Link this tab group to another group (submenu lists other tab groups; choose the destination)
-- Detach this tab
-  - Position (same submenu as "Position Move")
-  - Link to another group
-- Close Tab
-  - Close this tab
-  - Close {N} tabs to the left
-  - Close {N} tabs to the right
-  - Close other tabs
-  - Close all tabs
-- Tab Margin When Snapping
-  - Add margin at top
-- Tab Alignment
-  - Align all tabs to Left
-  - Align all tabs to Right
-  - Align this tab to Left
-  - Align this tab to Right
-- Tab Pin
-  - Pin this tab
-  - Unpin this tab
-  - Pin all tabs
-  - Unpin all tabs
-- Tab Color Settings
-  - This tab color
-    - Red / Blue / Green / Yellow / Purple / Orange / Pink
-    - (same 7 colors, Underline variants)
-    - (same 7 colors, Border variants)
-  - Clear this tab color
-  - Clear color settings on all tabs
-- Tab Name
-  - Rename this tab : (tab name)
-  - Reset this tab name : (name after reset)
-- System
-  - Copy (exe name) path
-  - Copy window title : (window title)
-  - Open folder of (exe name)
-  - Force kill this process
-- Settings...
+```
+Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
+---
+New tab : execute (exe name)
+  Right of this tab
+  ---
+  Position (same submenu as "Position Move")
+  Link to another group
+---
+Position Move
+  Snap Left / Snap Right / Snap Top / Snap Bottom
+  ---
+  Snap 90% / 70% / 50% / 30% (each)
+    Left / Right / Top / Bottom
+    Top Left / Top Right / Bottom Left / Bottom Right
+    Center / Center Horizontally / Center Vertically
+  ---
+  Snap Display
+  Snap Desktop (multi-monitor only)
+  ---
+  Move
+    Left Edge / Right Edge / Top Edge / Bottom Edge
+    Top Left / Top Right / Bottom Left / Bottom Right
+Link this tab group to another group (submenu lists other tab groups; choose the destination)
+---
+Detach this tab
+  Position (same submenu as "Position Move")
+  Link to another group
+---
+Close Tab
+  Close this tab
+  ---
+  Close {N} tabs to the left
+  Close {N} tabs to the right
+  ---
+  Close other tabs
+  Close all tabs
+---
+Tab Margin When Snapping
+  Add margin at top
+Tab Alignment
+  Align all tabs to Left
+  Align all tabs to Right
+  ---
+  Align this tab to Left
+  Align this tab to Right
+Tab Pin
+  Pin this tab
+  Unpin this tab
+  ---
+  Pin all tabs
+  Unpin all tabs
+Tab Color Settings
+  This tab color
+    Red / Blue / Green / Yellow / Purple / Orange / Pink
+    ---
+    (same 7 colors, Underline variants)
+    ---
+    (same 7 colors, Border variants)
+  Clear this tab color
+  ---
+  Clear color settings on all tabs
+Tab Name
+  Rename this tab : (tab name)
+  Reset this tab name : (name after reset)
+---
+System
+  Copy (exe name) path
+  Copy window title : (window title)
+  ---
+  Open folder of (exe name)
+  Force kill this process
+---
+Settings...
+```
 
-In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. Items that require a single target tab are disabled.
+In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. When the tab you right-clicked is not in the selection they read "Selected {N} tabs + target tab...", and "Close other tabs" becomes "Close {N} unselected tabs". Items that require a single target tab are disabled.
 
 ### New Tab (New Launch)
 
-- Launch the same exe as the target tab, placing it to the right, in a new window at a specified position, or in another tab group.
+- Launch the same exe, placing it to the right of the tab, in a new window at a chosen position, or in another tab group.
 
 ![Popup Menu](README_Image/PopupMenu.png)
 
 ### Position Move
 
-- Snap moves the group to a screen edge, keeping its width / height; percentage snaps resize it relative to the display.
-- Move to screen edges or corners, or maximize across a display or the desktop.
-- On multi-monitor setups, the position menus ("Position Move", the new-tab "Position", and the detach "Position") appear once per display, e.g. "Position Move Display Left"; the display the window currently sits on is marked with a "(here)" suffix. The other displays' menus start with a "Same position on this display" item.
+- Snap moves the group to a screen edge keeping its width / height; percentage snaps resize it relative to the display. Moves to edges and corners, and maximizing across a display or the desktop, are there too.
+- On multi-monitor setups the position menus appear once per display, e.g. "Position Move Display Left". The display the window sits on is marked "(here)"; the others start with a "Same position on this display" item.
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
 ### Link this tab group to another group
 
-- Move all tabs of the current tab group into another existing tab group.
+- Move all tabs of the current group into another tab group.
 
 ![Link this tab group to another group](README_Image/MoveTabGroupToGroup.png)
 
 ### Detach Tab
 
-- Detach the selected tab ("Detach this tab") and reposition it, or link it to another tab group.
-- To detach multiple tabs together, use [Multi-Select Tabs](#multi-select-tabs) first and then run "Detach {N} selected tabs".
+- Move a detached tab to a chosen position, or link it to another tab group.
+- To detach several at once, use [Multi-Select Tabs](#multi-select-tabs) first, then "Detach {N} selected tabs".
 
 ### Close Tab
 
 ![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
 
-### Per-Tab Alignment
+### Tab Alignment
 
 - Align tabs left / right individually or all at once.
-- Drag to the other half of the strip to change alignment, even in a single-tab group. Dragging outside the strip detaches the tab.
-- Optionally (Behavior tab setting, on by default), snapping a uniformly-aligned group left or right (including x% snaps) realigns its tabs to the snap side.
+- Dragging a tab changes its alignment too.
+- With the "Tab placement on left/right snap" setting, a group whose tabs are all aligned to the same side realigns to the side it is snapped to.
 
 ### Pinned Tabs
 
@@ -275,13 +284,12 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Dark Mode / Light Mode
 
-- The tab / tray-icon context menus (popup menus) and the settings dialog can be switched to dark mode.
+- The tab and tray-icon context menus, and the settings dialog, can be switched to dark mode.
 
 ### Multi-Display and DPI Support
 
-- Tabs, settings, and confirmation dialogs adapt when moved between displays with different DPI scales
-- Sharp rendering at 125% / 150% / 175% and other scales, with tab and button hover / click positions matching their appearance
-- Automatic window resizing when dropped to prevent exceeding monitor dimensions
+- Tabs, settings and confirmation dialogs adapt when moved between displays with different DPI scales. Sharp rendering at 125% / 150% / 175% and other scales, with hover and click positions matching what is drawn
+- A window dropped on a display is kept from growing past it
 
 ### Virtual Desktop Support
 
@@ -290,86 +298,61 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### UWP Application Support
 
-- Supports UWP (Universal Windows Platform) applications
-- All UWP apps are collectively treated as a single exe, supporting tabbing and auto-grouping
-- Properly detects the state of apps on other virtual desktops
+- UWP (Universal Windows Platform) applications are collectively treated as a single exe, supporting tabbing and auto-grouping
 
 ### Multi-Language Support
 
-- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian language support
-- Japanese Kansai and Tohoku dialect files included
-- Switch languages via the tray menu without restarting
-
-![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese and Indonesian. Japanese Kansai and Tohoku dialect files are included
+- Switch languages from the tray menu without restarting
 
 ### Settings Files
 
-- `Settings\` beside `WindowTabs.exe` holds these files
-    - `Settings\VersionFolder.json`
-      - Applications whose path changes with every version are treated as one application
-    - `Settings\WindowMargin.json`
-      - Settings for applications with thick window frames
-    - `Settings\Language\FileList.json`
-      - Which language files are loaded
-    - `Settings\Language\<language>.json`
-- The files under `<exePath>\Settings\`
-  - are the defaults
-  - are replaced by every upgrade
-- To change a setting or a translation
-  - do not edit the files under `<exePath>\Settings\`: an upgrade would overwrite them
-  - put a file of the same name under `%APPDATA%\WindowTabs\Settings\` instead
-  - it is laid over the shipped one entry by entry
+- `Settings\` beside `WindowTabs.exe` holds the defaults
+    - `VersionFolder.json` - applications whose path changes with every version are treated as one application
+    - `WindowMargin.json` - settings for applications with thick window frames
+    - `Language\FileList.json` and `Language\<language>.json` - the language files
+- Those files are replaced by every upgrade. To change one, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
 - To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
   - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
   - `FileList.json` replaces the shipped list whole, so it can also hide languages from the tray menu
 
 ### Settings files from ss_2026.09.02 and earlier
 
-- Up to ss_2026.09.02 the language files sat in `Language\` beside `WindowTabs.exe` and the margins in `Settings\Window_Margin.json`, and those files were edited in place
-- The current version does not read either place. The MSI removes both on upgrade; the zip leaves them
-- If you edited them, move your copies before upgrading: language files to `%APPDATA%\WindowTabs\Settings\Language\`, and `Window_Margin.json` to `%APPDATA%\WindowTabs\Settings\WindowMargin.json`
+- Up to ss_2026.09.02 the language files sat in `Language\` and the margins in `Settings\Window_Margin.json`, edited in place. The current version reads neither (the MSI removes them on upgrade; the zip leaves them)
+- If you edited them, move your copies before upgrading, to `%APPDATA%\WindowTabs\Settings\Language\` and `%APPDATA%\WindowTabs\Settings\WindowMargin.json`
 
 ### Check for Updates
 
-- "Check for Updates" in the tray menu checks the latest GitHub release.
-- The check runs only when you click the menu item — WindowTabs never checks automatically (e.g. at startup).
-- If a newer version exists, it can be installed on the spot after a confirmation dialog: the MSI install runs the installer, and the zip install replaces the executable in place and restarts automatically.
+- "Check for Updates" in the tray menu checks the latest GitHub release. It runs only when you click it; WindowTabs never checks by itself.
+- If a newer version exists, it can be installed on the spot: the MSI install runs the installer, the zip install replaces the executable and restarts.
 
 ### Disable Feature
 
-- All tab functionality can be temporarily disabled without quitting WindowTabs.
-- Useful when using an app in full-screen mode.
+- All tab functionality can be temporarily disabled without quitting WindowTabs. Useful when using an app in full-screen mode.
 
 ### Tab Group Persistence
 
-- WindowTabs preserves your tab group configuration across restarts and when disabled.
-- State is saved every 10 seconds. After a force-quit, saved state can be restored.
-- Groups also come back after a Windows restart or a logoff, when every window has been closed and reopened with a handle of its own. Windows are recognised again by their application and their title.
-- A tab's name, pin, colours, left/right alignment and its place in the group come back with its window.
-- A window whose title has not settled yet - Excel before a workbook has loaded, say - takes its place once its real title appears.
+- Tab group configuration is saved every 10 seconds, and survives a restart, being disabled, and a force-quit.
+- Groups come back after a Windows restart or a logoff too. Even with new window handles, windows are recognised again by their application and their title.
+- A tab's name, pin, colours, left/right alignment and its place in the group come back with its window. A window whose title has not settled yet - Excel before a workbook has loaded, say - takes its place once its real title appears.
 - What was saved for a window that has not been reopened is kept for thirty days; for a tab closed by hand, eight.
 
 ### Watchdog Auto-Restart
 
-- If WindowTabs ever becomes unresponsive, a watchdog detects the frozen state and automatically restarts the application; tab group configuration is preserved and restored.
-- The freeze that used to occur when changing the number of displays, the resolution, or waking from sleep has been fixed, so the watchdog now remains only as a safety net.
+- If WindowTabs ever becomes unresponsive, a watchdog detects the frozen state and restarts it; tab groups are preserved and restored.
+- Earlier versions froze when the display configuration changed or the machine woke from sleep, which is what made this matter. Those are fixed, so the watchdog now remains only as a safety net.
 
 ## Settings
 
-Access settings by right-clicking the tray icon and selecting "Settings" or by right-clicking on a tab and selecting "Settings...".
-
-Tray actions are disabled while settings or another dialog is open to prevent overlapping operations.
+Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray actions are disabled while a dialog is open, to prevent overlapping operations.
 
 ### Programs Tab
 
 - **Tabs**: Enable/disable tabbing for each program
-- **Auto Grouping**: When enabled, windows of the same program are automatically grouped into the same tab group
-- **Category 1-10**: Programs in the same category are automatically grouped together, even across different applications
-  - For example, assign Word, Excel, PowerPoint, etc. to the same category to auto-group Office apps together
-  - Category columns are only visible when Auto Grouping is enabled for a program
+- **Auto Grouping**: windows of the same program are automatically grouped into the same tab group
+- **Category 1-10**: programs in the same category are grouped together even across different applications. Put Word, Excel and PowerPoint in one category to gather the Office apps (the columns are only visible where Auto Grouping is on)
 - Switching Auto Grouping or a Category **on** also gathers the windows that are already open, as though each of them had just been opened. A tab pulled out by hand while the setting was already on stays out.
-- **Show all settings**: Checkbox to display settings for programs not currently running
-- **Delete button [x]**: Remove settings for non-running processes
+- **Show all settings**: also shows settings for programs that are not running. **[x]** removes one
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
@@ -383,17 +366,16 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 ### Behavior Tab
 
-- **Tab position on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
+- **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - **Vertical tab direction**: choose "Up, or down when it would be off-screen" (default) or "Always down".
 - Configure hiding tabs for full-screen windows, while moving windows, and when tabs face downward.
-- Prevent moving tabbed windows by dragging their title bars, without disabling resizing. Some custom title bars may not be supported.
+- **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
 ### Shortcut Keys Tab
 
-- Configure keys for selecting tabs 1–9, switching to the next / previous tab, and adding a new tab.
-- Use Ctrl+1–9, Alt+1–9, or individual assignments for numbered tabs. Shortcuts are active only while working in a target window.
+- Configure keys for selecting tabs 1–9, switching to the next / previous tab, and adding a new tab. Numbered tabs use Ctrl+1–9, Alt+1–9 or individual assignments, and are active only while working in a target window.
 
 ### Workspace Tab
 
@@ -408,13 +390,9 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 ### Build Scripts
 
-A build script is provided in the project root:
+**build_release.bat** in the project root builds both the MSI installer and the portable ZIP distribution.
 
-- **build_release.bat** - Builds both the MSI installer and the portable ZIP distribution
-  - Output: `exe\installer\WtSetup.msi`
-  - Output: `exe\zip\WindowTabs.zip`
-
-Simply run the batch file to create the distribution packages.
+- Output: `exe\installer\WtSetup.msi`, `exe\zip\WindowTabs.zip`
 
 ## Links
 
@@ -450,3 +428,5 @@ This project is open source and licensed under the MIT License.
 ## Comments
 
 If you have any issues, please contact us via GitHub Issues or email: `standard.software.net@gmail.com`
+
+Issues are the quicker way to reach me.
