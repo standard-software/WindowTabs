@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.18_next1
+
 ## version ss_2026.09.18
 
 - This version marks ten thousand downloads (or thereabouts).

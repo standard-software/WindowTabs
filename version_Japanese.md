@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.18_next1
+
 ## version ss_2026.09.18
 
 - このバージョンは、10kダウンロード(予定)の記念です。
