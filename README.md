@@ -377,6 +377,8 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 - Configure keys for selecting tabs 1–9, switching to the next / previous tab, and adding a new tab. Numbered tabs use Ctrl+1–9, Alt+1–9 or individual assignments, and are active only while working in a target window.
 
+![Settings Shortcut Keys](README_Image/SettingsShortcutKeys.png)
+
 ### Workspace Tab
 
 - Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
