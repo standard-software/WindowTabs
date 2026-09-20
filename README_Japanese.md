@@ -115,7 +115,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.09.18_next1_build5**
+最新のバージョン: **ss_2026.09.18_next2**
 
 詳細は [version_Japanese.md](version_Japanese.md) を参照してください。
 
