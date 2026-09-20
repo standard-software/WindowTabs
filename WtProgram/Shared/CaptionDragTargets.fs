@@ -14,10 +14,26 @@ open System.Threading
 // (see CaptionDragFallback). Both sides only take a short lock.
 module CaptionDragTargets =
     let private targets = ConcurrentDictionary<IntPtr, obj>()
-    let add owner hwnd = targets.[hwnd] <- owner
+
+    /// Set by the hook's own thread: asks it to look at the state again.
+    /// A group registers its windows only while it is locked, so the hook is
+    /// wanted exactly while something is registered here - the first window
+    /// to arrive has to bring it up, and the last to leave has to take it
+    /// down.
+    let mutable wake : unit -> unit = id
+    let private notifyHook () = try wake() with _ -> ()
+
+    let add owner hwnd =
+        let wasEmpty = targets.IsEmpty
+        targets.[hwnd] <- owner
+        if wasEmpty then notifyHook ()
     let remove owner hwnd =
         (targets :> ICollection<KeyValuePair<IntPtr, obj>>).Remove(KeyValuePair(hwnd, owner)) |> ignore
+        if targets.IsEmpty then notifyHook ()
     let contains hwnd = targets.ContainsKey(hwnd)
+    /// Whether any window is locked at all, which is what decides whether the
+    /// hook is installed.
+    let anyTarget () = not targets.IsEmpty
 
     type Press =
         {

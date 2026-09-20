@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "{0} nicht ausgewählte Tabs schließen",
   "CloseAllTabs": "Alle Tabs schließen",
 
-  "SnapTabMarginMenu": "Tab-Rand beim Andocken",
-  "SnapTabMarginTop": "Rand oben hinzufügen",
+"WindowBehaviorMenu": "Verhalten der Tab-Gruppe",
+  "LockWindowPositionMenu": "Verschieben von Fenstern und Größenänderung an der Oberkante verhindern",
+    "SnapTabMarginTop": "Beim Andocken Rand für Tab-Höhe hinzufügen",
 
   "TabAlignMenu": "Tab-Ausrichtung",
   "AlignAllTopLeft": "Alle Tabs links ausrichten",

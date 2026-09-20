@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Tutup {0} tab yang tidak dipilih",
   "CloseAllTabs": "Tutup semua tab",
 
-  "SnapTabMarginMenu": "Margin Tab Saat Snap",
-  "SnapTabMarginTop": "Tambahkan margin di atas",
+"WindowBehaviorMenu": "Perilaku grup tab",
+  "LockWindowPositionMenu": "Cegah pemindahan jendela dan pengubahan ukuran dari sisi atas",
+    "SnapTabMarginTop": "Tambahkan margin tinggi tab saat snap",
 
   "TabAlignMenu": "Perataan Tab",
   "AlignAllTopLeft": "Ratakan semua tab ke Kiri",

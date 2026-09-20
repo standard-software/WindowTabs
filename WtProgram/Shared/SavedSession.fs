@@ -37,6 +37,8 @@ module SavedSession =
         windows: SavedTab list
         tabPosition: string option
         snapMargin: bool option
+        // None in a file written before the lock became per-group.
+        lockPosition: bool option
     }
 
     // ---------------------------------------------------------------- save --
@@ -68,6 +70,7 @@ module SavedSession =
         seeds: PendingTab list
         tabPosition: string option
         snapMargin: bool option
+        lockPosition: bool option
     }
 
     let mergedOrder (stripOrder: IntPtr list) (mirrorOrder: IntPtr list) =
@@ -103,7 +106,8 @@ module SavedSession =
     // in at the index they held. A group with nothing in it is not written at
     // all: emptying a group is the plainest way of saying it is finished with.
     let groupToSavedJson (windows: SavedTab list) (seeds: PendingTab list)
-                         (tabPosition: string option) (snapMargin: bool option) =
+                         (tabPosition: string option) (snapMargin: bool option)
+                         (lockPosition: bool option) =
         let arr = JArray()
         windows |> List.iter (fun t -> arr.Add(toJson t))
         seeds
@@ -111,7 +115,7 @@ module SavedSession =
         |> List.iter (fun e ->
             let at = if e.rank >= 0 && e.rank < arr.Count then e.rank else arr.Count
             arr.Insert(at, toJson e.tab))
-        if arr.Count = 0 then None else Some(groupToJson arr tabPosition snapMargin)
+        if arr.Count = 0 then None else Some(groupToJson arr tabPosition snapMargin lockPosition)
 
     // The whole of SavedTabGroupsForRestart.
     //
@@ -124,7 +128,7 @@ module SavedSession =
         let arr = JArray()
         groups |> List.iter (fun g ->
             let windows = mergedOrder g.stripOrder g.mirrorOrder |> List.choose stateOf
-            groupToSavedJson windows g.seeds g.tabPosition g.snapMargin
+            groupToSavedJson windows g.seeds g.tabPosition g.snapMargin g.lockPosition
             |> Option.iter (fun o -> arr.Add(o)))
         arr
 
@@ -135,7 +139,8 @@ module SavedSession =
         |> Seq.map (fun t ->
             { windows = groupWindows t
               tabPosition = groupTabPosition t
-              snapMargin = groupSnapMargin t })
+              snapMargin = groupSnapMargin t
+              lockPosition = groupLockPosition t })
         |> List.ofSeq
 
     // ------------------------------------------------------------- restore --
@@ -191,6 +196,7 @@ module SavedSession =
         tabs: PlannedTab list
         tabPosition: string option
         snapMargin: bool option
+        lockPosition: bool option
         // The saved order in the handles the file holds, which is what an
         // arrival's order arithmetic is done against.
         savedOrder: IntPtr list
@@ -543,5 +549,6 @@ module SavedSession =
             { tabs = tabs
               tabPosition = g.tabPosition
               snapMargin = g.snapMargin
+              lockPosition = g.lockPosition
               savedOrder = savedOrder
               token = (match savedOrder with h :: _ -> h | [] -> IntPtr.Zero) })

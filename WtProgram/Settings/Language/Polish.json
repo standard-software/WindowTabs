@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Zamknij {0} niezaznaczonych kart",
   "CloseAllTabs": "Zamknij wszystkie karty",
 
-  "SnapTabMarginMenu": "Margines kart przy przyciąganiu",
-  "SnapTabMarginTop": "Dodaj margines u góry",
+"WindowBehaviorMenu": "Zachowanie grupy kart",
+  "LockWindowPositionMenu": "Blokuj przesuwanie okien i zmianę rozmiaru od górnej krawędzi",
+    "SnapTabMarginTop": "Dodaj margines wysokości karty przy przyciąganiu",
 
   "TabAlignMenu": "Wyrównanie kart",
   "AlignAllTopLeft": "Wyrównaj wszystkie karty do lewej",

@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Fermer les {0} onglets non sélectionnés",
   "CloseAllTabs": "Fermer tous les onglets",
 
-  "SnapTabMarginMenu": "Marge d'onglet lors de l'ancrage",
-  "SnapTabMarginTop": "Ajouter une marge en haut",
+"WindowBehaviorMenu": "Comportement du groupe d'onglets",
+  "LockWindowPositionMenu": "Empêcher le déplacement des fenêtres et le redimensionnement par le haut",
+    "SnapTabMarginTop": "Ajouter une marge de hauteur d'onglet lors de l'ancrage",
 
   "TabAlignMenu": "Alignement des onglets",
   "AlignAllTopLeft": "Aligner tous les onglets à gauche",

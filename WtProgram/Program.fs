@@ -322,6 +322,9 @@ type Program() as this =
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
     let pendingDragSnapMargins = Cell.create(Map2<IntPtr, bool>())
+    // The lock of the group a tab was dragged out of, waiting for the group
+    // it lands in to be created (see IProgram.markDetachedLock).
+    let pendingDetachedLocks = Cell.create(Map2<IntPtr, bool>())
     // Case C: hwnds recently placed into a group via the multi-select
     // drag-detach path. removeUntabableWindows skips these for a short
     // grace period so the dragExit off-screen parking doesn't cause the
@@ -442,7 +445,7 @@ type Program() as this =
     // auto-grouping, which knows nothing of what was saved, so without this
     // the group came back on the default side of its windows and lost the
     // setting again at the next save.
-    let seededGroupSettings = Cell.create(Map2() : Map2<IntPtr, string option * bool option>)
+    let seededGroupSettings = Cell.create(Map2() : Map2<IntPtr, string option * bool option * bool option>)
     // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
     // relative placement can locate already-restored siblings in an order
     // snapshot taken before they closed
@@ -456,7 +459,7 @@ type Program() as this =
     // as it stands at that moment.
     let restoredFromMap = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>()
     // Temporary storage for tab group configuration (used during disable/enable)
-    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * List2<IntPtr>>>(List2())
+    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * bool * List2<IntPtr>>>(List2())
     let windowNameOverride = Cell.create(Map2())
     // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
     let windowFillColor = Cell.create(Map2() : Map2<IntPtr, Color>)
@@ -937,9 +940,10 @@ type Program() as this =
     // been bound to it.
     member private this.applySeededGroupSettings(token: IntPtr, g: IGroup) =
         match seededGroupSettings.value.tryFind(token) with
-        | Some(pos, margin) ->
+        | Some(pos, margin, locked) ->
             pos |> Option.iter (fun p -> g.perGroupTabPositionValue <- p)
             margin |> Option.iter (fun m -> g.snapTabHeightMargin <- m)
+            locked |> Option.iter (fun l -> g.lockWindowPosition <- l)
         | None -> ()
 
     member private this.isInfoGroup (g: IGroup) (info: ClosedTabInfo) =
@@ -1822,6 +1826,9 @@ type Program() as this =
         let snapMargin = pendingDragSnapMargins.value.tryFind(hwnd)
         pendingDragSnapMargins.map(fun m -> m.remove hwnd)
         if isNewGroup then snapMargin |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
+        let detachedLock = pendingDetachedLocks.value.tryFind(hwnd)
+        pendingDetachedLocks.map(fun m -> m.remove hwnd)
+        if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
         group.addWindow(hwnd, withDelay)
 
         // Check if this is a "New Tab" launch - position after the invoking tab
@@ -2341,7 +2348,8 @@ type Program() as this =
                           mirrorOrder = gi.visualOrder.list
                           seeds = seeds
                           tabPosition = Some(gi.perGroupTabPositionValue)
-                          snapMargin = Some(gi.snapTabHeightMargin) }
+                          snapMargin = Some(gi.snapTabHeightMargin)
+                          lockPosition = Some(gi.lockWindowPosition) }
                     group)
             // A group where nothing has opened yet keeps a group of its own,
             // held together by the sentinel token it was seeded under. Tabs
@@ -2367,16 +2375,17 @@ type Program() as this =
                         // The group's own settings go with it. Read from the
                         // live group above, they have no live group to be read
                         // from here, and a second restart would have lost them.
-                        let pos, margin =
+                        let pos, margin, locked =
                             match seededGroupSettings.value.tryFind(token) with
-                            | Some(p, m) -> p, m
-                            | None -> None, None
+                            | Some(p, m, l) -> p, m, l
+                            | None -> None, None, None
                         let group : SavedSession.GroupToSave =
                             { stripOrder = []
                               mirrorOrder = []
                               seeds = entries
                               tabPosition = pos
-                              snapMargin = margin }
+                              snapMargin = margin
+                              lockPosition = locked }
                         Some(group))
             json.addOrUpdate("SavedTabGroupsForRestart",
                              SavedSession.write this.savedTabOfWindow (liveGroups @ waitingGroups))
@@ -2475,6 +2484,7 @@ type Program() as this =
                         // already applied at creation when it has none.
                         g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
                         g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
+                        g.lockPosition |> Option.iter (fun v -> group.lockWindowPosition <- v)
                         Some(group)
 
                     RestoreTrace.log (fun () -> sprintf "group token=%X created=%b order=%s"
@@ -2482,7 +2492,7 @@ type Program() as this =
                                                         (createdGroup.IsSome)
                                                         (g.savedOrder |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
                     if g.token <> IntPtr.Zero then
-                        seededGroupSettings.map(fun m -> m.add g.token (g.tabPosition, g.snapMargin))
+                        seededGroupSettings.map(fun m -> m.add g.token (g.tabPosition, g.snapMargin, g.lockPosition))
                         (match createdGroup with
                          | Some(grp) -> seededGroupMap.map(fun m -> m.add g.token grp)
                          | None -> ())
@@ -2818,7 +2828,7 @@ type Program() as this =
                 // When disabling, save current tab group configuration first (with per-group tab position)
                 let groupConfigs = this.desktop.groups.map <| fun gi ->
                     let pinnedHwnds = gi.visualOrder.where(fun hwnd -> gi.isPinned(hwnd))
-                    (gi.visualOrder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, pinnedHwnds)
+                    (gi.visualOrder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, pinnedHwnds)
                 savedTabGroups.set(groupConfigs)
 
                 // Set disabled state before destroying groups
@@ -2844,7 +2854,7 @@ type Program() as this =
                     this.restoreTabGroupsFromSettings()
 
                 // Restore saved tab groups
-                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, pinnedHwnds) ->
+                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, savedLockPosition, pinnedHwnds) ->
                     // Filter out windows that no longer exist or are not visible
                     let validHwnds = hwnds.where <| fun hwnd ->
                         let window = os.windowFromHwnd(hwnd)
@@ -2858,6 +2868,8 @@ type Program() as this =
                         group.perGroupTabPositionValue <- savedTabPos
                         // Restore per-group snap tab height margin
                         group.snapTabHeightMargin <- savedSnapMargin
+                        // Restore whether this group's windows are locked
+                        group.lockWindowPosition <- savedLockPosition
                         // Restore pinned tabs
                         pinnedHwnds.iter <| fun hwnd ->
                             if validHwnds.contains((=) hwnd) then
@@ -2934,6 +2946,9 @@ type Program() as this =
                 let newPaths = AppPath.removeApp paths.list procPath
                 settingsJson.setStringArray(categoryKey, List2(newPaths))
             settingsManager.settingsJson <- settingsJson
+
+        member x.markDetachedLock (hwnd: IntPtr) (locked: bool) =
+            pendingDetachedLocks.map(fun m -> m.add hwnd locked)
 
         member x.markRecentlyPlaced(hwnds) =
             let now = DateTime.Now
