@@ -67,7 +67,7 @@
 
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示",
   "HideTabsWhileMoving": "ウィンドウ移動時はタブを非表示",
-  "LockWindowPosition": "ウィンドウの移動や上端リサイズをさせない",
+  "LockWindowPosition": "ウィンドウの移動と上端リサイズを禁止",
   "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあける",
   "SnapOnDragDetach": "タブ分離時にドロップ位置でスナップする",
   "NextTab": "次のタブ",
@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "選択していない{0}タブを閉じる",
   "CloseAllTabs": "全てのタブを閉じる",
 
-  "SnapTabMarginMenu": "スナップ時のタブの余白",
-  "SnapTabMarginTop": "上に余白をあける",
+"WindowBehaviorMenu": "タブグループの動作",
+  "LockWindowPositionMenu": "ウィンドウの移動と上端リサイズを禁止",
+    "SnapTabMarginTop": "スナップ時にタブの高さ分の余白をあける",
 
   "TabAlignMenu": "タブの配置",
   "AlignAllTopLeft": "全てのタブを左寄せ",

@@ -65,6 +65,9 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let movedEvent = Event<IntPtr*int>()
     let removedEvent = Event<_>()
     let exitedEvent = Event<_>()
+    // Raised when this group's lock changes, from its own menu or from the
+    // dialog: the top edge band follows it (see TabStripDecorator).
+    let lockChangedEvent = Event<unit>()
     let flashEvent = Event<_>()
     let foregroundEvent = Event<_>()
 
@@ -108,11 +111,16 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let isMinimized hwnd = this.os.windowFromHwnd(hwnd).isMinimized
     let hookCleanup = Cell.create(Map2<IntPtr, IDisposable>())
     let captionDragOwner = obj()
-    // "Lock window position" fallback for drags the input hook could not stop
-    // (see CaptionDragFallback). The setting is mirrored here - read once in
-    // init, kept current by notifyValue - so a move/size start costs a field
-    // read while it is off. The armed session belongs to one window and to
-    // the press (sequence number) that armed it. (group-thread only)
+    // Whether this group's windows are locked in place. The dialog's setting
+    // is the value a new group starts from, and changing it there applies to
+    // every group, exactly as the snap margin behaves; the tab menu then
+    // overrides it for one group. While it is on, the group's windows are
+    // registered in CaptionDragTargets, which is what puts the input hook up
+    // (see CaptionDragPlugin) and what the hook filters presses by.
+    //
+    // It also arms the fallback for drags the hook could not stop (see
+    // CaptionDragFallback); that session belongs to one window and to the
+    // press (sequence number) that armed it. (group-thread only)
     let mutable captionDragEnabled = false
     let mutable fallbackSession : CaptionDragFallback.Session option = None
     let mutable fallbackHwnd = IntPtr.Zero
@@ -248,10 +256,12 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
 
         // Turning "lock window position" off drops an armed fallback at once,
         // even in the middle of a drag.
+        // Changing it in the dialog applies to all groups, as the snap margin
+        // does, and overwrites whatever a group was set to from its own menu.
         Services.settings.notifyValue "lockWindowPosition" <| fun value ->
             this.invokeAsync <| fun() ->
-                captionDragEnabled <- unbox<bool>(value)
-                if not captionDragEnabled then this.endCaptionDragFallback "setting turned off"
+                this.applyLockWindowPosition(unbox<bool>(value))
+                lockChangedEvent.Trigger()
 
         // Listen for hideTabsWhenDownByDefault changes
         Services.settings.notifyValue "hideTabsWhenDownByDefault" <| fun value ->
@@ -585,10 +595,13 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         this.setZorder(this.inZorder(this.windows.items))
 
     member private this.setWindows(newWindows: Set2<IntPtr>) =
-        // Publish membership without cross-thread service calls in the input hook.
+        // Publish membership without cross-thread service calls in the input
+        // hook. A group that is not locked registers nothing: the hook is
+        // installed only while some window is registered.
         this.windows.items.iter (fun hwnd ->
-            if not (newWindows.contains hwnd) then CaptionDragTargets.remove captionDragOwner hwnd)
-        newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
+            if not (newWindows.contains hwnd) || not captionDragEnabled then
+                CaptionDragTargets.remove captionDragOwner hwnd)
+        if captionDragEnabled then newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
         windowsCell.set(newWindows)
         this.saveZorder()
         this.updateIsVisible()
@@ -797,6 +810,22 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     member this.snapTabHeightMargin
         with get() = perGroupSnapTabHeightMargin
         and set(value) = perGroupSnapTabHeightMargin <- value
+
+    member this.lockWindowPosition
+        with get() = captionDragEnabled
+        and set(value) =
+            this.applyLockWindowPosition(value)
+            lockChangedEvent.Trigger()
+
+    // Registering the windows is what turns the hook on for them, so the
+    // registration has to follow the setting both ways. An armed fallback is
+    // dropped at once when the lock goes off, even in the middle of a drag.
+    member private this.applyLockWindowPosition(value: bool) =
+        captionDragEnabled <- value
+        if value then this.windows.items.iter (CaptionDragTargets.add captionDragOwner)
+        else
+            this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
+            this.endCaptionDragFallback "lock turned off"
 
     member this.hwnd = this.ts.hwnd
 
@@ -1601,6 +1630,7 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
         movedEvent.Trigger(hwnd, index)
 
     member x.exited = exitedEvent.Publish
+    member this.lockChanged = lockChangedEvent.Publish
     member this.bounds = boundsExport :> ICellOutput<_>
     member this.isForeground = isForegroundExport :> ICellOutput<_>
     member this.zorder = zorderExport :> ICellOutput<_>

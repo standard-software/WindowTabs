@@ -220,12 +220,21 @@ module SavedTabState =
         | :? JObject as g -> boolOf g "snapTabHeightMargin"
         | _ -> None
 
+    // Absent in a file written before the lock became per-group: the group
+    // then starts from the dialog's value, as it always did.
+    let groupLockPosition (groupToken: JToken) =
+        match groupToken with
+        | :? JObject as g -> boolOf g "lockWindowPosition"
+        | _ -> None
+
     // The window array is passed in rather than built from a SavedTab list:
     // the save has to splice not-yet-started windows into it at the index they
     // held in the saved order, which is an operation on the array itself.
-    let groupToJson (windows: JArray) (tabPosition: string option) (snapMargin: bool option) =
+    let groupToJson (windows: JArray) (tabPosition: string option) (snapMargin: bool option)
+                    (lockPosition: bool option) =
         let o = JObject()
         o.Add("windows", windows)
         tabPosition |> Option.iter (fun p -> o.Add("tabPosition", JValue(p)))
         snapMargin |> Option.iter (fun m -> o.Add("snapTabHeightMargin", JValue(m)))
+        lockPosition |> Option.iter (fun m -> o.Add("lockWindowPosition", JValue(m)))
         o

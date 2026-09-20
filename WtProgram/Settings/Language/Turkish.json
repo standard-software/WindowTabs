@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Seçili olmayan {0} sekmeyi kapat",
   "CloseAllTabs": "Tüm sekmeleri kapat",
 
-  "SnapTabMarginMenu": "Yaslarken Sekme Boşluğu",
-  "SnapTabMarginTop": "Üste boşluk ekle",
+"WindowBehaviorMenu": "Sekme grubu davranışı",
+  "LockWindowPositionMenu": "Pencerelerin taşınmasını ve üst kenardan boyutlandırılmasını engelle",
+    "SnapTabMarginTop": "Yaslarken sekme yüksekliği kadar boşluk ekle",
 
   "TabAlignMenu": "Sekme Hizalama",
   "AlignAllTopLeft": "Tüm sekmeleri sola hizala",

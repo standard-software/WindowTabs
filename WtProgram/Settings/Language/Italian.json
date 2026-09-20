@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Chiudi {0} schede non selezionate",
   "CloseAllTabs": "Chiudi tutte le schede",
 
-  "SnapTabMarginMenu": "Margine schede all'aggancio",
-  "SnapTabMarginTop": "Aggiungi margine in alto",
+"WindowBehaviorMenu": "Comportamento del gruppo di schede",
+  "LockWindowPositionMenu": "Impedisci lo spostamento delle finestre e il ridimensionamento dal bordo superiore",
+    "SnapTabMarginTop": "Aggiungi margine per l'altezza delle schede all'aggancio",
 
   "TabAlignMenu": "Allineamento scheda",
   "AlignAllTopLeft": "Allinea tutte le schede a sinistra",

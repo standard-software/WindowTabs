@@ -338,7 +338,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeAsync <| fun() ->
                 this.updateTsPlacement()
 
-        Services.settings.notifyValue "lockWindowPosition" <| fun(_) ->
+        // The group carries the lock now; the dialog's value reaches it
+        // through the group and comes back here as this event.
+        group.lockChanged.Add <| fun() ->
             this.invokeAsync <| fun() ->
                 this.updateTopEdgeGuard()
 
@@ -361,7 +363,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.updateTopEdgeGuard() =
         try
             let wanted =
-                (try Services.settings.getValue("lockWindowPosition") :?> bool with _ -> false) &&
+                group.lockWindowPosition &&
                 group.bounds.value.IsSome &&
                 not this.ts.showInside &&
                 // Nothing to guard during a move or resize - the drag is
@@ -2880,9 +2882,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             }))
             Some(CmiSeparator)
             Some(CmiPopUp({
-                text = Localization.getString("SnapTabMarginMenu")
+                // Both of these are about how the window behaves rather than
+                // how the tabs look, which is what separates them from the
+                // rest of the menu. Each one starts from the dialog's value
+                // and is overridden here for this group alone.
+                text = Localization.getString("WindowBehaviorMenu")
                 image = None
                 items = List2([
+                    CmiRegular({
+                        text = Localization.getString("LockWindowPositionMenu")
+                        image = None
+                        flags = if group.lockWindowPosition then List2([MenuFlags.MF_CHECKED]) else List2()
+                        click = fun() ->
+                            group.lockWindowPosition <- not group.lockWindowPosition
+                    })
                     CmiRegular({
                         text = Localization.getString("SnapTabMarginTop")
                         image = None
@@ -3092,6 +3105,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                           if window.isMaximized || window.isMinimized then window.placement.rcNormalPosition.size
                                           else window.bounds.size
                                       sourceSnapTabHeightMargin = group.snapTabHeightMargin
+                                      sourceLockWindowPosition = group.lockWindowPosition
                                       sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign })
                             Services.dragDrop.beginDrag(this.ts.hwnd, dragImage, imageOffset, ptScreen, dragInfo)
                 | MouseMiddle ->

@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Fechar {0} guias não selecionadas",
   "CloseAllTabs": "Fechar todas as guias",
 
-  "SnapTabMarginMenu": "Margem da guia ao ajustar",
-  "SnapTabMarginTop": "Adicionar margem na parte superior",
+"WindowBehaviorMenu": "Comportamento do grupo de guias",
+  "LockWindowPositionMenu": "Impedir mover janelas e redimensioná-las pela borda superior",
+    "SnapTabMarginTop": "Adicionar margem da altura da guia ao ajustar",
 
   "TabAlignMenu": "Alinhamento da guia",
   "AlignAllTopLeft": "Alinhar todas as guias à esquerda",

@@ -4,6 +4,10 @@
 
 ## version ss_2026.09.18_next1
 
+- "Prevent moving windows and resizing them from the top" is now a setting of each tab group.
+  - It is in the tab menu, under "tab group behaviour", beside the snap margin.
+  - The one in the settings dialog is what a new group starts from, and changing it there applies to every group.
+
 ## version ss_2026.09.18
 
 - This version marks ten thousand downloads (or thereabouts).

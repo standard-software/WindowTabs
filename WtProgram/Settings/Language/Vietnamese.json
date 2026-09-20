@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Đóng {0} thẻ chưa chọn",
   "CloseAllTabs": "Đóng tất cả thẻ",
 
-  "SnapTabMarginMenu": "Lề thẻ khi ghép",
-  "SnapTabMarginTop": "Thêm lề ở trên",
+"WindowBehaviorMenu": "Hành vi nhóm thẻ",
+  "LockWindowPositionMenu": "Ngăn di chuyển cửa sổ và thay đổi kích thước từ cạnh trên",
+    "SnapTabMarginTop": "Thêm lề bằng chiều cao thẻ khi ghép",
 
   "TabAlignMenu": "Căn chỉnh thẻ",
   "AlignAllTopLeft": "Căn tất cả thẻ sang trái",

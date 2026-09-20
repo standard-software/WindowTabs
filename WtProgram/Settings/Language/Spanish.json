@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "Cerrar {0} pestañas no seleccionadas",
   "CloseAllTabs": "Cerrar todas las pestañas",
 
-  "SnapTabMarginMenu": "Margen de pestaña al acoplar",
-  "SnapTabMarginTop": "Agregar margen en la parte superior",
+"WindowBehaviorMenu": "Comportamiento del grupo de pestañas",
+  "LockWindowPositionMenu": "Impedir mover ventanas y redimensionarlas desde el borde superior",
+    "SnapTabMarginTop": "Agregar margen de alto de pestaña al acoplar",
 
   "TabAlignMenu": "Alineación de la pestaña",
   "AlignAllTopLeft": "Alinear todas las pestañas a la izquierda",

@@ -81,6 +81,9 @@ type GroupInfo(enableSuperBar) as this =
         member x.snapTabHeightMargin
             with get() = _group.snapTabHeightMargin
             and set(value) = this.invokeGroup <| fun() -> _group.snapTabHeightMargin <- value
+        member x.lockWindowPosition
+            with get() = _group.lockWindowPosition
+            and set(value) = this.invokeGroup <| fun() -> _group.lockWindowPosition <- value
         member x.isPinned(hwnd) = _group.isPinnedThreadSafe(hwnd)
         member x.pinTab(hwnd) = this.invokeGroup <| fun() -> _group.pinTab(hwnd)
         member x.isPinnedThreadSafe(hwnd) = _group.isPinnedThreadSafe(hwnd)
@@ -270,6 +273,7 @@ type Desktop(notify:IDesktopNotification) as this =
                     try
                         let newGroup = this.createGroup(false)
                         if snapMonitor.IsSome then newGroup.snapTabHeightMargin <- dragInfo.sourceSnapTabHeightMargin
+                        newGroup.lockWindowPosition <- dragInfo.sourceLockWindowPosition
                         newGroup.addWindow(hwnd, false)
                         for selHwnd in dragInfo.selectedHwnds do
                             if not (newGroup.windows.contains((=) selHwnd)) then
@@ -287,6 +291,9 @@ type Desktop(notify:IDesktopNotification) as this =
                     finally
                         Services.program.resumeTabMonitoring()
                 else
+                    // The group this window lands in may not exist yet; the
+                    // lock waits under its handle until it does.
+                    Services.program.markDetachedLock hwnd dragInfo.sourceLockWindowPosition
                     notify.dragDrop(hwnd, snapMonitor |> Option.map (fun _ -> dragInfo.sourceSnapTabHeightMargin))
             match snapMonitor with
             | Some(mon) ->

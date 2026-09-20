@@ -163,6 +163,11 @@ type IProgram =
     // momentarily off-screen (the dragExit hideOffScreen parking). Cleared
     // automatically by the implementation after a short window.
     abstract member markRecentlyPlaced : List<IntPtr> -> unit
+    // A tab detached into a group of its own takes the source group's lock
+    // with it. The group does not exist yet when the drop is handled, so the
+    // value waits here under the window's handle, the way the snap margin of
+    // a snap-on-detach does.
+    abstract member markDetachedLock : IntPtr -> bool -> unit
 
 type IGroup =
     abstract member hwnd : IntPtr
@@ -181,6 +186,7 @@ type IGroup =
     abstract member destroy: unit -> unit
     abstract member perGroupTabPositionValue: string with get, set
     abstract member snapTabHeightMargin: bool with get, set
+    abstract member lockWindowPosition: bool with get, set
     abstract member isPinned: IntPtr -> bool
     abstract member pinTab: IntPtr -> unit
     abstract member isPinnedThreadSafe: IntPtr -> bool

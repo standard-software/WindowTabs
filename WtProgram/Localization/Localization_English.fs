@@ -163,8 +163,9 @@ module Localization_English =
         ("CloseUnselectedTabsFormat", "Close {0} unselected tabs")
         ("CloseAllTabs", "Close all tabs")
 
-        ("SnapTabMarginMenu", "Tab Margin When Snapping")
-        ("SnapTabMarginTop", "Add margin at top")
+        ("WindowBehaviorMenu", "Tab Group Behavior")
+        ("LockWindowPositionMenu", "Prevent moving windows and resizing them from the top")
+        ("SnapTabMarginTop", "Add tab height margin when snapping")
 
         ("TabAlignMenu", "Tab Alignment")
         ("AlignAllTopLeft", "Align all tabs to Left")

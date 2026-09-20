@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "選んでね{0}タブ閉じっぺ",
   "CloseAllTabs": "全部のタブ閉じっぺ",
 
-  "SnapTabMarginMenu": "スナップん時のタブの余白だべ",
-  "SnapTabMarginTop": "上に余白あけっぺ",
+"WindowBehaviorMenu": "タブグループの動き",
+  "LockWindowPositionMenu": "ウィンドウの移動や上端のサイズ変更はさせねえ",
+    "SnapTabMarginTop": "スナップ時にタブの高さ分の余白をあけっぺ",
 
   "TabAlignMenu": "タブの配置だべ",
   "AlignAllTopLeft": "全部のタブを左寄せにすっぺ",

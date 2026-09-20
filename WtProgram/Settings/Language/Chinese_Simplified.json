@@ -160,8 +160,9 @@
   "CloseUnselectedTabsFormat": "关闭未选中的{0}个标签页",
   "CloseAllTabs": "关闭所有标签页",
 
-  "SnapTabMarginMenu": "吸附时的标签页边距",
-  "SnapTabMarginTop": "顶部添加边距",
+"WindowBehaviorMenu": "标签页组行为",
+  "LockWindowPositionMenu": "禁止移动窗口和从顶边调整大小",
+    "SnapTabMarginTop": "吸附时为标签页高度留出边距",
 
   "TabAlignMenu": "标签页对齐",
   "AlignAllTopLeft": "将所有标签页靠左对齐",

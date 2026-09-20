@@ -101,7 +101,6 @@ module private CaptionDragNative =
 // WM_NCLBUTTONDOWN handling does not run. Activation and double-click are
 // re-created below; nothing else is.
 type CaptionDragPlugin() =
-    let mutable enabled = 0
     let mutable stopping = 0
     // Set by the hook when it passes a press that starts a resize; cleared
     // when the button is found released (see CaptionDragPolicy.suspendsHook).
@@ -321,7 +320,7 @@ type CaptionDragPlugin() =
                     if msg <> 0x201 then None
                     else
                         CaptionDragTargets.notePress() |> ignore
-                        if Volatile.Read(&enabled) = 0 then None
+                        if not (CaptionDragTargets.anyTarget()) then None
                         else
                             let leaf = CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(x, y))
                             let root = CaptionDragNative.GetAncestor(leaf, 2u (* GA_ROOT *))
@@ -338,7 +337,7 @@ type CaptionDragPlugin() =
                                 hitTestMs <- elapsedMs hitStarted
                                 pressRootHit <- rootHit
                                 match caption with
-                                | Some(receiver, hx, hy) when Volatile.Read(&enabled) <> 0 && CaptionDragTargets.contains root ->
+                                | Some(receiver, hx, hy) when CaptionDragTargets.contains root ->
                                     CaptionDragTargets.setPress None
                                     Some ({ target = root.ToInt64(); receiver = receiver.ToInt64()
                                             x = x; y = y; hitX = hx; hitY = hy
@@ -380,7 +379,7 @@ type CaptionDragPlugin() =
                     post (fun () ->
                         Trace.WriteLine(sprintf "Caption drag: slow hook callback %.1f ms (hit test %.1f ms)" callbackMs hitMs))
 #if DEBUG
-                if msg = 0x201 && Volatile.Read(&enabled) <> 0 then
+                if msg = 0x201 && CaptionDragTargets.anyTarget() then
                     post (fun () ->
                         Debug.WriteLine(sprintf "[CaptionDrag] down %A callback=%.2fms hitTest=%.2fms" action callbackMs hitMs))
 #endif
@@ -452,7 +451,10 @@ type CaptionDragPlugin() =
             if Volatile.Read(&resizeSuspend) <> 0 && not (primaryButtonHeld()) then
                 Volatile.Write(&resizeSuspend, 0)
             let suspended = Volatile.Read(&resizeSuspend) <> 0
-            let isEnabled = Volatile.Read(&enabled) <> 0 && not suspended
+            // Locking is per tab group now: a group registers its windows in
+            // CaptionDragTargets only while it is locked, so something being
+            // registered is exactly when the hook has work to do.
+            let isEnabled = CaptionDragTargets.anyTarget() && not suspended
             if not isEnabled then
                 state <- fst (CaptionDragPolicy.step 0u 0 0 state CaptionDragPolicy.Disable)
             let plan =
@@ -505,10 +507,9 @@ type CaptionDragPlugin() =
 
     interface IPlugin with
         member this.init() =
-            Volatile.Write(&enabled, if unbox<bool>(Services.settings.getValue("lockWindowPosition")) then 1 else 0)
-            Services.settings.notifyValue "lockWindowPosition" (fun value ->
-                Volatile.Write(&enabled, if unbox<bool> value then 1 else 0)
-                wake())
+            // A group locking or unlocking changes whether the hook is wanted,
+            // and that happens on a group's own thread.
+            CaptionDragTargets.wake <- wake
             let thread = Thread(ThreadStart(run), IsBackground = true, Name = "Caption drag input")
             thread.SetApartmentState(ApartmentState.STA)
             worker <- Some thread
@@ -516,7 +517,6 @@ type CaptionDragPlugin() =
 
     interface IDisposable with
         member this.Dispose() =
-            Volatile.Write(&enabled, 0)
             Volatile.Write(&stopping, 1)
             wake()
             worker |> Option.iter (fun thread -> thread.Join(1500) |> ignore)

@@ -30,6 +30,10 @@ and TabDragInfo = {
     // Capture the restore dimensions before dragExit parks/restores the window.
     sourceRestoreSize: Sz
     sourceSnapTabHeightMargin: bool
+    //   sourceLockWindowPosition: the source group's per-group lock. A tab
+    //   dragged out keeps it, so a window that could not be moved does not
+    //   suddenly become movable by being detached.
+    sourceLockWindowPosition: bool
     sourceTabAligns: List<TabAlign>
     }
 
