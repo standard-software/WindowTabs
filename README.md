@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.09.18_next2**
+Latest version: **ss_2026.09.21**
 
 See [version.md](version.md) for details.
 
@@ -194,8 +194,9 @@ Close Tab
   Close other tabs
   Close all tabs
 ---
-Tab Margin When Snapping
-  Add margin at top
+Tab Group Behavior
+  Prevent moving windows and resizing them from the top
+  Add tab height margin when snapping
 Tab Alignment
   Align all tabs to Left
   Align all tabs to Right
@@ -295,6 +296,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 - Tab groups are preserved when switching virtual desktops (Win+Tab)
 - Tab group state is restored across all virtual desktops on WindowTabs restart
+- A tab group stays on one virtual desktop. Drag a tabbed window to another desktop in task view and it leaves its group, so a group is never split across desktops
+- Groups on another virtual desktop are left out of the menus that link a tab, or a whole group, into another group
 
 ### UWP Application Support
 
@@ -369,7 +372,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - **Vertical tab direction**: choose "Up, or down when it would be off-screen" (default) or "Always down".
 - Configure hiding tabs for full-screen windows, while moving windows, and when tabs face downward.
-- **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before.
+- **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
 
