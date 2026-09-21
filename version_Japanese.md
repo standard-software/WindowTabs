@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.09.21_next1
+
 ## version ss_2026.09.21
 
 - 「ウィンドウの移動と上端リサイズを禁止」を、タブグループごとに設定できるようにした。

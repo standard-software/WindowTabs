@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.21_next1
+
 ## version ss_2026.09.21
 
 - "Prevent moving windows and resizing them from the top" is now a setting of each tab group.
