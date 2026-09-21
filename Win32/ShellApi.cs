@@ -549,6 +549,28 @@ namespace Bemo
             return true; // Assume true on error
         }
 
+        // The same read, with the HRESULT kept. GetWindowDesktopId answers
+        // TYPE_E_ELEMENTNOTFOUND for some windows of other processes, and a
+        // call made from the wrong thread has its own code again; telling the
+        // two apart is the whole point of the diagnostic log.
+        public static int TryGetWindowDesktopId(IntPtr hwnd, out Guid desktopId)
+        {
+            EnsureInitialized();
+            desktopId = Guid.Empty;
+            if (!_isSupported || _manager == null || hwnd == IntPtr.Zero)
+                return -1;
+
+            try
+            {
+                return _manager.GetWindowDesktopId(hwnd, out desktopId);
+            }
+            catch (Exception ex)
+            {
+                desktopId = Guid.Empty;
+                return System.Runtime.InteropServices.Marshal.GetHRForException(ex);
+            }
+        }
+
         public static Guid GetWindowDesktopId(IntPtr hwnd)
         {
             EnsureInitialized();
