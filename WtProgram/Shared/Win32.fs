@@ -336,6 +336,14 @@ and
     // Get the virtual desktop ID for this window
     member this.virtualDesktopId = VirtualDesktopHelper.GetWindowDesktopId(hwnd)
 
+    // The same, with the HRESULT: Guid.Empty comes back both for a window
+    // Windows will not talk about and for a call it refused, and the two have
+    // to be told apart when a group looks as if it straddles desktops.
+    member this.virtualDesktopIdWithHr =
+        let mutable id = Guid.Empty
+        let hr = VirtualDesktopHelper.TryGetWindowDesktopId(hwnd, &id)
+        (hr, id)
+
     member this.isMinimized = WinUserApi.IsIconic(hwnd)
 
     member this.showWindow(cmd:int) = WinUserApi.ShowWindow(hwnd, cmd).ignore

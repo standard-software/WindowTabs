@@ -7,6 +7,11 @@
 - "Prevent moving windows and resizing them from the top" is now a setting of each tab group.
   - It is in the tab menu, under "tab group behaviour", beside the snap margin.
   - The one in the settings dialog is what a new group starts from, and changing it there applies to every group.
+- More of what virtual desktops need
+  - A tab group no longer straddles two virtual desktops.
+  - A window sent to another desktop leaves its tab group.
+  - The menus that link a tab or a group into another group no longer offer groups that are on another desktop
+  - Several windows moved in task view, the screen that switches virtual desktops, arrive on the other desktop as one tab group
 
 ## version ss_2026.09.18
 

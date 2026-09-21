@@ -142,6 +142,28 @@ type MonitorScreen(mon: Mon) =
 type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as this =
     // Static registry for all TabStripDecorator instances
     static let mutable decorators = System.Collections.Generic.Dictionary<IntPtr, TabStripDecorator>()
+    // Roughly when WindowTabs started: the first group is decorated within a
+    // moment of startup. A restored session brings its windows back over
+    // several seconds, on whichever desktops Windows picks, so nothing is
+    // judged to straddle until that has settled.
+    static let startedAt = DateTime.UtcNow
+    static let restoreSettles = TimeSpan.FromSeconds(20.0)
+    // A straddle has to hold still for this many ticks (one a second) before
+    // windows are taken out of a group over it. Two, because each window is
+    // read once more immediately before it goes: waiting longer only makes a
+    // move that was meant look as though nothing noticed it.
+    static let straddleTicksNeeded = 2
+    // Which groups are currently reporting that they straddle, and when they
+    // last said so. A person moves one window at a time, so one group at a
+    // time is the only picture that is believed.
+    static let straddlingGroups = System.Collections.Generic.Dictionary<IntPtr, DateTime>()
+    static let straddleGate = obj()
+    // Task view (Win+Tab) and the Alt+Tab switcher, which the shell shows as a
+    // window of its own. While one is open the person is in the middle of
+    // arranging windows - dragging them from desktop to desktop one at a time -
+    // and nothing they do there is finished until it closes.
+    static let shellSwitcherClasses =
+        set ["XamlExplorerHostIslandWindow"; "ForegroundStaging"; "MultitaskingViewFrame"; "TaskSwitcherWnd"]
     static let mutable groupInfos = System.Collections.Generic.Dictionary<IntPtr, TabGroupInfo>()
 
     let os = OS()
@@ -160,6 +182,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // What the last groupInfos entry was built from, so the periodic refresh
     // rebuilds the icon bitmaps only when the tabs actually changed.
     let mutable groupInfoSource : (IntPtr list * string list * obj * obj) option = None
+    // What the virtual desktops of this group's windows looked like on the
+    // previous tick, and which windows they were. A straddle is acted on only
+    // when the same one is seen twice, and never right after the group gained
+    // or lost a window (see reconcileVirtualDesktop).
+    let mutable lastDesktopDecision = VirtualDesktopIntegrity.Settled
+    let mutable lastDesktopMembers : IntPtr list = []
+    // The last reading written to the trace, so a group that sees the same
+    // thing second after second writes one line rather than thousands.
+    let mutable lastDesktopReading = ""
+    // How many ticks running this group has looked the same way about the
+    // desktops, and when it last took a window out over it.
+    let mutable straddleTicks = 0
+    // The desktop each window was on when this group last looked, which is
+    // what tells a window that moved from a window that did not.
+    let mutable lastDesktopReads : Map<IntPtr, Guid> = Map.empty
+    let mutable lastStraddleAction = DateTime.MinValue
     let topEdgeGuard = TopEdgeGuard(os)
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
@@ -241,6 +279,232 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     lock groupInfos (fun () -> groupInfos.[group.hwnd] <- info)
         with _ -> ()
 
+    /// Whether every window of a group is on the desktop being looked at now.
+    /// A window Windows will not answer for counts as being here: an unreadable
+    /// window must not quietly remove a group from a menu, the same way it must
+    /// not make a group look as if it straddles.
+    member private this.isOnCurrentDesktop(info: TabGroupInfo) =
+        try info.tabHwnds |> List.forall (fun hwnd -> os.windowFromHwnd(hwnd).isOnCurrentVirtualDesktop)
+        with _ -> true
+
+    /// A tab group is one window to the person using it, so it belongs on one
+    /// virtual desktop. Nothing stops a tabbed window from being sent to
+    /// another desktop (Win+Ctrl+arrow, task view, the taskbar) and no event
+    /// says that it happened, so each group looks at its own windows once a
+    /// second. A window that has left is detached into a group of its own: it
+    /// stays where it was put, and neither group straddles.
+    ///
+    /// Moving the rest of the group after it - which is what one would rather
+    /// do, since the tab group is the thing being moved - is not open to us.
+    /// IVirtualDesktopManager.MoveWindowToDesktop refuses every window of
+    /// another process with E_ACCESSDENIED, and the interface that does not is
+    /// undocumented and changes shape with each Windows build.
+    /// Whether the shell is showing task view or the Alt+Tab switcher. Windows
+    /// gives each of them a window of its own, and it is the foreground window
+    /// while it is up.
+    member private this.shellSwitcherIsOpen =
+        try
+            let fg = WinUserApi.GetForegroundWindow()
+            fg <> IntPtr.Zero && shellSwitcherClasses.Contains(os.windowFromHwnd(fg).className)
+        with _ -> false
+
+    member private this.reconcileVirtualDesktop() =
+        try
+            // Nothing is decided while task view is open. Dragging a group's
+            // windows to another desktop is done there, one window at a time,
+            // and a window that has been dragged over is not a window the
+            // person has finished with - it is part of a move that ends when
+            // task view closes. Acting per drag took the windows out of the
+            // group one by one, so each arrived on the other desktop alone;
+            // waiting means the whole picture is read at once, and they arrive
+            // together, as the group they still are.
+            //
+            // The reading from before task view opened is kept, so the pass
+            // after it closes compares against it and sees every window that
+            // moved.
+            if this.shellSwitcherIsOpen then () else
+            let members = group.windows.items.list
+            let membershipChanged = members <> lastDesktopMembers
+            lastDesktopMembers <- members
+            let wait =
+                membershipChanged
+                || members.Length <= 1
+                || DateTime.UtcNow - startedAt < restoreSettles
+                // Mid-drag the windows are being moved about by us; a desktop
+                // read then says nothing about what the person wants.
+                || group.isInMoveSizeThreadSafe
+            if wait then
+                lastDesktopDecision <- VirtualDesktopIntegrity.Settled
+                straddleTicks <- 0
+                // The next reading has nothing to compare against: whatever a
+                // window did while this group was not looking was not done to
+                // this group.
+                lastDesktopReads <- Map.empty
+            else
+                // One call per window per second, and no more: asking also
+                // whether each window is on the desktop being looked at cost
+                // as much again and told the rule nothing (the ids already
+                // say who is with whom). The front window answers that one
+                // for the whole group, for the trace.
+                let reads =
+                    members |> List.map (fun hwnd ->
+                        let (hr, id) =
+                            try os.windowFromHwnd(hwnd).virtualDesktopIdWithHr with _ -> (-2, Guid.Empty)
+                        (hwnd, hr, id))
+                let windows =
+                    reads |> List.map (fun (hwnd, hr, id) ->
+                        { VirtualDesktopIntegrity.hwnd = hwnd
+                          VirtualDesktopIntegrity.desktop =
+                            if hr <> 0 || id = Guid.Empty then None else Some(id) })
+                let previousReads = lastDesktopReads
+                let decision = VirtualDesktopIntegrity.decide previousReads group.topWindow windows
+                lastDesktopReads <- VirtualDesktopIntegrity.reading windows
+                // What was read, whenever it is not what was read a second ago.
+                // The thread is in the line because each group reads from its
+                // own thread, while everything else in WindowTabs asks this COM
+                // object from one thread - the first thing to rule in or out.
+                let reading =
+                    reads
+                    |> List.map (fun (hwnd, hr, id) ->
+                        sprintf "%X:%s" (hwnd.ToInt64())
+                            (if hr = 0 then (string id).Substring(0, 8) else sprintf "hr=%08X" hr))
+                    |> String.concat " "
+                if reading <> lastDesktopReading then
+                    lastDesktopReading <- reading
+                    let frontIsHere =
+                        try os.windowFromHwnd(group.topWindow).isOnCurrentVirtualDesktop with _ -> true
+                    VirtualDesktopTrace.log (fun () ->
+                        sprintf "group=%X thread=%d top=%X%s %s -> %A"
+                            (group.hwnd.ToInt64())
+                            System.Threading.Thread.CurrentThread.ManagedThreadId
+                            (group.topWindow.ToInt64())
+                            (if frontIsHere then "" else "(group is on another desktop)")
+                            reading decision)
+                // The count is of one unchanging picture. Any change at all -
+                // a different base, a different set of windows, or the group
+                // settling - starts it again, so a picture that keeps moving
+                // never reaches the number that lets a window be taken out.
+                if decision <> lastDesktopDecision then straddleTicks <- 0
+                lastDesktopDecision <- decision
+                match decision with
+                | VirtualDesktopIntegrity.Settled ->
+                    lock straddleGate (fun () -> straddlingGroups.Remove(group.hwnd) |> ignore)
+                | VirtualDesktopIntegrity.Straddling(baseDesktop, strays) ->
+                    straddleTicks <- straddleTicks + 1
+                    if not (VirtualDesktopIntegrity.plausible previousReads windows decision) then
+                        if straddleTicks = 1 then
+                            VirtualDesktopTrace.log (fun () ->
+                                sprintf "group=%X straddle IMPLAUSIBLE base=%s strays=%d of %d - left alone"
+                                    (group.hwnd.ToInt64()) ((string baseDesktop).Substring(0, 8))
+                                    strays.Length windows.Length)
+                    elif straddleTicks >= straddleTicksNeeded then
+                        this.actOnStraddle(baseDesktop, strays)
+                    else
+                        VirtualDesktopTrace.log (fun () ->
+                            sprintf "group=%X straddle %d/%d base=%s strays=%s"
+                                (group.hwnd.ToInt64()) straddleTicks straddleTicksNeeded
+                                ((string baseDesktop).Substring(0, 8))
+                                (strays |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
+        with _ -> ()
+
+    /// Takes the windows that left out of the group, once the reading has held
+    /// still for a few seconds and a second, fresh look at each of them agrees.
+    ///
+    /// They go together rather than one a second: three windows sent to another
+    /// desktop used to take twenty-five seconds to leave, which reads as the
+    /// feature being unsure of itself. Each one is still checked on its own
+    /// immediately before it is taken out, and the set they come from can never
+    /// be more than half the group (VirtualDesktopIntegrity.plausible).
+    ///
+    /// The guards are what this feature earns: the first version of it took the
+    /// front window's desktop for the group's, and one second in 2026-09-20 it
+    /// believed every group at once - 7 groups became 21 in half a minute. So
+    /// nothing acts while another group is also reporting a straddle, since a
+    /// person moves windows out of one group at a time, and a group waits a few
+    /// seconds after acting before it acts again.
+    member private this.actOnStraddle(baseDesktop: Guid, strays: IntPtr list) =
+        let now = DateTime.UtcNow
+        let elsewhere =
+            lock straddleGate (fun () ->
+                straddlingGroups
+                |> Seq.filter (fun kv -> kv.Key <> group.hwnd && now - kv.Value < TimeSpan.FromSeconds(5.0))
+                |> Seq.length)
+        lock straddleGate (fun () -> straddlingGroups.[group.hwnd] <- now)
+        let tooSoon = now - lastStraddleAction < TimeSpan.FromSeconds(3.0)
+        // A second look, a moment later, at each window about to be taken out
+        // and at the windows that stayed. Every one of the first has to read as
+        // being somewhere else, and at least one of the second as being where
+        // the group is - checked against the group's desktop rather than the
+        // front window's, since the window just moved is usually the one in
+        // front.
+        let readsAs desktop hwnd =
+            try
+                let (hr, id) = os.windowFromHwnd(hwnd).virtualDesktopIdWithHr
+                hr = 0 && id <> Guid.Empty && desktop id
+            with _ -> false
+        let desktopOf hwnd =
+            try
+                let (hr, id) = os.windowFromHwnd(hwnd).virtualDesktopIdWithHr
+                if hr = 0 then id else Guid.Empty
+            with _ -> Guid.Empty
+        let stayedHere =
+            group.windows.items.list
+            |> List.exists (fun hwnd ->
+                not (List.contains hwnd strays) && readsAs (fun id -> id = baseDesktop) hwnd)
+        let away = strays |> List.filter (readsAs (fun id -> id <> baseDesktop))
+        let stillAway = stayedHere && not away.IsEmpty && away.Length = strays.Length
+        let act =
+            VirtualDesktopIntegrity.actOnStraddle && stillAway && not tooSoon && elsewhere = 0
+        VirtualDesktopTrace.log (fun () ->
+            sprintf "group=%X straddle CONFIRMED base=%s strays=%s stillAway=%b tooSoon=%b otherGroups=%d -> %s"
+                (group.hwnd.ToInt64()) ((string baseDesktop).Substring(0, 8))
+                (strays |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                stillAway tooSoon elsewhere
+                (if act then
+                    sprintf "detach %s"
+                        (away |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                 else "left alone"))
+        if act then
+            lastStraddleAction <- now
+            straddleTicks <- 0
+            // Windows that went to the same desktop went there together, so
+            // they arrive as one tab group rather than as a row of single
+            // tabs. Moving a group across desktops means moving its windows
+            // one by one - Windows offers nothing else - and this is what
+            // makes that add up to the group arriving.
+            let order = this.ts.visualOrder.list |> List.map (fun (Tab(hwnd)) -> hwnd)
+            let inOrder hwnds =
+                (order |> List.filter (fun hwnd -> List.contains hwnd hwnds))
+                @ (hwnds |> List.filter (fun hwnd -> not (List.contains hwnd order)))
+            away
+            |> List.groupBy desktopOf
+            |> List.iter (fun (_, together) ->
+                match inOrder together with
+                | [] -> ()
+                | [alone] -> this.detachToOwnGroup(alone)
+                | ordered ->
+                    // The seed keeps the place it is in: it is on another
+                    // desktop, where the person put it, so it is not moved or
+                    // snapped the way a detach from the menu would be.
+                    let seed = os.windowFromHwnd(List.head ordered)
+                    this.detachTabsCommon(ordered, fun _ bounds ->
+                        seed.setPositionOnly bounds.location.x bounds.location.y))
+
+    /// Detach without placing: the window is on another virtual desktop, where
+    /// the person put it, so nothing here moves or resizes it. The other detach
+    /// paths position the window because the person asked for a position.
+    member private this.detachToOwnGroup(hwnd: IntPtr) =
+        try
+            if group.windows.items.count > 1 && group.windows.contains(hwnd) then
+                Services.program.suspendTabMonitoring()
+                try
+                    this.ts.removeTab(Tab(hwnd))
+                    group.removeWindow(hwnd)
+                    notifyDetached(hwnd)
+                finally
+                    Services.program.resumeTabMonitoringAfter(200)
+        with _ -> ()
+
     member private this.init() =
         Services.registerLocal(_ts)
         group.init(this.ts)
@@ -260,7 +524,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // fine for a menu label.
         this.updateGroupInfo()
         let groupInfoTimer = new System.Windows.Forms.Timer(Interval = 1000)
-        groupInfoTimer.Tick.Add(fun _ -> this.updateGroupInfo())
+        groupInfoTimer.Tick.Add(fun _ ->
+            this.updateGroupInfo()
+            // Same tick, same thread as the rest of this group's upkeep.
+            this.reconcileVirtualDesktop())
         groupInfoTimer.Start()
         // Stop and release the timer with the group: it owns a window of this
         // group's thread, which goes away with the group.
@@ -1875,7 +2142,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let otherGroupInfos = lock groupInfos (fun () ->
                 groupInfos.Values
                 |> List.ofSeq
-                |> List.filter (fun info -> info.hwnd <> group.hwnd && info.tabCount > 0))
+                |> List.filter (fun info ->
+                    info.hwnd <> group.hwnd && info.tabCount > 0 &&
+                    // A group on another virtual desktop is not offered: a
+                    // group belongs on one desktop (VirtualDesktopIntegrity).
+                    this.isOnCurrentDesktop info))
             let groupItems =
                 if List.isEmpty otherGroupInfos then []
                 else
@@ -2619,7 +2890,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 |> List.ofSeq
                 |> List.filter (fun info ->
                     info.hwnd <> group.hwnd && // Not current group
-                    info.tabCount > 0 // Has at least one tab
+                    info.tabCount > 0 && // Has at least one tab
+                    // Only groups on this virtual desktop
+                    this.isOnCurrentDesktop info
                 )
             )
 
@@ -2735,6 +3008,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     |> List.filter (fun info ->
                         info.hwnd <> group.hwnd && // Not current group
                         info.tabCount > 0 && // Has at least one tab
+                        // Only groups on this virtual desktop
+                        this.isOnCurrentDesktop info &&
                         // Don't show groups that contain the tab we're moving
                         not (info.tabHwnds |> List.contains hwnd)
                     )
