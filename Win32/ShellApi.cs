@@ -501,9 +501,13 @@ namespace Bemo
     // Helper class for Virtual Desktop operations
     public static class VirtualDesktopHelper
     {
-        private static IVirtualDesktopManager _manager;
-        private static bool _initialized = false;
-        private static bool _isSupported = false;
+        // One COM object per thread. The main thread and every tab group's
+        // thread ask; an object created on one STA thread and called from
+        // another fails with RPC_E_WRONG_THREAD, which read as "no answer"
+        // for whichever thread happened to come second.
+        [ThreadStatic] private static IVirtualDesktopManager _manager;
+        [ThreadStatic] private static bool _initialized;
+        [ThreadStatic] private static bool _isSupported;
 
         private static void EnsureInitialized()
         {
@@ -547,6 +551,81 @@ namespace Bemo
                 // Ignore exceptions
             }
             return true; // Assume true on error
+        }
+
+        // IsWindowOnCurrentVirtualDesktop with the HRESULT kept: a failed call
+        // is not "on this desktop", it is no answer at all.
+        public static int TryIsWindowOnCurrentVirtualDesktop(IntPtr hwnd, out bool onCurrentDesktop)
+        {
+            EnsureInitialized();
+            onCurrentDesktop = false;
+            if (!_isSupported || _manager == null || hwnd == IntPtr.Zero)
+                return -1;
+            try
+            {
+                return _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop);
+            }
+            catch (Exception ex)
+            {
+                onCurrentDesktop = false;
+                return System.Runtime.InteropServices.Marshal.GetHRForException(ex);
+            }
+        }
+
+        private const string ExplorerDesktopsKey =
+            @"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops";
+
+        // Explorer's own record of the desktops, read-only. Windows 11 keeps
+        // the current one under the user's key; Windows 10 under the session.
+        private static byte[] ReadExplorerValue(string name)
+        {
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(ExplorerDesktopsKey))
+                {
+                    var value = key == null ? null : key.GetValue(name) as byte[];
+                    if (value != null) return value;
+                }
+                int session = System.Diagnostics.Process.GetCurrentProcess().SessionId;
+                string sessionKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\"
+                                    + session + @"\VirtualDesktops";
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(sessionKey))
+                {
+                    return key == null ? null : key.GetValue(name) as byte[];
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // The desktop Explorer says is being looked at. False when there is
+        // no such value (a single desktop that was never switched away from
+        // has none) or it cannot be read.
+        public static bool TryReadCurrentDesktopId(out Guid desktopId)
+        {
+            desktopId = Guid.Empty;
+            byte[] bytes = ReadExplorerValue("CurrentVirtualDesktop");
+            if (bytes == null || bytes.Length != 16) return false;
+            desktopId = new Guid(bytes);
+            return desktopId != Guid.Empty;
+        }
+
+        // Every desktop Explorer lists, in its order; null when the list
+        // cannot be read.
+        public static Guid[] TryReadDesktopIds()
+        {
+            byte[] bytes = ReadExplorerValue("VirtualDesktopIDs");
+            if (bytes == null || bytes.Length % 16 != 0) return null;
+            var ids = new Guid[bytes.Length / 16];
+            for (int i = 0; i < ids.Length; i++)
+            {
+                byte[] one = new byte[16];
+                Array.Copy(bytes, i * 16, one, 0, 16);
+                ids[i] = new Guid(one);
+            }
+            return ids;
         }
 
         // The same read, with the HRESULT kept. GetWindowDesktopId answers

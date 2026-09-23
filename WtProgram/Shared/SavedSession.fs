@@ -39,6 +39,9 @@ module SavedSession =
         snapMargin: bool option
         // None in a file written before the lock became per-group.
         lockPosition: bool option
+        // The virtual desktop the group belongs to (VirtualDesktopGroups).
+        // None in a file written before groups belonged to a desktop.
+        desktop: string option
     }
 
     // ---------------------------------------------------------------- save --
@@ -71,6 +74,7 @@ module SavedSession =
         tabPosition: string option
         snapMargin: bool option
         lockPosition: bool option
+        desktop: string option
     }
 
     let mergedOrder (stripOrder: IntPtr list) (mirrorOrder: IntPtr list) =
@@ -107,7 +111,7 @@ module SavedSession =
     // all: emptying a group is the plainest way of saying it is finished with.
     let groupToSavedJson (windows: SavedTab list) (seeds: PendingTab list)
                          (tabPosition: string option) (snapMargin: bool option)
-                         (lockPosition: bool option) =
+                         (lockPosition: bool option) (desktop: string option) =
         let arr = JArray()
         windows |> List.iter (fun t -> arr.Add(toJson t))
         seeds
@@ -115,7 +119,11 @@ module SavedSession =
         |> List.iter (fun e ->
             let at = if e.rank >= 0 && e.rank < arr.Count then e.rank else arr.Count
             arr.Insert(at, toJson e.tab))
-        if arr.Count = 0 then None else Some(groupToJson arr tabPosition snapMargin lockPosition)
+        if arr.Count = 0 then None
+        else
+            let o = groupToJson arr tabPosition snapMargin lockPosition
+            desktop |> Option.iter (fun d -> o.Add("virtualDesktop", JValue(d)))
+            Some(o)
 
     // The whole of SavedTabGroupsForRestart.
     //
@@ -124,13 +132,20 @@ module SavedSession =
     // and None for a handle that is no longer a window. It is a function
     // because that half is the only part of the save that has to touch
     // Windows; everything else about the file is decided here.
-    let write (stateOf: IntPtr -> SavedTab option) (groups: GroupToSave list) : JArray =
+    //
+    // writeEach is the same with an answer per group: a window shown on all
+    // virtual desktops is a tab of one group per desktop, and its pin is that
+    // group's, not a single value for the window.
+    let writeEach (groups: (GroupToSave * (IntPtr -> SavedTab option)) list) : JArray =
         let arr = JArray()
-        groups |> List.iter (fun g ->
+        groups |> List.iter (fun (g, stateOf) ->
             let windows = mergedOrder g.stripOrder g.mirrorOrder |> List.choose stateOf
-            groupToSavedJson windows g.seeds g.tabPosition g.snapMargin g.lockPosition
+            groupToSavedJson windows g.seeds g.tabPosition g.snapMargin g.lockPosition g.desktop
             |> Option.iter (fun o -> arr.Add(o)))
         arr
+
+    let write (stateOf: IntPtr -> SavedTab option) (groups: GroupToSave list) : JArray =
+        writeEach (groups |> List.map (fun g -> g, stateOf))
 
     // ---------------------------------------------------------------- load --
 
@@ -140,7 +155,8 @@ module SavedSession =
             { windows = groupWindows t
               tabPosition = groupTabPosition t
               snapMargin = groupSnapMargin t
-              lockPosition = groupLockPosition t })
+              lockPosition = groupLockPosition t
+              desktop = groupDesktop t })
         |> List.ofSeq
 
     // ------------------------------------------------------------- restore --
@@ -204,6 +220,7 @@ module SavedSession =
         // live group exists to point at. Never a live strip handle: the strip
         // of a group created moments ago does not reliably have one yet.
         token: IntPtr
+        desktop: string option
     }
 
     // An entry that is still waiting, as it goes back into the settings file.
@@ -364,9 +381,13 @@ module SavedSession =
         //     restored. Whichever live window each entry ends up matching, the
         //     resulting group membership is identical, so it is right either
         //     way.
+        //   - Except for a window that was shown on all virtual desktops: it IS
+        //     in several groups, one per desktop, and every entry of it names
+        //     the same window (onAllDesktops, and sharedOnly below).
         let savedCounts = System.Collections.Generic.Dictionary<string, int>()
         let savedGroupOf = System.Collections.Generic.Dictionary<string, int>()
         let crossGroup = System.Collections.Generic.HashSet<string>()
+        let notShared = System.Collections.Generic.HashSet<string>()
         groups |> List.iteri (fun gi g ->
             g.windows |> List.iter (fun t ->
                 if not (reserved.Contains(t.hwnd)) then
@@ -375,10 +396,16 @@ module SavedSession =
                             (match savedCounts.TryGetValue(key) with
                              | true, n -> n + 1
                              | _ -> 1)
+                        if not t.onAllDesktops then notShared.Add(key) |> ignore
                         match savedGroupOf.TryGetValue(key) with
                         | true, g0 when g0 <> gi -> crossGroup.Add(key) |> ignore
                         | true, _ -> ()
                         | _ -> savedGroupOf.[key] <- gi)))
+        // Identities saved only as one window shown on all desktops: one live
+        // window answers for every entry of them.
+        let sharedOnly = System.Collections.Generic.HashSet<string>()
+        crossGroup |> Seq.filter (notShared.Contains >> not) |> Seq.iter (sharedOnly.Add >> ignore)
+        sharedOnly |> Seq.iter (crossGroup.Remove >> ignore)
 
         let liveCounts = System.Collections.Generic.Dictionary<string, int>()
         live |> List.iter (fun w ->
@@ -410,10 +437,11 @@ module SavedSession =
         let resolved = System.Collections.Generic.Dictionary<int * int, IntPtr>()
 
         // Same session first: a window that still carries the handle it was
-        // saved with IS the window that was saved.
+        // saved with IS the window that was saved. A window shown on all
+        // desktops takes its place in each group it was saved in.
         groups |> List.iteri (fun gi g ->
             g.windows |> List.iteri (fun ti t ->
-                if reserved.Contains(t.hwnd) && taken.Add(t.hwnd) then
+                if reserved.Contains(t.hwnd) && (taken.Add(t.hwnd) || t.onAllDesktops) then
                     resolved.[(gi, ti)] <- t.hwnd))
 
         // Then by identity, all the tabs of one identity together, because
@@ -438,11 +466,22 @@ module SavedSession =
                     identityKey w.exePath w.title = key &&
                     not (reserved.Contains(w.handle)) &&
                     not (taken.Contains(w.handle)))
+            let candArr = List.toArray candidates
+            if sharedOnly.Contains(key) then
+                // One window, standing in several groups: the first entry
+                // chooses it, and every entry is given it.
+                let (_, _, first) = List.head entries
+                match assignTwins [ centerOfRect first.rect ] (candidates |> List.map (fun w -> w.center)) with
+                | [ Some(j) ] ->
+                    let w = candArr.[j]
+                    if taken.Add(w.handle) then
+                        entries |> List.iter (fun (gi, ti, _) -> resolved.[(gi, ti)] <- w.handle)
+                | _ -> ()
+            else
             let picks =
                 assignTwins
                     (entries |> List.map (fun (_, _, t) -> centerOfRect t.rect))
                     (candidates |> List.map (fun w -> w.center))
-            let candArr = List.toArray candidates
             List.zip entries picks
             |> List.iter (fun ((gi, ti, _), pick) ->
                 pick |> Option.iter (fun j ->
@@ -551,4 +590,5 @@ module SavedSession =
               snapMargin = g.snapMargin
               lockPosition = g.lockPosition
               savedOrder = savedOrder
-              token = (match savedOrder with h :: _ -> h | [] -> IntPtr.Zero) })
+              token = (match savedOrder with h :: _ -> h | [] -> IntPtr.Zero)
+              desktop = g.desktop })

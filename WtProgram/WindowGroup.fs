@@ -134,6 +134,26 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let isDraggingExport = Cell.export <| fun() -> isDraggingCell.value
     let zorderExport = Cell.export <| fun() -> zorderCell.value
     let isVisibleCell = Cell.create(false)
+    // Tab groups per virtual desktop (Shared/VirtualDesktopGroups.fs). A window
+    // shown on all desktops is a member of one group per desktop; this is
+    // whether this group is the one of the desktop being looked at, as the
+    // main thread's pass last decided, and which desktop it belongs to. Both
+    // are written from the main thread and read from this group's thread and
+    // its decorator's.
+    [<VolatileField>]
+    let mutable desktopShown = true
+    [<VolatileField>]
+    let mutable desktopHomeValue : Guid option = None
+    // Whether WindowTabs itself hides the strip because the group is not the
+    // one of the desktop being looked at. Most of the time the shell has
+    // already hidden it (its owner is on the other desktop), and this stays
+    // false; see VirtualDesktopGroups.hideStrip.
+    let desktopHiddenCell = Cell.create(false)
+    let desktopChangedEvent = Event<unit>()
+    // Who each member was when it joined (VirtualDesktopGroups.Identity), so
+    // that a handle Windows has given to another window since is not moved
+    // along with a window shown on all desktops. This group's thread only.
+    let memberIdentities = Dictionary<IntPtr, VirtualDesktopGroups.Identity option>()
 
     let isMaximizedExport = Cell.export <| fun() ->
         zorderCell.value.tryHead.exists(fun hwnd -> this.os.windowFromHwnd(hwnd).isMaximized)
@@ -162,7 +182,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         with _ -> false
 
     let shouldShowTabStrip () =
-        isVisibleCell.value && not (shouldHideTabs())
+        isVisibleCell.value && not (shouldHideTabs()) && not desktopHiddenCell.value
 
     let updateTabVisibility () =
         match !_ts with
@@ -286,7 +306,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             //this is important, we dont' want to leave the parent set to the previous hwnd
             //which was removed, this can cause issues when that window gets added to another
             //group on another thread during drag / drop
-            this.setTsParent(if this.isEmpty.not then zorderCell.value.head else IntPtr.Zero)
+            this.updateStripOwner()
 
         Cell.listen updateTabVisibility
 
@@ -595,11 +615,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.setWindows(newWindows: Set2<IntPtr>) =
         // Publish membership without cross-thread service calls in the input
         // hook. A group that is not locked registers nothing: the hook is
-        // installed only while some window is registered.
+        // installed only while some window is registered. Nor does a group of
+        // another virtual desktop: a window shown on all desktops is in it as
+        // well as in the group of the desktop being looked at, and only that
+        // group's lock is the one the person can see.
+        let register = captionDragEnabled && desktopShown
         this.windows.items.iter (fun hwnd ->
-            if not (newWindows.contains hwnd) || not captionDragEnabled then
+            if not (newWindows.contains hwnd) || not register then
                 CaptionDragTargets.remove captionDragOwner hwnd)
-        if captionDragEnabled then newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
+        if register then newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
         windowsCell.set(newWindows)
         this.saveZorder()
         this.updateIsVisible()
@@ -646,7 +670,68 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
-        
+
+    // The window that owns the strip. The shell shows and hides an owned tool
+    // window with its owner, so the strip of a group holding a window shown
+    // on all desktops is owned by one of its windows that is not: it then
+    // disappears in the same frame as its desktop does, instead of staying on
+    // screen with the pinned window until WindowTabs notices the switch. With
+    // no such window about, it is the front window, as it always was.
+    member private this.stripOwnerHwnd =
+        if this.isEmpty then IntPtr.Zero
+        else
+            VirtualDesktopGroups.stripOwner zorderCell.value.list (VirtualDesktopGroups.Live.shared())
+            |> Option.defaultValue zorderCell.value.head
+
+    member private this.updateStripOwner() =
+        let owner = this.stripOwnerHwnd
+        this.setTsParent(owner)
+        this.keepStripAboveTop(owner)
+
+    // Owned by a window that is not the front one, the strip sits just above
+    // its owner - behind the front window. It is put back just above the front
+    // window, where an owned strip would have been.
+    member private this.keepStripAboveTop(owner: IntPtr) =
+        if owner <> IntPtr.Zero && not this.isEmpty then
+            let top = zorderCell.value.head
+            if top <> owner then
+                try
+                    let above = this.os.windowFromHwnd(top).prevZorder
+                    if above.hwnd <> this.ts.hwnd then
+                        this.os.windowFromHwnd(this.ts.hwnd).insertAfter(above)
+                with _ -> ()
+
+    /// Called by the main thread's desktop pass (through GroupInfo): whether
+    /// this group is the one of the desktop being looked at. Re-chooses the
+    /// strip's owner (the set of windows shown everywhere may have changed),
+    /// and hides the strip only where the shell has not already done so.
+    member this.applyDesktopState(shown: bool) =
+        desktopShown <- shown
+        this.updateStripOwner()
+        let owner = this.stripOwnerHwnd
+        let ownerPresence =
+            if owner = IntPtr.Zero then VirtualDesktopGroups.Unsure
+            else try this.os.windowFromHwnd(owner).desktopPresence with _ -> VirtualDesktopGroups.Unsure
+        let hide =
+            VirtualDesktopGroups.hideStrip
+                (if shown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden) ownerPresence
+        if desktopHiddenCell.value <> hide then desktopHiddenCell.set(hide)
+        this.syncCaptionDragTargets()
+        if shown then
+            // What a group of another desktop did not keep up with.
+            this.updateIsVisible()
+            this.foreground <- this.os.foreground.hwnd
+        desktopChangedEvent.Trigger()
+
+    member this.isDesktopShownThreadSafe = desktopShown
+    // Set at once from the main thread, ahead of applyDesktopState, so that
+    // nothing asking in between is told the old answer.
+    member this.markDesktopShown(shown: bool) = desktopShown <- shown
+    member this.desktopHome
+        with get() = desktopHomeValue
+        and set(value: Guid option) = desktopHomeValue <- value
+    member this.desktopChanged = desktopChangedEvent.Publish
+
     member this.isPinned(hwnd) = this.ts.isPinned(Tab(hwnd))
     // Thread-safe version for cross-thread reads (e.g., save from main thread)
     member this.isPinnedThreadSafe(hwnd) = this.ts.isPinnedThreadSafe(Tab(hwnd))
@@ -820,10 +905,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // dropped at once when the lock goes off, even in the middle of a drag.
     member private this.applyLockWindowPosition(value: bool) =
         captionDragEnabled <- value
-        if value then this.windows.items.iter (CaptionDragTargets.add captionDragOwner)
-        else
-            this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
-            this.endCaptionDragFallback "lock turned off"
+        this.syncCaptionDragTargets()
+        if not value then this.endCaptionDragFallback "lock turned off"
+
+    member private this.syncCaptionDragTargets() =
+        if captionDragEnabled && desktopShown then this.windows.items.iter (CaptionDragTargets.add captionDragOwner)
+        else this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
 
     member this.hwnd = this.ts.hwnd
 
@@ -1225,12 +1312,120 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member this.shouldShowTabs = shouldShowTabStrip()
 
+    // ----- A group of another virtual desktop -----
+    //
+    // Its windows that live on that desktop are not in anyone's hands right
+    // now, and nothing they do may reach the desktop being looked at. Its
+    // windows shown on all desktops are, and what is done to them here is
+    // done to them in this group as well - a move, a maximize, a minimize or
+    // a restore - so that the group is found as it should be when its desktop
+    // is looked at again, and switching desktops never has to move anything.
+    // Nothing here activates a window or touches the z-order: that would
+    // switch the desktop.
+    member private this.backgroundEvent(hwnd, evt) =
+        let isSharedMember =
+            this.windows.contains(hwnd) &&
+            VirtualDesktopGroups.adoptsMoveOf false ((VirtualDesktopGroups.Live.shared()).Contains hwnd) false
+        match evt with
+        | WinEvent.EVENT_OBJECT_NAMECHANGE ->
+            if this.windows.contains(hwnd) then this.setTabInfo hwnd
+        | WinEvent.EVENT_SYSTEM_FOREGROUND ->
+            this.foreground <- hwnd
+        | WinEvent.EVENT_OBJECT_LOCATIONCHANGE
+        | WinEvent.EVENT_SYSTEM_MOVESIZEEND when isSharedMember ->
+            this.followSharedWindow(hwnd)
+        | WinEvent.EVENT_SYSTEM_MINIMIZESTART when isSharedMember ->
+            this.followSharedMinimize(hwnd)
+        | WinEvent.EVENT_SYSTEM_MINIMIZEEND when isSharedMember ->
+            this.followSharedRestore(hwnd)
+        | _ -> ()
+
+    /// Takes the rectangle a member was given somewhere else as the group's,
+    /// and puts the other members there - as the group would if the member
+    /// had been dragged while in front. Not while it is being dragged (the
+    /// end of the drag brings it here once), not minimized, not parked off
+    /// every monitor (a group parks its other windows there while its front
+    /// window is dragged).
+    member private this.followSharedWindow(hwnd) =
+        let window = this.os.windowFromHwnd(hwnd)
+        if window.isWindow && not window.isMinimized && not window.isInMoveSize && this.isSameWindow(hwnd) then
+            let live = window.bounds
+            if live.width > 0 && live.height > 0 && this.os.isOnScreen(live) then
+                let bounds =
+                    if window.isMaximized then
+                        match Mon.fromHwnd(hwnd) with
+                        | Some(mon) -> mon.workRect.move(-1,-1)
+                        | None -> live
+                    else live
+                let adjusted =
+                    if this.hasExeMargin(hwnd) && not window.isMaximized then this.removeExeMarginForRead(hwnd, bounds)
+                    else bounds
+                let wp = window.placement
+                let unchanged =
+                    match placement.value with
+                    | Some(r, p) -> r = adjusted && p.showCmd = wp.showCmd
+                    | None -> false
+                if not unchanged then
+                    VirtualDesktopTrace.log (fun () ->
+                        sprintf "group=%X follows %X to %d,%d %dx%d (shown=%b)"
+                            (this.hwnd.ToInt64()) (hwnd.ToInt64())
+                            adjusted.x adjusted.y adjusted.width adjusted.height desktopShown)
+                    placement.set(Some(adjusted, wp))
+                    // Checked just before each is moved: a handle Windows has
+                    // given to another window since it joined is left alone.
+                    zorderCell.value
+                        .where((<>) hwnd)
+                        .where(isMinimized >> not)
+                        .iter(fun other ->
+                            if this.isSameWindow(other) then this.adjustWindowPlacement(other)
+                            else
+                                VirtualDesktopTrace.log (fun () ->
+                                    sprintf "group=%X does not move %X: no longer the window that joined"
+                                        (this.hwnd.ToInt64()) (other.ToInt64())))
+
+    member private this.identityOf(hwnd: IntPtr) : VirtualDesktopGroups.Identity option =
+        try
+            let tid = Win32Helper.GetWindowThreadId(hwnd)
+            let pid = Win32Helper.GetWindowProcessId(hwnd)
+            if tid = 0 || pid = 0 then None
+            else
+                let exe = try this.os.windowFromHwnd(hwnd).pid.processPath with _ -> ""
+                Some { VirtualDesktopGroups.Identity.pid = pid
+                       VirtualDesktopGroups.Identity.tid = tid
+                       VirtualDesktopGroups.Identity.exe = exe }
+        with _ -> None
+
+    member private this.isSameWindow(hwnd: IntPtr) =
+        let joined =
+            match memberIdentities.TryGetValue(hwnd) with
+            | true, identity -> identity
+            | _ -> None
+        joined.IsNone || VirtualDesktopGroups.sameWindow joined (this.identityOf hwnd)
+
+    member private this.followSharedMinimize(hwnd) =
+        suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
+        zorderCell.value.where((<>) hwnd).reverse.iter <| fun other ->
+            if this.os.windowFromHwnd(other).isMinimized.not && this.isSameWindow(other) then
+                pendingMinMaxEchoes.[(other, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
+                this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWMINNOACTIVE)
+        this.updateIsVisible()
+
+    member private this.followSharedRestore(hwnd) =
+        suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
+        zorderCell.value.where((<>) hwnd).iter <| fun other ->
+            if this.os.windowFromHwnd(other).isMinimized && this.isSameWindow(other) then
+                pendingMinMaxEchoes.[(other, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
+                this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWNOACTIVATE)
+        this.updateIsVisible()
+        this.followSharedWindow(hwnd)
+
     member this.main(hwnd, evt) =
         let fallbackPress =
             if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART then this.captureCaptionDragFallback(hwnd) else None
         this.dispatchEvent(hwnd, evt, fallbackPress)
 
     member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
+        if not desktopShown then this.backgroundEvent(hwnd, evt) else
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then
@@ -1327,9 +1522,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         isMaximizedExport.update()
                         isFullscreenExport.update()
                         updateTabVisibility()
+            // A window of this group that is shown on all desktops, moved by
+            // something other than this group - its group on another desktop
+            // following a move made there. Same as if it had been dragged
+            // here (VirtualDesktopGroups.adoptsMoveOf).
+            elif this.windows.contains(hwnd) && inMoveSize.value.not &&
+                 VirtualDesktopGroups.adoptsMoveOf true ((VirtualDesktopGroups.Live.shared()).Contains hwnd) false then
+                this.followSharedWindow(hwnd)
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
             this.saveZorder()
+            this.keepStripAboveTop(this.stripOwnerHwnd)
             // Update visibility for all groups when foreground changes
             // This is critical for detecting virtual desktop switches where windows become cloaked
             this.updateIsVisible()
@@ -1364,7 +1567,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 updateTabVisibility()
         | _ -> ()
       
-    member this.addWindow(hwnd, withDelay) = this.withUpdate <| fun() ->
+    member this.addWindow(hwnd, withDelay) = this.addWindowPlaced(hwnd, withDelay, true)
+
+    // `place` false: the window joins where it is. A group made for a window
+    // shown on all desktops, on another desktop, takes it as it is found - the
+    // first member's own rectangle is the group's, and moving the others to it
+    // would be switching desktops moving windows.
+    member this.addWindowPlaced(hwnd, withDelay, place) = this.withUpdate <| fun() ->
        if this.windows.contains(hwnd).not then
             if withDelay then System.Threading.Thread.Sleep(250)
             let window = this.os.windowFromHwnd(hwnd)                
@@ -1449,7 +1658,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             match Services.program.getWindowAlignment(hwnd) with
             | Some(a) -> this.ts.setTabAlign(Tab(hwnd), a)
             | None -> ()
-            this.adjustWindowPlacement(hwnd)
+            memberIdentities.[hwnd] <- this.identityOf(hwnd)
+            if place then this.adjustWindowPlacement(hwnd)
             addedEvent.Trigger(hwnd)
 
     // Put one window of the group back where the group is. For the periodic
@@ -1476,8 +1686,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // Skip active tab switching during shutdown, restart, disable, or when window is cloaked
             // (cloaked = window moved to another virtual desktop, not actually closed)
             // to avoid excessive window switching during bulk close operations or virtual desktop switches
+            // Nor in a group of another desktop: a window shown on all desktops
+            // closed (or unpinned) here leaves that group too, and bringing the
+            // next of its tabs forward would switch to that desktop.
             let window = this.os.windowFromHwnd(hwnd)
-            let skipActivation = Services.program.isShuttingDown || Services.program.isDisabled || window.isCloaked
+            let skipActivation =
+                Services.program.isShuttingDown || Services.program.isDisabled || window.isCloaked || not desktopShown
 
             // Determine which tab to activate if this was the active window
             let tabToActivate =
@@ -1505,6 +1719,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.applySelected(selectedTabsCell.value.remove(hwnd))
             hookCleanup.value.find(hwnd).Dispose()
             hookCleanup.map(fun hooks -> hooks.remove(hwnd))
+            memberIdentities.Remove(hwnd) |> ignore
             removedEvent.Trigger(hwnd)
     
     member this.activateIndex(index, force) =

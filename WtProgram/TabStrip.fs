@@ -952,6 +952,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         match tabAlignmentSnapshot.tryFind(tab) with
         | Some(a) -> a
         | None -> defaultAlignmentCell.value
+
+    // The tab's own alignment, None when it simply follows the group's side:
+    // the distinction the global per-window map keeps, for another group of
+    // the same window to take over as it is.
+    member this.explicitTabAlignThreadSafe(tab) = tabAlignmentSnapshot.tryFind(tab)
             
     member this.direction = if showInsideCell.value then TabDown else TabUp
     

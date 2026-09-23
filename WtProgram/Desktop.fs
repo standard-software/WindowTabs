@@ -97,6 +97,18 @@ type GroupInfo() as this =
         member x.setTabName(hwnd, name) = this.invokeGroup <| fun() -> _group.setTabName(hwnd, name)
         member x.setTabAlign(hwnd, align) = this.invokeGroup <| fun() -> _group.setTabAlign(hwnd, align)
         member x.moveTab(hwnd, index) = this.invokeGroup <| fun() -> _group.ts.moveTab(Tab(hwnd), index)
+        member x.desktopHome
+            with get() = _group.desktopHome
+            and set(value) = _group.desktopHome <- value
+        member x.isDesktopShown = _group.isDesktopShownThreadSafe
+        member x.setDesktopShown(shown) =
+            _group.markDesktopShown(shown)
+            this.invokeGroup <| fun() -> _group.applyDesktopState(shown)
+        member x.explicitTabAlign(hwnd) = _group.ts.explicitTabAlignThreadSafe(Tab(hwnd))
+        member x.addWindowUnplaced(hwnd) =
+            windowsCell.map <| fun l -> l.append hwnd
+            this.invokeGroup <| fun() -> _group.addWindowPlaced(hwnd, false, false)
+        member x.unpinTab(hwnd) = this.invokeGroup <| fun() -> _group.unpinTab(hwnd)
 
 type IDesktopNotification =
     abstract member dragDrop : IntPtr * bool option -> unit
@@ -137,8 +149,13 @@ type Desktop(notify:IDesktopNotification) as this =
     // (windowOffset removed: it had no callers and read the RAW, unscaled
     // appearance, so reviving it on a scaled monitor would have placed windows
     // a third of a strip height off.)
+    // A window shown on all virtual desktops is in one group per desktop; the
+    // one meant is the one on the desktop being looked at.
     member this.findGroupContainingHwnd hwnd : IGroup option =
-        this.cast<IDesktop>().groups.tryFind(fun g -> g.windows.contains((=)hwnd))
+        let groups = this.cast<IDesktop>().groups
+        match groups.tryFind(fun g -> g.isDesktopShown && g.windows.contains((=)hwnd)) with
+        | Some(g) -> Some(g)
+        | None -> groups.tryFind(fun g -> g.windows.contains((=)hwnd))
 
     // Variant B uses the menu's 50-percent geometry. Group creation continues
     // only after the position-first DPI transition, without blocking the UI.

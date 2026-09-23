@@ -207,6 +207,19 @@ type IGroup =
     abstract member setTabName: IntPtr * string option -> unit
     abstract member setTabAlign: IntPtr * TabAlign -> unit
     abstract member moveTab: IntPtr * int -> unit
+    // Tab groups per virtual desktop (VirtualDesktopGroups). The desktop the
+    // group belongs to; whether it is the group of the desktop being looked
+    // at (thread-safe snapshot); and the main thread's pass telling it so.
+    abstract member desktopHome: Guid option with get, set
+    abstract member isDesktopShown: bool
+    abstract member setDesktopShown: bool -> unit
+    // A tab's own alignment, None when it follows the group's side
+    // (thread-safe snapshot).
+    abstract member explicitTabAlign: IntPtr -> TabAlign option
+    // Join a window without putting it where the group is: a window shown on
+    // all desktops given a group on another desktop is where it is already.
+    abstract member addWindowUnplaced: IntPtr -> unit
+    abstract member unpinTab: IntPtr -> unit
 
 type IDesktop =
     abstract member isDragging : bool

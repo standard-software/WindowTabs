@@ -47,6 +47,11 @@ type WinEvent =
     | EVENT_OBJECT_REORDER = 0x8004
     | EVENT_OBJECT_LOCATIONCHANGE = 0x800B
     | EVENT_OBJECT_NAMECHANGE = 0x800C
+    // The shell cloaks the windows of the desktop being left and uncloaks
+    // those of the one being switched to: the earliest public sign of a
+    // virtual desktop switch.
+    | EVENT_OBJECT_CLOAKED = 0x8017
+    | EVENT_OBJECT_UNCLOAKED = 0x8018
     | EVENT_SYSTEM_MINIMIZESTART = 0x0016
     | EVENT_SYSTEM_MINIMIZEEND = 0x0017
 
@@ -330,8 +335,32 @@ and
     // Check if window is truly visible (visible and not cloaked)
     member this.isVisibleOnScreen = this.isVisible && not this.isCloaked
 
+    // DWMWA_CLOAKED as it is, None when the call failed. The shell's bit
+    // (DWM_CLOAKED_SHELL) is what a window on another virtual desktop has.
+    member this.cloakedValue =
+        let mutable cloaked = 0
+        let result = DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, &cloaked, sizeof<int>)
+        if result = 0 then Some(cloaked) else None
+
     // Check if window is on the current virtual desktop using IVirtualDesktopManager COM API
     member this.isOnCurrentVirtualDesktop = VirtualDesktopHelper.IsWindowOnCurrentVirtualDesktop(hwnd)
+
+    // The same, None when the call failed (the plain one says "yes" then).
+    member this.onCurrentVirtualDesktopOrNone =
+        let mutable onCurrent = false
+        if VirtualDesktopHelper.TryIsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent) = 0 then Some(onCurrent)
+        else None
+
+    // Whether the window is on the desktop being looked at, from both public
+    // signals (VirtualDesktopGroups.presence).
+    member this.desktopPresence =
+        VirtualDesktopGroups.presence this.onCurrentVirtualDesktopOrNone this.cloakedValue
+
+    // GetWindowDesktopId, None when the call failed or named nothing.
+    member this.desktopIdOrNone =
+        let mutable id = Guid.Empty
+        let hr = VirtualDesktopHelper.TryGetWindowDesktopId(hwnd, &id)
+        if hr = 0 && id <> Guid.Empty then Some(id) else None
 
     // Get the virtual desktop ID for this window
     member this.virtualDesktopId = VirtualDesktopHelper.GetWindowDesktopId(hwnd)

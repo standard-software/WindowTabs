@@ -445,6 +445,8 @@ type Program() as this =
     // the group came back on the default side of its windows and lost the
     // setting again at the next save.
     let seededGroupSettings = Cell.create(Map2() : Map2<IntPtr, string option * bool option * bool option>)
+    // The virtual desktop such a group belongs to, as the file names it.
+    let seededGroupDesktops = Cell.create(Map2() : Map2<IntPtr, string>)
     // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
     // relative placement can locate already-restored siblings in an order
     // snapshot taken before they closed
@@ -458,7 +460,9 @@ type Program() as this =
     // as it stands at that moment.
     let restoredFromMap = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>()
     // Temporary storage for tab group configuration (used during disable/enable)
-    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * bool * List2<IntPtr>>>(List2())
+    // Also the virtual desktop each group belongs to, and whether it held a
+    // window that was in the groups of several desktops.
+    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * bool * List2<IntPtr> * Guid option * bool>>(List2())
     let windowNameOverride = Cell.create(Map2())
     // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
     let windowFillColor = Cell.create(Map2() : Map2<IntPtr, Color>)
@@ -466,6 +470,18 @@ type Program() as this =
     let windowBorderColor = Cell.create(Map2() : Map2<IntPtr, Color>)
     let windowPinned = Cell.create(Set2<IntPtr>())
     let windowAlignment = Cell.create(Map2() : Map2<IntPtr, TabAlign>)
+    // Tab groups per virtual desktop (Shared/VirtualDesktopGroups.fs, and the
+    // "Virtual desktops" section below). What the passes have gathered about
+    // which windows are shown on all desktops; a plan for new groups waiting
+    // for a second pass to agree with it; the last desktop that could be
+    // trusted to be the one looked at; and the pass's scheduling.
+    let mutable desktopEvidence : Map<IntPtr, VirtualDesktopGroups.Evidence> = Map.empty
+    let mutable pendingDesktopVisits : VirtualDesktopGroups.Visit list = []
+    let mutable previousDesktop : Guid option = None
+    let mutable desktopPassPending = false
+    let mutable lastDesktopTrace = ""
+    let desktopPassTimer = new System.Windows.Forms.Timer(Interval = 1000)
+    let mutable cloakHook : IDisposable option = None
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
     // Trailing debounce for updateAppWindows: apps such as LibreOffice fire shell events
@@ -641,7 +657,15 @@ type Program() as this =
                     this.syncWindowTitles()
             with _ -> ()
         titleSyncTimer.Start()
-    
+        // Virtual desktops: a look once a second, and one as soon as the shell
+        // starts cloaking and uncloaking windows - which is what a switch of
+        // desktops is, seen from outside.
+        desktopPassTimer.Tick.Add <| fun _ -> this.desktopPass()
+        desktopPassTimer.Start()
+        cloakHook <- Some(
+            os.setWinEventHook(WinEvent.EVENT_OBJECT_CLOAKED, WinEvent.EVENT_OBJECT_UNCLOAKED,
+                               (fun _ _ _ _ _ _ _ -> this.scheduleDesktopPass(15)), 0, 0))
+
     member this.desktop = Services.desktop
     member this.isTabMonitoringSuspended
         with get() = isTabMonitoringSuspendedCell.value
@@ -708,7 +732,8 @@ type Program() as this =
             this.suppressExplicitRestore(window.hwnd, window.text) |> ignore
             match r.destination with
             | JoinGroup(groupHwnd, invokerHwnd) ->
-                match this.desktop.groups.tryFind(fun g -> g.hwnd = groupHwnd) with
+                // Only a group drawn on the desktop in front of us (joinableGroups).
+                match this.joinableGroups |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
                 | Some(g) ->
                     let anchor = if g.windows.contains((=) invokerHwnd) then invokerHwnd else IntPtr.Zero
                     pendingNewTabInvokers.map(fun m -> m.add window.hwnd anchor)
@@ -759,10 +784,11 @@ type Program() as this =
 
     // Every group on screen, described in the plain values Regroup.chooseGroup
     // reasons about. The group itself is the id, so the answer that comes back
-    // is the group to join.
+    // is the group to join. On screen means drawn on the desktop being looked
+    // at (joinableGroups).
     member private this.groupViews(categoryOf: string -> int) =
         let hwndZorders = this.hwndZorders()
-        this.desktop.groups.list |> List.map (fun g ->
+        this.joinableGroups |> List.map (fun g ->
             let procPaths =
                 g.windows.list |> List.map (fun hwnd ->
                     try os.windowFromHwnd(hwnd).pid.processPath with _ -> "")
@@ -797,7 +823,7 @@ type Program() as this =
             None
         | Some(pending) ->
             match pending.group with
-            | Some(group) when this.desktop.groups.any(fun g -> obj.ReferenceEquals(g, group)) ->
+            | Some(group) when this.joinableGroups |> List.exists (fun g -> obj.ReferenceEquals(g, group)) ->
                 Some(Some(group))
             | Some(_) ->
                 // The destination went away between the decision and the
@@ -911,11 +937,22 @@ type Program() as this =
                         | Some(i) -> anchor.orderSnapshot, i
                         | None -> fallback()
                     | None -> fallback()
+                // The pin of the tab in the group it closed in. A window shown
+                // on all desktops can be pinned in one desktop's group and not
+                // in another's; the global map holds whichever group was last
+                // in front. The side is still taken from the global map: a
+                // strip gives every tab a side, so only the map can tell "this
+                // tab's own side" from "whatever side the group is on".
+                let owningGroup =
+                    this.desktop.groups.tryFind(fun g -> (try g.hwnd = groupHwnd with _ -> false))
                 let info = {
                     exePath = exePath
                     windowTitle = normalizeClosedTabTitle windowTitle
                     renamedTabName = windowNameOverride.value.tryFind(hwnd) |> Option.bind id
-                    isPinned = windowPinned.value.contains(hwnd)
+                    isPinned =
+                        match owningGroup with
+                        | Some(g) when g.windows.contains((=) hwnd) -> g.isPinnedThreadSafe(hwnd)
+                        | _ -> windowPinned.value.contains(hwnd)
                     fillColor = windowFillColor.value.tryFind(hwnd)
                     underlineColor = windowUnderlineColor.value.tryFind(hwnd)
                     borderColor = windowBorderColor.value.tryFind(hwnd)
@@ -1172,9 +1209,9 @@ type Program() as this =
             restoredFromMap.[hwnd] <- info.closedHwnd
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
-            match this.findGroupForClosedInfo info with
+            match this.closedInfoGroupHere info with
             | Some(g) -> Some(Some(g))
-            | None -> None  // former group is gone: state is restored, grouping falls through
+            | None -> None  // former group is gone (or on another desktop): state is restored, grouping falls through
         | None -> None
 
     // Main-thread title sync (no cross-thread notification): compares each
@@ -1254,8 +1291,10 @@ type Program() as this =
                                                                     (waiting |> List.map (fun i -> i.windowTitle) |> String.concat " | ")))
                     match peeked with
                     | Some(info, ambiguous) ->
-                        let currentGroup = this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd))
-                        let savedGroup = this.findGroupForClosedInfo info
+                        let currentGroup = this.groupOfWindow hwnd
+                        // A former group on another desktop is not somewhere to
+                        // detach the window to: the entry is applied in place.
+                        let savedGroup = this.closedInfoGroupHere info
                         match currentGroup, savedGroup with
                         | Some(cur), Some(saved) when (try cur.hwnd <> saved.hwnd with _ -> false) ->
                             // The tab sits in the wrong group (e.g. VSCode's "Welcome"
@@ -1278,7 +1317,7 @@ type Program() as this =
                             if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
                             info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
                             restoredFromMap.[hwnd] <- info.closedHwnd
-                            match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
+                            match this.groupOfWindow hwnd with
                             | Some(g) ->
                                 // A window whose title had not settled when it
                                 // appeared was auto-grouped before its saved
@@ -1430,8 +1469,17 @@ type Program() as this =
             isSubscribed.map(fun s -> s.add hwnd dispose)
 
     member this.ensureWindowIsGrouped(window:Window) =
+        // A tab the user has just dropped outside every strip wants a group of
+        // its own here, even if the window is still a tab of a group of
+        // another virtual desktop (it is shown on all of them). Any other
+        // window in a group anywhere is left to the desktop pass, which gives
+        // a window shown on all desktops its group on each desktop.
+        let wantsGroup =
+            let dropped = isDroppedAndAwaitingGrouping.value.contains(window.hwnd)
+            VirtualDesktopGroups.wantsGroup dropped
+                (dropped && this.isInShownGroup(window.hwnd)) (this.isInGroup(window.hwnd))
         // Skip windows not on the current virtual desktop to prevent regrouping during desktop switch
-        if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window) && this.isInGroup(window.hwnd).not then
+        if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window) && wantsGroup then
             if groupTraceCount < 60 then
                 groupTraceCount <- groupTraceCount + 1
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
@@ -1500,7 +1548,12 @@ type Program() as this =
     member private this.regroupNow(procPath: string) =
         let categoryOf = this.categoryLookup()
         let hwndZorders = this.hwndZorders()
-        let groups = this.desktop.groups.list |> Array.ofList
+        // The groups drawn on the desktop being looked at, and no others: they
+        // are the only ones a window here can be sent to (joinableGroups), and a
+        // window shown on all desktops is a tab of the group the person can see.
+        // A window here that only another desktop's group holds is listed below
+        // as in no group, and the ordinary pass leaves it to the desktop pass.
+        let groups = this.joinableGroups |> Array.ofList
         // A window belongs to this pass when it is the changed application's
         // AND the ordinary pass would be willing to group it. Same predicate as
         // ensureWindowIsGrouped, deliberately: "treated as if it had just
@@ -1578,7 +1631,14 @@ type Program() as this =
             match recentlyPlacedHwnds.value.tryFind(hwnd) with
             | Some _ -> true
             | None -> false
-        this.desktop.groups.iter <| fun gi ->
+        // A window shown on all virtual desktops is in several groups; it is
+        // recorded once, from the group of the desktop being looked at - so
+        // those groups go first - and taken out of all of them.
+        let closedRecorded = HashSet<IntPtr>()
+        let groupsShownFirst =
+            this.desktop.groups.where(fun g -> g.isDesktopShown)
+                .appendList(this.desktop.groups.where(fun g -> g.isDesktopShown.not))
+        groupsShownFirst.iter <| fun gi ->
             // Skip groups whose top window is in a native move/size loop: the
             // other windows are parked off-screen for the duration
             // (hideChildWindows) and would wrongly fail the tabbable check,
@@ -1634,7 +1694,7 @@ type Program() as this =
                     // its state in the global maps. Its place is remembered
                     // instead, for the destroy that may follow.
                     if window.isWindow.not then
-                        this.recordClosedTab(hwnd, gi)
+                        if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
                         explicitWindows.map(fun m -> m.remove hwnd)
                     // Removal is asynchronous, so the next pass sees the window
                     // still here and would remember it again, one place further
@@ -1716,7 +1776,7 @@ type Program() as this =
     member this.tryReturnToLastGroup(window:Window) =
         match windowLastGroup.value.tryFind(window.hwnd) with
         | Some(info) ->
-            match this.findGroupForClosedInfo info with
+            match this.closedInfoGroupHere info with
             | Some(g) -> Some(Some(g))
             | None -> None
         | None -> None
@@ -1977,10 +2037,14 @@ type Program() as this =
                 // Direct removal + lightweight cleanup instead of expensive full window scan.
                 // EVENT_OBJECT_HIDE already handles tab removal via updateAppWindows(),
                 // so HSHELL_WINDOWDESTROYED only needs cleanup for any remaining cases.
-                (match this.desktop.groups.tryFind(fun g -> g.windows.contains((=)hwnd)) with
+                // A window shown on all virtual desktops is in one group per
+                // desktop: it is recorded once, as a tab of the group of the
+                // desktop being looked at, and leaves every one of them.
+                (match this.groupOfWindow hwnd with
                  | Some(g) ->
                     this.recordClosedTab(hwnd, g)
-                    g.removeWindow(hwnd)
+                    this.desktop.groups.iter (fun other ->
+                        if other.windows.contains((=)hwnd) then other.removeWindow(hwnd))
                  | None ->
                     // Left its group alive earlier, or was never a tab. The
                     // first has a place remembered for it; the second has no
@@ -2119,7 +2183,7 @@ type Program() as this =
     // group would act on the wrong strip.
     member private this.runHotKey (action: HotKeyPolicy.HotKeyAction) =
         let hwnd = WinUserApi.GetForegroundWindow()
-        match this.desktop.groups.tryFind(fun g -> g.windows.contains((=) hwnd)) with
+        match this.groupOfWindow hwnd with
         | None ->
             // Fired in the moment between a foreground change and the
             // release it causes. Nothing to act on.
@@ -2144,6 +2208,242 @@ type Program() as this =
     
     member this.isInGroup hwnd : bool =
         this.desktop.groups.any(fun group -> group.windows.contains((=)hwnd))
+
+    // ------------------------------------------------------ virtual desktops --
+    //
+    // A window shown on all virtual desktops ("Show this window / windows from
+    // this app on all desktops" in task view) is really there on every
+    // desktop, so it is a tab in a group of each desktop it has been seen on,
+    // and those groups are separate groups. A group belongs to a desktop
+    // (IGroup.desktopHome); only the groups of the desktop being looked at are
+    // "shown" (IGroup.isDesktopShown). Everything is decided in
+    // Shared/VirtualDesktopGroups.fs; this reads Windows, hands it over, and
+    // carries out the answer.
+    //
+    // Someone who never uses the setting sees no difference: every window is
+    // in one group, every group's strip is owned by its front window, and the
+    // shell shows and hides the strips with their windows exactly as before.
+    // WindowTabs hides a strip itself only where the shell cannot - a group of
+    // another desktop whose owner is here - and that takes a window shown on
+    // all desktops.
+
+    /// Whether the group a window is in on the desktop being looked at exists.
+    member this.isInShownGroup hwnd : bool =
+        this.desktop.groups.any(fun group -> group.isDesktopShown && group.windows.contains((=)hwnd))
+
+    /// The group an action on a window is about: the one of the desktop being
+    /// looked at, failing that the first that holds it.
+    member this.groupOfWindow hwnd : IGroup option =
+        let groups = this.desktop.groups
+        match groups.tryFind(fun g -> g.isDesktopShown && g.windows.contains((=)hwnd)) with
+        | Some(g) -> Some(g)
+        | None -> groups.tryFind(fun g -> g.windows.contains((=)hwnd))
+
+    /// The groups WindowTabs may put a window into by itself - auto-grouping,
+    /// a "new window" launch, a setting-change regroup, a returning window:
+    /// the ones drawn on the desktop being looked at
+    /// (VirtualDesktopGroups.joinable). Without pins that is every group of
+    /// this desktop, and a group of another desktop never had a window of
+    /// this one to offer anyway.
+    member this.joinableGroups : IGroup list =
+        VirtualDesktopGroups.joinable
+            (this.desktop.groups.list |> List.map (fun g ->
+                g, (if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden)))
+
+    /// A closed tab's former group, while it is drawn here
+    /// (VirtualDesktopGroups.restoreInto). Only the group is refused, never the
+    /// record: the tab's state comes back either way.
+    member private this.closedInfoGroupHere (info: ClosedTabInfo) : IGroup option =
+        VirtualDesktopGroups.restoreInto (this.findGroupForClosedInfo info) (fun (g: IGroup) -> g.isDesktopShown)
+
+    /// Which windows of which group are written to the settings file or set
+    /// aside while WindowTabs is off - `keeps groupIndex hwnd` - and which of
+    /// them are marked as on all desktops (VirtualDesktopGroups.savedMembership).
+    /// A window moved to another desktop and followed is in two groups for a
+    /// moment; it is written once, into the group of the desktop it went to.
+    member private this.savedMembers (groups: (IGroup * IntPtr list) list) =
+        let shared = VirtualDesktopGroups.Live.shared()
+        let holders =
+            groups
+            |> List.mapi (fun i (g, members) -> members |> List.distinct |> List.map (fun h -> h, (i, g.desktopHome)))
+            |> List.concat
+            |> List.groupBy fst
+            |> List.map (fun (h, xs) -> h, List.map snd xs)
+            |> Map.ofList
+        let verdicts =
+            holders |> Map.map (fun h places ->
+                match places with
+                | [ _ ] -> VirtualDesktopGroups.savedMembership false None places
+                | _ ->
+                    let desktop = try os.windowFromHwnd(h).desktopIdOrNone with _ -> None
+                    VirtualDesktopGroups.savedMembership (shared.Contains h) desktop places)
+        let keeps (i: int) (h: IntPtr) =
+            match verdicts.TryFind h with
+            | Some(into, _) -> List.contains i into
+            | None -> true
+        let marked = verdicts |> Map.filter (fun _ (_, onAll) -> onAll) |> Map.toList |> List.map fst |> Set.ofList
+        keeps, marked
+
+    member private this.scheduleDesktopPass(delayMs: int) =
+        if not desktopPassPending then
+            desktopPassPending <- true
+            ThreadHelper.cancelablePostBack delayMs (fun () ->
+                desktopPassPending <- false
+                this.desktopPass()) |> ignore
+
+    /// The per-window maps (pin, side, colours) hold the state of the tab in
+    /// the group it is being handled in. A window in several groups can be
+    /// pinned in one and not in another, so when a group comes to the front
+    /// its own state of such a window is put back in the maps - anything that
+    /// copies a tab from the maps (a drag into another group, a closed tab's
+    /// record, the save) then copies this desktop's.
+    member private this.publishTabState(g: IGroup, hwnd: IntPtr) =
+        if g.isPinnedThreadSafe(hwnd) then windowPinned.set(windowPinned.value.add hwnd)
+        else windowPinned.set(windowPinned.value.remove hwnd)
+        match g.explicitTabAlign(hwnd) with
+        | Some(a) -> windowAlignment.set(windowAlignment.value.add hwnd a)
+        | None -> windowAlignment.set(windowAlignment.value.remove hwnd)
+        let colour (read: IntPtr -> Color option) (map: Cell<Map2<IntPtr, Color>>) =
+            match read hwnd with
+            | Some(c) -> map.set(map.value.add hwnd c)
+            | None -> map.set(map.value.remove hwnd)
+        colour g.getTabFillColorThreadSafe windowFillColor
+        colour g.getTabUnderlineColorThreadSafe windowUnderlineColor
+        colour g.getTabBorderColorThreadSafe windowBorderColor
+
+    /// A group for this desktop, made of the windows of another desktop's
+    /// group that are here and have no group here: its windows shown on all
+    /// desktops (or ones moved here and followed). It starts as a copy - the
+    /// order, each tab's state, the group's settings - and is its own group
+    /// from then on. Its windows are not moved: they are where they are.
+    member private this.makeDesktopGroup(source: IGroup, members: IntPtr list, desktop: Guid) =
+        let g = Services.desktop.createGroup()
+        g.desktopHome <- Some(desktop)
+        g.perGroupTabPositionValue <- source.perGroupTabPositionValue
+        g.snapTabHeightMargin <- source.snapTabHeightMargin
+        g.lockWindowPosition <- source.lockWindowPosition
+        for hwnd in members do
+            // The global maps are what a joining tab takes its state from.
+            this.publishTabState(source, hwnd)
+            g.addWindowUnplaced(hwnd)
+        VirtualDesktopTrace.log (fun () ->
+            sprintf "desktop %s: group made for %s (from group %X)"
+                ((string desktop).Substring(0, 8))
+                (members |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                (try source.hwnd.ToInt64() with _ -> 0L))
+
+    /// One look at the desktops. Cheap enough to run once a second and at
+    /// every cloak burst: two reads per grouped window and two registry
+    /// values; nothing is sent to another window.
+    member this.desktopPass() =
+        try
+            if isDisabledCell.value || inShutdown.value || isRestoringTabGroups.value ||
+               needsRestoreOnStartup.value || not VirtualDesktopHelper.IsSupported then () else
+            let groups = this.desktop.groups.list
+            let listed =
+                match VirtualDesktopHelper.TryReadDesktopIds() with
+                | null -> None
+                | ids -> Some(List.ofArray ids)
+            let readRegistry () =
+                let mutable id = Guid.Empty
+                if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some(id) else None
+            let registryBefore = readRegistry()
+            let members = groups |> List.collect (fun g -> g.windows.list) |> List.distinct
+            let reads =
+                members |> List.map (fun h ->
+                    let w = os.windowFromHwnd(h)
+                    { VirtualDesktopGroups.hwnd = h
+                      VirtualDesktopGroups.presence = (try w.desktopPresence with _ -> VirtualDesktopGroups.Unsure)
+                      VirtualDesktopGroups.desktop = (try w.desktopIdOrNone with _ -> None) })
+            let registryAfter = readRegistry()
+            // Explorer changed its mind while the windows were being read: the
+            // reading straddles a switch. Look again in a moment.
+            if registryBefore <> registryAfter then this.scheduleDesktopPass(50) else
+            let readMap = reads |> List.map (fun r -> r.hwnd, r) |> Map.ofList
+            let wasShared = VirtualDesktopGroups.sharedOf desktopEvidence
+            let current =
+                match VirtualDesktopGroups.trustCurrent registryAfter previousDesktop listed wasShared reads with
+                | Some c when VirtualDesktopGroups.contradicted c readMap wasShared
+                                  (groups |> List.map (fun g -> g.desktopHome, g.windows.list)) -> None
+                | c -> c
+            if current.IsSome then previousDesktop <- current
+            let d = { VirtualDesktopGroups.current = current; VirtualDesktopGroups.listed = listed }
+            desktopEvidence <- VirtualDesktopGroups.updateEvidence d desktopEvidence reads
+            let shared = VirtualDesktopGroups.sharedOf desktopEvidence
+            let several =
+                members
+                |> List.filter (fun h -> (groups |> List.filter (fun g -> g.windows.contains((=) h))).Length > 1)
+                |> Set.ofList
+            VirtualDesktopGroups.Live.publish shared several current
+            let keyed = groups |> List.mapi (fun i g -> i, g) |> Map.ofList
+            let stateOf (i: int) (g: IGroup) : VirtualDesktopGroups.GroupState =
+                { key = i
+                  members = g.windows.list
+                  home = g.desktopHome
+                  display = if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden }
+            let states = keyed |> Map.toList |> List.map (fun (i, g) -> stateOf i g)
+            // No longer shown on all desktops: it stays in the group of the
+            // desktop it was left on and leaves the others' - as a closed tab
+            // would, without a closed-tab record (the window is not closed).
+            let leaving = VirtualDesktopGroups.leftBehind current wasShared shared readMap states
+            for (i, h) in leaving do
+                VirtualDesktopTrace.log (fun () ->
+                    sprintf "%X is no longer on all desktops: out of group %X" (h.ToInt64()) (try keyed.[i].hwnd.ToInt64() with _ -> 0L))
+                keyed.[i].removeWindow(h)
+            let states =
+                states |> List.map (fun s ->
+                    { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) leaving)) })
+            let decisions = VirtualDesktopGroups.decide d readMap shared states
+            let sharedChanged = shared <> wasShared
+            for dec in decisions do
+                let g = keyed.[dec.key]
+                if g.desktopHome <> dec.home then g.desktopHome <- dec.home
+                let shown = (dec.display = VirtualDesktopGroups.Shown)
+                // A group holding a window shown everywhere is refreshed every
+                // pass: its strip's owner, and whether that owner is here,
+                // change without its display changing.
+                let holdsShared = g.windows.any(fun h -> shared.Contains h || wasShared.Contains h || several.Contains h)
+                if shown <> g.isDesktopShown || sharedChanged || holdsShared then
+                    if shown && not g.isDesktopShown then
+                        g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
+                    g.setDesktopShown(shown)
+            // Groups for the windows that are here and have none here.
+            match current with
+            | Some c when not this.isTabMonitoringSuspended && not this.desktop.isDragging &&
+                          not (TabStripDecorator.isShellSwitcherOpen(os)) ->
+                let displayOf i =
+                    match decisions |> List.tryFind (fun dec -> dec.key = i) with
+                    | Some(dec) -> dec.display
+                    | None -> VirtualDesktopGroups.Shown
+                let withDisplay = states |> List.map (fun s -> s, displayOf s.key)
+                let eligible h =
+                    not (isDroppedAndAwaitingGrouping.value.contains h) &&
+                    (try this.isTabbableWindow(os.windowFromHwnd(h)) with _ -> false)
+                let visits = VirtualDesktopGroups.visits c readMap withDisplay eligible
+                if VirtualDesktopGroups.sameVisits pendingDesktopVisits visits then
+                    pendingDesktopVisits <- []
+                    for v in visits do
+                        this.makeDesktopGroup(keyed.[v.source], v.members, c)
+                else
+                    pendingDesktopVisits <- visits
+                    // The second pass a visit waits for.
+                    if not visits.IsEmpty then this.scheduleDesktopPass(150)
+            | _ -> pendingDesktopVisits <- []
+            let trace =
+                sprintf "current=%s shared=%s groups=%s"
+                    (match current with Some c -> (string c).Substring(0, 8) | None -> "?")
+                    (shared |> Seq.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                    (decisions
+                     |> List.map (fun dec ->
+                        sprintf "%X:%s@%s" (try keyed.[dec.key].hwnd.ToInt64() with _ -> 0L)
+                            (if dec.display = VirtualDesktopGroups.Shown then "shown" else "hidden")
+                            (match dec.home with Some h -> (string h).Substring(0, 8) | None -> "?"))
+                     |> String.concat " ")
+            if trace <> lastDesktopTrace then
+                lastDesktopTrace <- trace
+                VirtualDesktopTrace.log (fun () -> trace)
+        with ex ->
+            VirtualDesktopTrace.log (fun () -> sprintf "desktop pass failed: %s" ex.Message)
 
     member this.notifyNewVersion = notifyNewVersionEvt.Publish
 
@@ -2281,9 +2581,23 @@ type Program() as this =
                 SavedSession.seedsToSave saveNow seedMaxAgeDays closedTabMaxAgeDays
                                          closedTabSaveLimit (pending |> List.map snd)
             let claimedSeeds = System.Collections.Generic.HashSet<IntPtr>()
+            // A window in the groups of several virtual desktops because it is
+            // shown on all of them is written into each, marked, with that
+            // group's pin, so that the restore puts it back into each rather
+            // than refusing it as an identity claimed by two groups. One that
+            // is in two groups only because it was moved and followed is
+            // written once (savedMembers).
+            let groupsNow = this.desktop.groups.list
+            let keeps, marked =
+                this.savedMembers (groupsNow |> List.map (fun gi -> gi, gi.visualOrderThreadSafe.list @ gi.visualOrder.list))
+            let stateIn (gi: IGroup) hwnd =
+                this.savedTabOfWindow hwnd
+                |> Option.map (fun t ->
+                    if marked.Contains hwnd then { t with onAllDesktops = true; isPinned = gi.isPinnedThreadSafe(hwnd) }
+                    else t)
             let liveGroups =
-                this.desktop.groups.list
-                |> List.map (fun gi ->
+                groupsNow
+                |> List.mapi (fun i gi ->
                     // Seeds of a group that has partly reassembled here are
                     // saved with it. Which group an entry belongs to is a
                     // question about the live desktop, so it is answered here
@@ -2302,13 +2616,14 @@ type Program() as this =
                     // yet hold a window added moments ago, and the mirror goes
                     // stale after a pin/unpin normalization.
                     let group : SavedSession.GroupToSave =
-                        { stripOrder = gi.visualOrderThreadSafe.list
-                          mirrorOrder = gi.visualOrder.list
+                        { stripOrder = gi.visualOrderThreadSafe.list |> List.filter (keeps i)
+                          mirrorOrder = gi.visualOrder.list |> List.filter (keeps i)
                           seeds = seeds
                           tabPosition = Some(gi.perGroupTabPositionValue)
                           snapMargin = Some(gi.snapTabHeightMargin)
-                          lockPosition = Some(gi.lockWindowPosition) }
-                    group)
+                          lockPosition = Some(gi.lockWindowPosition)
+                          desktop = gi.desktopHome |> Option.map VirtualDesktopGroups.formatDesktop }
+                    group, stateIn gi)
             // A group where nothing has opened yet keeps a group of its own,
             // held together by the sentinel token it was seeded under. Tabs
             // the user closed are not kept this way: emptying a group is the
@@ -2343,10 +2658,12 @@ type Program() as this =
                               seeds = entries
                               tabPosition = pos
                               snapMargin = margin
-                              lockPosition = locked }
+                              lockPosition = locked
+                              desktop = seededGroupDesktops.value.tryFind(token) }
                         Some(group))
             json.addOrUpdate("SavedTabGroupsForRestart",
-                             SavedSession.write this.savedTabOfWindow (liveGroups @ waitingGroups))
+                             SavedSession.writeEach
+                                 (liveGroups @ (waitingGroups |> List.map (fun g -> g, this.savedTabOfWindow))))
             settingsManager.settingsJson <- json
         with
         | _ -> ()
@@ -2401,8 +2718,43 @@ type Program() as this =
                     SavedSession.plan DateTime.Now seedMaxAgeDays closedTabMaxAgeDays
                                       (SavedSession.read groupsArray) live
 
-                for g in planned do
-                    let matched = g.tabs |> List.filter (fun t -> t.live.IsSome)
+                // Tab groups per virtual desktop. Each group goes back to its
+                // desktop (a desktop Explorer no longer lists belongs to
+                // nothing, and the group is filed again where its windows
+                // are). A window saved in several groups - it was shown on all
+                // desktops - goes back into each only if it still is; one that
+                // now lives on one desktop goes into that desktop's group
+                // (VirtualDesktopGroups.restoreTargets).
+                let listed =
+                    match VirtualDesktopHelper.TryReadDesktopIds() with
+                    | null -> None
+                    | ids -> Some(List.ofArray ids)
+                let homes =
+                    planned |> List.map (fun g -> VirtualDesktopGroups.savedHome listed g.desktop)
+                let registryCurrent =
+                    let mutable id = Guid.Empty
+                    if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some(id) else None
+                let desktops = { VirtualDesktopGroups.current = registryCurrent; VirtualDesktopGroups.listed = listed }
+                let savedIn =
+                    planned
+                    |> List.mapi (fun gi g -> g.tabs |> List.choose (fun t -> t.live |> Option.map (fun h -> h, (gi, homes.[gi]))))
+                    |> List.concat
+                    |> List.groupBy fst
+                    |> List.map (fun (h, xs) -> h, List.map snd xs)
+                    |> Map.ofList
+                let goesInto (gi: int) (hwnd: IntPtr) =
+                    match savedIn.TryFind hwnd with
+                    | Some(places) when places.Length > 1 ->
+                        let w = os.windowFromHwnd(hwnd)
+                        let read =
+                            { VirtualDesktopGroups.hwnd = hwnd
+                              VirtualDesktopGroups.presence = (try w.desktopPresence with _ -> VirtualDesktopGroups.Unsure)
+                              VirtualDesktopGroups.desktop = (try w.desktopIdOrNone with _ -> None) }
+                        List.contains gi (VirtualDesktopGroups.restoreTargets desktops (Some read) places)
+                    | _ -> true
+
+                for (gi, g) in List.indexed planned do
+                    let matched = g.tabs |> List.filter (fun t -> t.live.IsSome && goesInto gi t.live.Value)
                     matched |> List.iteri (fun i t ->
                         RestoreTrace.log (fun () -> sprintf "  matched[%d] hwnd=%X saved=%X"
                                                             i (t.live.Value.ToInt64()) (t.saved.hwnd.ToInt64())))
@@ -2443,6 +2795,7 @@ type Program() as this =
                         g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
                         g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
                         g.lockPosition |> Option.iter (fun v -> group.lockWindowPosition <- v)
+                        group.desktopHome <- homes.[gi]
                         Some(group)
 
                     RestoreTrace.log (fun () -> sprintf "group token=%X created=%b order=%s"
@@ -2451,6 +2804,8 @@ type Program() as this =
                                                         (g.savedOrder |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
                     if g.token <> IntPtr.Zero then
                         seededGroupSettings.map(fun m -> m.add g.token (g.tabPosition, g.snapMargin, g.lockPosition))
+                        homes.[gi] |> Option.iter (fun h ->
+                            seededGroupDesktops.map(fun m -> m.add g.token (VirtualDesktopGroups.formatDesktop h)))
                         (match createdGroup with
                          | Some(grp) -> seededGroupMap.map(fun m -> m.add g.token grp)
                          | None -> ())
@@ -2784,10 +3139,19 @@ type Program() as this =
 
             if value then
                 // When disabling, save current tab group configuration first (with per-group tab position)
-                let groupConfigs = this.desktop.groups.map <| fun gi ->
-                    let pinnedHwnds = gi.visualOrder.where(fun hwnd -> gi.isPinned(hwnd))
-                    (gi.visualOrder, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, pinnedHwnds)
-                savedTabGroups.set(groupConfigs)
+                // As the save writes them (savedMembers): a window moved and
+                // followed comes back in the group of the desktop it went to
+                // only, and a group "held a window of several desktops" only
+                // if that window is shown on all of them.
+                let groupsNow = this.desktop.groups.list
+                let keeps, marked = this.savedMembers (groupsNow |> List.map (fun gi -> gi, gi.visualOrder.list))
+                let groupConfigs =
+                    groupsNow |> List.mapi (fun i gi ->
+                        let order = gi.visualOrder.where(keeps i)
+                        let pinnedHwnds = order.where(fun hwnd -> gi.isPinned(hwnd))
+                        (order, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, pinnedHwnds,
+                         gi.desktopHome, order.any(marked.Contains)))
+                savedTabGroups.set(List2(groupConfigs))
 
                 // Set disabled state before destroying groups
                 isDisabledCell.set(true)
@@ -2812,11 +3176,17 @@ type Program() as this =
                     this.restoreTabGroupsFromSettings()
 
                 // Restore saved tab groups
-                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, savedLockPosition, pinnedHwnds) ->
-                    // Filter out windows that no longer exist or are not visible
+                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, savedLockPosition, pinnedHwnds, home, heldSeveral) ->
+                    // Filter out windows that no longer exist or are not visible.
+                    // A group that held a window shown on all desktops keeps its
+                    // windows that are on another desktop (cloaked there): one of
+                    // its windows is here, so the group is rebuilt - and without
+                    // them the other desktop's group would come back as that
+                    // one window alone.
                     let validHwnds = hwnds.where <| fun hwnd ->
                         let window = os.windowFromHwnd(hwnd)
-                        window.isWindow && window.isVisibleOnScreen
+                        VirtualDesktopGroups.keepOnReenable heldSeveral window.isWindow
+                            window.isVisibleOnScreen window.isVisible
 
                     if validHwnds.count > 0 then
                         let group = Services.desktop.createGroup()
@@ -2828,10 +3198,20 @@ type Program() as this =
                         group.snapTabHeightMargin <- savedSnapMargin
                         // Restore whether this group's windows are locked
                         group.lockWindowPosition <- savedLockPosition
+                        // And which virtual desktop it belongs to
+                        group.desktopHome <- home
                         // Restore pinned tabs
                         pinnedHwnds.iter <| fun hwnd ->
                             if validHwnds.contains((=) hwnd) then
                                 group.pinTab(hwnd)
+                        // A window shown on all desktops joined with the pin of
+                        // whichever of its groups was rebuilt last; one that was
+                        // not pinned in this group is unpinned again. (Any other
+                        // window's pin was this group's already.)
+                        if heldSeveral then
+                            validHwnds.iter <| fun hwnd ->
+                                if not (pinnedHwnds.contains((=) hwnd)) then
+                                    group.unpinTab(hwnd)
 
                 // Clear saved configuration
                 savedTabGroups.set(List2())

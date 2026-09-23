@@ -71,6 +71,10 @@ module SavedTabState =
         // The user closed this tab, as against the window simply not having
         // started yet. Only an exact title match may claim one of these.
         closedByUser: bool
+        // The window was shown on all virtual desktops when it was saved, and
+        // so was in the group of every desktop it had been seen on: the one
+        // kind of entry that may stand in more than one group.
+        onAllDesktops: bool
     }
 
     let ofHwnd (hwnd: IntPtr) = {
@@ -86,6 +90,7 @@ module SavedTabState =
         align = None
         seedSince = None
         closedByUser = false
+        onAllDesktops = false
     }
 
     let formatAlign = function AlignLeft -> "TopLeft" | AlignRight -> "TopRight"
@@ -155,6 +160,7 @@ module SavedTabState =
         t.align |> Option.iter (fun a -> put "tabAlignment" (JValue(formatAlign a)))
         t.seedSince |> Option.iter (fun d -> put "seedSince" (JValue(d.ToString("o"))))
         if t.closedByUser then put "closedByUser" (JValue(true))
+        if t.onAllDesktops then put "onAllDesktops" (JValue(true))
         o
 
     // Nothing without a handle is an entry: the handle is the name every other
@@ -183,6 +189,7 @@ module SavedTabState =
                         | true, d -> Some(d)
                         | _ -> None)
                 closedByUser = (boolOf o "closedByUser" = Some(true))
+                onAllDesktops = (boolOf o "onAllDesktops" = Some(true))
             }
 
     // ----- one saved group -----
@@ -225,6 +232,15 @@ module SavedTabState =
     let groupLockPosition (groupToken: JToken) =
         match groupToken with
         | :? JObject as g -> boolOf g "lockWindowPosition"
+        | _ -> None
+
+    // The virtual desktop the group belongs to, as Explorer names it. Absent in
+    // a file written before groups belonged to a desktop, and for a group that
+    // had not been seen on one yet; such a group is filed under the desktop
+    // its windows are found on.
+    let groupDesktop (groupToken: JToken) =
+        match groupToken with
+        | :? JObject as g -> stringOf g "virtualDesktop"
         | _ -> None
 
     // The window array is passed in rather than built from a SavedTab list:

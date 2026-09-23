@@ -283,9 +283,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     /// A window Windows will not answer for counts as being here: an unreadable
     /// window must not quietly remove a group from a menu, the same way it must
     /// not make a group look as if it straddles.
+    /// A group of another desktop holding only windows shown on all desktops
+    /// has every window here, and is still not this desktop's group.
     member private this.isOnCurrentDesktop(info: TabGroupInfo) =
-        try info.tabHwnds |> List.forall (fun hwnd -> os.windowFromHwnd(hwnd).isOnCurrentVirtualDesktop)
-        with _ -> true
+        let shown =
+            lock decorators (fun () ->
+                match decorators.TryGetValue(info.hwnd) with
+                | true, d -> d.group.isDesktopShownThreadSafe
+                | _ -> true)
+        shown &&
+        (try info.tabHwnds |> List.forall (fun hwnd -> os.windowFromHwnd(hwnd).isOnCurrentVirtualDesktop)
+         with _ -> true)
 
     /// A tab group is one window to the person using it, so it belongs on one
     /// virtual desktop. Nothing stops a tabbed window from being sent to
@@ -302,7 +310,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     /// Whether the shell is showing task view or the Alt+Tab switcher. Windows
     /// gives each of them a window of its own, and it is the foreground window
     /// while it is up.
-    member private this.shellSwitcherIsOpen =
+    member private this.shellSwitcherIsOpen = TabStripDecorator.isShellSwitcherOpen(os)
+
+    // The same, for the main thread's desktop pass (Program.fs).
+    static member isShellSwitcherOpen(os: OS) =
         try
             let fg = WinUserApi.GetForegroundWindow()
             fg <> IntPtr.Zero && shellSwitcherClasses.Contains(os.windowFromHwnd(fg).className)
@@ -351,13 +362,27 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         let (hr, id) =
                             try os.windowFromHwnd(hwnd).virtualDesktopIdWithHr with _ -> (-2, Guid.Empty)
                         (hwnd, hr, id))
+                // A window shown on all desktops is counted as being where the
+                // group is, and one that is here but says nothing of where it
+                // lives is counted there while the group's desktop is being
+                // looked at (VirtualDesktopGroups.straddleView). Presence is
+                // read only when an answer is missing: it costs a second call.
+                let shared = VirtualDesktopGroups.Live.shared()
+                let home = group.desktopHome
+                let current = VirtualDesktopGroups.Live.current()
                 let windows =
-                    reads |> List.map (fun (hwnd, hr, id) ->
-                        { VirtualDesktopIntegrity.hwnd = hwnd
-                          VirtualDesktopIntegrity.desktop =
-                            if hr <> 0 || id = Guid.Empty then None else Some(id) })
+                    reads
+                    |> List.map (fun (hwnd, hr, id) ->
+                        let desktop = if hr <> 0 || id = Guid.Empty then None else Some(id)
+                        let presence =
+                            if desktop.IsSome then VirtualDesktopGroups.Unsure
+                            else try os.windowFromHwnd(hwnd).desktopPresence with _ -> VirtualDesktopGroups.Unsure
+                        (hwnd, presence, desktop))
+                    |> VirtualDesktopGroups.straddleView home current shared
                 let previousReads = lastDesktopReads
-                let decision = VirtualDesktopIntegrity.decide previousReads group.topWindow windows
+                let decision =
+                    VirtualDesktopIntegrity.decide previousReads group.topWindow windows
+                    |> VirtualDesktopGroups.rebase home windows
                 lastDesktopReads <- VirtualDesktopIntegrity.reading windows
                 // What was read, whenever it is not what was read a second ago.
                 // The thread is in the line because each group reads from its
@@ -437,21 +462,36 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // the group is - checked against the group's desktop rather than the
         // front window's, since the window just moved is usually the one in
         // front.
-        let readsAs desktop hwnd =
-            try
-                let (hr, id) = os.windowFromHwnd(hwnd).virtualDesktopIdWithHr
-                hr = 0 && id <> Guid.Empty && desktop id
-            with _ -> false
         let desktopOf hwnd =
             try
                 let (hr, id) = os.windowFromHwnd(hwnd).virtualDesktopIdWithHr
                 if hr = 0 then id else Guid.Empty
             with _ -> Guid.Empty
+        // Read as the rule reads them: a window shown on all desktops is where
+        // the group is (VirtualDesktopGroups.straddleView).
+        let shared = VirtualDesktopGroups.Live.shared()
+        let presenceOf hwnd =
+            try os.windowFromHwnd(hwnd).desktopPresence with _ -> VirtualDesktopGroups.Unsure
+        let fresh =
+            group.windows.items.list
+            |> List.map (fun hwnd ->
+                let id = desktopOf hwnd
+                (hwnd, presenceOf hwnd, (if id = Guid.Empty then None else Some(id))))
+            |> VirtualDesktopGroups.straddleView group.desktopHome (VirtualDesktopGroups.Live.current()) shared
+        let readsAs desktop hwnd =
+            fresh |> List.exists (fun w -> w.hwnd = hwnd && (match w.desktop with Some id -> desktop id | None -> false))
         let stayedHere =
             group.windows.items.list
             |> List.exists (fun hwnd ->
                 not (List.contains hwnd strays) && readsAs (fun id -> id = baseDesktop) hwnd)
-        let away = strays |> List.filter (readsAs (fun id -> id <> baseDesktop))
+        // Never a window that is on the desktop being looked at: one shown on
+        // all desktops always is, and one moved here is given a group here and
+        // leaves this one when this group's desktop is looked at
+        // (VirtualDesktopGroups.mayLeave).
+        let away =
+            strays |> List.filter (fun hwnd ->
+                readsAs (fun id -> id <> baseDesktop) hwnd &&
+                VirtualDesktopGroups.mayLeave (shared.Contains hwnd) (presenceOf hwnd))
         let stillAway = stayedHere && not away.IsEmpty && away.Length = strays.Length
         let act =
             VirtualDesktopIntegrity.actOnStraddle && stillAway && not tooSoon && elsewhere = 0
@@ -476,7 +516,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let inOrder hwnds =
                 (order |> List.filter (fun hwnd -> List.contains hwnd hwnds))
                 @ (hwnds |> List.filter (fun hwnd -> not (List.contains hwnd order)))
-            away
+            // A window that is in a group of another desktop as well (it was
+            // shown on all desktops, or moved and followed) already has a
+            // group where it went: it only leaves this one.
+            let several = VirtualDesktopGroups.Live.inSeveral()
+            let elsewhere, alone = away |> List.partition several.Contains
+            elsewhere |> List.iter (fun hwnd ->
+                if group.windows.items.count > 1 && group.windows.contains(hwnd) then
+                    this.ts.removeTab(Tab(hwnd))
+                    group.removeWindow(hwnd))
+            alone
             |> List.groupBy desktopOf
             |> List.iter (fun (_, together) ->
                 match inOrder together with
@@ -611,6 +660,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.invokeAsync <| fun() ->
                 this.updateTopEdgeGuard()
 
+        // Raised on this group's thread by the desktop pass.
+        group.desktopChanged.Add <| fun() ->
+            this.updateTopEdgeGuard()
+
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
             topEdgeGuard.dispose()
@@ -637,7 +690,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // already under way - and following the window frame by frame
                 // (position, size, repaint, z-order) is what made a top-edge
                 // resize crawl. The band comes back when the loop ends.
-                not group.isInMoveSizeThreadSafe
+                not group.isInMoveSizeThreadSafe &&
+                // A group of another virtual desktop guards nothing: a window
+                // shown on all desktops is guarded by the lock of the group of
+                // the desktop being looked at, and only by that one.
+                group.isDesktopShownThreadSafe
             // Only the window in front decides the band: its own margin, not
             // the group's. A group holding LINE and Chrome guards LINE's outer
             // frame while LINE shows, and just Chrome's top border while
