@@ -4,6 +4,7 @@
 
 ## version ss_2026.09.21_next1
 
+- A tab that comes back to the place it had when it was closed no longer rearranges the tabs that were never closed. Only the returning tab moves.
 - Removed the code for showing a whole tab group as one taskbar button. It was switched off at every call site and never ran.
 
 ## version ss_2026.09.21

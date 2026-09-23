@@ -1068,33 +1068,6 @@ type Program() as this =
         | Some(idx) -> Some(this.takeClosedTabAt idx)
         | None -> None
 
-    // Relative placement for a restored tab: the target index is the number
-    // of current tabs (excluding the restored one) that sat BEFORE it in the
-    // close-time order snapshot — survivors matched by their own hwnd,
-    // already-restored siblings via restoredFromMap. Tabs unknown to the
-    // snapshot (opened after the close) are treated as coming after. Runs on
-    // the group thread; reads only the arguments.
-    member private this.closedTabTargetIdx(currentTabs: List2<Tab>, selfTab: Tab, info: ClosedTabInfo, restoredPairs: System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>) =
-        match info.orderSnapshot |> List.tryFindIndex ((=) info.closedHwnd) with
-        | Some(rank) ->
-            let originalPos (t: Tab) =
-                let (Tab h) = t
-                match info.orderSnapshot |> List.tryFindIndex ((=) h) with
-                | Some(i) -> Some(i)
-                | None ->
-                    (match restoredPairs.TryGetValue(h) with
-                     | true, oldH -> Some(oldH)
-                     | _ -> None)
-                    |> Option.bind (fun oldH -> info.orderSnapshot |> List.tryFindIndex ((=) oldH))
-            currentTabs.list
-            |> List.filter (fun t -> t <> selfTab)
-            |> List.filter (fun t -> match originalPos t with Some(p) -> p < rank | None -> false)
-            |> List.length
-        | None ->
-            // No usable snapshot: fall back to the recorded absolute index
-            let count = currentTabs.list.Length
-            if info.tabIndex >= 0 && info.tabIndex < count then info.tabIndex else count
-
     // Put the saved pin state back on a restored tab. Runs on the group thread.
     //
     // Pin is half of the tab's band on the strip and the ordering below sorts
@@ -1110,29 +1083,10 @@ type Program() as this =
         if info.isPinned && not (wg.ts.isPinned(tab)) then wg.pinTab(hwnd)
         elif not info.isPinned && wg.ts.isPinned(tab) then wg.unpinTab(hwnd)
 
-    // Put a whole group back into the order one of its members was saved in.
-    // Runs on the group thread; the only shared state it reads is
-    // restoredFromMap, which is a concurrent dictionary for that reason.
-    //
-    // The whole group, not only the tab that has just arrived, and that is the
-    // point of it. The tab that CREATES a group is never placed by itself: at
-    // that moment it is the only tab there is, the group is not yet known to be
-    // the saved one, and until now nothing ever came back to it - so a group
-    // whose windows all start after WindowTabs came back with its first window
-    // wherever it happened to land and the rest arranged around it, which is
-    // exactly the reported fault. Recomputing the entire order at every arrival
-    // also makes the result independent of the sequence the windows start in,
-    // which is what matters when an application starts half an hour late.
-    //
-    // Nothing puts this on a timer: it runs only when a tab that belongs to the
-    // saved order arrives. Once the group's saved windows have all arrived (or
-    // their entries have expired) there is no arrival left to trigger it, so it
-    // cannot come back later and undo what the user has done since.
-    //
-    // The arithmetic itself is in TabOrder, where it can be run without
-    // starting WindowTabs; here it is only fed the strip's live values.
-    member private this.applySavedOrder(wg: WindowGroup, savedOrder: IntPtr list) =
-        if List.isEmpty savedOrder then () else
+    // Shared by early and late claims, after alignment and pin are applied.
+    // A saved snapshot may disagree with today's order. Move only the claimed
+    // tab so reopening a window cannot rearrange its existing peers.
+    member private this.restorePlacement(wg: WindowGroup, hwnd: IntPtr, info: ClosedTabInfo) =
         let current = wg.ts.visualOrder.list
         let placed =
             current |> List.map (fun (Tab(h) as t) -> TabOrder.placed h (wg.ts.visualZoneOf(t)))
@@ -1140,31 +1094,11 @@ type Program() as this =
             match restoredFromMap.TryGetValue(h) with
             | true, oldHwnd -> Some(oldHwnd)
             | _ -> None
-        let desired = TabOrder.restoreOrder savedOrder oldHandleOf placed
+        let desired =
+            TabOrder.placeRestoredTab info.orderSnapshot oldHandleOf hwnd info.closedHwnd info.tabIndex placed
         if desired <> (current |> List.map (fun (Tab(h)) -> h)) then
+            // Unlike moveTab, this does not apply smart-pin to the arrival.
             wg.ts.setVisualOrder(desired |> List.map Tab)
-
-    // The placement half of a closed-tab restore, shared by the early claim
-    // (addWindowToGroup) and the late one (tryLateClosedTabRestore) so that the
-    // two can never drift apart. Runs on the group thread, after the caller has
-    // applied the saved alignment and pin.
-    member private this.restorePlacement(wg: WindowGroup, hwnd: IntPtr, info: ClosedTabInfo) =
-        let tab = Tab(hwnd)
-        // An entry whose own handle is missing from its order snapshot - a tab
-        // closed at a moment when its group's order could not be read - has
-        // nothing to go on but the absolute index it was recorded at. Use that
-        // first; the group pass below then leaves the tab exactly where this
-        // put it, because a tab the snapshot does not know keeps the neighbour
-        // it currently follows.
-        if (info.orderSnapshot |> List.tryFindIndex ((=) info.closedHwnd)).IsNone then
-            let currentTabs = wg.ts.visualOrder
-            let targetIdx = this.closedTabTargetIdx(currentTabs, tab, info, restoredFromMap)
-            match currentTabs.tryFindIndex((=) tab) with
-            | Some(curIdx) when curIdx <> targetIdx -> wg.ts.moveTab(tab, targetIdx)
-            | _ -> ()
-            // moveTab is the one call here that applies smart-pin.
-            this.enforcePin(wg, hwnd, info)
-        this.applySavedOrder(wg, info.orderSnapshot)
 
     // Closed-tab restore: when a window matching a recorded closed tab
     // appears, restore its tab state and put it back into its former group.

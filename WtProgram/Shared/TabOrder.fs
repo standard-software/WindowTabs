@@ -6,8 +6,9 @@ open System
 //
 // Restoring a group is spread over minutes or hours: WindowTabs starts, some
 // of the group's windows are already open, and the rest appear one at a time
-// as their applications start. Every arrival recomputes the whole group's
-// order from the order that was saved, so the answer must not depend on the
+// as their applications start. The saved order supplies insertion anchors;
+// an arrival must not reorder the tabs already on screen. When those tabs
+// still agree with the save, the result must not depend on the
 // sequence the windows happened to arrive in - which makes it a calculation
 // over three plain values (the saved order, the tabs as they stand now, and
 // the old-handle-to-new-handle correspondence) with no window handling in it
@@ -99,3 +100,38 @@ module TabOrder =
             |> fst
             |> List.sortBy fst
             |> List.map snd)
+
+    // Restore one arrival without replaying a stale snapshot over its peers.
+    // Use the saved order to choose its predecessor in its own visual band;
+    // splice only this handle into the current order. Conflicting peer order
+    // is a user choice we preserve, even if the snapshot cannot be satisfied.
+    let placeRestoredTab (savedOrder: IntPtr list) (oldHandleOf: IntPtr -> IntPtr option)
+                         (handle: IntPtr) (savedHandle: IntPtr) (fallbackIndex: int)
+                         (current: Placed list) : IntPtr list =
+        let unchanged = current |> List.map (fun p -> p.handle)
+        match current |> List.tryFind (fun p -> p.handle = handle) with
+        | None -> unchanged
+        | Some(self) ->
+            let peers = current |> List.filter (fun p -> p.handle <> handle)
+            let inZone = current |> List.filter (fun p -> p.zone = self.zone)
+            let zoneStart = peers |> List.takeWhile (fun p -> p.zone < self.zone) |> List.length
+            let zoneCount = peers |> List.filter (fun p -> p.zone = self.zone) |> List.length
+            let index =
+                if savedOrder |> List.contains savedHandle then
+                    // Resolve this arrival through the claimed entry even if
+                    // its current handle also occurs elsewhere in the snapshot.
+                    let order =
+                        savedOrder
+                        |> List.filter (fun h -> h <> handle || h = savedHandle)
+                        |> List.map (fun h -> if h = savedHandle then handle else h)
+                    let desired = restoreOrder order oldHandleOf inZone
+                    let before = desired |> List.takeWhile ((<>) handle)
+                    match List.tryLast before with
+                    | Some(previous) ->
+                        (peers |> List.findIndex (fun p -> p.handle = previous)) + 1
+                    | None -> zoneStart
+                else
+                    // The recorded index is absolute, but cannot cross bands.
+                    max zoneStart (min (zoneStart + zoneCount) fallbackIndex)
+            let before, after = List.splitAt index peers
+            (before @ [self] @ after) |> List.map (fun p -> p.handle)
