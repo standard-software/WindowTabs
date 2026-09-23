@@ -4,6 +4,8 @@
 
 ## version ss_2026.09.21_next1
 
+- Removed the code for showing a whole tab group as one taskbar button. It was switched off at every call site and never ran.
+
 ## version ss_2026.09.21
 
 - "Prevent moving windows and resizing them from the top" is now a setting of each tab group.

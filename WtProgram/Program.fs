@@ -1798,7 +1798,7 @@ type Program() as this =
         let group,isNewGroup =
             match this.findGroupForWindow(window) with
             | Some(group) -> (group, false)
-            | None -> (Services.desktop.createGroup(false), true)
+            | None -> (Services.desktop.createGroup(), true)
         // Back in a group, so the remembered place is used up either way. Where
         // that group is the one it left, the place is put back through the
         // same step a closed tab's is (at the end of this method); anywhere
@@ -2451,7 +2451,7 @@ type Program() as this =
                     // Create the group with the matched windows, in saved order.
                     let createdGroup =
                         if matched.IsEmpty then None else
-                        let group = Services.desktop.createGroup(false)
+                        let group = Services.desktop.createGroup()
                         matched |> List.iter (fun t ->
                             let hwnd = t.live.Value
                             // What the plan allows onto this window: always
@@ -2861,7 +2861,7 @@ type Program() as this =
                         window.isWindow && window.isVisibleOnScreen
 
                     if validHwnds.count > 0 then
-                        let group = Services.desktop.createGroup(false)
+                        let group = Services.desktop.createGroup()
                         validHwnds.iter <| fun hwnd ->
                             group.addWindow(hwnd, false)
                         // Restore per-group tab position

@@ -211,8 +211,7 @@ type IGroup =
 type IDesktop =
     abstract member isDragging : bool
     abstract member isEmpty : bool
-    abstract member createGroup: bool -> IGroup
-    abstract member restartGroup: IntPtr * bool -> unit
+    abstract member createGroup: unit -> IGroup
     abstract member groups : List2<IGroup>
     abstract member groupExited: IEvent<IGroup>
     abstract member groupRemoved: IEvent<IGroup>

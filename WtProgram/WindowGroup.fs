@@ -56,7 +56,7 @@ module WindowMarginSettings =
     let reload() =
         marginCache <- Some(loadSettings())
 
-type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
+type WindowGroup(plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
     let _bb = Blackboard()
     let invoker = InvokerService.invoker
@@ -179,8 +179,6 @@ type WindowGroup(enableSuperBar:bool, plugins:List2<IPlugin>) as this =
     let marginShrunkSizes = Cell.create(Map.empty<IntPtr, (int * int)>)
     // Where each window was before hideChildWindows parked it off screen.
     let mutable parkedBounds : Map<IntPtr, Rect> = Map.empty
-
-    member this.isSuperBarEnabled = enableSuperBar
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)

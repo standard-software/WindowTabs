@@ -5,7 +5,7 @@ open System.Threading
 open System.Windows.Forms
 
 
-type GroupInfo(enableSuperBar) as this =
+type GroupInfo() as this =
     let Cell = CellScope(true, true)
     let windowsCell = Cell.create(List2())
     let mutable _isExited = false
@@ -18,11 +18,10 @@ type GroupInfo(enableSuperBar) as this =
             // RegisterHotKey hot keys now, owned by Program together with
             // Next / Previous Tab: see HotKeyPolicy and Program.syncHotKeys.
             Some(HideTabsOnInactiveGroupPlugin().cast<IPlugin>())
-            (if enableSuperBar then Some(SuperBarPlugin().cast<IPlugin>()) else None)
             ])
         let plugins = plugins.choose(id)
 
-        let _group = WindowGroup(enableSuperBar, plugins)
+        let _group = WindowGroup(plugins)
         _group.exited.Add <| fun _ ->
             _isExited <- true 
             Application.ExitThread()
@@ -121,8 +120,8 @@ type Desktop(notify:IDesktopNotification) as this =
     member private this.groups : List2<GroupInfo> = groupCell.value.items
     member private this.isEmpty = this.groups.all(fun g -> g.isExited)
     member private this.isDragging = isDraggingCell.value || pendingSnapDrops > 0
-    member private this.createGroup(enableSuperBar) =
-        let group = GroupInfo(enableSuperBar)
+    member private this.createGroup() =
+        let group = GroupInfo()
         groupCell.map(fun g -> g.add(group))
         group.invokeGroup <| fun() -> 
             let ig = group.cast<IGroup>()
@@ -140,20 +139,6 @@ type Desktop(notify:IDesktopNotification) as this =
     // a third of a strip height off.)
     member this.findGroupContainingHwnd hwnd : IGroup option =
         this.cast<IDesktop>().groups.tryFind(fun g -> g.windows.contains((=)hwnd))
-
-    member this.restartGroup(groupHwnd, enableSuperBar) =
-        let group = this.groups.tryFind(fun g -> g.hwnd = groupHwnd)
-        group.iter <| fun g ->
-            let group = g.cast<IGroup>()
-            
-            Services.program.suspendTabMonitoring()
-            
-            let newGroup = Services.desktop.createGroup(enableSuperBar)
-            group.windows.iter <| fun hwnd -> 
-                group.removeWindow(hwnd)
-                newGroup.addWindow(hwnd, false)
-
-            Services.program.resumeTabMonitoring()
 
     // Variant B uses the menu's 50-percent geometry. Group creation continues
     // only after the position-first DPI transition, without blocking the UI.
@@ -228,9 +213,7 @@ type Desktop(notify:IDesktopNotification) as this =
     interface IDesktop with
         member x.isDragging = this.isDragging
         member x.isEmpty = this.isEmpty
-        member x.createGroup(enableSuperBar) = this.createGroup(enableSuperBar)
-        member x.restartGroup(hwnd, enableSuperBar) = invoker.asyncInvoke <| fun() ->
-            this.restartGroup(hwnd, enableSuperBar)
+        member x.createGroup() = this.createGroup()
         member x.groups = this.groups.where(fun(g) -> g.isExited.not).map(fun(g) -> g.cast<IGroup>())
         member x.groupExited = exitedEvent.Publish
         member x.groupRemoved = removedEvent.Publish
@@ -271,7 +254,7 @@ type Desktop(notify:IDesktopNotification) as this =
                     Services.program.markRecentlyPlaced(hwnd :: dragInfo.selectedHwnds)
                     Services.program.suspendTabMonitoring()
                     try
-                        let newGroup = this.createGroup(false)
+                        let newGroup = this.createGroup()
                         if snapMonitor.IsSome then newGroup.snapTabHeightMargin <- dragInfo.sourceSnapTabHeightMargin
                         newGroup.lockWindowPosition <- dragInfo.sourceLockWindowPosition
                         newGroup.addWindow(hwnd, false)
