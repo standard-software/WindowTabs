@@ -2,9 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next1
+## version ss_2026.09.21_next2
 
 - A window shown on every virtual desktop no longer drags its whole tab group along with it. A tab group belongs to one desktop now: such a window takes part in a group on each of them, and those groups are separate in members, tab order and settings. Its rectangle is shared, so nothing moves when desktops are switched.
+
+## version ss_2026.09.21_next1
+
 - A window opened from the tab menu - a new tab, a new window at a position, a new window linked into another group - now goes where it was asked to go. It used to be put in the seat of a tab that had been closed, when the two happened to share a title.
 - A tab that comes back to the place it had when it was closed no longer rearranges the tabs that were never closed. Only the returning tab moves.
 - Removed the code for showing a whole tab group as one taskbar button. It was switched off at every call site and never ran.
