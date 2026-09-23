@@ -2078,7 +2078,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
                 image = None
                 click = fun() ->
-                    handleLaunchError (fun path -> Services.program.launchNewWindow group.hwnd hwnd path)
+                    handleLaunchError (fun path -> Services.program.launchNewWindow group.hwnd hwnd processPath)
             })
 
         // Item 2: "New window (position)" — launch as standalone then apply a position to the new group.
@@ -2088,7 +2088,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let newWindowPositionItems =
             let launchStandaloneThen (postAction: TabStripDecorator -> IntPtr -> unit) =
                 handleLaunchError (fun path ->
-                    Services.program.launchStandaloneWindow path (fun newHwnd ->
+                    Services.program.launchStandaloneWindow processPath (fun newHwnd ->
                         // The decorator for the new group is registered asynchronously on the group's thread,
                         // and the new window needs a moment to settle before it can be repositioned.
                         // Poll a few times until the decorator is available.
@@ -2189,7 +2189,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     image = groupMenuIcon info
                                     click = fun() ->
                                         handleLaunchError (fun path ->
-                                            Services.program.launchNewWindow decorator.group.hwnd hwnd path)
+                                            Services.program.launchNewWindow decorator.group.hwnd hwnd processPath)
                                     flags = List2()
                                 }))
                             | None -> None

@@ -18,6 +18,10 @@ open Newtonsoft.Json.Linq
 open Microsoft.Win32
 open System.Globalization
 
+type ExplicitDestination =
+    | JoinGroup of IntPtr * IntPtr
+    | FreshGroup of (IntPtr -> unit)
+
 type ProgramInput =
     | WinEvent of (IntPtr * WinEvent)
     | ShellEvent of (IntPtr * ShellEvent)
@@ -331,14 +335,9 @@ type Program() as this =
     // window to be stripped from the new group before it gets repositioned.
     let recentlyPlacedHwnds = Cell.create(Map2() : Map2<IntPtr, DateTime>)
     let recentlyPlacedGraceMs = 2000.0
-    // Track pending new window launches: process path -> (target group hwnd, invoker tab hwnd, timestamp)
-    let pendingNewWindowLaunches = Cell.create(Map2<string, IntPtr * IntPtr * DateTime>())
-    // Store the invoker tab hwnd consumed by tryNewWindowLaunch, for use by addWindowToGroup
-    let lastNewTabInvokerHwnd = Cell.create(IntPtr.Zero)
-    // Track pending standalone launches: process path -> (postAction, timestamp)
-    // postAction is invoked with the new window hwnd after it has been added to its new group.
-    let pendingStandaloneLaunches = Cell.create(Map2<string, (IntPtr -> unit) * DateTime>())
-    // Carry a standalone launch's postAction from tryStandaloneLaunch to addWindowToGroup, keyed by new window hwnd
+    let pendingExplicitLaunches = Cell.create<ExplicitLaunch.Request<ExplicitDestination> list>([])
+    let explicitWindows = Cell.create(Map2<IntPtr, ExplicitLaunch.Request<ExplicitDestination>>())
+    let pendingNewTabInvokers = Cell.create(Map2<IntPtr, IntPtr>())
     let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
     // Destinations decided by a grouping setting's off-to-on edge, and by
     // nothing else. Every entry is put here by regroupNow and consumed by the
@@ -685,38 +684,58 @@ type Program() as this =
     member this.tryDropped(window:Window) =
         if isDroppedAndAwaitingGrouping.value.contains(window.hwnd) then Some(None) else None
 
-    member this.tryNewWindowLaunch(window:Window) =
-        let processPath = window.pid.processPath
-        match pendingNewWindowLaunches.value.tryFind(processPath) with
-        | Some((groupHwnd, invokerHwnd, timestamp)) ->
-            // Remove the pending launch (only match once)
-            pendingNewWindowLaunches.map(fun m -> m.remove processPath)
-            // Store invoker hwnd for addWindowToGroup to use for positioning
-            lastNewTabInvokerHwnd.set(invokerHwnd)
-            // Check if the launch is still recent (within 30 seconds)
-            if (DateTime.Now - timestamp).TotalSeconds < 30.0 then
-                // Find the target group
-                match this.desktop.groups.tryFind(fun g -> g.hwnd = groupHwnd) with
-                | Some(group) -> Some(Some(group))
-                | None -> None
-            else
-                None
-        | None -> None
+    member private this.suppressExplicitRestore(hwnd: IntPtr, windowTitle: string) =
+        let suppressed, remaining =
+            ExplicitLaunch.suppress (explicitWindows.value.tryFind(hwnd))
+                (normalizeClosedTabTitle windowTitle)
+                (fun (e: ClosedTabInfo) -> e.exePath, e.windowTitle, e.closedAt)
+                closedTabCache.value
+        if remaining.Length <> closedTabCache.value.Length then
+            RestoreTrace.log (fun () ->
+                sprintf "discard(explicit) hwnd=%X count=%d title=%s"
+                    (hwnd.ToInt64()) (closedTabCache.value.Length - remaining.Length) windowTitle)
+        closedTabCache.set(remaining)
+        suppressed
 
-    // Handler for standalone-launched windows: force a new tab group (bypass auto-grouping)
-    // and schedule the registered postAction to run after the window is added to that new group.
-    member this.tryStandaloneLaunch(window:Window) =
-        let processPath = window.pid.processPath
-        match pendingStandaloneLaunches.value.tryFind(processPath) with
-        | Some((postAction, timestamp)) ->
-            pendingStandaloneLaunches.map(fun m -> m.remove processPath)
-            if (DateTime.Now - timestamp).TotalSeconds < 30.0 then
-                // Remember the action so addWindowToGroup can invoke it after the window is grouped
-                pendingStandalonePostActions.map(fun m -> m.add window.hwnd postAction)
-                Some(None)  // None = do not attach to any existing group; a fresh group will be created
-            else
-                None
+    member this.tryExplicitLaunch(window: Window) =
+        let request, remaining =
+            ExplicitLaunch.take DateTime.Now window.pid.processPath window.hwnd pendingExplicitLaunches.value
+        pendingExplicitLaunches.set(remaining)
+        match request with
         | None -> None
+        | Some(r) ->
+            explicitWindows.map(fun m -> m.add window.hwnd r)
+            this.suppressExplicitRestore(window.hwnd, window.text) |> ignore
+            match r.destination with
+            | JoinGroup(groupHwnd, invokerHwnd) ->
+                match this.desktop.groups.tryFind(fun g -> g.hwnd = groupHwnd) with
+                | Some(g) ->
+                    let anchor = if g.windows.contains((=) invokerHwnd) then invokerHwnd else IntPtr.Zero
+                    pendingNewTabInvokers.map(fun m -> m.add window.hwnd anchor)
+                    Some(Some(g))
+                // A vanished destination cannot hand control back to restore.
+                | None -> Some(None)
+            | FreshGroup(postAction) ->
+                pendingStandalonePostActions.map(fun m -> m.add window.hwnd postAction)
+                Some(None)
+
+    member private this.startExplicitWindow(processPath: string, destination: ExplicitDestination) =
+        let request: ExplicitLaunch.Request<ExplicitDestination> = {
+            id = Guid.NewGuid()
+            exePath = processPath
+            startedAt = DateTime.Now
+            existing = os.windowsInZorder.list |> List.map (fun w -> w.hwnd) |> Set.ofList
+            destination = destination
+        }
+        pendingExplicitLaunches.map(fun pending -> pending @ [request])
+        try
+            let psi = ProcessStartInfo()
+            psi.UseShellExecute <- true
+            psi.FileName <- LaunchPath.resolve processPath |> Option.defaultValue processPath
+            Process.Start(psi) |> ignore
+        with _ ->
+            pendingExplicitLaunches.map(List.filter (fun r -> r.id <> request.id))
+            reraise()
 
     // Get the category number (1-10) for a given process path, or 0 if no category is set
     member private this.getCategoryForProcess(procPath: string) =
@@ -1104,7 +1123,7 @@ type Program() as this =
     // appears, restore its tab state and put it back into its former group.
     // Runs before category/exe auto-grouping in findGroupForWindow.
     member this.tryClosedTabRestore(window:Window) =
-        if closedTabCache.value.IsEmpty then None else
+        if this.suppressExplicitRestore(window.hwnd, window.text) || closedTabCache.value.IsEmpty then None else
         let exePath = try window.pid.processPath with _ -> ""
         let windowTitle = try window.text with _ -> ""
         let bounds =
@@ -1205,7 +1224,7 @@ type Program() as this =
                     windowFillColor.value.tryFind(hwnd).IsNone &&
                     windowUnderlineColor.value.tryFind(hwnd).IsNone &&
                     windowBorderColor.value.tryFind(hwnd).IsNone
-                if closedTabCache.value.IsEmpty.not && isPristine then
+                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && isPristine then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -1616,6 +1635,7 @@ type Program() as this =
                     // instead, for the destroy that may follow.
                     if window.isWindow.not then
                         this.recordClosedTab(hwnd, gi)
+                        explicitWindows.map(fun m -> m.remove hwnd)
                     // Removal is asynchronous, so the next pass sees the window
                     // still here and would remember it again, one place further
                     // left each time as the others go: only the first pass
@@ -1680,11 +1700,10 @@ type Program() as this =
 
     member this.findGroupForWindow(window:Window) =
         let handlers = List2([
+            this.tryExplicitLaunch
             this.tryDropped
             this.tryRegroup
             launcher.findGroup
-            this.tryStandaloneLaunch
-            this.tryNewWindowLaunch
             this.tryClosedTabRestore
             this.tryReturnToLastGroup
             this.tryAutoGroup
@@ -1766,9 +1785,9 @@ type Program() as this =
         group.addWindow(hwnd, withDelay)
 
         // Check if this is a "New Tab" launch - position after the invoking tab
-        let invokerHwnd = lastNewTabInvokerHwnd.value
+        let invokerHwnd = pendingNewTabInvokers.value.tryFind(hwnd).def(IntPtr.Zero)
+        pendingNewTabInvokers.map(fun m -> m.remove hwnd)
         if invokerHwnd <> IntPtr.Zero then
-            lastNewTabInvokerHwnd.set(IntPtr.Zero)
             match group :> obj with
             | :? GroupInfo as gi ->
                 gi.invokeGroup <| fun() ->
@@ -1806,7 +1825,9 @@ type Program() as this =
             // the visual end.
             // While saved entries for this application are still waiting, they
             // decide the side instead: see savedAlignFor.
-            let savedAlign = this.savedAlignFor(try window.pid.processPath with _ -> "")
+            let savedAlign =
+                if explicitWindows.value.tryFind(hwnd).IsSome then None
+                else this.savedAlignFor(try window.pid.processPath with _ -> "")
             if not isNewGroup then
                 match group :> obj with
                 | :? GroupInfo as gi ->
@@ -1831,7 +1852,7 @@ type Program() as this =
                     gi.invokeGroup <| fun() -> gi.group.setTabAlign(hwnd, a)
                 | _ -> ()
         // For auto-grouping, position new tab next to same-exe tabs
-        if invokerHwnd = IntPtr.Zero && not isNewGroup && not isDropped then
+        if invokerHwnd = IntPtr.Zero && not isNewGroup && not isDropped && explicitWindows.value.tryFind(hwnd).IsNone then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -1970,6 +1991,9 @@ type Program() as this =
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
                 claimedEntry.map(fun m -> m.remove hwnd)
+                explicitWindows.map(fun m -> m.remove hwnd)
+                pendingNewTabInvokers.map(fun m -> m.remove hwnd)
+                pendingStandalonePostActions.map(fun m -> m.remove hwnd)
                 // A window closed between leaving its group and rejoining one
                 // never arrives to retire its own entry.
                 pendingRegroups.map(fun m -> m.remove hwnd)
@@ -2113,7 +2137,7 @@ type Program() as this =
                 // docks the new window right of the invoking tab.
                 let processPath = os.windowFromHwnd(hwnd).pid.processPath
                 NewWindowLaunch.start processPath (fun path ->
-                    this.cast<IProgram>().launchNewWindow group.hwnd hwnd path)
+                    this.cast<IProgram>().launchNewWindow group.hwnd hwnd processPath)
 
    
     member this.hwndZorders() : Map2<IntPtr, int>= Map2(os.windowsInZorder.enumerate.map(fun(i,w) -> w.hwnd,i))
@@ -2818,31 +2842,10 @@ type Program() as this =
             this.refresh()
 
         member x.launchNewWindow(groupHwnd)(invokerHwnd)(processPath) =
-            // Register the pending launch: new window with this process path should dock to this group
-            pendingNewWindowLaunches.map(fun m -> m.add processPath (groupHwnd, invokerHwnd, DateTime.Now))
-            // Start the process
-            try
-                let psi = ProcessStartInfo()
-                psi.UseShellExecute <- true
-                psi.FileName <- processPath
-                Process.Start(psi) |> ignore
-            with
-            | _ ->
-                // If launch fails, remove the pending entry
-                pendingNewWindowLaunches.map(fun m -> m.remove processPath)
+            this.startExplicitWindow(processPath, JoinGroup(groupHwnd, invokerHwnd))
 
         member x.launchStandaloneWindow(processPath)(postAction) =
-            // Register the pending launch: the new window must land in its own fresh group
-            // regardless of auto-grouping settings, and postAction runs afterwards.
-            pendingStandaloneLaunches.map(fun m -> m.add processPath (postAction, DateTime.Now))
-            try
-                let psi = ProcessStartInfo()
-                psi.UseShellExecute <- true
-                psi.FileName <- processPath
-                Process.Start(psi) |> ignore
-            with
-            | _ ->
-                pendingStandaloneLaunches.map(fun m -> m.remove processPath)
+            this.startExplicitWindow(processPath, FreshGroup(postAction))
 
         member x.getAllConfiguredProcessPaths() =
             let paths = System.Collections.Generic.HashSet<string>()

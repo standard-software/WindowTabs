@@ -4,6 +4,7 @@
 
 ## version ss_2026.09.21_next1
 
+- A window opened from the tab menu - a new tab, a new window at a position, a new window linked into another group - now goes where it was asked to go. It used to be put in the seat of a tab that had been closed, when the two happened to share a title.
 - A tab that comes back to the place it had when it was closed no longer rearranges the tabs that were never closed. Only the returning tab moves.
 - Removed the code for showing a whole tab group as one taskbar button. It was switched off at every call site and never ran.
 
