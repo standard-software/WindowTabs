@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.21_next3
+
+- The invisible band that stops the top edge from being dragged is now placed when the tabs are drawn downward as well. It sits directly behind the tab strip and in front of the window, so the gaps between tabs no longer resize the window while the tabs themselves stay clickable. An application given a margin in WindowMargin.json draws its own frame in windows of its own, and the band goes in front of those too, without raising anything above the other programs on screen.
+
 ## version ss_2026.09.21_next2
 
 - A window shown on every virtual desktop no longer drags its whole tab group along with it. A tab group belongs to one desktop now: such a window takes part in a group on each of them, and those groups are separate in members, tab order and settings. Its rectangle is shared, so nothing moves when desktops are switched.
