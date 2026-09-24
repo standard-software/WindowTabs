@@ -315,7 +315,7 @@ type AppearanceView() as this =
 
     let pinnedWidthIconOnlyRadio = RadioButton()
     let pinnedWidthSpecifyRadio = RadioButton()
-    let pinnedWidthNumeric = NumericUpDown()
+    let pinnedWidthNumeric = SettingsNumericUpDown()
 
     let pinnedWidthInputPanel =
         let tbl = TableLayoutPanel()
@@ -514,7 +514,7 @@ type AppearanceView() as this =
         // drop-down list's own item height at the dialog font, so the box is
         // as tall as the Behavior tab's.
         combo.DrawMode <- DrawMode.OwnerDrawVariable
-        combo.ItemHeight <- 14
+        combo.ItemHeight <- SettingsField.comboItemHeightPx
         // Outside Bounds, so Control.Scale never sees it (see the color
         // theme combo's MeasureItem).
         combo.MeasureItem.Add <| fun e -> e.ItemHeight <- SettingsDpi.px 30
@@ -605,6 +605,7 @@ type AppearanceView() as this =
         btn.AutoSize <- true
         btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
         btn.Padding <- Padding(3, 0, 3, 0)
+        btn.MinimumSize <- Size(0, SettingsField.heightPx)
         btn.Dock <- DockStyle.Fill
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
@@ -918,7 +919,7 @@ type AppearanceView() as this =
         let combo = new ComboBox()
         combo.DropDownStyle <- ComboBoxStyle.DropDownList
         combo.DrawMode <- DrawMode.OwnerDrawVariable
-        combo.ItemHeight <- 20
+        combo.ItemHeight <- SettingsField.comboItemHeightPx
         combo.Margin <- Padding(0, 0, 3, 0)  // Remove left margin, small right margin
         combo
 
@@ -1630,7 +1631,8 @@ type AppearanceView() as this =
         saveBtn.Text <- Localization.getString("SaveAs")
         saveBtn.AutoSize <- true
         saveBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        saveBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
+        saveBtn.MinimumSize <- Size(0, SettingsField.heightPx)
+        saveBtn.Margin <- Padding(3, 0, 0, 0)  // Same height as the drop-down beside it
         saveBtn.Enabled <- false
         saveBtn.Visible <- false
 
@@ -1668,7 +1670,8 @@ type AppearanceView() as this =
         editBtn.Text <- Localization.getString("Edit")
         editBtn.AutoSize <- true
         editBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        editBtn.Margin <- Padding(3, -1, 0, 0)  // Align vertically with ComboBox, 1px up
+        editBtn.MinimumSize <- Size(0, SettingsField.heightPx)
+        editBtn.Margin <- Padding(3, 0, 0, 0)  // Align vertically with ComboBox, 1px up
         editBtn.Enabled <- false
         editBtn.Visible <- false
 
@@ -1715,9 +1718,9 @@ type AppearanceView() as this =
         upBtn.Text <- Localization.getString("Up")
         upBtn.AutoSize <- true
         upBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        upBtn.MinimumSize <- Size(30, 0)
+        upBtn.MinimumSize <- Size(30, SettingsField.heightPx)
         upBtn.TextAlign <- ContentAlignment.MiddleCenter
-        upBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveEditBtn
+        upBtn.Margin <- Padding(3, 0, 0, 0)  // Align with saveEditBtn
         upBtn.Enabled <- false
         upBtn.Visible <- false
 
@@ -1752,9 +1755,9 @@ type AppearanceView() as this =
         downBtn.Text <- Localization.getString("Down")
         downBtn.AutoSize <- true
         downBtn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        downBtn.MinimumSize <- Size(30, 0)
+        downBtn.MinimumSize <- Size(30, SettingsField.heightPx)
         downBtn.TextAlign <- ContentAlignment.MiddleCenter
-        downBtn.Margin <- Padding(3, -1, 0, 0)  // Align with saveEditBtn
+        downBtn.Margin <- Padding(3, 0, 0, 0)  // Align with saveEditBtn
         downBtn.Enabled <- false
         downBtn.Visible <- false
 

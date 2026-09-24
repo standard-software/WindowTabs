@@ -59,7 +59,9 @@ type ShortcutKeysView() =
     // longest on the tab and would wrap in the 250-px column.
     let modeCheckBox captionKey =
         let checkBox = CheckBox()
-        checkBox.Text <- Localization.getString captionKey
+        // A space between the box and its caption, the width of one of
+        // them, so the two do not read as one word.
+        checkBox.Text <- " " + Localization.getString captionKey
         checkBox.AutoSize <- true
         checkBox
     let ctrlCheck = modeCheckBox "EnableCtrlNumberHotKey"
@@ -143,14 +145,15 @@ type ShortcutKeysView() =
             let column = ((n - 1) % 3) * 2
             let label = UIHelper.label (string n)
             label.Anchor <- AnchorStyles.Left
-            label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 6, UIHelper.settingsRowMarginPx)
+            let fieldMargin = (UIHelper.settingsRowHeightPx - SettingsField.heightPx) / 2
+            label.Margin <- Padding(0, fieldMargin, 6, fieldMargin)
             editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
-            editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 12, UIHelper.settingsRowMarginPx)
+            editor.control.Margin <- Padding(0, fieldMargin, 12, fieldMargin)
             table.Controls.Add(label, column, row)
             table.Controls.Add(editor.control, column + 1, row)
         table.Controls.Add(ctrlCheck, 0, 3)
         table.SetColumnSpan(ctrlCheck, 6)
-        ctrlCheck.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        ctrlCheck.Margin <- Padding(0, UIHelper.settingsRowMarginPx * 3, 0, UIHelper.settingsRowMarginPx)
         table.Controls.Add(altCheck, 0, 4)
         table.SetColumnSpan(altCheck, 6)
         altCheck.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)

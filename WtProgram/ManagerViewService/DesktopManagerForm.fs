@@ -313,6 +313,7 @@ type DesktopManagerForm() =
             createHandles form
             if isDarkModeEnabled() then DarkMode.applyDarkThemeBranch15ToForm form true
             SettingsDpi.reassertAfterShow form
+            SettingsField.reassert form
             prepared <- true
 
     let showFormCommon () =
@@ -330,6 +331,7 @@ type DesktopManagerForm() =
         try
             form.Show()
             SettingsDpi.reassertAfterShow form
+            SettingsField.reassert form
         finally
             if not form.IsDisposed then form.Opacity <- 1.0
         form.Activate()

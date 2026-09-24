@@ -2,11 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next6
+## version ss_2026.09.21_next7
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
   - Rounded and angular vertical lines, trapezoids, trapezoids cut away on the left or right, rounded and angular rectangles, among others.
+- The fields of the settings dialog look alike.
+  - Drop-downs, text fields and colour fields: one height, the text in the middle of the field, and the frames in one colour.
 - More of what "Prevent moving windows and resizing them from the top" needs
   - The invisible band that stops the top edge from being dragged is now placed when the tabs are drawn downward as well
   - The band sits directly behind the tab strip and in front of the window

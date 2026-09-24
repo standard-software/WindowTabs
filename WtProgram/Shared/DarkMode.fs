@@ -1,4 +1,4 @@
-namespace Bemo
+﻿namespace Bemo
 open System
 open System.Drawing
 open System.Runtime.InteropServices
@@ -237,6 +237,8 @@ module DarkMode =
                 tb.BorderStyle <-
                     match tb.Parent with
                     | :? NumericUpDown -> BorderStyle.None
+                    | _ when (match tb.Tag with :? string as t -> t = SettingsField.noBorderTag | _ -> false) ->
+                        BorderStyle.None
                     | _ -> BorderStyle.FixedSingle
             | :? NumericUpDown as nud ->
                 nud.BackColor <- darkPanel
@@ -248,7 +250,11 @@ module DarkMode =
                 // applyDarkNativeThemeToControl) so we don't get a second
                 // "double" border, and DarkNumericUpDownFrameSubclass
                 // recolors this NC border in dark grey via WM_NCPAINT.
-                nud.BorderStyle <- BorderStyle.FixedSingle
+                // A field inside a box of its own leaves the border to the box.
+                nud.BorderStyle <-
+                    match nud.Tag with
+                    | :? string as t when t = SettingsField.noBorderTag -> BorderStyle.None
+                    | _ -> BorderStyle.FixedSingle
             | :? Button as btn ->
                 // Skip buttons whose BackColor IS the content (e.g. the
                 // ColorEditor's color-swatch button). They are tagged with
@@ -550,6 +556,12 @@ module DarkMode =
                         // DarkComboBoxSubclass owns the appearance instead. The
                         // dropdown LIST popup is themed separately via
                         // DarkMode_Explorer in the cmb.DropDown handler.
+                        SetWindowTheme(control.Handle, "", "") |> ignore
+                    | :? TextBox when not (control.Parent :? NumericUpDown) ->
+                        // The dark edit theme paints its own border, and a
+                        // different one under the mouse and with the caret in
+                        // it, over the frame drawn by DarkTextBoxFrameSubclass.
+                        // Without the theme the frame is the only line there is.
                         SetWindowTheme(control.Handle, "", "") |> ignore
                     | :? TextBox when (control.Parent :? NumericUpDown) ->
                         // Inner edit of NumericUpDown: kill its DarkMode_CFD
@@ -1075,9 +1087,13 @@ module DarkMode =
     type private DarkNumericUpDownFrameSubclass(nud: NumericUpDown) as this =
         inherit NativeWindow()
         let WM_NCPAINT = 0x0085
+        let WM_PAINT = 0x000F
         let WM_NCCALCSIZE = 0x0083
         let attach() =
-            try if nud.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(nud.Handle)
+            try
+                if nud.IsHandleCreated && this.Handle <> nud.Handle then
+                    if this.Handle <> IntPtr.Zero then this.ReleaseHandle()
+                    this.AssignHandle(nud.Handle)
             with _ -> ()
         let paintBorder() =
             try
@@ -1099,9 +1115,51 @@ module DarkMode =
             nud.HandleCreated.Add(fun _ -> attach())
             nud.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
         override this.WndProc(m: byref<Message>) =
-            base.WndProc(&m)
             if m.Msg = WM_NCPAINT then
                 paintBorder()
+                m.Result <- IntPtr.Zero
+            else
+                base.WndProc(&m)
+                // Also after an ordinary paint: a field only a border wide
+                // outside its client area is not always asked to paint that
+                // border again, and the system's light line was left showing.
+                if m.Msg = WM_PAINT then paintBorder()
+
+    // A text box: the system's dark edit theme draws its border a lighter grey
+    // than everything around it, and draws it again - in another grey - when
+    // the mouse is over the box or the caret is in it. The box is left without
+    // a border of its own and the frame is drawn by whatever holds it: a
+    // parent repaints on its own account, never because its child took focus,
+    // so the line never flickers.
+    let private framedBoxes = Runtime.CompilerServices.ConditionalWeakTable<Control, obj>()
+
+    let private drawFrameAround (parent: Control) (g: Graphics) =
+        use pen = new Pen(darkBorder)
+        for child in parent.Controls do
+            match child with
+            | :? TextBoxBase as box when (match framedBoxes.TryGetValue(box) with | true, _ -> true | _ -> false) ->
+                if box.Visible then
+                    g.DrawRectangle(pen, Rectangle(box.Left - 1, box.Top - 1, box.Width + 1, box.Height + 1))
+            | _ -> ()
+
+    let private frameTextBox (box: TextBoxBase) =
+        match framedBoxes.TryGetValue(box) with
+        | true, _ -> ()
+        | _ ->
+            framedBoxes.Add(box, obj())
+            box.BorderStyle <- BorderStyle.None
+            let parent = box.Parent
+            if parent <> null then
+                match framedBoxes.TryGetValue(parent) with
+                | true, _ -> ()
+                | _ ->
+                    framedBoxes.Add(parent, obj())
+                    parent.Paint.Add(fun e -> drawFrameAround parent e.Graphics)
+                // A box that moves takes its frame with it: the parent has to
+                // paint the place it left as well as the one it went to.
+                box.LocationChanged.Add(fun _ -> parent.Invalidate())
+                box.SizeChanged.Add(fun _ -> parent.Invalidate())
+                box.VisibleChanged.Add(fun _ -> parent.Invalidate())
 
     // NumericUpDown: the spin button child window paints its own up/down
     // arrows via the system theme. We subclass that child to overpaint in
@@ -1150,6 +1208,8 @@ module DarkMode =
                 for child in nud.Controls do
                     if not (child :? TextBox) then
                         DarkUpDownButtonsSubclass(child) |> ignore
+            | :? TextBoxBase as box when not (box.Parent :? NumericUpDown) ->
+                frameTextBox box
             | _ -> ()
         with _ -> ()
         for child in control.Controls do

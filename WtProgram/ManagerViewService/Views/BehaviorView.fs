@@ -41,6 +41,7 @@ type HotKeyView() =
             let combo = new ComboBox()
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 100
+            SettingsField.apply combo
             combo.Items.Add(Localization.getString("AlignTopLeft")) |> ignore
             combo.Items.Add(Localization.getString("AlignTopRight")) |> ignore
 
@@ -168,11 +169,19 @@ type HotKeyView() =
             delayLabel.AutoSize <- true
             // Centred in the radio row, like the radio itself.
             delayLabel.Anchor <- AnchorStyles.Left
-            delayLabel.Margin <- Padding(10, UIHelper.settingsRowMarginPx, 3, 0)  // Left margin to separate from radio, top margin to align with textbox
+            // The same box as the radio beside it, with the text in the middle
+            // of it, so the two captions sit on one line.
+            delayLabel.TextAlign <- ContentAlignment.MiddleLeft
+            delayLabel.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
+            // The radio beside it carries its own glyph, which puts its caption
+            // two pixels lower than a plain label of the same box.
+            delayLabel.Padding <- Padding(0, 2, 0, 0)
+            delayLabel.Margin <- Padding(10, 0, 3, 0)  // Left margin to separate from the radio
 
             hideTabsDelay.Width <- 60
+            SettingsField.apply hideTabsDelay
             hideTabsDelay.Anchor <- AnchorStyles.Left
-            hideTabsDelay.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
+            hideTabsDelay.Margin <- Padding(0)
 
             // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
             table.Controls.Add(radioNever, 0, 0)
@@ -189,6 +198,7 @@ type HotKeyView() =
             let combo = ComboBox()
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 300
+            SettingsField.apply combo
             combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapWhenUniform")) |> ignore
             combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapNever")) |> ignore
             let currentMode =
@@ -210,6 +220,7 @@ type HotKeyView() =
             let combo = ComboBox()
             combo.DropDownStyle <- ComboBoxStyle.DropDownList
             combo.Width <- 300
+            SettingsField.apply combo
             combo.Items.Add(Localization.getString("TabVerticalAuto")) |> ignore
             combo.Items.Add(Localization.getString("TabVerticalAlwaysDown")) |> ignore
             let current =

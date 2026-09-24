@@ -55,9 +55,19 @@ type SmoothNodeTextBox() =
 type INode =
     abstract member showSettings : bool
 
+/// The spin field of the settings dialog. NumericUpDown clamps its height to
+/// the one its font asks for, whatever it is told - putting it in a box of the
+/// wanted height only made its arrows look small in a field too tall for them -
+/// so it keeps its own height and the number inside it is centred.
+type SettingsNumericUpDown() as this =
+    inherit NumericUpDown()
+    do
+        this.AutoSize <- false
+        SettingsField.apply this
+
 type IntEditor() =
     let control = 
-        let control = NumericUpDown()
+        let control = SettingsNumericUpDown()
         control.Minimum <- decimal(1)
         control.Maximum <- decimal(1000)
         control.Margin <- Padding(0)
@@ -72,6 +82,7 @@ type IntEditor() =
 type TextEditor() =
     let control = 
         let control = TextBox()
+        SettingsField.apply control
         control
     interface IPropEditor with
         member x.value 
@@ -91,6 +102,7 @@ type BoolEditor() =
 
 type EnumEditor<'e when 'e :> Enum>() as this =
     let control = ComboBox()
+    do SettingsField.apply control
     let mutable cachedValue = null
     do this.init()
 
@@ -119,7 +131,7 @@ type ColorEditor() as this =
     let changedEvent = Event<_>()
     let chooserButton =
         let btn = Button()
-        btn.Size <- Size(23, 23)
+        btn.Size <- Size(SettingsField.heightPx, SettingsField.heightPx)
         btn.Click.Add <| fun _ ->
             let dlg = System.Windows.Forms.ColorDialog()
             dlg.Color <- this.color
@@ -146,7 +158,8 @@ type ColorEditor() as this =
         tb.Dock <- DockStyle.None
         tb.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right  // Left align and stretch
         tb.CharacterCasing <- CharacterCasing.Upper
-        tb.Margin <- Padding(0, 2, 0, 0)
+        tb.Margin <- Padding(1)
+        SettingsField.apply tb
         tb.KeyPress.Add <| fun e ->
             try
                 if e.KeyChar = (char)Keys.Enter then
@@ -180,9 +193,9 @@ type ColorEditor() as this =
         panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         panel.RowCount <- 1
         panel.ColumnCount <- 2
-        panel.RowStyles.Add(RowStyle(SizeType.Absolute, 25.0f)).ignore
+        panel.RowStyles.Add(RowStyle(SizeType.Absolute, float32 (SettingsField.heightPx + 2))).ignore
         // Column 0: Color button (fixed 20%), Column 1: Text box (80% of panel width)
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 25.0f)).ignore
+        panel.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 SettingsField.heightPx)).ignore
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 70.0f)).ignore
         panel.Dock <- DockStyle.Fill  // Fill parent cell
         panel.Padding <- Padding(0)
@@ -226,6 +239,7 @@ type ColorEditor() as this =
 
 type HotKeyEditor() =
     let control = HotKeyControl()
+    do SettingsField.apply control
     interface IPropEditor with
         member x.value 
             with get() = box(control.HotKey)
@@ -243,6 +257,7 @@ type HotKeyModifiersEditor() as this =
                 true
     }
     do
+        SettingsField.apply textBox
         this.modifiers <- Keys.None
     
     member this.modifiers 
@@ -269,6 +284,7 @@ type HotKeyOnlyEditor() as this =
                 true
     }
     do
+        SettingsField.apply textBox
         this.hk <- Keys.None
     
     member this.hk 
@@ -322,20 +338,33 @@ type DropdownButton(text: string, ?colorMode: DropdownButtonColorMode) =
         container.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 17.0f)) |> ignore
         container.AutoSize <- true
         container.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        // The same height as a drop-down list, so the two line up where
+        // they sit side by side.
+        container.MinimumSize <- Size(0, SettingsField.heightPx)
         container.Margin <- Padding(0, 0, 0, 0)
         container.Padding <- Padding(0)
         container.Anchor <- AnchorStyles.Right
         container.BackColor <-
             if DropdownButton.UseDarkMode then DarkMode.darkPanel
             else SystemColors.Window
-        container.BorderStyle <- BorderStyle.FixedSingle
+        // Its own line rather than the system's: a panel's FixedSingle border
+        // is drawn in the classic light grey, which stood out beside the
+        // fields and buttons around it.
+        container.BorderStyle <- BorderStyle.None
+        container.Paint.Add <| fun e ->
+            let colour =
+                if DropdownButton.UseDarkMode then DarkMode.darkBorder
+                else SystemColors.ControlDark
+            use pen = new Pen(colour)
+            e.Graphics.DrawRectangle(pen, Rectangle(0, 0, container.Width - 1, container.Height - 1))
         container.Cursor <- Cursors.Hand
 
         // Configure text label
         textLabel.Text <- text
         textLabel.AutoSize <- true
         textLabel.TextAlign <- ContentAlignment.MiddleLeft
-        textLabel.Margin <- Padding(3, 3, 0, 3)
+        textLabel.Anchor <- AnchorStyles.Left
+        textLabel.Margin <- Padding(3, 0, 0, 0)
         textLabel.BackColor <- Color.Transparent
         textLabel.Cursor <- Cursors.Hand
 
@@ -560,8 +589,8 @@ module UIHelper =
     // Settings rows: every tab lays its rows out on this vertical grid
     // (design pixels at 96 DPI). A row is its content height plus the same
     // top and bottom margin on every caption and input.
-    let settingsRowHeightPx = 32
-    let settingsRowMarginPx = 4
+    let settingsRowHeightPx = SettingsField.rowHeightPx
+    let settingsRowMarginPx = SettingsField.rowMarginPx
     let private rowContentHeightPx = settingsRowHeightPx - 2 * settingsRowMarginPx
 
     // centerRows: label and input centred on the same line. The settings tabs
