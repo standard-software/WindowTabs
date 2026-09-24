@@ -2,25 +2,23 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next4
+## version ss_2026.09.21_next5
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
   - Rounded and angular vertical lines, trapezoids, trapezoids cut away on the left or right, rounded and angular rectangles, among others.
-
-## version ss_2026.09.21_next3
-
-- The invisible band that stops the top edge from being dragged is now placed when the tabs are drawn downward as well. It sits directly behind the tab strip and in front of the window, so the gaps between tabs no longer resize the window while the tabs themselves stay clickable. An application given a margin in WindowMargin.json draws its own frame in windows of its own, and the band goes in front of those too, without raising anything above the other programs on screen.
-
-## version ss_2026.09.21_next2
-
-- A window shown on every virtual desktop no longer drags its whole tab group along with it. A tab group belongs to one desktop now: such a window takes part in a group on each of them, and those groups are separate in members, tab order and settings. Its rectangle is shared, so nothing moves when desktops are switched.
-
-## version ss_2026.09.21_next1
-
-- A window opened from the tab menu - a new tab, a new window at a position, a new window linked into another group - now goes where it was asked to go. It used to be put in the seat of a tab that had been closed, when the two happened to share a title.
-- A tab that comes back to the place it had when it was closed no longer rearranges the tabs that were never closed. Only the returning tab moves.
-- Removed the code for showing a whole tab group as one taskbar button. It was switched off at every call site and never ran.
+- More of what "Prevent moving windows and resizing them from the top" needs
+  - The invisible band that stops the top edge from being dragged is now placed when the tabs are drawn downward as well
+    - The band sits directly behind the tab strip and in front of the window
+    - An application given a margin in WindowMargin.json draws its own frame in windows of its own, and the band goes in front of those too
+- More of what virtual desktops need
+  - "Show this window on all desktops" no longer breaks the tab groups.
+  - "Show windows from this app on all desktops" likewise
+  - A tab group is drawn per virtual desktop, and the window's position and size are shared between them
+- A window opened from the tab menu now goes where it was asked to go
+  - It was in conflict with the code that puts a tab back in the seat it had when it was closed, when the two happened to share a title
+  - A tab that comes back to its old place no longer rearranges the tabs that were never closed
+- Removed the unused code for showing a whole tab group as one taskbar button
 
 ## version ss_2026.09.21
 
