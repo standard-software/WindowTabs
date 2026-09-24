@@ -459,6 +459,12 @@ type TopEdgeGuard(os: OS) =
                             WindowHandleTypes.HWND_NOTOPMOST, SetWindowPosFlags.SWP_NOACTIVATE
                         | _ ->
                             IntPtr.Zero, SetWindowPosFlags.SWP_NOACTIVATE ||| SetWindowPosFlags.SWP_NOZORDER
+                    // The band is owned by the window it guards, and moving an
+                    // owned window carries its owner up with it unless this is
+                    // said. The band is placed again on every event the window
+                    // sends, so without it the guarded window kept being raised -
+                    // over a window the application had just opened, among others.
+                    let flags = flags ||| SetWindowPosFlags.SWP_NOOWNERZORDER
                     WinUserApi.SetWindowPos(w.hwnd, insertAfter, x, y, cx, cy, flags).ignore
                     repaint ()
                     if not shown then
