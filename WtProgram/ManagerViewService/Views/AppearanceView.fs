@@ -1,4 +1,4 @@
-﻿namespace Bemo
+namespace Bemo
 open System
 open System.Drawing
 open System.IO
@@ -121,13 +121,28 @@ type AppearanceView() as this =
 
     // Combined list of all properties (int + color) for setEditorValues
     let allPropertyKeys =
-        (intProperties.list |> List.map (fun p -> p.key)) @ ["tabPinnedTabWidth"; "tabPinnedTabWidthIcon"] @ colorPropertyKeys
+        (intProperties.list |> List.map (fun p -> p.key)) @ ["tabPinnedTabWidth"; "tabPinnedTabWidthIcon"; "tabShape"] @ colorPropertyKeys
+
+    // Caption key of each tab shape (TabShape.all order in the drop-down).
+    let tabShapeCaption shape =
+        match TabShape.normalize shape with
+        | TabShape.strong -> "TabShapeStrong"
+        | TabShape.slant -> "TabShapeSlant"
+        | TabShape.rounded -> "TabShapeRounded"
+        | TabShape.angular -> "TabShapeAngular"
+        | TabShape.cutLeft -> "TabShapeCutLeft"
+        | TabShape.cutRight -> "TabShapeCutRight"
+        | TabShape.rectangle -> "TabShapeRectangle"
+        | TabShape.roundedRectangle -> "TabShapeRoundedRectangle"
+        | TabShape.strongRoundedRectangle -> "TabShapeStrongRoundedRectangle"
+        | TabShape.angularRectangle -> "TabShapeAngularRectangle"
+        | _ -> "TabShapeSCurve"
 
     // Layout structure:
     // - Main panel (2 rows): upper section + color grid section
-    // - Upper panel: int properties + dark mode (3 columns: label, input, reset)
+    // - Upper panel: int properties + tab shape + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 2  // int props + pinned width row + dark mode
+    let upperRowCount = intProperties.length + 3  // int props + pinned width row + tab shape + dark mode
     let colorGridRowCount = 7  // theme row + header + 5 state rows (Inactive / Selected / MouseOver / Active / Flash)
 
     // Main container panel (vertical stack)
@@ -181,8 +196,7 @@ type AppearanceView() as this =
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
-        // Half a row of space above the color theme, then the same row grid
-        // as the panel above.
+        // Separate the theme section by half a row, keeping the same row grid.
         p.Margin <- Padding(0, UIHelper.settingsRowHeightPx / 2, 0, 0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- colorGridRowCount
@@ -269,21 +283,22 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
-    // Upper panel: int properties -> menu dark mode -> settings dialog dark mode
-    let darkModeRow = intProperties.length + 1  // +1 for custom pinned width row
+    // Upper panel: dark mode -> tab shape -> size and spacing properties.
+    let darkModeRow = 0
+    let tabShapeRow = 1
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
     let colorStateStartRow = 2
 
-    // Create int property editors (skip row 2 for custom pinned width row)
+    // Size editors follow the two appearance rows, skipping the pinned width row.
     let intEditors =
         intProperties.enumerate.map (fun (i, prop) ->
-            let row = if i >= 2 then i + 1 else i
+            let row = if i >= 2 then i + 3 else i + 2
             createIntEditorAt prop row)
 
-    // Custom pinned tab width row with radio buttons (row 2 in upperPanel)
-    let pinnedWidthRow = 2
+    // Custom pinned tab width row with radio buttons (row 4 in upperPanel).
+    let pinnedWidthRow = 4
 
     let pinnedWidthLabel =
         let label = Label()
@@ -426,6 +441,183 @@ type AppearanceView() as this =
             member x.changed = changedEvent.Publish
         }
 
+    // Tab shape row: caption, drop-down and reset button, laid out like the
+    // int rows above it. Each item of the open list shows a picture of two
+    // neighbouring tabs next to the shape's name, drawn from the same outline
+    // the tab strip uses and with the Tab Overlap currently in the editor, so
+    // the shapes can be told apart - and how they meet - before one is chosen.
+    let tabShapeLabel =
+        let label = Label()
+        label.AutoSize <- true
+        label.Text <- Localization.getString("Tab Shape")
+        label.TextAlign <- ContentAlignment.MiddleLeft
+        label.Anchor <- AnchorStyles.Left
+        label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
+        upperPanel.Controls.Add(label)
+        upperPanel.SetRow(label, tabShapeRow)
+        upperPanel.SetColumn(label, 0)
+        label
+
+    // Tab Overlap as currently typed in its editor, in design pixels.
+    let editedTabOverlap () =
+        match intEditors.list |> List.tryFind (fun (key, _) -> key = "tabOverlap") with
+        | Some(_, editor) ->
+            match editor.value with
+            | :? int as overlap -> overlap
+            | _ -> 20
+        | None -> 20
+
+    // `count` tabs standing on a base line, `height` px tall, at (x, y), in
+    // the proportions of the default strip (an 18 px edge band on a 24 px
+    // tab) and overlapping by `overlap` design pixels. Each tab is drawn over
+    // the one before it and the last one is tinted like the active tab, so
+    // the picture is the strip with its right-hand tab active. (In the strip
+    // the stacking follows the z-order - the active tab in front - not the
+    // position.) Returns the width used.
+    let drawTabShapePreview (g: Graphics) (shape: string) (x: int) (y: int) (height: int) (count: int) (overlap: int) (color: Color) (background: Color) =
+        let unit = float32 height / 24.0f
+        let edge = 18.0f * unit
+        let width = float32 height * 2.5f
+        // An overlap past the tab itself would stack the tabs on one another;
+        // the strip never looks like that in practice, so neither does this.
+        let step = width - (max (-width / 2.0f) (min (width / 2.0f) (float32 overlap * unit)))
+        use pen = new Pen(color, 1.0f)
+        let state = g.Save()
+        g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
+        g.TranslateTransform(float32 x, float32 y)
+        for i in 0 .. count - 1 do
+            use path = new Drawing2D.GraphicsPath()
+            TabShape.outline shape width (float32 height) 0.0f edge |> TabShape.addToPath path
+            use m = new Drawing2D.Matrix()
+            m.Translate(float32 i * step, 0.0f)
+            path.Transform(m)
+            use cover = new SolidBrush(Color.FromArgb(255, background))
+            use tint = new SolidBrush(Color.FromArgb((if i = count - 1 then 90 else 40), color))
+            g.FillPath(cover, path)
+            g.FillPath(tint, path)
+            g.DrawPath(pen, path)
+        let total = float32 (count - 1) * step + width
+        g.DrawLine(pen, -2.0f, float32 height, total + 2.0f, float32 height)
+        g.Restore(state)
+        int (ceil total) + 2
+
+    let tabShapeCombo =
+        let combo = new DarkMode.PreviewComboBox()
+        combo.DropDownStyle <- ComboBoxStyle.DropDownList
+        // Variable owner-draw, as the color theme combo: the closed box keeps
+        // the height of a plain drop-down, the open list gets items tall
+        // enough for a picture that tells the shapes apart at 100%.
+        // ItemHeight (the closed box) is a 96-dpi design number, so
+        // SettingsDpi scales it from that; left to the font it is re-derived
+        // from the already scaled font and then scaled again. 14 is a plain
+        // drop-down list's own item height at the dialog font, so the box is
+        // as tall as the Behavior tab's.
+        combo.DrawMode <- DrawMode.OwnerDrawVariable
+        combo.ItemHeight <- 14
+        // Outside Bounds, so Control.Scale never sees it (see the color
+        // theme combo's MeasureItem).
+        combo.MeasureItem.Add <| fun e -> e.ItemHeight <- SettingsDpi.px 30
+        TabShape.all |> List.iter (fun shape ->
+            combo.Items.Add(Localization.getString(tabShapeCaption shape)) |> ignore)
+        combo.IntegralHeight <- false
+        combo.MaxDropDownItems <- TabShape.all.Length
+        let fitDropDown() =
+            // Recalculate on every opening, including after a monitor DPI change.
+            let rowsHeight =
+                [0 .. combo.Items.Count - 1]
+                |> List.sumBy (fun index -> max (SettingsDpi.px 30) (combo.GetItemHeight(index)))
+            combo.DropDownHeight <- rowsHeight + SettingsDpi.px 4
+            let textWidth =
+                combo.Items |> Seq.cast<obj>
+                |> Seq.map (fun item -> TextRenderer.MeasureText(string item, combo.Font).Width)
+                |> Seq.fold max 0
+            combo.DropDownWidth <- max combo.Width (textWidth + SettingsDpi.px 140)
+        combo.DropDown.Add(fun _ -> fitDropDown())
+        fitDropDown()
+        combo.SelectedIndex <- 0
+        combo.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+        combo.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        // Colors as in colorThemeComboBox's DrawItem: DarkMode leaves the
+        // drawing of an owner-drawn combo to its owner.
+        combo.DrawItem.Add <| fun e ->
+            let darkOn = isDarkModeEnabled()
+            let isSelected = (e.State &&& DrawItemState.Selected) <> DrawItemState.None
+            let background =
+                if darkOn then (if isSelected then DarkMode.darkAccent else DarkMode.darkPanel)
+                else e.BackColor
+            if darkOn then
+                use bg = new SolidBrush(background)
+                e.Graphics.FillRectangle(bg, e.Bounds)
+            else
+                e.DrawBackground()
+            if e.Index >= 0 && e.Index < TabShape.all.Length then
+                let textColor = if darkOn then DarkMode.darkText else e.ForeColor
+                let pad = max 2 (e.Bounds.Height / 6)
+                let previewHeight = max 4 (e.Bounds.Height - 2 * pad - 1)
+                // The closed box is a plain drop-down's height: one small
+                // tab as a reminder. The open list: two tabs as they meet.
+                let isEdit = (e.State &&& DrawItemState.ComboBoxEdit) <> DrawItemState.None
+                let previewWidth =
+                    drawTabShapePreview e.Graphics TabShape.all.[e.Index] (e.Bounds.Left + pad + 2) (e.Bounds.Top + pad) previewHeight
+                        (if isEdit then 1 else 2) (editedTabOverlap ()) textColor background
+                let textBounds =
+                    Rectangle(e.Bounds.Left + pad + 2 + previewWidth + pad * 2, e.Bounds.Top,
+                              max 0 (e.Bounds.Width - previewWidth - pad * 4 - 2), e.Bounds.Height)
+                TextRenderer.DrawText(
+                    e.Graphics, combo.Items.[e.Index].ToString(), e.Font, textBounds, textColor,
+                    TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
+            e.DrawFocusRectangle()
+        upperPanel.Controls.Add(combo)
+        upperPanel.SetRow(combo, tabShapeRow)
+        upperPanel.SetColumn(combo, 1)
+        combo
+
+    let tabShapeEditor : IPropEditor =
+        let changedEvent = Event<unit>()
+        let mutable updating = false
+        tabShapeCombo.SelectedIndexChanged.Add(fun _ ->
+            if not updating then changedEvent.Trigger()
+        )
+        { new IPropEditor with
+            member x.value
+                with get() =
+                    let index = tabShapeCombo.SelectedIndex
+                    box(if index >= 0 && index < TabShape.all.Length then TabShape.all.[index] else TabShape.scurve)
+                and set(newValue) =
+                    updating <- true
+                    try
+                        let shape = TabShape.normalize(match newValue with :? string as s -> s | _ -> null)
+                        tabShapeCombo.SelectedIndex <- TabShape.all |> List.findIndex ((=) shape)
+                    finally
+                        updating <- false
+            member x.control = tabShapeCombo :> Control
+            member x.changed = changedEvent.Publish
+        }
+
+    let tabShapeResetBtn =
+        let btn = Button()
+        let defaultShape = TabShape.normalize(unbox<string>(getDefaultValue "tabShape"))
+        // Keep the caption short; the default is the first drop-down item.
+        // Let the existing autosized column accommodate translations such
+        // as German without clipping the caption.
+        btn.Text <- Localization.getString("Reset")
+        btn.AutoSize <- true
+        btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        btn.Padding <- Padding(3, 0, 3, 0)
+        btn.Dock <- DockStyle.Fill
+        btn.TextAlign <- ContentAlignment.MiddleLeft
+        btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
+        btn.Click.Add <| fun _ ->
+            suppressEvents <- true
+            tabShapeEditor.value <- box defaultShape
+            this.applyAppearance()
+            suppressEvents <- false
+        upperPanel.Controls.Add(btn)
+        upperPanel.SetRow(btn, tabShapeRow)
+        upperPanel.SetColumn(btn, 2)
+        btn
+
     // Create color editors storage
     let mutable colorEditorsList : (string * IPropEditor) list = []
 
@@ -489,7 +681,7 @@ type AppearanceView() as this =
 
     // Combine all editors into a map
     let editors : Map2<string, IPropEditor> =
-        (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthNumericEditor); ("tabPinnedTabWidthIcon", pinnedWidthIconEditor)] @ colorEditorsList)
+        (intEditors.list @ [("tabPinnedTabWidth", pinnedWidthNumericEditor); ("tabPinnedTabWidthIcon", pinnedWidthIconEditor); ("tabShape", tabShapeEditor)] @ colorEditorsList)
         |> List.fold (fun (acc: Map2<string, IPropEditor>) (key, editor) -> acc.add key editor) (Map2())
 
     // Unified dark mode checkbox: drives both menu (system tray / tab
@@ -911,6 +1103,7 @@ type AppearanceView() as this =
             tabMouseOverBorderColor = presetAppearance.tabMouseOverBorderColor
             tabActiveBorderColor = presetAppearance.tabActiveBorderColor
             tabFlashBorderColor = presetAppearance.tabFlashBorderColor
+            tabShape = currentAppearance.tabShape
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
         setEditorValues mergedAppearance
@@ -945,6 +1138,7 @@ type AppearanceView() as this =
             tabMouseOverBorderColor = toColor theme.mouseOverBorderColor
             tabActiveBorderColor = toColor theme.activeBorderColor
             tabFlashBorderColor = toColor theme.flashBorderColor
+            tabShape = currentAppearance.tabShape
         }
         Services.settings.setValue("tabAppearance", box(mergedAppearance))
         setEditorValues mergedAppearance
@@ -1707,6 +1901,7 @@ type AppearanceView() as this =
             tabMouseOverBorderColor = unbox(getValue "tabMouseOverBorderColor")
             tabActiveBorderColor = unbox(getValue "tabActiveBorderColor")
             tabFlashBorderColor = unbox(getValue "tabFlashBorderColor")
+            tabShape = unbox(getValue "tabShape")
         }
 
         Services.settings.setValue("tabAppearance", box(newAppearance))

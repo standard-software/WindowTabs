@@ -1,6 +1,12 @@
-# WindowTabs Standard-Software Version
+﻿# WindowTabs Standard-Software Version
 
 **Language:** [English](version.md)
+
+## version ss_2026.09.21_next4
+
+- 表示設定でタブ形状を選べるようにした。
+  - 再起動せずに反映し、既定は従来のS字を維持する。
+  - 角丸縦線、角ばった縦線、台形、左右切り欠き台形、角丸長方形、角ばった長方形などのデザイン種類。
 
 ## version ss_2026.09.21_next3
 

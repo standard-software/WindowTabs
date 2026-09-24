@@ -990,6 +990,14 @@ module DarkMode =
     // text from scratch, and ValidateRect's the window so the OS doesn't
     // re-issue WM_PAINT. WM_ERASEBKGND is also suppressed so the system
     // never has a chance to flash a light background.
+    // Allows a custom combo to share its selected-item renderer with dark paint.
+    type PreviewComboBox() =
+        inherit ComboBox()
+        member this.DrawSelectedItem(graphics: Graphics, bounds: Rectangle) =
+            let args = new DrawItemEventArgs(graphics, this.Font, bounds, this.SelectedIndex,
+                                            DrawItemState.ComboBoxEdit, darkText, darkPanel)
+            this.OnDrawItem(args)
+
     type private DarkComboBoxSubclass(cmb: ComboBox) as this =
         inherit NativeWindow()
         let WM_PAINT = 0x000F
@@ -1014,7 +1022,15 @@ module DarkMode =
                 // separate edit child, so we render the text ourselves to
                 // ensure a fully-themed appearance with no system paint
                 // leaking through.
-                if cmb.SelectedIndex >= 0 then
+                if cmb.SelectedIndex >= 0 && (cmb :? PreviewComboBox) then
+                    let itemRect = Rectangle(r.Left + 2, r.Top + 2, max 0 (r.Width - arrowWidth - 4), max 0 (r.Height - 4))
+                    let state = g.Save()
+                    try
+                        g.SetClip(itemRect)
+                        (cmb :?> PreviewComboBox).DrawSelectedItem(g, itemRect)
+                    finally
+                        g.Restore(state)
+                elif cmb.SelectedIndex >= 0 then
                     let txt =
                         match cmb.Items.[cmb.SelectedIndex] with
                         | null -> ""

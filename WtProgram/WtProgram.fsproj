@@ -157,6 +157,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/TabBehaviorPolicy.fs" />
     <Compile Include="Shared/TopEdgeGuardPolicy.fs" />
     <Compile Include="Shared/TopEdgeGuardPlacement.fs" />
+    <Compile Include="Shared/TabShape.fs" />
     <Compile Include="Shared/CaptionDragPolicy.fs" />
     <Compile Include="Shared/CaptionDragFallback.fs" />
     <Compile Include="Shared/CaptionDragTargets.fs" />

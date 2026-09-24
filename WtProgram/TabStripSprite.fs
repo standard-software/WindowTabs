@@ -243,33 +243,9 @@ type TabSprite<'id> = {
             scale = this.scale
         } :> ISprite
 
+    // Width of the band at each end of the tab that the neighbour overlaps
+    // into. The outline (TabShape) climbs across it or stands a side in it.
     member private this.edgeWidth = this.px 18
-
-    member private this.renderTabEdge(path:GraphicsPath, startPoint:PointF, endPoint:PointF) =
-        let width = endPoint.X - startPoint.X
-        let height = endPoint.Y - startPoint.Y
-        let xInc = width / float32(3)
-        let xCurveInc = xInc / float32(3)
-        let yCurveInc = height / float32(3)
-        let bezPoints =
-            [|
-                startPoint
-                PointF(startPoint.X + xInc, startPoint.Y)
-                PointF(startPoint.X + xInc + xCurveInc, startPoint.Y + yCurveInc)
-                PointF(startPoint.X + xInc + float32(2) * xCurveInc, startPoint.Y + float32(2) * yCurveInc)
-                PointF(startPoint.X + float32(2) * xInc, startPoint.Y + float32(3) * yCurveInc)
-                PointF(startPoint.X + float32(3) * xInc, startPoint.Y + float32(3) * yCurveInc)
-            |]
-        do path.AddBezier(
-            bezPoints.[0],
-            bezPoints.[1],
-            bezPoints.[2],
-            bezPoints.[3])
-        do path.AddBezier(
-            bezPoints.[2],
-            bezPoints.[3],
-            bezPoints.[4],
-            bezPoints.[5])
 
     // Color resolution priority for non-active, non-flashing tabs:
     //   MouseOver (hover/capture)  >  Selected  >  Inactive
@@ -312,9 +288,8 @@ type TabSprite<'id> = {
             match this.direction with
             | TabUp -> float32(this.size.height),float32(0)
             | TabDown -> float32(-1), float32(this.size.height - 1)
-        do this.renderTabEdge(path, PointF(float32(0), bottom), PointF(float32(this.edgeWidth), top))
-        do path.AddLine(Point(this.edgeWidth, int(top)), Point(this.size.width - this.edgeWidth, int(top)))
-        do this.renderTabEdge(path, PointF(float32(this.size.width) - float32(this.edgeWidth), top), PointF(float32(this.size.width), bottom))
+        TabShape.outline this.appearance.tabShape (float32(this.size.width)) bottom top (float32(this.edgeWidth))
+        |> TabShape.addToPath path
         path
 
     member private this.iconSize =
@@ -517,6 +492,18 @@ type TabSprite<'id> = {
     // Close/Pin hover flickers. Testing the full button rectangle is stable at
     // any DPI. Visibility rules mirror `children`; the buttons never overlap the
     // icon, so test order is immaterial.
+    member this.containsOutline (local: Pt, includeBorder: bool) =
+        if local.x < -1 || local.x > this.size.width || local.y < -1 || local.y > this.size.height then false
+        else
+            use path = this.borderPath
+            if path.IsVisible(float32 local.x, float32 local.y) then true
+            elif includeBorder then
+                // Rasterized borders cover pixels just outside the mathematical
+                // fill. Conservatively reserve that one-device-pixel fringe.
+                use pen = new Pen(Color.Black, 2.0f)
+                path.IsOutlineVisible(float32 local.x, float32 local.y, pen)
+            else false
+
     member this.partAt (local: Pt) : TabPart =
         let inRect (loc: Pt) (sz: Sz) =
             local.x >= loc.x && local.x < loc.x + sz.width &&
@@ -565,12 +552,16 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
     member private this.unpinnedTabMaxLen = float(this.appearance.tabMaxWidth)
-    member private this.pinnedTabMinLen =
-        // Calculate dynamically based on tab height and icon size
-        // (mirrors TabSprite.iconSize / edgeWidth, hence the same scaling)
+    // Where a tab's icon ends, from the tab's left end: the edge band plus
+    // the icon (mirrors TabSprite.iconLocation / iconSize, hence the same
+    // scaling). An icon-only tab is this plus a band of padding; the hit
+    // test keeps a squeezed tab clickable up to here.
+    member private this.iconRight =
         let tabHeight = this.size.height - 1
         let iconHeight = min (max (this.px 16) (tabHeight - this.px 8)) (this.px 24)
-        float(this.px 18 + iconHeight + this.px 18)  // left edge + icon width + right padding
+        float(this.px 18 + iconHeight)
+    member private this.pinnedTabMinLen =
+        this.iconRight + float(this.px 18)  // left edge + icon width + right padding
     member private this.pinnedTabSettingLen = float(this.appearance.tabPinnedTabWidth)
     member private this.pinnedTabMaxLen =
         if this.appearance.tabPinnedTabWidthIcon then this.pinnedTabMinLen
@@ -951,6 +942,14 @@ type TabStripSprite<'id> when 'id : equality = {
         | None -> this.visualOrder
 
 
+    member private this.renderOrder =
+        if List.isEmpty this.dragGroup then this.zorder
+        else
+            let grp = this.dragGroup
+            let nonGroup = this.zorder.where(fun t -> not (List.contains t grp))
+            let groupOrdered = this.visualOrder.where(fun t -> List.contains t grp)
+            nonGroup.appendList(groupOrdered)
+
     member this.sprite =
         {
             new ISprite with
@@ -963,15 +962,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 // member that sits behind the pivot in z-order would get
                 // covered by the pivot's overlap notch, producing the
                 // "[---A---]-B---]" artifact.
-                let order =
-                    if List.isEmpty this.dragGroup then
-                        this.zorder
-                    else
-                        let grp = this.dragGroup
-                        let nonGroup = this.zorder.where(fun t -> not (List.contains t grp))
-                        let groupOrdered = this.visualOrder.where(fun t -> List.contains t grp)
-                        nonGroup.appendList(groupOrdered)
-                order.map <| fun (tab:'id) ->
+                this.renderOrder.map <| fun (tab:'id) ->
                     (this.tabLocation tab, this.tabSprite(tab))
         }
 
@@ -991,7 +982,17 @@ type TabStripSprite<'id> when 'id : equality = {
             // Resolve the part (Close/Pin/Icon/Background) within that tab by
             // rectangle (see TabSprite.partAt) at tab-local coordinates.
             let part = (this.tabSpriteRec tab).partAt(pt.sub(this.tabLocation tab))
-            return tab,part
+            // Non-rectangular outlines may cross button rectangle corners.
+            // Never activate a part hidden by another tab or outside its outline.
+            // Keep the established S-curve ownership and hit behavior unchanged.
+            let resolvedPart =
+                if TabShape.needsOutlineHit this.appearance.tabShape && part <> TabBackground then
+                    let visible =
+                        this.renderOrder.list |> List.tryFind (fun id ->
+                            (this.tabSpriteRec id).containsOutline(pt.sub(this.tabLocation id), id <> tab))
+                    if visible = Some tab then part else TabBackground
+                else part
+            return tab,resolvedPart
         }
 
     // Tab-ownership hit test (used by both tooltip and tryHit): every tab's
@@ -1016,10 +1017,30 @@ type TabStripSprite<'id> when 'id : equality = {
                 let leftWidth = this.calcGroupWidth(leftTabs)
                 let rightWidth = this.calcGroupWidth(rightTabs)
                 let rightStartX = float(this.size.width) - rightWidth
-                let trim = max 0.0 (this.tabOverlap / 2.0)
-                if x < leftWidth - trim && not leftTabs.isEmpty then
+                // The box shape (TabShape) draws nothing in the outer half of
+                // the edge band, so both outer ends of a group stop at the
+                // box's side instead: the first and last box are hit exactly
+                // where they are drawn, whatever the Tab Overlap. Between
+                // tabs the overlap midpoint (hitInGroup) is already where two
+                // boxes meet, or the middle of the gap between them.
+                let isBox = TabShape.isBox this.appearance.tabShape
+                let inset = float(TabShape.boxInset (this.px 18))
+                let trimAfter (tabs: List2<'id>) =
+                    if not isBox then max 0.0 (this.tabOverlap / 2.0)
+                    elif tabs.isEmpty then inset
+                    else
+                        // A tab squeezed narrower than its content draws its
+                        // icon past the box's side (as every shape does);
+                        // that part stays clickable.
+                        let last = tabs.list |> List.last
+                        let len = if this.isPinned(last) then this.pinnedTabLength else this.unpinnedTabLength
+                        max 0.0 (min inset (len - this.iconRight))
+                // (The first tab sits at the whole pixel below the group's
+                // start, as tabLocation places it.)
+                let pastLead (groupStartX: float) = not isBox || x >= Math.Floor(groupStartX) + inset
+                if x < leftWidth - trimAfter leftTabs && pastLead 0.0 && not leftTabs.isEmpty then
                     this.hitInGroup leftTabs 0.0 x
-                elif x >= rightStartX && x < float(this.size.width) - trim && not rightTabs.isEmpty then
+                elif x >= rightStartX && pastLead rightStartX && x < float(this.size.width) - trimAfter rightTabs && not rightTabs.isEmpty then
                     this.hitInGroup rightTabs rightStartX x
                 else
                     None

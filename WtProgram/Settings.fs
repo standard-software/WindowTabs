@@ -368,6 +368,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x3A70B1)
             tabActiveBorderColor = Color.FromRGB(0x3A70B1)
             tabFlashBorderColor = Color.FromRGB(0x3A70B1)
+            tabShape = TabShape.scurve
         }
 
     member this.darkModeTabAppearance =
@@ -397,6 +398,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x333333)
             tabActiveBorderColor = Color.FromRGB(0x333333)
             tabFlashBorderColor = Color.FromRGB(0x333333)
+            tabShape = TabShape.scurve
         }
 
     member this.darkModeBlueTabAppearance =
@@ -426,6 +428,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x374151)
             tabActiveBorderColor = Color.FromRGB(0x374151)
             tabFlashBorderColor = Color.FromRGB(0x374151)
+            tabShape = TabShape.scurve
         }
 
     member this.lightMonoTabAppearance =
@@ -455,6 +458,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x252525)
             tabActiveBorderColor = Color.FromRGB(0x252525)
             tabFlashBorderColor = Color.FromRGB(0x252525)
+            tabShape = TabShape.scurve
         }
 
     member this.darkMonoTabAppearance =
@@ -484,6 +488,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0xF2F2F2)
             tabActiveBorderColor = Color.FromRGB(0x6B6B6B)
             tabFlashBorderColor = Color.FromRGB(0x787878)
+            tabShape = TabShape.scurve
         }
 
     member this.darkMono2TabAppearance =
@@ -513,6 +518,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x6B6B6B)
             tabActiveBorderColor = Color.FromRGB(0xF2F2F2)
             tabFlashBorderColor = Color.FromRGB(0x787878)
+            tabShape = TabShape.scurve
         }
 
     member this.darkRedFrameTabAppearance =
@@ -542,6 +548,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0xFF6666)
             tabActiveBorderColor = Color.FromRGB(0xCC4444)
             tabFlashBorderColor = Color.FromRGB(0xB13A3A)
+            tabShape = TabShape.scurve
         }
 
     member this.update f = this.settings <- f(this.settings)
@@ -609,6 +616,12 @@ type Settings(isStandAlone) as this =
                                             if fieldType = typeof<Int32> then box(unbox<Int64>(value).Int32)
                                             elif fieldType = typeof<Boolean> then box(unbox<bool>(value))
                                             elif fieldType = typeof<Color> then box(Color.FromRGB(Int32.Parse(unbox<string>(value), Globalization.NumberStyles.HexNumber)))
+                                            elif fieldType = typeof<String> then
+                                                // Accepted by type, so a new string field is read
+                                                // back without another branch here; the fields that
+                                                // hold a fixed set of values are normalized.
+                                                let text = unbox<string>(value)
+                                                box(if key = "tabShape" then TabShape.normalize text else text)
                                             else failwith "UNKNOWN TYPE"
                                         Serialize.writeField appearance key value :?> TabAppearanceInfo
                                     with

@@ -115,7 +115,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.09.21_next3**
+最新のバージョン: **ss_2026.09.21_next4**
 
 詳細は [version_Japanese.md](version_Japanese.md) を参照してください。
 
@@ -360,6 +360,8 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
 ### 表示タブ
+
+**タブの形**で、S字・角丸縦線・強い角丸縦線・角ばった縦線・台形・右切り欠き台形・左切り欠き台形・長方形・角丸長方形・強い角丸長方形・角ばった長方形を選べます。一覧は全項目をスクロールなしで表示します。設定値には英語名を保存し、認識できない値は既定のS字に戻します。
 
 よいカラーテーマを作成された方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。
 

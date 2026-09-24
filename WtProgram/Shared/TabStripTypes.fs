@@ -1,4 +1,4 @@
-﻿namespace Bemo
+namespace Bemo
 open System
 open System.Drawing
 
@@ -92,4 +92,8 @@ and TabAppearanceInfo = {
     tabMouseOverBorderColor: Color
     tabActiveBorderColor: Color
     tabFlashBorderColor: Color
+    // Outline of a tab: one of the English TabShape names ("S-curve" is the
+    // original look). Always read through TabShape.normalize, so an unknown
+    // value draws the original shape.
+    tabShape: string
     }
