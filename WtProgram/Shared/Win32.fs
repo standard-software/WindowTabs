@@ -625,12 +625,13 @@ and
         WinUserApi.TrackMouseEvent(ref tme) |> ignore
 
     member this.hideOffScreen (size:Sz option) =
-        let corners = Mon.all.map <| fun monitor -> monitor.workRect.BR
-        let rightCorner = corners.fold (Pt()) <| fun maxCorner corner ->
-            if maxCorner.x < corner.x then corner else maxCorner
-        let bottomCorner = corners.fold (Pt()) <| fun maxCorner corner ->
-            if maxCorner.y < corner.y then corner else maxCorner
-        let corner = Pt(rightCorner.x + 100, bottomCorner.y + 100)
+        // ParkedWindow.isParked recognises a window left here from the same
+        // arithmetic, so the two cannot drift apart.
+        let workAreas =
+            Mon.all.list |> List.map (fun monitor ->
+                let r = monitor.workRect in ParkedWindow.ofXYWH r.x r.y r.width r.height)
+        let (x, y) = ParkedWindow.parkPoint workAreas
+        let corner = Pt(x, y)
 
         if this.isMinimized || this.isMaximized then
             this.showWindow(ShowWindowCommands.SW_RESTORE)
