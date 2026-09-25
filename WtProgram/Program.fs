@@ -404,6 +404,12 @@ type Program() as this =
     // A window found here goes back to its own group at its own place, and a
     // destroy records from here. Cleared on either.
     let windowLastGroup = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // Windows found in the parking spot in no group (ParkedWindow), and when
+    // each was first seen there. One is brought back only after it has stayed
+    // put for the whole grace period: a drag parks windows and places them
+    // again within a couple of seconds, and recentlyPlacedGraceMs is 2000.
+    let parkedOrphanSince = System.Collections.Generic.Dictionary<IntPtr, int64>()
+    let parkedOrphanGraceMs = 3000L
     // Windows whose late restore has already had a miss written to the trace:
     // how many, and the title of the last one. The late pass runs every second
     // while entries wait, so the same miss would repeat forever; a line is
@@ -1440,9 +1446,15 @@ type Program() as this =
             if inShutdown.value.not && isDisabledCell.value.not then
                 let windows = PerfTrace.time "windowsInZorder" (fun () -> os.windowsInZorder)
                 PerfTrace.count (sprintf "windowsScanned.%d" (windows.count / 50 * 50))
+                this.forgetDeadParkedOrphans()
                 windows.iter <| fun window ->
                     this.ensureWindowIsSubscribed(window)
                     if this.isTabMonitoringSuspended.not then
+                        // Before grouping: a window brought back on screen is
+                        // tabbable again, and is grouped in this same pass -
+                        // back into its own group when windowLastGroup still
+                        // remembers it.
+                        this.rescueParkedOrphan(window)
                         this.ensureWindowIsGrouped(window)
                 PerfTrace.time "syncWindowTitles" (fun () -> this.syncWindowTitles())
             this.destroyEmptyGroups()
@@ -1483,6 +1495,73 @@ type Program() as this =
                 groupTraceCount <- groupTraceCount + 1
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
             this.addWindowToGroup(window)
+
+    // A window WindowTabs parked and then lost track of - in no group, still
+    // in the parking spot - is put back on the primary monitor. See
+    // ParkedWindow for how one gets there and why the spot is ours alone.
+    // Group members are not touched: the stranded pass in
+    // removeUntabableWindows already reseats those inside their own group.
+    member this.rescueParkedOrphan(window:Window) =
+        let hwnd = window.hwnd
+        let isOrphanInParkingSpot () =
+            window.pid.isCurrentProcess.not &&
+            window.isWindow && window.isVisible &&
+            not window.isMinimized && not window.isCloaked &&
+            window.isOnCurrentVirtualDesktop &&
+            this.isInGroup(hwnd).not &&
+            recentlyPlacedHwnds.value.tryFind(hwnd).IsNone &&
+            pendingRegroups.value.tryFind(hwnd).IsNone &&
+            this.isAppWindowStyle(window) &&
+            (let monitors = Mon.all.list
+             let toBox (r: Rect) = ParkedWindow.ofXYWH r.x r.y r.width r.height
+             ParkedWindow.isParked
+                (monitors |> List.map (fun m -> toBox m.displayRect))
+                (monitors |> List.map (fun m -> toBox m.workRect))
+                (toBox window.bounds)) &&
+            Services.filter.getIsTabbingEnabledForProcess(window.pid.processPath)
+        let parked =
+            this.desktop.isDragging.not &&
+            isRestoringTabGroups.value.not && needsRestoreOnStartup.value.not &&
+            (try isOrphanInParkingSpot () with _ -> false)
+        if parked.not then
+            parkedOrphanSince.Remove(hwnd) |> ignore
+        else
+            let now = monotonic.ElapsedMilliseconds
+            match parkedOrphanSince.TryGetValue(hwnd) with
+            | false, _ ->
+                parkedOrphanSince.[hwnd] <- now
+                // Nothing else may ask for a pass while it waits; the
+                // ten-second timer would, but later than it has to be.
+                ThreadHelper.cancelablePostBack (int parkedOrphanGraceMs + 250) (fun () ->
+                    this.scheduleUpdateAppWindows()) |> ignore
+            | true, since when now - since >= parkedOrphanGraceMs ->
+                parkedOrphanSince.Remove(hwnd) |> ignore
+                let monitors = Mon.all.list
+                let primary =
+                    monitors
+                    |> List.tryFind (fun m -> let r = m.displayRect in r.left <= 0 && r.top <= 0 && r.right > 0 && r.bottom > 0)
+                    |> Option.orElse (List.tryHead monitors)
+                match primary with
+                | Some(monitor) ->
+                    let area = monitor.workRect
+                    let b = window.bounds
+                    let (x, y, w, h) =
+                        ParkedWindow.homeFor
+                            (ParkedWindow.ofXYWH area.x area.y area.width area.height) b.width b.height
+                    RestoreTrace.log (fun () -> sprintf "rescue hwnd=%X (in no group, parked at %d,%d for %dms) -> %d,%d"
+                                                        (hwnd.ToInt64()) b.x b.y (now - since) x y)
+                    if w = b.width && h = b.height then window.setPositionOnly x y
+                    else window.move(Rect(Pt(x, y), Sz(w, h)))
+                | None -> ()
+            | true, _ -> ()
+
+    member private this.forgetDeadParkedOrphans() =
+        if parkedOrphanSince.Count > 0 then
+            let dead =
+                parkedOrphanSince.Keys
+                |> Seq.filter (fun hwnd -> (try os.windowFromHwnd(hwnd).isWindow with _ -> false) |> not)
+                |> List.ofSeq
+            dead |> List.iter (fun hwnd -> parkedOrphanSince.Remove(hwnd) |> ignore)
 
     // Group one application's windows again as though each of them had just
     // opened. Reached ONLY from a grouping setting going off to on - never
