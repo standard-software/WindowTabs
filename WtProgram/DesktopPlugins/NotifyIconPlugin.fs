@@ -1,5 +1,8 @@
 ﻿namespace Bemo
 open System
+#if DEBUG
+#nowarn "0044" // Obsolete thread suspension APIs are used only for freeze diagnostics.
+#endif
 open System.Windows.Forms
 open System.Reflection
 open Newtonsoft.Json.Linq
@@ -15,6 +18,9 @@ module Watchdog =
     let mutable private watchdogThread: Thread option = None
     let mutable private stopRequested = false
     let mutable private uiThreadInvoker: Invoker option = None  // Store UI thread's invoker
+#if DEBUG
+    let mutable private uiThread: Thread option = None
+#endif
     let private freezeTimeout = 10000  // 10 seconds timeout for freeze detection
     let private checkInterval = 5000   // Check every 5 seconds
     let private requiredConsecutiveFailures = 1  // Restart after 1 timeout (10 seconds unresponsive)
@@ -30,8 +36,7 @@ module Watchdog =
     // now writes no log of any kind. What guards the settings file there is
     // the refusal to save over it and the recovery from a backup, neither of
     // which needs a log to work.
-    // It cannot grow: a run writes one line when the watchdog is armed and one
-    // when it stops, and a ping timeout always ends in a restart, so there is
+    // A timeout adds a stack trace and restart progress, then ends in a restart, so there is
     // no repeating state to spam. The 1 MB guard is there only in case that
     // assumption is ever wrong, and it keeps the overflow as watchdog.log.old
     // instead of dropping it.
@@ -46,7 +51,7 @@ module Watchdog =
     // Takes a thunk so that nothing is built outside Debug: an argument would
     // be evaluated before the call, leaving the message assembled and thrown
     // away on every run of a released build.
-    let private log (message: unit -> string) =
+    let private writeLog (message: unit -> string) =
 #if DEBUG
         try
             let dir = Path.GetDirectoryName(logPath)
@@ -66,8 +71,113 @@ module Watchdog =
         ignore message
 #endif
 
+#if DEBUG
+    let private logGate = obj()
+#endif
+    let private log message =
+#if DEBUG
+        lock logGate (fun () -> writeLog message)
+#else
+        writeLog message
+#endif
+
     let respondToPing() =
         pingResponse.Set() |> ignore
+
+#if DEBUG
+    // Do not suspend a thread again if an earlier stack walk is still pending.
+    let private activeCaptures = System.Collections.Concurrent.ConcurrentDictionary<int, byte>()
+
+    let private logAllStacks sample waitMilliseconds =
+        let elapsed = Stopwatch.StartNew()
+        let watchdogId = Thread.CurrentThread.ManagedThreadId
+        // Enumeration, worker startup and logging also belong to the bounded
+        // diagnostic worker, never to the watchdog's restart path.
+        let capture = new Thread(ThreadStart(fun () ->
+            try
+                let workers =
+                    InvokerThreads.snapshot()
+                    |> Array.choose (fun (target, id, name) ->
+                        if id = watchdogId then None
+                        elif not (activeCaptures.TryAdd(id, 0uy)) then
+                            log (fun () -> sprintf "All stacks sample %d: thread id=%d name=%s capture still pending" sample id name)
+                            None
+                        else
+                            let worker = new Thread(ThreadStart(fun () ->
+                                try
+                                    try
+                                        let mutable suspended = false
+                                        let stack =
+                                            try
+                                                target.Suspend()
+                                                suspended <- true
+                                                new StackTrace(target, true)
+                                            finally
+                                                if suspended then target.Resume()
+                                        // Resume before formatting or touching the log file.
+                                        log (fun () ->
+                                            sprintf "All stacks sample %d: thread id=%d name=%s%s%s"
+                                                sample id (if isNull name then "<unnamed>" else name)
+                                                Environment.NewLine (stack.ToString()))
+                                    with ex ->
+                                        log (fun () -> sprintf "All stacks sample %d: thread id=%d name=%s capture failed: %O" sample id name ex)
+                                finally
+                                    let mutable removed = 0uy
+                                    activeCaptures.TryRemove(id, &removed) |> ignore))
+                            worker.IsBackground <- true
+                            worker.Name <- sprintf "WindowTabs Stack Capture %d" id
+                            try
+                                worker.Start()
+                                Some worker
+                            with ex ->
+                                let mutable removed = 0uy
+                                activeCaptures.TryRemove(id, &removed) |> ignore
+                                log (fun () -> sprintf "All stacks sample %d: thread id=%d name=%s worker failed: %O" sample id name ex)
+                                None)
+                // Independent workers let other threads finish even when one
+                // suspension or stack walk stalls inside the runtime.
+                for worker in workers do worker.Join()
+            with ex ->
+                log (fun () -> sprintf "All stacks sample %d failed: %O" sample ex)))
+        capture.IsBackground <- true
+        capture.Name <- sprintf "WindowTabs All Stacks %d" sample
+        capture.Start()
+        capture.Join(max 0 (waitMilliseconds - int elapsed.ElapsedMilliseconds)) |> ignore
+
+    let private logUiStack() =
+        try
+            match uiThread with
+            | None -> log (fun () -> "UI stack unavailable - UI thread was not captured")
+            | Some target ->
+                // Suspension or stack walking can itself stall. Keep the watchdog
+                // independent and cap the total diagnostic wait at five seconds.
+                let capture = new Thread(ThreadStart(fun () ->
+                    try
+                        if activeCaptures.TryAdd(target.ManagedThreadId, 0uy) then
+                            try
+                                let mutable suspended = false
+                                let stack =
+                                    try
+                                        target.Suspend()
+                                        suspended <- true
+                                        new StackTrace(target, true)
+                                    finally
+                                        if suspended then target.Resume()
+                                // Format and write only after resuming the target.
+                                log (fun () -> sprintf "UI managed stack:%s%s" Environment.NewLine (stack.ToString()))
+                            finally
+                                let mutable removed = 0uy
+                                activeCaptures.TryRemove(target.ManagedThreadId, &removed) |> ignore
+                    with ex ->
+                        log (fun () -> sprintf "UI stack capture failed: %O" ex)))
+                capture.IsBackground <- true
+                capture.Name <- "WindowTabs Watchdog Stack Capture"
+                capture.Start()
+                if not (capture.Join(5000)) then
+                    log (fun () -> "UI stack capture timed out after 5000 ms; continuing restart")
+        with ex ->
+            log (fun () -> sprintf "UI stack diagnostic failed: %O" ex)
+#endif
 
     let private trySaveAndRestart() =
         // Written before anything else: the process is about to be replaced,
@@ -78,18 +188,24 @@ module Watchdog =
             // Try to save tab groups before restart
             let saveComplete = new ManualResetEvent(false)
             try
+                log (fun () -> "restart: save requested (waiting up to 2000 ms)")
                 match uiThreadInvoker with
                 | Some invoker ->
                     invoker.asyncInvoke(fun () ->
                         try
+                            log (fun () -> "restart: save started on UI thread")
                             Services.program.saveTabGroupsBeforeExit()
-                        with _ -> ()
+                            log (fun () -> "restart: save completed")
+                        with ex ->
+                            log (fun () -> sprintf "restart: save failed: %O" ex)
                         saveComplete.Set() |> ignore
                     )
-                | None -> ()
+                | None -> log (fun () -> "restart: save unavailable - no UI invoker")
                 // Wait max 2 seconds for save
-                saveComplete.WaitOne(2000) |> ignore
-            with _ -> ()
+                if not (saveComplete.WaitOne(2000)) then
+                    log (fun () -> "restart: save wait timed out after 2000 ms")
+            with ex ->
+                log (fun () -> sprintf "restart: save dispatch failed: %O" ex)
 
             // Start new process and exit
             let exePath = Assembly.GetExecutingAssembly().Location
@@ -104,10 +220,16 @@ module Watchdog =
             startInfo.Arguments <- sprintf "/c ping -n 3 127.0.0.1 >nul && start \"\" \"%s\"" exePath
             startInfo.WindowStyle <- ProcessWindowStyle.Hidden
             startInfo.CreateNoWindow <- true
-            Process.Start(startInfo) |> ignore
+            log (fun () -> sprintf "restart: launching delayed restart helper for %s" exePath)
+            use restartProcess = Process.Start(startInfo)
+            log (fun () ->
+                if isNull restartProcess then "restart: process launch returned no process"
+                else sprintf "restart: helper started (pid %d); application launch is pending" restartProcess.Id)
             ForceExitState.isForceExiting <- true
+            log (fun () -> "restart: exiting current process with code 0")
             Environment.Exit(0)
-        with _ ->
+        with ex ->
+            log (fun () -> sprintf "restart: failed: %O; exiting current process with code 1" ex)
             Environment.Exit(1)
 
     let private watchdogLoop() =
@@ -137,6 +259,17 @@ module Watchdog =
                     consecutiveFailures <- consecutiveFailures + 1
                     log (fun () -> sprintf "ping timed out after %d ms (%d of %d before a restart)"
                                         freezeTimeout consecutiveFailures requiredConsecutiveFailures)
+#if DEBUG
+                    logUiStack()
+                    // Two 500 ms capture allowances total at most one second.
+                    // Reserve the final allowance inside the five-second window
+                    // so the follow-up completes before restart, not next tick.
+                    let diagnostics = Stopwatch.StartNew()
+                    logAllStacks 1 500
+                    let delay = max 0 (4500 - int diagnostics.ElapsedMilliseconds)
+                    if delay > 0 then Thread.Sleep(delay)
+                    logAllStacks 2 (max 0 (min 500 (5000 - int diagnostics.ElapsedMilliseconds)))
+#endif
 
                     if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
                         // UI thread is frozen (confirmed by multiple consecutive failures), force restart
@@ -154,6 +287,9 @@ module Watchdog =
         elif watchdogThread.IsNone then
             // Capture UI thread's invoker (must be called from UI thread)
             uiThreadInvoker <- Some(InvokerService.invoker)
+#if DEBUG
+            uiThread <- Some Thread.CurrentThread
+#endif
             stopRequested <- false
             let thread = new Thread(ThreadStart(watchdogLoop))
             thread.IsBackground <- true

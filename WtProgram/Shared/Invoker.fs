@@ -37,6 +37,30 @@ type Invoker() as this =
             lockDispose <| fun() ->
                 form.Dispose()
 
+#if DEBUG
+// Debug only: every thread that owns an Invoker (the main thread and each
+// tab-group thread), so the watchdog can dump all their stacks on a freeze.
+module InvokerThreads =
+    let private gate = obj()
+    let private threads = System.Collections.Generic.List<WeakReference<Thread>>()
+
+    let register (thread: Thread) =
+        lock gate (fun () -> threads.Add(WeakReference<Thread>(thread)))
+
+    let snapshot () =
+        lock gate (fun () ->
+            threads.RemoveAll(fun r ->
+                match r.TryGetTarget() with
+                | true, t -> not t.IsAlive
+                | _ -> true) |> ignore
+            threads
+            |> Seq.choose (fun r ->
+                match r.TryGetTarget() with
+                | true, t -> Some (t, t.ManagedThreadId, t.Name)
+                | _ -> None)
+            |> Seq.toArray)
+#endif
+
 type InvokerService =
     [<DefaultValue>]
     [<ThreadStatic>]
@@ -46,6 +70,9 @@ type InvokerService =
         with get() =
             if InvokerService._invoker = null then
                 InvokerService._invoker <- Invoker()
+#if DEBUG
+                InvokerThreads.register Thread.CurrentThread
+#endif
             InvokerService._invoker
 
 // Deadlock guard for secondary UI threads (one per tab group).
