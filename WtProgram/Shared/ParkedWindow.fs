@@ -46,13 +46,16 @@ module ParkedWindow =
         min a.right b.right > max a.left b.left &&
         min a.bottom b.bottom > max a.top b.top
 
-    /// True for a window that sits where only hideOffScreen puts windows.
+    /// True for a window that sits where only hideOffScreen puts windows:
+    /// off every monitor, and at or past the bottom right corner of at least
+    /// one work area. Not the corner of the union of them all - a monitor
+    /// added to the right or below after the window was parked would put the
+    /// park point inside the union, and the window would never be found.
     let isParked (displays: Box list) (workAreas: Box list) (window: Box) =
         not (List.isEmpty displays) &&
         window.right > window.left && window.bottom > window.top &&
         not (displays |> List.exists (overlaps window)) &&
-        window.left >= maxRight workAreas &&
-        window.top >= maxBottom workAreas
+        (workAreas |> List.exists (fun a -> window.left >= a.right && window.top >= a.bottom))
 
     /// Where to put a parked window back: centred in the given work area,
     /// shrunk to fit it if it is larger. Returns left, top, width, height.
