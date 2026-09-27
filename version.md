@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.09.21_next8
+
+- A window left off screen in no group is brought back on screen.
+
 ## version ss_2026.09.21_next7
 
 - The tab outline can be chosen in the appearance settings.
