@@ -82,6 +82,9 @@ type SettingsDialogWindow(initialScale: float) =
             try SettingsDpi.placeWindow this (Rect(suggested.TL, SettingsDpi.windowSizeAt this newScale))
             with _ -> ()
             rescaling <- false
+            // Reassert also queues a pass after WM_DPICHANGED and native layout
+            // finish, including fields whose final size did not change.
+            SettingsField.reassert this
 
     // A size the user dragged the border to REPLACES the design size, so their
     // choice survives the move to another monitor exactly the way the original

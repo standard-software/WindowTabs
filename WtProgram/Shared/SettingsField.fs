@@ -65,8 +65,12 @@ module SettingsField =
         match box with
         | :? TextBox as tb -> tb.AcceptsReturn <- false
         | _ -> ()
+        let mutable pending = false
+        let mutable generation = 0
+        let mutable applied = None
+        let coordinates (rect: RECT) = rect.left, rect.top, rect.right, rect.bottom
         let centre () =
-            if box.IsHandleCreated then
+            if not box.IsDisposed && box.IsHandleCreated then
                 let line = TextRenderer.MeasureText("Wg", box.Font).Height
                 let inset = max 0 ((box.ClientSize.Height - line) / 2 - 1)
                 let mutable rect = RECT()
@@ -79,16 +83,53 @@ module SettingsField =
                 let size = Marshal.SizeOf(typeof<RECT>)
                 let memory = Marshal.AllocHGlobal(size)
                 try
-                    Marshal.StructureToPtr(rect, memory, false)
-                    SendMessageW(box.Handle, 0xB3u (* EM_SETRECT *), 0n, memory) |> ignore
+                    let read () =
+                        SendMessageW(box.Handle, 0xB2u (* EM_GETRECT *), 0n, memory) |> ignore
+                        Marshal.PtrToStructure(memory, typeof<RECT>) :?> RECT |> coordinates
+                    let desired = coordinates rect
+                    let actual = read ()
+                    // Remember the native result too: EDIT may round the rectangle.
+                    // A reset by Windows is detected even when our inputs are unchanged.
+                    if applied <> Some(desired, actual) then
+                        Marshal.StructureToPtr(rect, memory, false)
+                        SendMessageW(box.Handle, 0xB3u (* EM_SETRECT *), 0n, memory) |> ignore
+                        let measured = read ()
+                        let _, actualTop, _, _ = measured
+                        // Native EDIT adds its border to EM_SETRECT coordinates.
+                        // Compensate from the readback rather than assuming a
+                        // fixed border width at every DPI and theme.
+                        if actualTop <> inset then
+                            rect.top <- rect.top + inset - actualTop
+                            Marshal.StructureToPtr(rect, memory, false)
+                            SendMessageW(box.Handle, 0xB3u (* EM_SETRECT *), 0n, memory) |> ignore
+                        applied <- Some(desired, read ())
                 finally Marshal.FreeHGlobal(memory)
-                box.Invalidate()
+        let queueCentre () =
+            if not pending && not box.IsDisposed && box.IsHandleCreated then
+                pending <- true
+                let queuedGeneration = generation
+                try
+                    box.BeginInvoke(MethodInvoker(fun () ->
+                        if generation = queuedGeneration then
+                            pending <- false
+                            centre ())) |> ignore
+                with :? InvalidOperationException -> pending <- false
+        let refresh () =
+            centre ()
+            // FontChanged/SizeChanged can precede the native EDIT reset.
+            // Coalesce a second pass after font assignment and layout complete.
+            queueCentre ()
         centred.Remove(box) |> ignore
-        centred.Add(box, centre)
-        box.HandleCreated.Add(fun _ -> centre ())
-        box.SizeChanged.Add(fun _ -> centre ())
-        box.FontChanged.Add(fun _ -> centre ())
-        centre ()
+        centred.Add(box, refresh)
+        box.HandleDestroyed.Add(fun _ ->
+            generation <- generation + 1
+            pending <- false
+            applied <- None)
+        box.HandleCreated.Add(fun _ -> refresh ())
+        box.SizeChanged.Add(fun _ -> refresh ())
+        box.FontChanged.Add(fun _ -> refresh ())
+        box.Layout.Add(fun _ -> queueCentre ())
+        refresh ()
 
     /// A drop-down list takes its closed height from the item height, and it
     /// listens to that only when it draws its own items: left to the system,
