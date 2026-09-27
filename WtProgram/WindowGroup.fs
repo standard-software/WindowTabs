@@ -1,4 +1,4 @@
-﻿namespace Bemo
+namespace Bemo
 open System
 open System.Collections.Generic
 open System.Diagnostics
@@ -586,21 +586,27 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     /// monitor. Called after the move/size loop, whatever adjustChildWindows
     /// decided to do.
     member private this.restoreParkedWindows() =
-        if not parkedBounds.IsEmpty then
-            let parked = parkedBounds
-            parkedBounds <- Map.empty
-            for entry in parked do
-                try
-                    let window = this.os.windowFromHwnd(entry.Key)
-                    if window.isWindow && not window.isMinimized then
-                        let bounds = window.bounds
-                        let onScreen =
-                            Mon.all.any(fun mon ->
-                                let r = mon.displayRect
-                                bounds.x < r.x + r.width && bounds.x + bounds.width > r.x &&
-                                bounds.y < r.y + r.height && bounds.y + bounds.height > r.y)
-                        if not onScreen then window.move(entry.Value)
-                with _ -> ()
+        for hwnd in parkedBounds |> Map.toList |> List.map fst do
+            this.restoreParkedWindow hwnd
+
+    /// Puts one window back from where hideChildWindows parked it, if it is
+    /// still outside every monitor, and forgets the park.
+    member private this.restoreParkedWindow(hwnd: IntPtr) =
+        match parkedBounds.TryFind hwnd with
+        | None -> ()
+        | Some(home) ->
+            parkedBounds <- parkedBounds.Remove hwnd
+            try
+                let window = this.os.windowFromHwnd(hwnd)
+                if window.isWindow && not window.isMinimized then
+                    let bounds = window.bounds
+                    let onScreen =
+                        Mon.all.any(fun mon ->
+                            let r = mon.displayRect
+                            bounds.x < r.x + r.width && bounds.x + bounds.width > r.x &&
+                            bounds.y < r.y + r.height && bounds.y + bounds.height > r.y)
+                    if not onScreen then window.move(home)
+            with _ -> ()
 
     member private this.inZorder(windows:List2<IntPtr>) = this.windows.items.sortBy(fun hwnd -> this.os.windowFromHwnd(hwnd).zorder)
 
@@ -1672,6 +1678,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
         if this.windows.contains(hwnd) then    
+            // A window this group parked is put back before it leaves: once it
+            // is in no group, nothing would. Every way out of a group passes
+            // here - a closed tab, a drag into another group, a window no
+            // longer shown on all desktops (VirtualDesktopGroups.leftBehind) -
+            // and the move/size loop that would have restored it may never end
+            // for this group.
+            this.restoreParkedWindow hwnd
             //CASE 777 - chrome windows can close when you merge a single chrome tab
             //into another chrome group, need to exit the move/size and restore windows on screen in this case
             if inMoveSize.value then
