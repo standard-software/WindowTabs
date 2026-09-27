@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next11
+## version ss_2026.09.21_next12
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
@@ -23,6 +23,7 @@
   - A tab that comes back to its old place no longer rearranges the tabs that were never closed
 - Removed the unused code for showing a whole tab group as one taskbar button
 - A window left off screen in no group is brought back on screen.
+- Notepad and other Store apps can now be opened in a new window from the tab menu and the new-tab hot key. The app decides whether it opens a window or a tab.
 
 ## version ss_2026.09.21
 

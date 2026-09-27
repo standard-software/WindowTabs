@@ -33,8 +33,8 @@ module VirtualDesktopTrace =
 
 /// A tab group is one window as far as the person using it is concerned, so it
 /// belongs on one virtual desktop. Windows offers no way to keep it that way:
-/// a tabbed window can be sent to another desktop from task view or the
-/// taskbar, and nothing tells us it happened. So each group looks at where its
+/// a tabbed window can be sent to another desktop from task view (dragged,
+/// or "Move to" on its context menu), and nothing tells us it happened. So each group looks at where its
 /// own windows are, once a second, and this module says what that picture
 /// means.
 ///

@@ -298,7 +298,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     /// A tab group is one window to the person using it, so it belongs on one
     /// virtual desktop. Nothing stops a tabbed window from being sent to
-    /// another desktop (Win+Ctrl+arrow, task view, the taskbar) and no event
+    /// another desktop (in task view, by dragging it or with "Move to" on its
+    /// context menu - Windows has no key for it - or by an application moving
+    /// its own window) and no event
     /// says that it happened, so each group looks at its own windows once a
     /// second. A window that has left is detached into a group of its own: it
     /// stays where it was put, and neither group straddles.
