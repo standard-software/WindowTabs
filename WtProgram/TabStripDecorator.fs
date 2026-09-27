@@ -2121,7 +2121,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // to the right of the active tab" hot key (Program.runHotKey) - the
         // same NewWindowLaunch.start, so the menu and the key behave alike.
         let handleLaunchError (launchCall: string -> unit) =
-            NewWindowLaunch.start processPath launchCall
+            NewWindowLaunch.start hwnd processPath launchCall
 
         // Find the decorator whose group contains the given window hwnd.
         // Used by the "new window + position" callback to reach the newly created group.

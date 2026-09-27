@@ -238,7 +238,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.21_next11"
+    let version = "ss_2026.09.21_next12_build1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2284,7 +2284,7 @@ type Program() as this =
                 // failed start are handled alike; tryNewWindowLaunch then
                 // docks the new window right of the invoking tab.
                 let processPath = os.windowFromHwnd(hwnd).pid.processPath
-                NewWindowLaunch.start processPath (fun path ->
+                NewWindowLaunch.start hwnd processPath (fun path ->
                     this.cast<IProgram>().launchNewWindow group.hwnd hwnd processPath)
 
    

@@ -8,7 +8,7 @@ open System.IO
 // A Store application cannot be started from its package folder under
 // WindowsApps: the executable there refuses to run outside its package. The
 // one known case with a launcher alias is Windows Terminal (wt.exe); every
-// other Store application resolves to None and the caller reports it.
+// other Store application resolves to None and the caller tries its AUMID.
 module LaunchPath =
 
     /// Whether the executable lives in a Store package folder.
@@ -26,3 +26,22 @@ module LaunchPath =
     let resolve (processPath: string) : string option =
         if isStoreApp processPath then storeAppAlias processPath
         else Some(processPath)
+
+    /// Injected effects keep the launch decision testable without COM or processes.
+    /// False means package activation was unavailable or failed; the caller shows
+    /// the existing UWP error. Other process errors keep their original handling.
+    let startWith (processPath: string) (launch: string -> unit)
+                  (appId: unit -> string option) (activate: string -> bool) =
+        let package () =
+            match appId () with
+            | Some id when not (System.String.IsNullOrWhiteSpace id) -> activate id
+            | _ -> false
+        match resolve processPath with
+        | None -> package ()
+        | Some path ->
+            let launched =
+                try
+                    launch path
+                    true
+                with :? System.ComponentModel.Win32Exception when isStoreApp processPath -> false
+            if launched then true else package ()
