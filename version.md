@@ -2,11 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next8
-
-- A window left off screen in no group is brought back on screen.
-
-## version ss_2026.09.21_next7
+## version ss_2026.09.21_next9
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
@@ -26,6 +22,13 @@
   - It was in conflict with the code that puts a tab back in the seat it had when it was closed, when the two happened to share a title
   - A tab that comes back to its old place no longer rearranges the tabs that were never closed
 - Removed the unused code for showing a whole tab group as one taskbar button
+- A window left off screen in no group is brought back on screen.
+- Fixed faults found in the checks before release
+  - With a margin set in WindowMargin.json, the lock off and the tabs drawn downward, the tabs were hidden behind the application's frame
+  - A window whose virtual desktop could not be read was taken for one shown on all desktops when it was moved
+  - The number fields of the settings dialog did not follow the dialog to a monitor of another scale
+  - With the rounded vertical line shape, the curved feet at either end of a group did not answer a click
+- The number fields of the settings dialog keep the same height ratio to the other fields at every display scale
 
 ## version ss_2026.09.21
 
