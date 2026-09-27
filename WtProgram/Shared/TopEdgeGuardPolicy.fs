@@ -86,7 +86,8 @@ module TopEdgeGuardPolicy =
                 else Before first.hwnd
 
     let useMarginOrder inside marginTop = inside && marginTop > 0
-    let temporaryStripTopmost inside uwp hasMargin = inside && not uwp && not hasMargin
+    let temporaryStripTopmost inside uwp hasMargin locked =
+        inside && not uwp && not (hasMargin && locked)
 
     type Observation = {
         ownerReady: bool; stripReady: bool; stripAboveOwner: bool

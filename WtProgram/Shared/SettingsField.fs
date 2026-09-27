@@ -96,6 +96,9 @@ module SettingsField =
                                       TextFormatFlags.NoPrefix ||| TextFormatFlags.EndEllipsis)
             e.DrawFocusRectangle()
 
+    // Register once per numeric field, even when apply is called again.
+    let private numericFonts = Runtime.CompilerServices.ConditionalWeakTable<NumericUpDown, (unit -> unit)>()
+
     /// Give `control` the shared height. Anything else is left alone, so a
     /// caller may hand it a whole row of controls.
     let rec apply (control: Control) =
@@ -105,33 +108,65 @@ module SettingsField =
             combo.ItemHeight <- comboItemHeightPx
         | :? NumericUpDown as numeric ->
             numeric.AutoSize <- false
-            let mutable fitting = false
-            let fitFont () =
-                if not fitting then
-                    fitting <- true
-                    try
-                        let family = numeric.Font
-                        let mutable size = family.Size
-                        while numeric.PreferredHeight < heightPx && size < family.Size + 1.0f do
-                            size <- size + 0.25f
-                            numeric.Font <- new Font(family.FontFamily, size, family.Style)
-                    finally fitting <- false
-            numeric.FontChanged.Add(fun _ -> fitFont ())
-            fitFont ()
-            // The number lives in an edit box the control lays out for itself,
-            // against the top of the field. It is put back in the middle after
-            // every layout, which is when the control has just moved it.
-            let centreEdit () =
-                for child in numeric.Controls do
-                    match child with
-                    | :? TextBoxBase as box ->
-                        let top = max 0 ((numeric.ClientSize.Height - box.Height) / 2)
-                        if box.Top <> top then box.Top <- top
-                    | _ -> ()
-            numeric.Layout.Add(fun _ -> centreEdit ())
-            numeric.SizeChanged.Add(fun _ -> centreEdit ())
-            numeric.FontChanged.Add(fun _ -> centreEdit ())
-            centreEdit ()
+            match numericFonts.TryGetValue(numeric) with
+            | true, refresh -> refresh ()
+            | _ ->
+                let fallback = numeric.Font
+                let mutable parent: Control = null
+                let mutable owned: Font option = None
+                let mutable fitting = false
+                let fitFont () =
+                    if not fitting && not numeric.IsDisposed then
+                        fitting <- true
+                        try
+                            // Explicit fonts stop WinForms inheritance. Always start
+                            // from the parent, never from our previous enlargement.
+                            let family = if isNull parent then fallback else parent.Font
+                            let assign (font: Font) =
+                                if numeric.Font.Equals(font) then font.Dispose()
+                                else
+                                    let previous = owned
+                                    numeric.Font <- font
+                                    owned <- Some font
+                                    previous |> Option.iter (fun old -> old.Dispose())
+                            let fontAt points =
+                                new Font(family.FontFamily,
+                                         family.Size * (family.SizeInPoints + points) / family.SizeInPoints,
+                                         family.Style, family.Unit, family.GdiCharSet, family.GdiVerticalFont)
+                            assign (fontAt 0.0f)
+                            let mutable extra = 0.0f
+                            while numeric.PreferredHeight < SettingsDpi.px heightPx && extra < 1.0f do
+                                extra <- extra + 0.25f
+                                assign (fontAt extra)
+                        finally fitting <- false
+                let parentFontChanged = EventHandler(fun _ _ -> fitFont ())
+                let followParent () =
+                    if not (isNull parent) then parent.FontChanged.RemoveHandler(parentFontChanged)
+                    parent <- numeric.Parent
+                    if not (isNull parent) then parent.FontChanged.AddHandler(parentFontChanged)
+                    fitFont ()
+                numericFonts.Add(numeric, fitFont)
+                numeric.ParentChanged.Add(fun _ -> followParent ())
+                numeric.FontChanged.Add(fun _ -> fitFont ())
+                numeric.Disposed.Add(fun _ ->
+                    if not (isNull parent) then parent.FontChanged.RemoveHandler(parentFontChanged)
+                    owned |> Option.iter (fun font -> font.Dispose())
+                    owned <- None)
+                followParent ()
+                // The number lives in an edit box the control lays out for itself,
+                // against the top of the field. It is put back in the middle after
+                // every layout, which is when the control has just moved it.
+                let centreEdit () =
+                    for child in numeric.Controls do
+                        match child with
+                        | :? TextBoxBase as box ->
+                            let top = max 0 ((numeric.ClientSize.Height - box.Height) / 2)
+                            if box.Top <> top then box.Top <- top
+                        | _ -> ()
+                numeric.Layout.Add(fun _ -> centreEdit ())
+                numeric.SizeChanged.Add(fun _ -> centreEdit ())
+                numeric.FontChanged.Add(fun _ -> centreEdit ())
+                centreEdit ()
         | :? TextBoxBase as box ->
             if not box.Multiline then
                 box.AutoSize <- false

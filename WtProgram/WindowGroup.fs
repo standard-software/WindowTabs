@@ -1830,7 +1830,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let isUWP = window.className = "ApplicationFrameWindow"
 
         // Temporarily set TOPMOST for non-UWP windows when tabs are inside to prevent flashing
-        if TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasExeMargin(hwnd)) then
+        let temporaryTopmost =
+            TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasExeMargin(hwnd)) this.lockWindowPosition
+        if temporaryTopmost then
             tsWindow.makeTopMost()
 
         window.setForegroundOrRestore(force)
@@ -1839,7 +1841,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.bringToTop(hwnd)
 
         // Remove TOPMOST after the window switch for non-UWP windows
-        if TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasExeMargin(hwnd)) then
+        if temporaryTopmost then
             // Use a small delay to ensure the window switch is complete
             (ThreadHelper.cancelablePostBack 50 <| fun() ->
                 this.invokeAsync <| fun() ->

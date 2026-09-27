@@ -217,7 +217,7 @@ module VirtualDesktopGroups =
                 | Here ->
                     let followedUs =
                         match d.current, e.lastHereOn with
-                        | Some c, Some p -> c <> p && r.desktop = e.lastId
+                        | Some c, Some p -> c <> p && r.desktop.IsSome && r.desktop = e.lastId
                         | _ -> false
                     let returned =
                         match d.current, e.lastHereOn with

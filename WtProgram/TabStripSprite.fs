@@ -1038,11 +1038,25 @@ type TabStripSprite<'id> when 'id : equality = {
                 // (The first tab sits at the whole pixel below the group's
                 // start, as tabLocation places it.)
                 let pastLead (groupStartX: float) = not isBox || x >= Math.Floor(groupStartX) + inset
-                if x < leftWidth - trimAfter leftTabs && pastLead 0.0 && not leftTabs.isEmpty then
-                    this.hitInGroup leftTabs 0.0 x
-                elif x >= rightStartX && pastLead rightStartX && x < float(this.size.width) - trimAfter rightTabs && not rightTabs.isEmpty then
-                    this.hitInGroup rightTabs rightStartX x
-                else
-                    None
+                let hit =
+                    if x < leftWidth - trimAfter leftTabs && pastLead 0.0 && not leftTabs.isEmpty then
+                        this.hitInGroup leftTabs 0.0 x
+                    elif x >= rightStartX && pastLead rightStartX && x < float(this.size.width) - trimAfter rightTabs && not rightTabs.isEmpty then
+                        this.hitInGroup rightTabs rightStartX x
+                    else
+                        None
+                match hit with
+                | None when TabShape.normalize this.appearance.tabShape = TabShape.rounded ->
+                    // The rounded feet extend outside the box inset. Include
+                    // their outline and rasterized border at each group end,
+                    // preserving the existing ownership between neighbours.
+                    let ends =
+                        [leftTabs; rightTabs]
+                        |> List.collect (fun tabs ->
+                            if tabs.isEmpty then [] else [List.head tabs.list; List.last tabs.list])
+                    this.renderOrder.list |> List.tryFind (fun tab ->
+                        List.contains tab ends &&
+                        (this.tabSpriteRec tab).containsOutline(pt.sub(this.tabLocation tab), true))
+                | _ -> hit
             else
                 None
