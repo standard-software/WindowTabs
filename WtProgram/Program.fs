@@ -238,7 +238,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.09.21_next10"
+    let version = "ss_2026.09.21_next11_build1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -1501,9 +1501,10 @@ type Program() as this =
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
             this.addWindowToGroup(window)
 
-    // A window WindowTabs parked and then lost track of - in no group, still
-    // in the parking spot - is put back on the primary monitor. See
-    // ParkedWindow for how one gets there and why the spot is ours alone.
+    // A window in no group that remains in the geometric parking region is
+    // put back on the primary monitor. ParkedWindow requires it to be outside
+    // every display and beyond one work area's bottom-right corner. This is
+    // not proof that WindowTabs, rather than another application, parked it.
     // Group members are not touched: the stranded pass in
     // removeUntabableWindows already reseats those inside their own group.
     member this.rescueParkedOrphan(window:Window) =

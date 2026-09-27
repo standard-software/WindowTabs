@@ -401,8 +401,8 @@ module SavedSession =
                         | true, g0 when g0 <> gi -> crossGroup.Add(key) |> ignore
                         | true, _ -> ()
                         | _ -> savedGroupOf.[key] <- gi)))
-        // Identities saved only as one window shown on all desktops: one live
-        // window answers for every entry of them.
+        // Identities saved only as windows shown on all desktops. Entries with
+        // the same saved handle describe one window, not every identity twin.
         let sharedOnly = System.Collections.Generic.HashSet<string>()
         crossGroup |> Seq.filter (notShared.Contains >> not) |> Seq.iter (sharedOnly.Add >> ignore)
         sharedOnly |> Seq.iter (crossGroup.Remove >> ignore)
@@ -468,15 +468,22 @@ module SavedSession =
                     not (taken.Contains(w.handle)))
             let candArr = List.toArray candidates
             if sharedOnly.Contains(key) then
-                // One window, standing in several groups: the first entry
-                // chooses it, and every entry is given it.
-                let (_, _, first) = List.head entries
-                match assignTwins [ centerOfRect first.rect ] (candidates |> List.map (fun w -> w.center)) with
-                | [ Some(j) ] ->
-                    let w = candArr.[j]
-                    if taken.Add(w.handle) then
-                        entries |> List.iter (fun (gi, ti, _) -> resolved.[(gi, ti)] <- w.handle)
-                | _ -> ()
+                // A saved handle identifies one window across desktop records.
+                // Different handles still need different live candidates, even
+                // when every window has the same application, title and bounds.
+                let windows = entries |> List.groupBy (fun (_, _, t) -> t.hwnd)
+                let picks =
+                    assignTwins
+                        (windows |> List.map (fun (_, copies) ->
+                            let (_, _, first) = List.head copies
+                            centerOfRect first.rect))
+                        (candidates |> List.map (fun w -> w.center))
+                List.zip windows picks
+                |> List.iter (fun ((_, copies), pick) ->
+                    pick |> Option.iter (fun j ->
+                        let w = candArr.[j]
+                        if taken.Add(w.handle) then
+                            copies |> List.iter (fun (gi, ti, _) -> resolved.[(gi, ti)] <- w.handle)))
             else
             let picks =
                 assignTwins
