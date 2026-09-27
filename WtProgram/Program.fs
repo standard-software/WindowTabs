@@ -405,8 +405,12 @@ type Program() as this =
     let windowLastGroup = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
     // Windows found in the parking spot in no group (ParkedWindow), and when
     // each was first seen there. One is brought back only after it has stayed
-    // put for the whole grace period: a drag parks windows and places them
-    // again within a couple of seconds, and recentlyPlacedGraceMs is 2000.
+    // put for the whole grace period. What keeps a drag in progress safe is
+    // not this length: the whole window pass waits while a drag is on
+    // (desktop.isDragging) and while tab monitoring is suspended, which a
+    // detach does for up to tabMonitoringSuspendMaxMs; a window just placed
+    // is excluded by recentlyPlacedHwnds. The grace only lets a park that is
+    // about to be undone by its own code be undone first.
     let parkedOrphanSince = System.Collections.Generic.Dictionary<IntPtr, int64>()
     let parkedOrphanGraceMs = 3000L
     // Windows whose late restore has already had a miss written to the trace:
