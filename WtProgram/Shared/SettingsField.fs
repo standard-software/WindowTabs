@@ -43,6 +43,17 @@ module SettingsField =
     let comboItemHeightPx = 20
     let heightPx = comboItemHeightPx + 6
 
+    // Measure the actual 100% settings font once, rather than assuming font
+    // metrics for a particular Windows language. The probe is never shown;
+    // its +1pt PreferredHeight defines a constant ratio at every scale.
+    let private numericHeightRatio = lazy (
+        let baseline = defaultArg (SettingsDpi.font 1.0) Control.DefaultFont
+        use font = new Font(baseline.FontFamily,
+                            baseline.Size * (baseline.SizeInPoints + 1.0f) / baseline.SizeInPoints,
+                            baseline.Style, baseline.Unit, baseline.GdiCharSet, baseline.GdiVerticalFont)
+        use probe = new NumericUpDown(Font = font)
+        float probe.PreferredHeight / float heightPx)
+
     /// A text box draws its text against the top of the box, so a box made
     /// taller than its font shows the text high up. EM_SETRECT moves the
     /// drawing rectangle down by half of what is left over - and a single-line
@@ -115,41 +126,86 @@ module SettingsField =
                 let mutable parent: Control = null
                 let mutable owned: Font option = None
                 let mutable fitting = false
+                let mutable fitted: (Font * int * BorderStyle) option = None
                 let fitFont () =
                     if not fitting && not numeric.IsDisposed then
-                        fitting <- true
-                        try
-                            // Explicit fonts stop WinForms inheritance. Always start
-                            // from the parent, never from our previous enlargement.
-                            let family = if isNull parent then fallback else parent.Font
-                            let assign (font: Font) =
-                                if numeric.Font.Equals(font) then font.Dispose()
-                                else
-                                    let previous = owned
-                                    numeric.Font <- font
-                                    owned <- Some font
-                                    previous |> Option.iter (fun old -> old.Dispose())
-                            let fontAt points =
-                                new Font(family.FontFamily,
-                                         family.Size * (family.SizeInPoints + points) / family.SizeInPoints,
-                                         family.Style, family.Unit, family.GdiCharSet, family.GdiVerticalFont)
-                            assign (fontAt 0.0f)
-                            let mutable extra = 0.0f
-                            while numeric.PreferredHeight < SettingsDpi.px heightPx && extra < 1.0f do
-                                extra <- extra + 0.25f
-                                assign (fontAt extra)
-                        finally fitting <- false
+                        let family = if isNull parent then fallback else parent.Font
+                        let target = SettingsDpi.px heightPx
+                        let unchanged =
+                            match fitted with
+                            | Some(source, height, border) ->
+                                source.Equals(family) && height = target && border = numeric.BorderStyle
+                            | None -> false
+                        if not unchanged then
+                            fitting <- true
+                            try
+                                // Explicit fonts stop WinForms inheritance. Always start
+                                // from the parent, never from our previous enlargement.
+                                let assign (font: Font) =
+                                    if numeric.Font.Equals(font) then font.Dispose()
+                                    else
+                                        let previous = owned
+                                        numeric.Font <- font
+                                        owned <- Some font
+                                        previous |> Option.iter (fun old -> old.Dispose())
+                                let fontAt points =
+                                    new Font(family.FontFamily,
+                                             family.Size * (family.SizeInPoints + points) / family.SizeInPoints,
+                                             family.Style, family.Unit, family.GdiCharSet, family.GdiVerticalFont)
+                                let targetHeight = numericHeightRatio.Value * float target
+                                use probe = new NumericUpDown(BorderStyle = numeric.BorderStyle)
+                                // Count every candidate, including the final live font.
+                                // The probe has no parent and never creates a window.
+                                let maxFonts = 40
+                                let mutable created = 0
+                                let measure extra =
+                                    use candidate = fontAt extra
+                                    created <- created + 1
+                                    probe.Font <- candidate
+                                    abs (float probe.PreferredHeight - targetHeight)
+                                let mutable bestExtra = 1.0f
+                                let mutable bestDistance = measure bestExtra
+                                // Compare unrounded distances: rounding the target first
+                                // can select the wrong native height. On ties prefer the
+                                // extra nearest +1pt, preserving the exact 100% font.
+                                // The +8pt ceiling bounds growth for unusual fonts/scales.
+                                let mutable step = 0
+                                while step <= 32 && created < maxFonts - 1 do
+                                    let extra = float32 step * 0.25f
+                                    let distance = measure extra
+                                    if distance < bestDistance ||
+                                       (distance = bestDistance && abs (extra - 1.0f) < abs (bestExtra - 1.0f)) then
+                                        bestExtra <- extra
+                                        bestDistance <- distance
+                                    step <- step + 1
+                                // Publish the input before assignment: synchronous and
+                                // deferred layouts must both observe a completed fit.
+                                fitted <- Some(family, target, numeric.BorderStyle)
+                                created <- created + 1
+                                assign (fontAt bestExtra)
+                            finally fitting <- false
                 let parentFontChanged = EventHandler(fun _ _ -> fitFont ())
+                // Layout notices changes to the destination scale. A font
+                // overwritten by Control.Scale is not a new fitting input;
+                // unchanged inputs must never restart the layout cycle.
+                let parentLayout = LayoutEventHandler(fun _ _ -> fitFont ())
                 let followParent () =
-                    if not (isNull parent) then parent.FontChanged.RemoveHandler(parentFontChanged)
+                    if not (isNull parent) then
+                        parent.FontChanged.RemoveHandler(parentFontChanged)
+                        parent.Layout.RemoveHandler(parentLayout)
                     parent <- numeric.Parent
-                    if not (isNull parent) then parent.FontChanged.AddHandler(parentFontChanged)
+                    if not (isNull parent) then
+                        parent.FontChanged.AddHandler(parentFontChanged)
+                        parent.Layout.AddHandler(parentLayout)
                     fitFont ()
                 numericFonts.Add(numeric, fitFont)
                 numeric.ParentChanged.Add(fun _ -> followParent ())
                 numeric.FontChanged.Add(fun _ -> fitFont ())
+                numeric.HandleCreated.Add(fun _ -> fitFont ())
                 numeric.Disposed.Add(fun _ ->
-                    if not (isNull parent) then parent.FontChanged.RemoveHandler(parentFontChanged)
+                    if not (isNull parent) then
+                        parent.FontChanged.RemoveHandler(parentFontChanged)
+                        parent.Layout.RemoveHandler(parentLayout)
                     owned |> Option.iter (fun font -> font.Dispose())
                     owned <- None)
                 followParent ()
@@ -178,6 +234,12 @@ module SettingsField =
     /// calls this once it has been themed and scaled: both put the drawing
     /// rectangle of an edit control back where it was.
     let rec reassert (root: Control) =
+        match root with
+        | :? NumericUpDown as numeric ->
+            match numericFonts.TryGetValue(numeric) with
+            | true, refresh -> refresh ()
+            | _ -> ()
+        | _ -> ()
         match centred.TryGetValue(root) with
         | true, centre -> centre ()
         | _ -> ()
