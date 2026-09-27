@@ -361,11 +361,14 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ### 表示タブ
 
-**タブの形**で、S字・角丸縦線・強い角丸縦線・角ばった縦線・台形・右切り欠き台形・左切り欠き台形・長方形・角丸長方形・強い角丸長方形・角ばった長方形を選べます。一覧は全項目をスクロールなしで表示します。設定値には英語名を保存し、認識できない値は既定のS字に戻します。
+- **タブの形**: S字・角丸縦線・強い角丸縦線・角ばった縦線・台形・右切り欠き台形・左切り欠き台形・長方形・角丸長方形・強い角丸長方形・角ばった長方形の11種類から選べます。選ぶとすぐにタブに反映され、再起動は不要です。既定はS字です。
+- **タブの高さ・幅・重なり・端からの距離**: 数値で調整できます。各項目の右のボタンで既定値に戻せます。
+- **タブカラーテーマ**: 既定のテーマから選ぶか、色を編集して名前を付けて保存できます。クリップボード操作で、テーマをテキストとして書き出し・読み込みできます。
 
 よいカラーテーマを作成された方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。
 
-![Settings Appearance](README_Image/SettingsAppearance.png)
+![Settings Appearance](README_Image/SettingsAppearance_Japanese.png)
+![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape_Japanese.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
 ![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
@@ -376,13 +379,13 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - 全画面時・ウィンドウ移動時の非表示や、下方向タブを隠す方法も設定できます。
 - **ウィンドウの移動と上端リサイズを禁止**: タイトルバーのドラッグでの移動と、上端からのサイズ変更を止めます。左右と下端のサイズ変更は可能です。これを変更すると全てのタブグループに反映されます。
 
-![Settings Behavior](README_Image/SettingsBehavior.png)
+![Settings Behavior](README_Image/SettingsBehavior_Japanese.png)
 
 ### ショートカットキータブ
 
 - タブ1～9の選択、前後のタブへの切り替え、新規タブ追加のキーを設定できます。数字キーは Ctrl+1～9・Alt+1～9 または個別指定で、対象ウィンドウの操作中のみ有効です。
 
-![Settings Shortcut Keys](README_Image/SettingsShortcutKeys.png)
+![Settings Shortcut Keys](README_Image/SettingsShortcutKeys_Japanese.png)
 
 ### ワークスペースタブ
 
