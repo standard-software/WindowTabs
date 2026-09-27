@@ -302,8 +302,12 @@ type TopEdgeGuard(os: OS) =
         lastRect <- None
 
     member private this.trace(key: obj, build: unit -> string) =
+#if DEBUG
         traceChanges.Write(key, build, fun line ->
             Diagnostics.Trace.WriteLine(sprintf "[TopEdgeGuard] %s updates=%d placements=%d zorder=%d" line updates placements zorders))
+#else
+        ()
+#endif
 
     member private this.trace(line: string) = this.trace(box line, fun () -> line)
 

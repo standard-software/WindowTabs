@@ -19,12 +19,12 @@ namespace Bemo
 //    is an orphan.
 //
 // The test is geometry only: off every monitor, AND at or beyond both the
-// right edge and the bottom edge of the work area union - the corner that
-// hideOffScreen aims at. Applications that hide a window of their own put it
-// at negative coordinates (-32000 for a minimized window, often -10000 or so
-// for a deliberately hidden one), never down and to the right, so the region
-// is ours. Plain values, so ParkedWindow.Tests.fsx can check it without
-// starting WindowTabs.
+// right edge and the bottom edge of at least one monitor's work area. This
+// also covers a changed monitor arrangement after the window was parked.
+// These bounds restrict recovery geometrically; they are not evidence that
+// WindowTabs itself parked the window. Another application can place a window
+// in the same region. Plain values let ParkedWindow.Tests.fsx check the rule
+// without starting WindowTabs.
 module ParkedWindow =
 
     /// A rectangle as left, top, right, bottom.
@@ -46,7 +46,7 @@ module ParkedWindow =
         min a.right b.right > max a.left b.left &&
         min a.bottom b.bottom > max a.top b.top
 
-    /// True for a window that sits where only hideOffScreen puts windows:
+    /// True for a window inside the geometric recovery region:
     /// off every monitor, and at or past the bottom right corner of at least
     /// one work area. Not the corner of the union of them all - a monitor
     /// added to the right or below after the window was parked would put the
