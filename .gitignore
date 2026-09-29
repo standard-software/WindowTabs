@@ -32,3 +32,7 @@ unite/
 
 # Screenshots taken while checking the UI (Tools\Capture-*.ps1); not part of the repository
 /Shots/
+
+# Development scripts and test scripts stay local; they are not part of the published repository
+/Tools/
+*.Tests.fsx
