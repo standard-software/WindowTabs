@@ -2,7 +2,7 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.09.21_next12
+## version ss_2026.09.30
 
 - 表示設定でタブ形状を選べるようにした。
   - 再起動せずに反映し、既定は従来のS字を維持する。

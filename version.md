@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.21_next12
+## version ss_2026.09.30
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
