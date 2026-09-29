@@ -87,6 +87,7 @@ type SettingsViewType =
     | HotKeySettings
     // The "Shortcut Keys" tab.
     | ShortcutKeySettings
+    | ColorSettings
 
 type ISettingsView =
     abstract key : SettingsViewType

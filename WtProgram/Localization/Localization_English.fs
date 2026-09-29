@@ -12,6 +12,7 @@ module Localization_English =
         ("Category", "Category ")
 
         ("Appearance", "Appearance")
+        ("ColorPage", "Color")
         ("Tab Height", "Tab Height")
         ("Tab Width (Max)", "Tab Width (Max)")
         ("Pinned Tab Width", "Pinned Tab Width")
