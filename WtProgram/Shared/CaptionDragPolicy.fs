@@ -68,6 +68,55 @@ module CaptionDragPolicy =
     // validate native rendering, DPI awareness and the geometry first.
     type CaptionRect = { left: int; top: int; right: int; bottom: int }
 
+    // Only these custom frames are known to return HTCAPTION on buttons.
+    // UIA Button semantics avoid localized names and guessed pixel regions.
+    // Every locked window: any application may draw its own title bar and
+    // answer HTCAPTION over its buttons, so no list of applications decides.
+    let needsCaptionButtonAreas (_className: string) = true
+
+    let insideCaptionRect (r: CaptionRect) x y =
+        r.left <= x && x < r.right && r.top <= y && y < r.bottom
+
+    // Only what can be a caption button: inside the window, narrower than a
+    // third of it, and no taller than a title bar. A provider that reports a
+    // whole title bar or panel as one button must not open a hole in the lock
+    // through which the window could be dragged.
+    let validCaptionButton (window: CaptionRect) (button: CaptionRect) =
+        let width = button.right - button.left
+        let height = button.bottom - button.top
+        let windowWidth = window.right - window.left
+        let windowHeight = window.bottom - window.top
+        button.left < button.right && button.top < button.bottom &&
+        window.left <= button.left && button.right <= window.right &&
+        window.top <= button.top && button.bottom <= window.bottom &&
+        button <> window &&
+        width * 3 < windowWidth && height * 3 < windowHeight &&
+        // A title bar is about 30 px at 96 dpi; allow twice that, at any scale
+        // (the window's own height already bounds it above).
+        height <= max 64 (windowHeight / 8)
+
+    // Validity follows geometry, DPI and registration, never elapsed time.
+    let captionButtonCacheValid sameRegistration window capturedWindow dpi capturedDpi =
+        sameRegistration && window = capturedWindow && dpi <> 0u && dpi = capturedDpi
+
+    let passesCaptionButton hit valid (window: CaptionRect) buttons x y =
+        hit = hitCaption && valid &&
+        (buttons |> List.exists (fun button ->
+            validCaptionButton window button && insideCaptionRect button x y))
+
+    type CaptionButtonDecision = KeepCaption | RefreshButtons | PassButton
+
+    let captionButtonDecision hit candidate valid window buttons x y =
+        if hit <> hitCaption || not candidate then KeepCaption
+        elif not valid then RefreshButtons
+        elif passesCaptionButton hit valid window buttons x y then PassButton
+        else KeepCaption
+
+    // Remember failed attempts too: an unchanged window must not cause
+    // another cross-process query until a press explicitly requests one.
+    let captionButtonRefreshNeeded candidate requested observationChanged =
+        candidate && (requested || observationChanged)
+
     let nativeCaptionBoundary hit supported titleVisible
                                 (window: CaptionRect) (title: CaptionRect)
                                 clientTop (buttons: CaptionRect) x y =
