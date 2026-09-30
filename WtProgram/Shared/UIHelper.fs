@@ -589,6 +589,14 @@ module UIHelper =
     // Settings rows: every tab lays its rows out on this vertical grid
     // (design pixels at 96 DPI). A row is its content height plus the same
     // top and bottom margin on every caption and input.
+    // Shared settings-page geometry in 96-DPI design pixels. SettingsDpi's
+    // layout snapshot scales the padding and absolute label column together.
+    // The remaining width belongs to the input group, including reset buttons
+    // or multiple fields where a setting needs them.
+    let settingsPageMarginPx = 16
+    let settingsLabelWidthPx = 250
+    let settingsPagePadding = Padding(settingsPageMarginPx)
+
     let settingsRowHeightPx = SettingsField.rowHeightPx
     let settingsRowMarginPx = SettingsField.rowMarginPx
     let private rowContentHeightPx = settingsRowHeightPx - 2 * settingsRowMarginPx
@@ -651,7 +659,7 @@ module UIHelper =
     // Default form layout: 250-px label column (matches AppearanceView /
     // BehaviorView where labels are long).
     let form (fields:List2<_>) =
-        buildForm fields 250.0f true false
+        buildForm fields (float32 settingsLabelWidthPx) true false
 
     // Compact form layout: 100-px label column for short captions
     // (Workspace edit dialog "Name" / "Title" / "Match Type"). AutoScroll

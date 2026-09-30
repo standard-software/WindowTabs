@@ -196,7 +196,7 @@ type ShortcutKeysView() =
         activateTabPanel.Margin <- Padding(0, 0, 0, UIHelper.settingsRowHeightPx / 2)
         form.Dock <- DockStyle.Fill
         // Same padding as the Appearance and Behavior tabs.
-        form.Padding <- Padding(10)
+        form.Padding <- UIHelper.settingsPagePadding
         form
 
     member this.refresh() =

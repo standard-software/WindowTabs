@@ -286,7 +286,7 @@ type HotKeyView() =
         let (_,control) = sections.head
         control.Dock <- DockStyle.Fill
         // Add padding to match Appearance tab
-        control.Padding <- Padding(10)
+        control.Padding <- UIHelper.settingsPagePadding
         control
 
     member this.refresh() =

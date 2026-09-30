@@ -151,7 +151,7 @@ type AppearanceView() as this =
         page.AutoScroll <- true
         page.Dock <- DockStyle.Fill
         page.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
-        page.Padding <- Padding(10)
+        page.Padding <- UIHelper.settingsPagePadding
         page.RowCount <- rowCount
         page.ColumnCount <- 1
         for _ in 1..rowCount do
@@ -164,7 +164,7 @@ type AppearanceView() as this =
         let page = createPage 2
         page.ColumnCount <- 2
         page.ColumnStyles.Clear()
-        page.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore
+        page.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore
         page.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
         page
 
@@ -174,8 +174,7 @@ type AppearanceView() as this =
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
-        // No default 3-px margin: captions start at the same 10 px / 15 px
-        // as the Behavior and Shortcut Keys tabs.
+        // The page owns the shared inset; nested panels add no horizontal margin.
         p.Margin <- Padding(0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- upperRowCount
@@ -192,7 +191,7 @@ type AppearanceView() as this =
             p.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
         // Match BehaviorView's UIHelper.form column width (250 px) so the
         // longest translated labels still stay on a single line.
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // Label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
         p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
         p
@@ -211,7 +210,7 @@ type AppearanceView() as this =
         List2([0..colorGridRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.Absolute, float32 UIHelper.settingsRowHeightPx)).ignore
         // Match upperPanel's first column width (250px)
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // State label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // State label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Tab color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Text color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.34f)).ignore   // Border color
@@ -242,8 +241,9 @@ type AppearanceView() as this =
     // AutoSize now, so without this a row would shrink to its tallest cell
     // (the reset Button, 24 px + 10 px of margin) and every 100% layout would
     // move. Scaled with everything else: Control.Scale multiplies MinimumSize.
-    // About two characters of the settings font.
-    let colorCaptionIndentPx = 24
+    // The state captions sit under "Tab colour", indented by about two
+    // characters of the settings font (about 10 px each at 96 dpi).
+    let colorCaptionIndentPx = 20
 
     let rowMinimumHeight (topMargin: int) (bottomMargin: int) = UIHelper.settingsRowHeightPx - topMargin - bottomMargin
 
