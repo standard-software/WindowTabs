@@ -363,12 +363,18 @@ Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray 
 
 - **Tab shape**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the S-curve.
 - **Tab height, width, overlap and distance from the edge**: Set as numbers. The button to the right of each puts back its default.
+
+![Settings Appearance](README_Image/SettingsAppearance.png)
+![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape.png)
+
+### Color Tab
+
+- **Dark mode**: Switches the menus and the settings dialog to dark mode.
 - **Tab color theme**: Pick a preset, or edit the colors and save them under a name. The clipboard menu writes a theme out as text and reads one in.
 
 If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
 
-![Settings Appearance](README_Image/SettingsAppearance.png)
-![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape.png)
+![Settings Color](README_Image/SettingsColor.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
 ![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 

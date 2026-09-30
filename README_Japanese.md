@@ -363,12 +363,18 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 - **タブの形**: S字・角丸縦線・強い角丸縦線・角ばった縦線・台形・右切り欠き台形・左切り欠き台形・長方形・角丸長方形・強い角丸長方形・角ばった長方形の11種類から選べます。選ぶとすぐにタブに反映され、再起動は不要です。既定はS字です。
 - **タブの高さ・幅・重なり・端からの距離**: 数値で調整できます。各項目の右のボタンで既定値に戻せます。
+
+![Settings Appearance](README_Image/SettingsAppearance_Japanese.png)
+![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape_Japanese.png)
+
+### カラータブ
+
+- **ダークモード**: メニューと設定画面をダークモードにします。
 - **タブカラーテーマ**: 既定のテーマから選ぶか、色を編集して名前を付けて保存できます。クリップボード操作で、テーマをテキストとして書き出し・読み込みできます。
 
 よいカラーテーマを作成された方は、ぜひ [GitHub Issues](https://github.com/standard-software/WindowTabs/issues) に投稿してください。既定のカラーテーマとして組み込ませていただく場合もあります。
 
-![Settings Appearance](README_Image/SettingsAppearance_Japanese.png)
-![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape_Japanese.png)
+![Settings Color](README_Image/SettingsColor_Japanese.png)
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
 ![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
