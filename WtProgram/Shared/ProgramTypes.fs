@@ -100,6 +100,8 @@ type IPropEditor =
     abstract member changed : IEvent<unit>
 
 type IManagerView =
+    // Prepare the hidden settings dialog before confirming a tray language change.
+    abstract member preparePresentation : unit -> unit
     abstract member show : unit -> unit
     abstract member show : SettingsViewType -> unit
     // Hide settings and release its visible session; keep the prepared form.
