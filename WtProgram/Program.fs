@@ -2720,6 +2720,12 @@ type Program() as this =
         // that record is all that is left to rebuild them from after a restart.
         // The last snapshot from before the switch stays frozen instead.
         if isDisabledCell.value then () else
+        // Likewise until the startup restore has read the saved groups. The
+        // periodic timer was trusted to fire after it, 10 s from start; on a
+        // loaded machine the hidden settings preload held the message loop
+        // longer than that, the first tick ran before the restore, and saved
+        // the still-empty desktop over the record it was about to read.
+        if needsRestoreOnStartup.value then () else
         try
             let json = settingsManager.settingsJson
             let saveNow = DateTime.Now
@@ -3495,6 +3501,16 @@ type Program() as this =
 
         // Pay settings construction cost during startup, before the watchdog
         // is armed. Preloading never shows a window or acquires the dialog gate.
+#if DEBUG
+        // Test hook: imitate a slow start (a loaded machine) by holding the
+        // startup here, after the periodic save timer has started and before
+        // the message loop runs the startup restore.
+        match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_STARTUP_DELAY_MS")) with
+        | true, ms when ms > 0 ->
+            RestoreTrace.log (fun () -> sprintf "debug startup delay %d ms" ms)
+            System.Threading.Thread.Sleep(ms)
+        | _ -> ()
+#endif
         managerView.preload()
 
         plugins.iter <| fun p -> p.init()
