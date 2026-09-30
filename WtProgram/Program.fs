@@ -1996,6 +1996,17 @@ type Program() as this =
         if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
         let invokerHwnd = pendingNewTabInvokers.value.tryFind(hwnd).def(IntPtr.Zero)
         pendingNewTabInvokers.map(fun m -> m.remove hwnd)
+        // A tab opened beside another takes its colours along with its side
+        // and pin. They are copied before the tab is added, so it is drawn in
+        // them from the start.
+        if invokerHwnd <> IntPtr.Zero then
+            let copyFrom (colors: Cell<Map2<IntPtr, Color>>) =
+                match colors.value.tryFind(invokerHwnd) with
+                | Some(c) -> colors.set(colors.value.add hwnd c)
+                | None -> ()
+            copyFrom windowFillColor
+            copyFrom windowUnderlineColor
+            copyFrom windowBorderColor
         let returningState = pendingClosedTabRestores.value.tryFind(hwnd)
         // Capture restore correspondence on the main thread; the insertion
         // callback must not read the mutable dictionary from the group thread.
