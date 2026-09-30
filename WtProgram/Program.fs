@@ -2720,6 +2720,12 @@ type Program() as this =
         // that record is all that is left to rebuild them from after a restart.
         // The last snapshot from before the switch stays frozen instead.
         if isDisabledCell.value then () else
+        // Likewise until the startup restore has read the saved groups. The
+        // periodic timer was trusted to fire after it, 10 s from start; on a
+        // loaded machine the hidden settings preload held the message loop
+        // longer than that, the first tick ran before the restore, and saved
+        // the still-empty desktop over the record it was about to read.
+        if needsRestoreOnStartup.value then () else
         try
             let json = settingsManager.settingsJson
             let saveNow = DateTime.Now
