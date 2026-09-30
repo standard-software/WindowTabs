@@ -1494,8 +1494,13 @@ type Program() as this =
             let dropped = isDroppedAndAwaitingGrouping.value.contains(window.hwnd)
             VirtualDesktopGroups.wantsGroup dropped
                 (dropped && this.isInShownGroup(window.hwnd)) (this.isInGroup(window.hwnd))
-        // Skip windows not on the current virtual desktop to prevent regrouping during desktop switch
-        if window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window) && wantsGroup then
+        // Skip windows not on the current virtual desktop to prevent regrouping
+        // during desktop switch. That question is asked last: it is a call into
+        // the shell, this runs for every top-level window on every pass (eight
+        // hundred and more), and while the shell is busy each call can take a
+        // millisecond or more - asked first, it was most of a pass and held the
+        // main thread for seconds.
+        if wantsGroup && this.isTabbableWindow(window) && window.isOnCurrentVirtualDesktop then
             if groupTraceCount < 60 then
                 groupTraceCount <- groupTraceCount + 1
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
@@ -1513,7 +1518,6 @@ type Program() as this =
             window.pid.isCurrentProcess.not &&
             window.isWindow && window.isVisible &&
             not window.isMinimized && not window.isCloaked &&
-            window.isOnCurrentVirtualDesktop &&
             this.isInGroup(hwnd).not &&
             recentlyPlacedHwnds.value.tryFind(hwnd).IsNone &&
             pendingRegroups.value.tryFind(hwnd).IsNone &&
@@ -1524,7 +1528,9 @@ type Program() as this =
                 (monitors |> List.map (fun m -> toBox m.displayRect))
                 (monitors |> List.map (fun m -> toBox m.workRect))
                 (toBox window.bounds)) &&
-            Services.filter.getIsTabbingEnabledForProcess(window.pid.processPath)
+            Services.filter.getIsTabbingEnabledForProcess(window.pid.processPath) &&
+            // Last: a call into the shell (see ensureWindowIsGrouped).
+            window.isOnCurrentVirtualDesktop
         let parked =
             this.desktop.isDragging.not &&
             isRestoringTabGroups.value.not && needsRestoreOnStartup.value.not &&
@@ -1648,7 +1654,7 @@ type Program() as this =
             windowProcPath = procPath &&
             (try
                 let window = os.windowFromHwnd(hwnd)
-                window.isOnCurrentVirtualDesktop && this.isTabbableWindow(window)
+                this.isTabbableWindow(window) && window.isOnCurrentVirtualDesktop
              with _ -> false)
         let seen = HashSet<IntPtr>()
         let views = ResizeArray<Regroup.WindowView>()
@@ -1738,9 +1744,9 @@ type Program() as this =
                 // still be at the dragExit off-screen parking location
                 // while their adjustChildWindows hasn't run yet.
                 let untabbable =
-                    window.isOnCurrentVirtualDesktop &&
                     this.isTabbableWindow(window).not &&
-                    not (isRecentlyPlaced(hwnd))
+                    not (isRecentlyPlaced(hwnd)) &&
+                    window.isOnCurrentVirtualDesktop
                 // A live, visible, un-minimized window of a tabbed application
                 // sitting at the iconic position (-32000,-32000) has not left:
                 // a restore left it there (see the second pass of
