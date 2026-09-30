@@ -109,7 +109,9 @@ module PerfTrace =
         with _ -> ()
 #else
     let count (_name: string) = ()
-    let time (_name: string) (f: unit -> 'a) = f()
+    // Inline, so a Release build calls the timed work directly: no closure
+    // is allocated for it at the call site.
+    let inline time (_name: string) (f: unit -> 'a) = f()
     let gauge (_name: string) (_value: int) = ()
     let flush (_version: string) = ()
 #endif
