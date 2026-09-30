@@ -343,7 +343,9 @@ and
         if result = 0 then Some(cloaked) else None
 
     // Check if window is on the current virtual desktop using IVirtualDesktopManager COM API
-    member this.isOnCurrentVirtualDesktop = VirtualDesktopHelper.IsWindowOnCurrentVirtualDesktop(hwnd)
+    member this.isOnCurrentVirtualDesktop =
+        // Counted and timed in perf_trace.log (debug builds; a plain call otherwise).
+        PerfTrace.time "vd.isOnCurrent" (fun () -> VirtualDesktopHelper.IsWindowOnCurrentVirtualDesktop(hwnd))
 
     // The same, None when the call failed (the plain one says "yes" then).
     member this.onCurrentVirtualDesktopOrNone =
@@ -370,7 +372,18 @@ and
     // to be told apart when a group looks as if it straddles desktops.
     member this.virtualDesktopIdWithHr =
         let mutable id = Guid.Empty
+#if DEBUG
+        // How long one desktop reading takes, into perf_trace.log.
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+#endif
         let hr = VirtualDesktopHelper.TryGetWindowDesktopId(hwnd, &id)
+#if DEBUG
+        let ms = sw.Elapsed.TotalMilliseconds
+        PerfTrace.count "vd.read"
+        if ms >= 1000.0 then PerfTrace.count "vd.read1000+"
+        elif ms >= 100.0 then PerfTrace.count "vd.read100+"
+        elif ms >= 10.0 then PerfTrace.count "vd.read10+"
+#endif
         (hr, id)
 
     member this.isMinimized = WinUserApi.IsIconic(hwnd)

@@ -2509,7 +2509,7 @@ type Program() as this =
     /// A completed publication is consumed once, on the main thread. Keep
     /// derived evidence and group changes here; group threads see Live only
     /// after the registry checks and trust rules have accepted the raw read.
-    member private this.applyDesktopReading() =
+    member private this.applyDesktopReading() = PerfTrace.time "applyDesktopReading" <| fun () ->
         let mutable completedReading: VirtualDesktopReader.Reading option = None
         try
             match desktopReader.Latest with

@@ -303,6 +303,15 @@ type CaptionDragPlugin() =
             let pass() = CaptionDragNative.CallNextHookEx(hook, code, message, data)
             if code < 0 || data = IntPtr.Zero then pass() else
             lastCallbackTick <- Environment.TickCount
+#if DEBUG
+            // How late each mouse event reaches this hook, into perf_trace.log.
+            // A late hook holds up every mouse event on the desktop.
+            let lag = int (uint32 Environment.TickCount - uint32 (Marshal.ReadInt32(data, 16)))
+            PerfTrace.count "hook.events"
+            if lag >= 1000 then PerfTrace.count "hookLag1000+"
+            elif lag >= 200 then PerfTrace.count "hookLag200+"
+            elif lag >= 50 then PerfTrace.count "hookLag50+"
+#endif
             // MSLLHOOKSTRUCT: pt.x 0, pt.y 4, time 16.
             let x = Marshal.ReadInt32(data, 0)
             let y = Marshal.ReadInt32(data, 4)

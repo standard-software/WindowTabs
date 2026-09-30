@@ -14,6 +14,33 @@ open System.Threading
 open Microsoft.Win32
 
 // Watchdog module to detect UI thread freeze and auto-restart
+#if DEBUG
+// Debug builds only: which processes have a hung top-level window, named in
+// the watchdog log when the UI thread stalls (process names only, no titles).
+module HungProbe =
+    type EnumProc = delegate of nativeint * nativeint -> bool
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern bool EnumWindows(EnumProc cb, nativeint l)
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern bool IsHungAppWindow(nativeint h)
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern bool IsWindowVisible(nativeint h)
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern uint32 GetWindowThreadProcessId(nativeint h, uint32& pid)
+    let describe () =
+        let hung = System.Collections.Generic.List<string>()
+        let cb = EnumProc(fun h _ ->
+            if IsWindowVisible h && IsHungAppWindow h then
+                let mutable pid = 0u
+                GetWindowThreadProcessId(h, &pid) |> ignore
+                let name = try System.Diagnostics.Process.GetProcessById(int pid).ProcessName with _ -> "?"
+                hung.Add(sprintf "%s(%d)" name pid)
+            true)
+        EnumWindows(cb, 0n) |> ignore
+        System.GC.KeepAlive cb
+        if hung.Count = 0 then "none" else String.Join(", ", hung |> Seq.distinct)
+#endif
+
 module Watchdog =
     let mutable private watchdogThread: Thread option = None
     let mutable private stopRequested = false
@@ -22,7 +49,11 @@ module Watchdog =
     let mutable private uiThread: Thread option = None
 #endif
     let private freezeTimeout = 10000  // 10 seconds timeout for freeze detection
+#if DEBUG
+    let private checkInterval = 1000   // Check every second, to catch short stalls too
+#else
     let private checkInterval = 5000   // Check every 5 seconds
+#endif
     let private requiredConsecutiveFailures = 1  // Restart after 1 timeout (10 seconds unresponsive)
 
     // Use AutoResetEvent for more reliable signaling
@@ -249,7 +280,23 @@ module Watchdog =
                 | None -> ()
 
                 // Wait for response with timeout
+#if DEBUG
+                // A stall shorter than the restart timeout is felt too: after
+                // 1.5 s, log the stacks and any hung applications, then keep
+                // waiting for the full timeout as before.
+                let stallWatch = Stopwatch.StartNew()
+                let quick = pingResponse.WaitOne(1500)
+                let responded =
+                    if quick then true else
+                    log (fun () -> "STALL: UI thread has not answered for 1500 ms; hung windows: " + (try HungProbe.describe() with ex -> ex.Message))
+                    logUiStack()
+                    logAllStacks 0 500
+                    let late = pingResponse.WaitOne(max 0 (freezeTimeout - int stallWatch.ElapsedMilliseconds))
+                    if late then log (fun () -> sprintf "STALL ended: UI thread answered after %d ms" stallWatch.ElapsedMilliseconds)
+                    late
+#else
                 let responded = pingResponse.WaitOne(freezeTimeout)
+#endif
 
                 if responded then
                     // UI thread responded, reset failure count
