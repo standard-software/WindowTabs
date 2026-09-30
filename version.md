@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next2
+
+- A tab follows its window's title even when the application does not announce the change: PowerPoint kept the old file name after "Save As".
+
 ## version ss_2026.10.01_next1
 
 ## version ss_2026.10.01

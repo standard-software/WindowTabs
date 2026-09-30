@@ -2,6 +2,10 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next2
+
+- タイトルの変更を知らせないアプリでも、タブ名がウィンドウのタイトルに追従するようにした。PowerPoint で「名前を付けて保存」をしても、タブが古いファイル名のままだった。
+
 ## version ss_2026.10.01_next1
 
 ## version ss_2026.10.01
