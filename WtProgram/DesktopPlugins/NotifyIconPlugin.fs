@@ -664,7 +664,14 @@ type NotifyIconPlugin() as this =
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject(fileName)
                 Services.settings.root <- json
+#if DEBUG
+                let languageClock = System.Diagnostics.Stopwatch.StartNew()
+#endif
                 Localization.setLanguage(fileName)
+#if DEBUG
+                DesktopManagerFormState.log (sprintf "language load and notifications ms=%.1f" languageClock.Elapsed.TotalMilliseconds)
+#endif
+                Services.managerView.preparePresentation()
                 // Keep this message in English so a user can recover after
                 // accidentally choosing a language they cannot read.
                 show "Language Change" (sprintf "Language has been changed to %s." displayName)

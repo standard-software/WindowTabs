@@ -14,15 +14,35 @@ type ManagerViewService() =
     let getForm() =
         let key = presentationKey()
         match cached with
-        | Some(oldKey, form) when oldKey = key && not form.isDisposed -> form
+        | Some(oldKey, form) when oldKey = key && not form.isDisposed ->
+#if DEBUG
+            DesktopManagerFormState.log "settings cache hit"
+#endif
+            form
         | old ->
             preparing <- true
             try
+#if DEBUG
+                let clock = System.Diagnostics.Stopwatch.StartNew()
+                DesktopManagerFormState.log "settings cache miss: disposal begin"
+#endif
                 cached <- None
                 old |> Option.iter(fun (_, form) -> form.dispose())
+#if DEBUG
+                DesktopManagerFormState.log (sprintf "settings dispose old ms=%.1f" clock.Elapsed.TotalMilliseconds)
+                clock.Restart()
+#endif
                 let form = DesktopManagerForm()
                 try
+#if DEBUG
+                    DesktopManagerFormState.log (sprintf "settings construction ms=%.1f" clock.Elapsed.TotalMilliseconds)
+                    clock.Restart()
+#endif
                     form.preload()
+#if DEBUG
+                    DesktopManagerFormState.log (sprintf "settings hidden preparation ms=%.1f" clock.Elapsed.TotalMilliseconds)
+                    clock.Restart()
+#endif
                     cached <- Some(key, form)
                     form
                 with _ ->
@@ -57,7 +77,14 @@ type ManagerViewService() =
 
     let showSettings show =
         if not preparing && not Services.program.isDisabled then
-            match DialogState.tryAcquire() with
+#if DEBUG
+            let gateClock = System.Diagnostics.Stopwatch.StartNew()
+#endif
+            let session = DialogState.tryAcquire()
+#if DEBUG
+            DesktopManagerFormState.log (sprintf "settings gate ms=%.1f acquired=%b" gateClock.Elapsed.TotalMilliseconds session.IsSome)
+#endif
+            match session with
             | None -> ()
             | Some session ->
                 try
@@ -127,6 +154,11 @@ type ManagerViewService() =
     // a two-call unaware island inside WorkspaceModel rather than a
     // dialog-wide one - see WorkspaceModel.createWorkspace / restoreWorkspace.
     interface IManagerView with
+        member x.preparePresentation() =
+            // The tray caller owns the dialog gate and settings is closed.
+            // Hidden preparation must not acquire that gate again.
+            if not preparing then getForm() |> ignore
+
         member x.show() =
             DesktopManagerFormState.log("manager show requested")
             showSettings (fun form session -> form.show(session))

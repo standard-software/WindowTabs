@@ -57,6 +57,10 @@ type SettingsDialogWindow(initialScale: float) =
 
     member private this.rescale(newScale: float, suggested: Rect) =
         if newScale > 0.0 && newScale <> scale && not rescaling then
+#if DEBUG
+            let clock = System.Diagnostics.Stopwatch.StartNew()
+            let previousScale = scale
+#endif
             rescaling <- true
             this.SuspendLayout()
             try
@@ -85,6 +89,9 @@ type SettingsDialogWindow(initialScale: float) =
             // Reassert also queues a pass after WM_DPICHANGED and native layout
             // finish, including fields whose final size did not change.
             SettingsField.reassert this
+#if DEBUG
+            DesktopManagerFormState.log (sprintf "settings DPI rescale %.2f->%.2f ms=%.1f" previousScale newScale clock.Elapsed.TotalMilliseconds)
+#endif
 
     // A size the user dragged the border to REPLACES the design size, so their
     // choice survives the move to another monitor exactly the way the original
@@ -171,6 +178,9 @@ type DesktopManagerForm() =
     // Construct every page before the first DPI design snapshot. Mixing
     // controls captured with the form and controls added after Show made a
     // monitor crossing depend on which path had created each page.
+#if DEBUG
+    let constructionClock = System.Diagnostics.Stopwatch.StartNew()
+#endif
     let programView = ProgramView()
     let appearanceView = AppearanceView()
     let tabs = List2([
@@ -181,6 +191,9 @@ type DesktopManagerForm() =
         ShortcutKeysView() :> ISettingsView
         WorkspaceView() :> ISettingsView
         ])
+#if DEBUG
+    do DesktopManagerFormState.log (sprintf "settings pages ms=%.1f" constructionClock.Elapsed.TotalMilliseconds)
+#endif
     let tabControl : TabControl = {
         new TabControl() with
             override this.OnKeyDown(e:KeyEventArgs) =
@@ -243,8 +256,14 @@ type DesktopManagerForm() =
         // of its own later; a snapshot taken after them read the multiplied
         // values as "design" and every later re-assertion doubled them (the
         // 106-px rows reported from the 175%-primary laptop).
+#if DEBUG
+        let scaleClock = System.Diagnostics.Stopwatch.StartNew()
+#endif
         SettingsDpi.captureLayoutDesigns form
         SettingsDpi.applyScale form 1.0 openScale
+#if DEBUG
+        DesktopManagerFormState.log (sprintf "settings initial DPI scale=%.2f ms=%.1f" openScale scaleClock.Elapsed.TotalMilliseconds)
+#endif
         // Place the window by hand instead of leaving it to CenterScreen.
         //
         // Two reasons. The size has to be CLAMPED to the monitor first -
@@ -316,15 +335,32 @@ type DesktopManagerForm() =
             let rec createHandles (control: Control) =
                 control.Handle |> ignore
                 for child in control.Controls do createHandles child
+#if DEBUG
+            let clock = System.Diagnostics.Stopwatch.StartNew()
+#endif
             createHandles form
+#if DEBUG
+            DesktopManagerFormState.log (sprintf "settings native handles ms=%.1f" clock.Elapsed.TotalMilliseconds)
+            clock.Restart()
+#endif
             if isDarkModeEnabled() then DarkMode.applyDarkThemeBranch15ToForm form true
+#if DEBUG
+            DesktopManagerFormState.log (sprintf "settings native theme ms=%.1f" clock.Elapsed.TotalMilliseconds)
+            clock.Restart()
+#endif
             SettingsDpi.reassertAfterShow form
             SettingsField.reassert form
+#if DEBUG
+            DesktopManagerFormState.log (sprintf "settings hidden DPI/fields reassert ms=%.1f" clock.Elapsed.TotalMilliseconds)
+#endif
             prepared <- true
 
     let showFormCommon () =
         // The native controls and theme already exist. Keep the initial
         // WinForms Show-time scaling invisible until metrics are reasserted.
+#if DEBUG
+        let showClock = System.Diagnostics.Stopwatch.StartNew()
+#endif
         prepareHidden()
         tabs.iter(fun view ->
             match view with
@@ -332,7 +368,15 @@ type DesktopManagerForm() =
             | :? HotKeyView as behavior -> behavior.refresh()
             | :? ShortcutKeysView as shortcuts -> shortcuts.refresh()
             | _ -> ())
+#if DEBUG
+        DesktopManagerFormState.log (sprintf "settings show refresh ms=%.1f" showClock.Elapsed.TotalMilliseconds)
+        showClock.Restart()
+#endif
         (form :?> SettingsDialogWindow).prepareAtCursor()
+#if DEBUG
+        DesktopManagerFormState.log (sprintf "settings show cursor DPI/place ms=%.1f" showClock.Elapsed.TotalMilliseconds)
+        showClock.Restart()
+#endif
         form.Opacity <- 0.0
         try
             form.Show()
@@ -340,6 +384,9 @@ type DesktopManagerForm() =
             SettingsField.reassert form
         finally
             if not form.IsDisposed then form.Opacity <- 1.0
+#if DEBUG
+        DesktopManagerFormState.log (sprintf "settings Show and DPI/fields reassert ms=%.1f" showClock.Elapsed.TotalMilliseconds)
+#endif
         form.Activate()
         form.BeginInvoke(MethodInvoker(fun () ->
             if not form.IsDisposed && form.Visible then
