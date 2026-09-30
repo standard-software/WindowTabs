@@ -542,11 +542,14 @@ type WorkspaceModel() as this =
 
         Services.program.resumeTabMonitoring()
 
-    member this.addWorkspace(ws:Workspace) =
+    member private this.attachWorkspace(ws:Workspace) =
         ws.cast<IWorkspaceNode>().removed.Add <| fun() -> this.onWorkspaceRemoved(ws)
         _workspaces.Add(ws)
-        this.saveSettings() 
-        workspaceAddedEvt.Trigger(ws) 
+        workspaceAddedEvt.Trigger(ws)
+
+    member this.addWorkspace(ws:Workspace) =
+        this.attachWorkspace(ws)
+        this.saveSettings()
          
     member this.create() =
         let ws = this.createWorkspace()
@@ -663,7 +666,8 @@ type WorkspaceModel() as this =
     member this.loadSettings() =
         let settingsObj = Services.settings.root
         let workspaces = settingsObj.getObjectArray("workspaces").def(List2()).map(Workspace.deserialize)
-        workspaces.iter this.addWorkspace
+        // Hydration is not an edit: never persist a partly loaded collection.
+        workspaces.iter this.attachWorkspace
 
     member this.saveSettings() =
         let settingsObj = Services.settings.root
