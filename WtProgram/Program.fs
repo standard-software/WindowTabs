@@ -428,21 +428,9 @@ type Program() as this =
     // page.
     let lateMissLogged = System.Collections.Generic.Dictionary<IntPtr, int * string>()
     let lateMissLogLimit = 5
-    // Windows that have already taken a saved entry, either by matching one
-    // at startup or by claiming one afterwards. A window takes at most one.
-    // While saved windows are still waiting to open, the title sync offers
-    // every grouped window to the late restore, and a window that was put
-    // back in its place at startup is as eligible as any other: one already
-    // restored to slot 0 went on to claim the leftover entry of a sibling
-    // that never reopened, and moved itself to that sibling's slot. The
-    // group's own windows shuffled themselves out of order that way.
-    // What each window is currently holding. A window may claim again when its
-    // title changes to match another entry exactly: Visual Studio opens under
-    // its own name, takes the entry saved under that name, then loads a project
-    // and its real title arrives. Refusing the second claim left it unpinned in
-    // the wrong place for good. The entry it was holding goes back to the cache
-    // so the window it really belongs to can still have it.
-    let claimedEntry = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // One claim per live window, including startup matches. Membership and
+    // title changes do not release it; destruction does. Never persisted.
+    let claimedWindows = Cell.create(Set.empty<IntPtr>)
     // Live snapshot of (exePath, windowTitle) per grouped hwnd, so the info
     // is still available when the closed tab is recorded after its window
     // has already been destroyed
@@ -959,6 +947,17 @@ type Program() as this =
                                                     exePath windowTitle)
             | None -> ()
 
+    member private this.hasLiveIdentityTwin(hwnd: IntPtr, exePath: string, title: string) =
+        let live =
+            this.desktop.groups.list |> List.collect (fun g -> g.windows.list) |> List.distinct
+            |> List.choose (fun h ->
+                let w = os.windowFromHwnd(h)
+                if h = hwnd || not w.isWindow then None
+                else
+                    try Some(h, (w.pid.processPath, normalizeClosedTabTitle w.text))
+                    with _ -> None)
+        not (ClosedTabClaim.canRecord hwnd (exePath, normalizeClosedTabTitle title) live)
+
     member private this.recordClosedTabIn(hwnd: IntPtr, groupHwnd: IntPtr, order: IntPtr list, ownIndex: int) =
             // The two removal paths (HSHELL_WINDOWDESTROYED and the periodic
             // scan) can both see the window still in its group because removal
@@ -976,6 +975,9 @@ type Program() as this =
             else
             match windowInfoCache.value.tryFind(hwnd) with
             | Some((exePath, windowTitle)) when exePath <> "" && windowTitle <> "" ->
+                if this.hasLiveIdentityTwin(hwnd, exePath, windowTitle) then
+                    RestoreTrace.log (fun () -> "closed claim: skipped-duplicate")
+                else
                 let now = DateTime.Now
                 // When several tabs of one group close in a burst (an app
                 // quitting all its windows), the list shrinks unpredictably
@@ -1076,38 +1078,29 @@ type Program() as this =
              | None -> false)
         | LiveStrip(strip) -> (try g.hwnd = strip with _ -> false)
 
-    // Take (and consume) the most recently recorded closed-tab entry that
-    // matches exe path + window title exactly (after title normalization).
-    // Exact match only: restoring nothing is better than restoring onto the
-    // wrong window.
-    member private this.takeClosedTabAt(idx: int) =
-        let info = closedTabCache.value.[idx]
-        closedTabCache.map(fun l ->
-            l |> List.mapi (fun i v -> (i, v)) |> List.filter (fun (i, _) -> i <> idx) |> List.map snd)
-        // Nothing left to claim, so nothing left to guard. Otherwise the
-        // record of which windows have claimed grows for the life of the
-        // session - it is only pruned when a window is destroyed, and a
-        // destroy notification that never arrives would leave a handle in it
-        // for Windows to hand to another window, which would then be refused
-        // a restore it was entitled to.
-        info
+    member private this.isPristineForClaim(hwnd) =
+        windowNameOverride.value.tryFind(hwnd).IsNone &&
+        not (windowPinned.value.contains(hwnd)) &&
+        windowFillColor.value.tryFind(hwnd).IsNone &&
+        windowUnderlineColor.value.tryFind(hwnd).IsNone &&
+        windowBorderColor.value.tryFind(hwnd).IsNone
 
-    // Note what this window now holds, handing back whatever it held before.
-    member private this.recordClaim(hwnd: IntPtr, info: ClosedTabInfo) =
-        (match claimedEntry.value.tryFind(hwnd) with
-         | Some(previous) when not (obj.ReferenceEquals(previous, info)) ->
-            if closedTabCache.value |> List.exists (fun e -> obj.ReferenceEquals(e, previous)) |> not then
-                closedTabCache.map(fun l -> previous :: l |> List.truncate closedTabCacheLimit)
-         | _ -> ())
-        claimedEntry.map(fun m -> m.add hwnd info)
+    member private this.closedClaimDecision(hwnd, exePath, windowTitle) =
+        if claimedWindows.value.Contains hwnd then ClosedTabClaim.AlreadyClaimed else
+        let identity = exePath, normalizeClosedTabTitle windowTitle
+        let matches =
+            if exePath = "" || windowTitle = "" then [] else
+            closedTabCache.value |> List.indexed
+            |> List.choose (fun (i, e) ->
+                if ClosedTabClaim.sameIdentity identity (e.exePath, e.windowTitle) then Some i
+                else None)
+        ClosedTabClaim.decide hwnd claimedWindows.value matches
 
-    member private this.takeClosedTabMatch(exePath: string, windowTitle: string) =
-        if exePath = "" || windowTitle = "" then None else
-        let windowTitle = normalizeClosedTabTitle windowTitle
-        match closedTabCache.value |> List.tryFindIndex (fun i ->
-                sameExePath i.exePath exePath && i.windowTitle = windowTitle) with
-        | Some(idx) -> Some(this.takeClosedTabAt idx)
-        | None -> None
+    member private this.peekClosedTabMatch(hwnd, exePath, windowTitle) =
+        match this.closedClaimDecision(hwnd, exePath, windowTitle) with
+        | ClosedTabClaim.Claim index -> Some closedTabCache.value.[index]
+        | ClosedTabClaim.AlreadyClaimed -> None
+        | ClosedTabClaim.NoMatch -> None
 
     // Fallback for a window whose title does not survive a restart. A
     // browser's title is its active tab's, so Edge or Chrome comes back
@@ -1185,9 +1178,13 @@ type Program() as this =
          | None -> false)
 
     // Consume one specific cache entry (the one a peek settled on).
-    member private this.takeClosedTabEntry(info: ClosedTabInfo) =
-        match closedTabCache.value |> List.tryFindIndex (fun e -> obj.ReferenceEquals(e, info)) with
-        | Some(idx) -> Some(this.takeClosedTabAt idx)
+    member private this.takeClosedTabEntry(hwnd, info: ClosedTabInfo) =
+        match ClosedTabClaim.take hwnd (fun e -> obj.ReferenceEquals(e, info))
+                                  claimedWindows.value closedTabCache.value with
+        | Some(entry, claimed, remaining) ->
+            claimedWindows.set(claimed)
+            closedTabCache.set(remaining)
+            Some entry
         | None -> None
 
     // Put the saved pin state back on a restored tab. Runs on the group thread.
@@ -1226,7 +1223,7 @@ type Program() as this =
     // appears, restore its tab state and put it back into its former group.
     // Runs before category/exe auto-grouping in findGroupForWindow.
     member this.tryClosedTabRestore(window:Window) =
-        if this.suppressExplicitRestore(window.hwnd, window.text) || closedTabCache.value.IsEmpty then None else
+        if this.suppressExplicitRestore(window.hwnd, window.text) then None else
         let exePath = try window.pid.processPath with _ -> ""
         let windowTitle = try window.text with _ -> ""
         let bounds =
@@ -1246,9 +1243,15 @@ type Program() as this =
         // it. Restoring nothing is better: entries are kept for thirty days,
         // so a window whose title comes back gets its place back with it.
         let matched =
-            match this.takeClosedTabMatch(exePath, windowTitle) with
-            | Some(info) -> Some(applicableState true info)
-            | None -> None
+            // A late claim moving between groups already reserved this entry.
+            let reserved = pendingClosedTabRestores.value.tryFind(window.hwnd)
+            let entry =
+                match reserved with
+                | Some info -> Some info
+                | None ->
+                    this.peekClosedTabMatch(window.hwnd, exePath, windowTitle)
+                    |> Option.bind (fun info -> this.takeClosedTabEntry(window.hwnd, info))
+            entry |> Option.map (applicableState true)
         (match matched with
          | Some(i) -> RestoreTrace.log (fun () -> sprintf "claim(early) hwnd=%X token=%X rank=%d align=%A pin=%b title=%s"
                                                       (window.hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex i.tabAlign i.isPinned windowTitle)
@@ -1258,7 +1261,6 @@ type Program() as this =
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
-            this.recordClaim(hwnd, info)
             // Restore state to the global maps before addWindow so the tab is
             // created with the saved name/colors/pin/alignment (same pattern
             // as restoreTabGroupsFromSettings)
@@ -1291,6 +1293,13 @@ type Program() as this =
     // Called from updateAppWindows and the 1s titleSyncTimer.
     member this.syncWindowTitles() =
         try
+            // A destroy event may be missed after a window leaves its group.
+            // Clear only dead windows, never merely detached or renamed ones.
+            let dead = claimedWindows.value |> Set.filter (fun h -> not (os.windowFromHwnd(h).isWindow))
+            if not dead.IsEmpty then
+                claimedWindows.map(fun claimed -> Set.difference claimed dead)
+                pendingClosedTabRestores.map(fun pending ->
+                    dead |> Set.fold (fun (m: Map2<IntPtr, ClosedTabInfo>) h -> m.remove h) pending)
             // While saved windows are still waiting to open, every grouped
             // window is offered to the late restore on each pass, not only
             // when its title changes: a window whose title never becomes the
@@ -1321,13 +1330,7 @@ type Program() as this =
 
     member private this.tryLateClosedTabRestore(hwnd: IntPtr, exePath: string, windowTitle: string) =
         try
-                let isPristine =
-                    windowNameOverride.value.tryFind(hwnd).IsNone &&
-                    windowPinned.value.contains(hwnd).not &&
-                    windowFillColor.value.tryFind(hwnd).IsNone &&
-                    windowUnderlineColor.value.tryFind(hwnd).IsNone &&
-                    windowBorderColor.value.tryFind(hwnd).IsNone
-                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && isPristine then
+                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -1336,10 +1339,8 @@ type Program() as this =
                             Some(b.x, b.y, b.width, b.height)
                         with _ -> None
                     let peeked =
-                        match closedTabCache.value |> List.tryFind (fun i -> sameExePath i.exePath exePath && i.windowTitle = normTitle) with
-                        | Some(info) -> Some(info, false)
-                        // Exact title only here as well - see tryClosedTabRestore.
-                        | None -> None
+                        this.peekClosedTabMatch(hwnd, exePath, windowTitle)
+                        |> Option.map (fun info -> info, false)
                     (match peeked with
                      | Some(i, amb) -> RestoreTrace.log (fun () -> sprintf "claim(late) hwnd=%X token=%X rank=%d amb=%b title=%s"
                                                                       (hwnd.ToInt64()) ((groupRefHandle i.groupRef).ToInt64()) i.tabIndex amb windowTitle)
@@ -1368,14 +1369,17 @@ type Program() as this =
                             // appeared). Detach it and let the normal grouping
                             // pipeline re-add it: with the title now matching,
                             // tryClosedTabRestore performs the full group +
-                            // position + state restore and consumes the entry.
+                            // position + state restore using this reservation.
                             RestoreTrace.log (fun () -> sprintf "  late hwnd=%X DETACH (wrong group)" (hwnd.ToInt64()))
-                            cur.removeWindow(hwnd)
-                            this.scheduleUpdateAppWindows()
+                            match this.takeClosedTabEntry(hwnd, info) with
+                            | Some entry ->
+                                pendingClosedTabRestores.map(fun m -> m.add hwnd entry)
+                                cur.removeWindow(hwnd)
+                                this.scheduleUpdateAppWindows()
+                            | None -> ()
                         | _ ->
-                        match this.takeClosedTabEntry(info) with
+                        match this.takeClosedTabEntry(hwnd, info) with
                         | Some(entry) ->
-                            this.recordClaim(hwnd, entry)
                             let info = applicableState (not ambiguous) entry
                             info.fillColor |> Option.iter (fun c -> windowFillColor.set(windowFillColor.value.add hwnd c))
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
@@ -1441,7 +1445,7 @@ type Program() as this =
                                             // still keeps what it was saved
                                             // with.
                                             this.enforcePin(wg, hwnd, info)
-                                            if isSavedGroup then
+                                            if ClosedTabClaim.mayPlace info.isRestoreSeed isSavedGroup false then
                                                 this.restorePlacement(wg, hwnd, info)
                                                 RestoreTrace.log (fun () -> sprintf "  place(late) hwnd=%X rank=%d order=%s"
                                                                                   (hwnd.ToInt64()) info.tabIndex
@@ -1841,6 +1845,8 @@ type Program() as this =
                     // instead, for the destroy that may follow.
                     if window.isWindow.not then
                         if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
+                        claimedWindows.map(ClosedTabClaim.forget hwnd)
+                        pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                         explicitWindows.map(fun m -> m.remove hwnd)
                     // Removal is asynchronous, so the next pass sees the window
                     // still here and would remember it again, one place further
@@ -1990,6 +1996,17 @@ type Program() as this =
         if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
         let invokerHwnd = pendingNewTabInvokers.value.tryFind(hwnd).def(IntPtr.Zero)
         pendingNewTabInvokers.map(fun m -> m.remove hwnd)
+        // A tab opened beside another takes its colours along with its side
+        // and pin. They are copied before the tab is added, so it is drawn in
+        // them from the start.
+        if invokerHwnd <> IntPtr.Zero then
+            let copyFrom (colors: Cell<Map2<IntPtr, Color>>) =
+                match colors.value.tryFind(invokerHwnd) with
+                | Some(c) -> colors.set(colors.value.add hwnd c)
+                | None -> ()
+            copyFrom windowFillColor
+            copyFrom windowUnderlineColor
+            copyFrom windowBorderColor
         let returningState = pendingClosedTabRestores.value.tryFind(hwnd)
         // Capture restore correspondence on the main thread; the insertion
         // callback must not read the mutable dictionary from the group thread.
@@ -2001,7 +2018,7 @@ type Program() as this =
                     | SavedToken token -> info.isRestoreSeed && token <> IntPtr.Zero &&
                                           (this.findGroupForClosedInfo info).IsNone
                     | _ -> false
-                if this.isInfoGroup group info || willBind then
+                if ClosedTabClaim.mayPlace info.isRestoreSeed (this.isInfoGroup group info) willBind then
                     Some(TabOrder.placeRestoredTab info.orderSnapshot (fun h -> Map.tryFind h oldHandles)
                              hwnd info.closedHwnd info.tabIndex)
                 else None)
@@ -2162,7 +2179,8 @@ type Program() as this =
                 lateMissLogged.Remove(hwnd) |> ignore
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
-                claimedEntry.map(fun m -> m.remove hwnd)
+                claimedWindows.map(ClosedTabClaim.forget hwnd)
+                pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                 explicitWindows.map(fun m -> m.remove hwnd)
                 pendingNewTabInvokers.map(fun m -> m.remove hwnd)
                 pendingStandalonePostActions.map(fun m -> m.remove hwnd)
@@ -2910,6 +2928,7 @@ type Program() as this =
                         g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
                         matched |> List.iter (fun t ->
                             let hwnd = t.live.Value
+                            claimedWindows.map(Set.add hwnd)
                             // What the plan allows onto this window: always
                             // the alignment and the pin, the name and the
                             // colours only when they cannot have belonged to
