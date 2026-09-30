@@ -240,6 +240,15 @@ module VirtualDesktopGroups =
     let sharedOf (evidence: Map<IntPtr, Evidence>) =
         evidence |> Seq.filter (fun kv -> kv.Value.shared) |> Seq.map (fun kv -> kv.Key) |> Set.ofSeq
 
+    /// Historical evidence is not permission to copy when this reading is
+    /// missing, unsure, or contradicts the identity observed while shared.
+    let positiveShared (d: Desktops) (evidence: Map<IntPtr, Evidence>) (reads: Map<IntPtr, WindowRead>) =
+        sharedOf evidence |> Set.filter (fun h ->
+            match reads.TryFind h, evidence.TryFind h with
+            | Some r, Some e when d.current.IsSome && r.presence = Here ->
+                hint d r = SaysShared || e.answersCurrent || r.desktop = e.sharedId
+            | _ -> false)
+
     // ------------------------------------------------------------ display --
 
     type Display =
@@ -307,7 +316,7 @@ module VirtualDesktopGroups =
             match d.current, g.home with
             | None, _ -> keep
             | Some c, None ->
-                if not here.IsEmpty && away.IsEmpty then { keep with display = Shown; home = Some c }
+                if not here.IsEmpty && here.Length = g.members.Length then { keep with display = Shown; home = Some c }
                 else keep
             | Some c, Some h when c = h -> { keep with display = Shown }
             | Some c, Some _ ->
@@ -317,12 +326,13 @@ module VirtualDesktopGroups =
                 elif here |> List.exists shared.Contains then { keep with display = Hidden }
                 elif here |> List.exists heldHereByAnother then { keep with display = Hidden }
                 elif g.members |> List.exists shared.Contains then { keep with display = Hidden }
+                elif here.Length <> g.members.Length then keep
                 else { keep with display = Shown; home = Some c })
 
     // ------------------------------------------------------------- visits --
 
-    /// A group to make on the desktop being looked at: windows that are here,
-    /// belong to a group, and have no group drawn here. `source` is the group
+    /// A group to make on the desktop being looked at: confirmed shared
+    /// windows that are here, belong to a group, and have no group drawn here. `source` is the group
     /// they are taken from - its settings and per-tab state are copied, and its
     /// order kept - and it keeps them: the source is another desktop's group.
     type Visit = {
@@ -337,7 +347,7 @@ module VirtualDesktopGroups =
     /// one here, whatever that group's display says: that is what keeps a
     /// registry that is behind from making a second group on the desktop it
     /// wrongly names.
-    let visits (current: Guid) (reads: Map<IntPtr, WindowRead>) (groups: (GroupState * Display) list)
+    let visits (current: Guid) (reads: Map<IntPtr, WindowRead>) (shared: Set<IntPtr>) (groups: (GroupState * Display) list)
                (eligible: IntPtr -> bool) : Visit list =
         let isHere h = match reads.TryFind h with Some r -> r.presence = Here | None -> false
         let shownHolds h = groups |> List.exists (fun (g, disp) -> disp = Shown && List.contains h g.members)
@@ -346,7 +356,7 @@ module VirtualDesktopGroups =
             groups
             |> List.collect (fun (g, _) -> g.members)
             |> List.distinct
-            |> List.filter (fun h -> isHere h && not (shownHolds h) && not (homeHolds h) && eligible h)
+            |> List.filter (fun h -> shared.Contains h && isHere h && not (shownHolds h) && not (homeHolds h) && eligible h)
             |> Set.ofList
         let taken = Collections.Generic.HashSet<IntPtr>()
         groups
@@ -355,6 +365,19 @@ module VirtualDesktopGroups =
             else
                 let ms = g.members |> List.filter (fun h -> wanted.Contains h && taken.Add h)
                 if ms.IsEmpty then None else Some { source = g.key; members = ms })
+
+    /// Bound arrivals are transferred, not copied. Reuse visit ordering and
+    /// destination exclusion, but require a known, different source home.
+    let moves current reads shared groups eligible =
+        let d = { current = Some current; listed = None }
+        let bound =
+            reads |> Map.toList |> List.choose (fun (h, r) ->
+                if not (Set.contains h shared) && r.presence = Here &&
+                   r.desktop = Some current && hint d r = SaysBound then Some h else None)
+            |> Set.ofList
+        visits current reads bound groups eligible
+        |> List.filter (fun v -> groups |> List.exists (fun (g, _) ->
+            g.key = v.source && g.home.IsSome && g.home <> Some current))
 
     /// A visit is carried out only when the same plan comes out of two passes
     /// in a row. Making a group is not undone by the next reading.
@@ -465,11 +488,11 @@ module VirtualDesktopGroups =
 
     /// Whether a window that the straddle rule found elsewhere may be taken out
     /// of its group. Never a window that is here: a window shown on all desktops
-    /// is here wherever one looks, and a window that was moved to the desktop
-    /// being looked at is given a group here by a visit and leaves its old
-    /// group only when that group's desktop is looked at and it is not there.
+    /// is here wherever one looks. A moved window that has not been positively
+    /// distinguished from a shared one waits until its old desktop is viewed
+    /// and it is read as away; then the straddle rule transfers it.
     let mayLeave (isShared: bool) (presence: Presence) =
-        not isShared && presence <> Here
+        not isShared && presence = Away
 
     // ------------------------------------------- the ordinary program paths --
 
@@ -515,12 +538,29 @@ module VirtualDesktopGroups =
         | [] | [_] -> homes |> List.map fst
         | (first, _) :: _ ->
             match read with
-            | Some r when hint d r = SaysShared -> homes |> List.map fst
+            | Some r when d.current.IsSome && hint d r = SaysShared -> homes |> List.map fst
             | Some({ desktop = Some wd }) ->
                 match homes |> List.tryFind (fun (_, h) -> h = Some wd) with
                 | Some(i, _) -> [ i ]
                 | None -> [ first ]
             | _ -> [ first ]
+
+    /// Repair any non-shared duplicate, including duplicates loaded from disk.
+    /// Uncertain reads never remove membership. Prefer the window's own desktop,
+    /// then stable group order when its home group no longer exists.
+    let duplicateRemovals (d: Desktops) (reads: Map<IntPtr, WindowRead>) (shared: Set<IntPtr>)
+                          (groups: GroupState list) =
+        groups |> List.collect (fun g -> g.members) |> List.distinct
+        |> List.collect (fun h ->
+            match reads.TryFind h with
+            | Some r when d.current.IsSome && r.desktop.IsSome && not (shared.Contains h) && hint d r = SaysBound ->
+                let holders = groups |> List.filter (fun g -> List.contains h g.members)
+                let keep =
+                    holders |> List.tryFind (fun g -> r.desktop.IsSome && g.home = r.desktop)
+                    |> Option.orElseWith (fun () -> List.tryHead holders)
+                holders |> List.choose (fun g ->
+                    if keep |> Option.exists (fun k -> k.key <> g.key) then Some(g.key, h) else None)
+            | _ -> [])
 
     // ----------------------------------------------------------- live state --
 
@@ -608,22 +648,53 @@ module VirtualDesktopGroups =
             generation = 0L; readAt = DateTime.MinValue
             shared = Set.empty; inSeveral = Set.empty; current = None
             reads = Map.empty; desktopResults = Map.empty }
+        let mutable private invalidatedAt = DateTime.MinValue
+        // Cloaking/uncloaking invalidates in-flight as well as published reads.
+        let invalidate () = lock gate (fun () -> invalidatedAt <- DateTime.UtcNow)
+        let freshAfter changedAt (state: Snapshot) = state.readAt >= changedAt && state.current.IsSome
+        let accepts readAt = lock gate (fun () -> readAt >= invalidatedAt)
+        let isFresh state = lock gate (fun () -> freshAfter invalidatedAt state)
         let snapshot () = lock gate (fun () -> latest)
-        let shared () = (snapshot()).shared
+        let shared () =
+            let state = snapshot()
+            if isFresh state then state.shared else Set.empty
         let inSeveral () = (snapshot()).inSeveral
-        let current () = (snapshot()).current
+        let current () =
+            let state = snapshot()
+            if isFresh state then state.current else None
         let read (state: Snapshot) hwnd =
             state.reads |> Map.tryFind hwnd
             |> Option.defaultValue { hwnd = hwnd; presence = Unsure; desktop = None }
-        let isHere state hwnd = (read state hwnd).presence <> Away
+        let isHere state hwnd = isFresh state && (read state hwnd).presence = Here
+        let canDecide state members =
+            isFresh state && members |> List.forall (fun h -> (read state h).presence <> Unsure)
+        let mayDuplicate state hwnd = isHere state hwnd && state.shared.Contains hwnd
         let isNewer generation (state: Snapshot) = state.generation > generation
         let confirmationReady pending state =
             pending |> Option.exists (fun generation -> isNewer generation state)
         let view state home members =
+            if not (canDecide state members) then [] else
             members |> List.map (fun hwnd ->
                 let r = read state hwnd
                 hwnd, r.presence, r.desktop)
             |> straddleView home state.current state.shared
+        let visitsAfter changedAt state groups eligible =
+            match state.current with
+            | Some c when freshAfter changedAt state -> visits c state.reads state.shared groups eligible
+            | _ -> []
+        let visitsNow state groups eligible =
+            let changedAt = lock gate (fun () -> invalidatedAt)
+            visitsAfter changedAt state groups eligible
+        let movesAfter changedAt state groups eligible =
+            match state.current with
+            | Some c when freshAfter changedAt state -> moves c state.reads state.shared groups eligible
+            | _ -> []
+        let movesNow state groups eligible =
+            let changedAt = lock gate (fun () -> invalidatedAt)
+            movesAfter changedAt state groups eligible
+        let mayMove state (home: Guid option) hwnd =
+            isHere state hwnd && not (state.shared.Contains hwnd) &&
+            home.IsSome && home <> state.current && (read state hwnd).desktop = state.current
         let publish s several current readAt reads desktopResults =
             lock gate (fun () ->
                 latest <- {

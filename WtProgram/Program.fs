@@ -488,6 +488,7 @@ type Program() as this =
     // trusted to be the one looked at; and the pass's scheduling.
     let mutable desktopEvidence : Map<IntPtr, VirtualDesktopGroups.Evidence> = Map.empty
     let mutable pendingDesktopVisits : VirtualDesktopGroups.Visit list = []
+    let mutable desktopTransferPending = false
     let mutable previousDesktop : Guid option = None
     let mutable desktopPassPending = false
     let mutable lastDesktopTrace = ""
@@ -498,8 +499,8 @@ type Program() as this =
     let mutable lastDesktopGeneration = 0L
     // OS caches and the thread-static COM manager belong to this reader only.
     let readerOS = lazy(OS())
+    let mutable readerDesktop : Guid option = None
     let readDesktops (request: VirtualDesktopReader.Request) : VirtualDesktopReader.Reading =
-        let readAt = DateTime.UtcNow
         let supported = VirtualDesktopHelper.IsSupported
         let listed =
             match VirtualDesktopHelper.TryReadDesktopIds() with
@@ -509,6 +510,9 @@ type Program() as this =
             let mutable id = Guid.Empty
             if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
         let before = registry()
+        if readerDesktop.IsSome && before <> readerDesktop then VirtualDesktopGroups.Live.invalidate()
+        readerDesktop <- before
+        let readAt = DateTime.UtcNow
         let samples = request.windows |> List.map (fun hwnd ->
             let window = readerOS.Value.windowFromHwnd(hwnd)
             // Preserve the plain on-current answer for callers that previously
@@ -521,8 +525,11 @@ type Program() as this =
                 { hwnd = hwnd; presence = presence
                   desktop = if hr = 0 && id <> Guid.Empty then Some id else None }
             reading, (hr, id), onCurrent)
+        let after = registry()
+        if before <> after then VirtualDesktopGroups.Live.invalidate()
+        readerDesktop <- after
         { request = request; readAt = readAt; supported = supported
-          listed = listed; registryBefore = before; registryAfter = registry()
+          listed = listed; registryBefore = before; registryAfter = after
           reads = samples |> List.map (fun (r, _, _) -> r.hwnd, r) |> Map.ofList
           desktopResults = samples |> List.map (fun (r, result, _) -> r.hwnd, result) |> Map.ofList
           onCurrent = samples |> List.map (fun (r, _, onCurrent) -> r.hwnd, onCurrent) |> Map.ofList }
@@ -718,7 +725,10 @@ type Program() as this =
         desktopPassTimer.Start()
         cloakHook <- Some(
             os.setWinEventHook(WinEvent.EVENT_OBJECT_CLOAKED, WinEvent.EVENT_OBJECT_UNCLOAKED,
-                               (fun _ _ _ _ _ _ _ -> this.scheduleDesktopPass(15)), 0, 0))
+                               (fun _ _ _ _ _ _ _ ->
+                                   VirtualDesktopGroups.Live.invalidate()
+                                   pendingDesktopVisits <- []
+                                   this.scheduleDesktopPass(15)), 0, 0))
 
     member this.desktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -1330,7 +1340,7 @@ type Program() as this =
 
     member private this.tryLateClosedTabRestore(hwnd: IntPtr, exePath: string, windowTitle: string) =
         try
-                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) then
+                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) && this.isOnDesktopFromReader(hwnd) then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -1560,7 +1570,10 @@ type Program() as this =
         // hundred and more), and while the shell is busy each call can take a
         // millisecond or more - asked first, it was most of a pass and held the
         // main thread for seconds.
-        if wantsGroup && this.isTabbableWindow(window) && this.isOnDesktopFromReader(window.hwnd) then
+        let mayJoin =
+            not (this.isInGroup(window.hwnd)) ||
+            VirtualDesktopGroups.Live.mayDuplicate (VirtualDesktopGroups.Live.snapshot()) window.hwnd
+        if wantsGroup && mayJoin && this.isTabbableWindow(window) && this.isOnDesktopFromReader(window.hwnd) then
             if groupTraceCount < 60 then
                 groupTraceCount <- groupTraceCount + 1
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
@@ -1985,6 +1998,8 @@ type Program() as this =
         DragTrace.log (fun () -> sprintf "addWindowToGroup: hwnd=%X dropped=%b newGroup=%b" (hwnd.ToInt64()) isDropped isNewGroup)
         //need to add this now so we don't end up creating another group for it while waiting for the WgnWindowAdded notification
         isDroppedAndAwaitingGrouping.map(fun s -> s.remove hwnd)
+        if this.isInGroup(hwnd) then
+            VirtualDesktopTrace.log (fun () -> sprintf "second group: hwnd=%X reason=fresh-shared-drop" (hwnd.ToInt64()))
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
         // Consume only the snap-drag metadata; keep the normal drop/regroup,
         // closed-tab and saved-alignment path for single-tab detach.
@@ -2439,24 +2454,76 @@ type Program() as this =
 
     /// A group for this desktop, made of the windows of another desktop's
     /// group that are here and have no group here: its windows shown on all
-    /// desktops (or ones moved here and followed). It starts as a copy - the
+    /// desktops, confirmed by a fresh reading. It starts as a copy - the
     /// order, each tab's state, the group's settings - and is its own group
     /// from then on. Its windows are not moved: they are where they are.
     member private this.makeDesktopGroup(source: IGroup, members: IntPtr list, desktop: Guid) =
-        let g = Services.desktop.createGroup()
-        g.desktopHome <- Some(desktop)
-        g.perGroupTabPositionValue <- source.perGroupTabPositionValue
-        g.snapTabHeightMargin <- source.snapTabHeightMargin
-        g.lockWindowPosition <- source.lockWindowPosition
-        for hwnd in members do
-            // The global maps are what a joining tab takes its state from.
-            this.publishTabState(source, hwnd)
-            g.addWindowUnplaced(hwnd)
-        VirtualDesktopTrace.log (fun () ->
-            sprintf "desktop %s: group made for %s (from group %X)"
-                ((string desktop).Substring(0, 8))
-                (members |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
-                (try source.hwnd.ToInt64() with _ -> 0L))
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let members = members |> List.filter (VirtualDesktopGroups.Live.mayDuplicate state)
+        if not members.IsEmpty then
+            let g = Services.desktop.createGroup()
+            g.desktopHome <- Some(desktop)
+            g.perGroupTabPositionValue <- source.perGroupTabPositionValue
+            g.snapTabHeightMargin <- source.snapTabHeightMargin
+            g.lockWindowPosition <- source.lockWindowPosition
+            for hwnd in members do
+                // The global maps are what a joining tab takes its state from.
+                this.publishTabState(source, hwnd)
+                let state = VirtualDesktopGroups.Live.snapshot()
+                if VirtualDesktopGroups.Live.mayDuplicate state hwnd then
+                    VirtualDesktopTrace.log (fun () -> sprintf "second group: hwnd=%X reason=fresh-shared-visit" (hwnd.ToInt64()))
+                    g.addWindowUnplaced(hwnd)
+            VirtualDesktopTrace.log (fun () ->
+                sprintf "desktop %s: group made for %s (from group %X)"
+                    ((string desktop).Substring(0, 8))
+                    (members |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                    (try source.hwnd.ToInt64() with _ -> 0L))
+
+    /// Complete the removal on the source thread before reserving the new
+    /// membership. Its removed notifications precede the completion callback
+    /// on the main queue, so no pass can observe two owning groups.
+    member private this.moveDesktopGroup(source: IGroup, members: IntPtr list, desktop: Guid) =
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let home = source.desktopHome
+        let members = members |> List.filter (VirtualDesktopGroups.Live.mayMove state home)
+        match source with
+        | :? GroupInfo as info when not members.IsEmpty && not info.isExited && not desktopTransferPending ->
+            let position = source.perGroupTabPositionValue
+            let margin = source.snapTabHeightMargin
+            let locked = source.lockWindowPosition
+            members |> List.iter (fun h -> this.publishTabState(source, h))
+            let program = this :> IProgram
+            program.suspendTabMonitoring()
+            let suspension = tabMonitoringSuspendGeneration
+            desktopTransferPending <- true
+            info.invokeGroup <| fun () ->
+                let moved = ResizeArray<IntPtr>()
+                try
+                    let fresh = VirtualDesktopGroups.Live.snapshot()
+                    for h in members do
+                        if fresh.current = Some desktop &&
+                           VirtualDesktopGroups.Live.mayMove fresh home h && info.group.windows.contains(h) then
+                            info.group.removeWindow(h)
+                            moved.Add(h)
+                finally
+                    invoker.asyncInvoke <| fun () ->
+                        try
+                            // Finish this committed transfer, even if a later
+                            // switch occurs while the notifications are queued.
+                            if moved.Count > 0 then
+                                let target = Services.desktop.createGroup()
+                                target.desktopHome <- Some desktop
+                                target.perGroupTabPositionValue <- position
+                                target.snapTabHeightMargin <- margin
+                                target.lockWindowPosition <- locked
+                                for h in moved do
+                                    target.addWindowUnplaced(h)
+                                    VirtualDesktopTrace.log (fun () ->
+                                        sprintf "desktop transfer: hwnd=%X reason=fresh-bound-arrival" (h.ToInt64()))
+                        finally
+                            desktopTransferPending <- false
+                            if suspension = tabMonitoringSuspendGeneration then program.resumeTabMonitoring()
+        | _ -> ()
 
     /// Ungrouped candidates are read on demand by the same background reader.
     /// An unseen window waits for a reading rather than being grouped blindly.
@@ -2468,11 +2535,12 @@ type Program() as this =
             false
         match desktopReader.Latest with
         | Some p when not p.value.supported -> true
-        | Some p when p.value.registryBefore = p.value.registryAfter ->
-            match p.value.onCurrent |> Map.tryFind hwnd with
-            | Some onCurrent -> onCurrent |> Option.defaultValue true
-            | None -> waitForReading ()
-        | _ -> waitForReading ()
+        | _ ->
+            let state = VirtualDesktopGroups.Live.snapshot()
+            if VirtualDesktopGroups.Live.isHere state hwnd then true
+            elif VirtualDesktopGroups.Live.isFresh state &&
+                 (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away then false
+            else waitForReading ()
 
     member private this.canReadDesktops =
         not (isDisabledCell.value || inShutdown.value || inSessionEnd.value ||
@@ -2497,12 +2565,14 @@ type Program() as this =
                 lastDesktopGeneration <- publication.generation
                 if not this.canReadDesktops then () else
                 let sample = publication.value
-                completedReading <- Some sample
-                if not sample.supported then () else
+                if not sample.supported then completedReading <- Some sample else
                 let groups = this.desktop.groups.list
                 let members = groups |> List.collect (fun g -> g.windows.list) |> List.distinct
-                if Set.ofList members <> sample.request.grouped then this.scheduleDesktopPass(15)
-                elif sample.registryBefore <> sample.registryAfter then this.scheduleDesktopPass(50)
+                if Set.ofList members <> sample.request.grouped ||
+                   not (VirtualDesktopGroups.Live.accepts sample.readAt) ||
+                   sample.registryBefore <> sample.registryAfter then
+                    pendingDesktopVisits <- []
+                    this.scheduleDesktopPass(50)
                 else
                 let listed = sample.listed
                 let registryAfter = sample.registryAfter
@@ -2516,10 +2586,14 @@ type Program() as this =
                     | Some c when VirtualDesktopGroups.contradicted c readMap wasShared
                                       (groups |> List.map (fun g -> g.desktopHome, g.windows.list)) -> None
                     | c -> c
-                if current.IsSome then previousDesktop <- current
+                if current.IsSome then
+                    if previousDesktop <> current then pendingDesktopVisits <- []
+                    previousDesktop <- current
+                    completedReading <- Some sample
                 let d = { VirtualDesktopGroups.current = current; VirtualDesktopGroups.listed = listed }
-                desktopEvidence <- VirtualDesktopGroups.updateEvidence d desktopEvidence reads
-                let shared = VirtualDesktopGroups.sharedOf desktopEvidence
+                if current.IsSome then
+                    desktopEvidence <- VirtualDesktopGroups.updateEvidence d desktopEvidence reads
+                let shared = VirtualDesktopGroups.positiveShared d desktopEvidence readMap
                 let several =
                     members
                     |> List.filter (fun h -> (groups |> List.filter (fun g -> g.windows.contains((=) h))).Length > 1)
@@ -2532,13 +2606,12 @@ type Program() as this =
                       home = g.desktopHome
                       display = if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden }
                 let states = keyed |> Map.toList |> List.map (fun (i, g) -> stateOf i g)
-                // No longer shown on all desktops: it stays in the group of the
-                // desktop it was left on and leaves the others' - as a closed tab
-                // would, without a closed-tab record (the window is not closed).
-                let leaving = VirtualDesktopGroups.leftBehind current wasShared shared readMap states
+                // Repair all bound duplicates, including those never classified
+                // as shared and those restored from an older saved session.
+                let leaving = VirtualDesktopGroups.duplicateRemovals d readMap shared states
                 for (i, h) in leaving do
                     VirtualDesktopTrace.log (fun () ->
-                        sprintf "%X is no longer on all desktops: out of group %X" (h.ToInt64()) (try keyed.[i].hwnd.ToInt64() with _ -> 0L))
+                        sprintf "duplicate removed: hwnd=%X group=%X reason=fresh-bound-reading" (h.ToInt64()) (try keyed.[i].hwnd.ToInt64() with _ -> 0L))
                     keyed.[i].removeWindow(h)
                 let states =
                     states |> List.map (fun s ->
@@ -2569,7 +2642,11 @@ type Program() as this =
                     let eligible h =
                         not (isDroppedAndAwaitingGrouping.value.contains h) &&
                         (try this.isTabbableWindow(os.windowFromHwnd(h)) with _ -> false)
-                    let visits = VirtualDesktopGroups.visits c readMap withDisplay eligible
+                    let state = VirtualDesktopGroups.Live.snapshot()
+                    let moves = VirtualDesktopGroups.Live.movesNow state withDisplay eligible
+                    moves |> List.tryHead |> Option.iter (fun move ->
+                        this.moveDesktopGroup(keyed.[move.source], move.members, c))
+                    let visits = VirtualDesktopGroups.Live.visitsNow state withDisplay eligible
                     if VirtualDesktopGroups.sameVisits pendingDesktopVisits visits then
                         pendingDesktopVisits <- []
                         for v in visits do
@@ -2910,16 +2987,26 @@ type Program() as this =
                     |> List.groupBy fst
                     |> List.map (fun (h, xs) -> h, List.map snd xs)
                     |> Map.ofList
-                let goesInto (gi: int) (hwnd: IntPtr) =
-                    match savedIn.TryFind hwnd with
-                    | Some(places) when places.Length > 1 ->
+                let restoreTargets =
+                    savedIn |> Map.map (fun hwnd places ->
+                        let readAt = DateTime.UtcNow
                         let w = os.windowFromHwnd(hwnd)
                         let read =
                             { VirtualDesktopGroups.hwnd = hwnd
                               VirtualDesktopGroups.presence = (try w.desktopPresence with _ -> VirtualDesktopGroups.Unsure)
                               VirtualDesktopGroups.desktop = (try w.desktopIdOrNone with _ -> None) }
-                        List.contains gi (VirtualDesktopGroups.restoreTargets desktops (Some read) places)
-                    | _ -> true
+                        let mutable after = Guid.Empty
+                        let stable =
+                            VirtualDesktopHelper.TryReadCurrentDesktopId(&after) &&
+                            Some after = registryCurrent && VirtualDesktopGroups.Live.accepts readAt
+                        let d = if stable then desktops else { desktops with current = None; listed = None }
+                        VirtualDesktopGroups.restoreTargets d (Some read) places, readAt)
+                let goesInto gi hwnd =
+                    match restoreTargets.TryFind hwnd with
+                    | Some(targets, readAt) ->
+                        List.contains gi targets &&
+                        (not (this.isInGroup(hwnd)) || VirtualDesktopGroups.Live.accepts readAt)
+                    | None -> false
 
                 for (gi, g) in List.indexed planned do
                     let matched = g.tabs |> List.filter (fun t -> t.live.IsSome && goesInto gi t.live.Value)
@@ -2934,6 +3021,8 @@ type Program() as this =
                         g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
                         matched |> List.iter (fun t ->
                             let hwnd = t.live.Value
+                            if this.isInGroup(hwnd) then
+                                VirtualDesktopTrace.log (fun () -> sprintf "second group: hwnd=%X reason=stable-shared-restore" (hwnd.ToInt64()))
                             claimedWindows.map(Set.add hwnd)
                             // What the plan allows onto this window: always
                             // the alignment and the pin, the name and the
