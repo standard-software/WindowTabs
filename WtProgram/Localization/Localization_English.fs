@@ -53,7 +53,7 @@ module Localization_English =
         ("PasteThemes", "Paste Color Themes")
 
         ("TabColorHeader", "Tab Color")
-        ("TabColor", "Tab Color")
+        ("TabColor", "Background Color")
         ("TextColor", "Text Color")
         ("BorderColor", "Border Color")
         ("Inactive", "Inactive")
