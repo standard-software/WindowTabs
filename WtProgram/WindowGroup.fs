@@ -717,7 +717,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let owner = this.stripOwnerHwnd
         let ownerPresence =
             if owner = IntPtr.Zero then VirtualDesktopGroups.Unsure
-            else try this.os.windowFromHwnd(owner).desktopPresence with _ -> VirtualDesktopGroups.Unsure
+            else (VirtualDesktopGroups.Live.read (VirtualDesktopGroups.Live.snapshot()) owner).presence
         let hide =
             VirtualDesktopGroups.hideStrip
                 (if shown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden) ownerPresence

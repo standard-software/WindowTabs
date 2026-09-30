@@ -591,20 +591,42 @@ module VirtualDesktopGroups =
         | Some _, None -> false
         | Some j, Some n -> j = n
 
-    /// What the main thread's pass last found, for the group threads to read:
-    /// the windows taken to be shown on all desktops, the windows that are
-    /// members of more than one group, and the desktop being looked at (when
-    /// it could be trusted). Written by that pass only.
+    /// One immutable publication, so evidence and readings cannot come from
+    /// different passes. Desktop results retain HRESULTs for diagnostics only.
     module Live =
+        type Snapshot = {
+            generation: int64
+            readAt: DateTime
+            shared: Set<IntPtr>
+            inSeveral: Set<IntPtr>
+            current: Guid option
+            reads: Map<IntPtr, WindowRead>
+            desktopResults: Map<IntPtr, int * Guid>
+        }
         let private gate = obj()
-        let mutable private sharedSet : Set<IntPtr> = Set.empty
-        let mutable private severalSet : Set<IntPtr> = Set.empty
-        let mutable private currentDesktop : Guid option = None
-        let shared () = lock gate (fun () -> sharedSet)
-        let inSeveral () = lock gate (fun () -> severalSet)
-        let current () = lock gate (fun () -> currentDesktop)
-        let publish (s: Set<IntPtr>) (several: Set<IntPtr>) (current: Guid option) =
+        let mutable private latest = {
+            generation = 0L; readAt = DateTime.MinValue
+            shared = Set.empty; inSeveral = Set.empty; current = None
+            reads = Map.empty; desktopResults = Map.empty }
+        let snapshot () = lock gate (fun () -> latest)
+        let shared () = (snapshot()).shared
+        let inSeveral () = (snapshot()).inSeveral
+        let current () = (snapshot()).current
+        let read (state: Snapshot) hwnd =
+            state.reads |> Map.tryFind hwnd
+            |> Option.defaultValue { hwnd = hwnd; presence = Unsure; desktop = None }
+        let isHere state hwnd = (read state hwnd).presence <> Away
+        let isNewer generation (state: Snapshot) = state.generation > generation
+        let confirmationReady pending state =
+            pending |> Option.exists (fun generation -> isNewer generation state)
+        let view state home members =
+            members |> List.map (fun hwnd ->
+                let r = read state hwnd
+                hwnd, r.presence, r.desktop)
+            |> straddleView home state.current state.shared
+        let publish s several current readAt reads desktopResults =
             lock gate (fun () ->
-                sharedSet <- s
-                severalSet <- several
-                currentDesktop <- current)
+                latest <- {
+                    generation = latest.generation + 1L; readAt = readAt
+                    shared = s; inSeveral = several; current = current
+                    reads = reads; desktopResults = desktopResults })

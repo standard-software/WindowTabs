@@ -524,6 +524,17 @@ namespace Bemo
             }
         }
 
+        // Called only by the owning reader apartment when its loop exits.
+        public static void ReleaseCurrentThread()
+        {
+            var manager = _manager;
+            _manager = null;
+            _initialized = false;
+            _isSupported = false;
+            if (manager != null && System.Runtime.InteropServices.Marshal.IsComObject(manager))
+                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(manager);
+        }
+
         public static bool IsSupported
         {
             get

@@ -191,6 +191,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // The last reading written to the trace, so a group that sees the same
     // thing second after second writes one line rather than thousands.
     let mutable lastDesktopReading = ""
+    let mutable lastDesktopGeneration = 0L
+    let mutable pendingStraddleGeneration : int64 option = None
     // How many ticks running this group has looked the same way about the
     // desktops, and when it last took a window out over it.
     let mutable straddleTicks = 0
@@ -292,9 +294,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 match decorators.TryGetValue(info.hwnd) with
                 | true, d -> d.group.isDesktopShownThreadSafe
                 | _ -> true)
-        shown &&
-        (try info.tabHwnds |> List.forall (fun hwnd -> os.windowFromHwnd(hwnd).isOnCurrentVirtualDesktop)
-         with _ -> true)
+        let state = VirtualDesktopGroups.Live.snapshot()
+        shown && (info.tabHwnds |> List.forall (VirtualDesktopGroups.Live.isHere state))
 
     /// A tab group is one window to the person using it, so it belongs on one
     /// virtual desktop. Nothing stops a tabbed window from being sent to
@@ -336,7 +337,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // The reading from before task view opened is kept, so the pass
             // after it closes compares against it and sees every window that
             // moved.
-            if this.shellSwitcherIsOpen then () else
+            let state = VirtualDesktopGroups.Live.snapshot()
+            if this.shellSwitcherIsOpen then
+                // Keep the pre-switch comparison, but do not reuse this
+                // publication after task view closes.
+                lastDesktopGeneration <- state.generation
+                pendingStraddleGeneration <- None
+            else
             let members = group.windows.items.list
             let membershipChanged = members <> lastDesktopMembers
             lastDesktopMembers <- members
@@ -348,71 +355,54 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // read then says nothing about what the person wants.
                 || group.isInMoveSizeThreadSafe
             if wait then
+                lastDesktopGeneration <- state.generation
+                pendingStraddleGeneration <- None
                 lastDesktopDecision <- VirtualDesktopIntegrity.Settled
                 straddleTicks <- 0
                 // The next reading has nothing to compare against: whatever a
                 // window did while this group was not looking was not done to
                 // this group.
                 lastDesktopReads <- Map.empty
-            else
-                // One call per window per second, and no more: asking also
-                // whether each window is on the desktop being looked at cost
-                // as much again and told the rule nothing (the ids already
-                // say who is with whom). The front window answers that one
-                // for the whole group, for the trace.
-                let reads =
-                    members |> List.map (fun hwnd ->
-                        let (hr, id) =
-                            try os.windowFromHwnd(hwnd).virtualDesktopIdWithHr with _ -> (-2, Guid.Empty)
-                        (hwnd, hr, id))
-                // A window shown on all desktops is counted as being where the
-                // group is, and one that is here but says nothing of where it
-                // lives is counted there while the group's desktop is being
-                // looked at (VirtualDesktopGroups.straddleView). Presence is
-                // read only when an answer is missing: it costs a second call.
-                let shared = VirtualDesktopGroups.Live.shared()
+            elif VirtualDesktopGroups.Live.isNewer lastDesktopGeneration state then
+                // A timer tick is not a new observation if the main pass has
+                // not published again. Only independent readings count.
+                lastDesktopGeneration <- state.generation
                 let home = group.desktopHome
-                let current = VirtualDesktopGroups.Live.current()
-                let windows =
-                    reads
-                    |> List.map (fun (hwnd, hr, id) ->
-                        let desktop = if hr <> 0 || id = Guid.Empty then None else Some(id)
-                        let presence =
-                            if desktop.IsSome then VirtualDesktopGroups.Unsure
-                            else try os.windowFromHwnd(hwnd).desktopPresence with _ -> VirtualDesktopGroups.Unsure
-                        (hwnd, presence, desktop))
-                    |> VirtualDesktopGroups.straddleView home current shared
+                let windows = VirtualDesktopGroups.Live.view state home members
                 let previousReads = lastDesktopReads
                 let decision =
                     VirtualDesktopIntegrity.decide previousReads group.topWindow windows
                     |> VirtualDesktopGroups.rebase home windows
                 lastDesktopReads <- VirtualDesktopIntegrity.reading windows
-                // What was read, whenever it is not what was read a second ago.
-                // The thread is in the line because each group reads from its
-                // own thread, while everything else in WindowTabs asks this COM
-                // object from one thread - the first thing to rule in or out.
+                // Trace the main pass's actual HRESULTs, not new COM calls
+                // made by the group thread. A missing entry is not a failure.
                 let reading =
-                    reads
-                    |> List.map (fun (hwnd, hr, id) ->
-                        sprintf "%X:%s" (hwnd.ToInt64())
-                            (if hr = 0 then (string id).Substring(0, 8) else sprintf "hr=%08X" hr))
+                    members |> List.map (fun hwnd ->
+                        let result =
+                            match state.desktopResults |> Map.tryFind hwnd with
+                            | Some(0, id) -> (string id).Substring(0, 8)
+                            | Some(hr, _) -> sprintf "hr=%08X" hr
+                            | None -> "unread"
+                        sprintf "%X:%s" (hwnd.ToInt64()) result)
                     |> String.concat " "
                 if reading <> lastDesktopReading then
                     lastDesktopReading <- reading
                     let frontIsHere =
-                        try os.windowFromHwnd(group.topWindow).isOnCurrentVirtualDesktop with _ -> true
+                        VirtualDesktopGroups.Live.isHere state group.topWindow
                     VirtualDesktopTrace.log (fun () ->
-                        sprintf "group=%X thread=%d top=%X%s %s -> %A"
+                        sprintf "group=%X thread=%d top=%X%s %s -> %A sample=%d ageMs=%.0f"
                             (group.hwnd.ToInt64())
                             System.Threading.Thread.CurrentThread.ManagedThreadId
                             (group.topWindow.ToInt64())
                             (if frontIsHere then "" else "(group is on another desktop)")
-                            reading decision)
+                            reading decision state.generation (DateTime.UtcNow - state.readAt).TotalMilliseconds)
                 // The count is of one unchanging picture. Any change at all -
                 // a different base, a different set of windows, or the group
                 // settling - starts it again, so a picture that keeps moving
                 // never reaches the number that lets a window be taken out.
-                if decision <> lastDesktopDecision then straddleTicks <- 0
+                if decision <> lastDesktopDecision then
+                    straddleTicks <- 0
+                    pendingStraddleGeneration <- None
                 lastDesktopDecision <- decision
                 match decision with
                 | VirtualDesktopIntegrity.Settled ->
@@ -426,7 +416,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     (group.hwnd.ToInt64()) ((string baseDesktop).Substring(0, 8))
                                     strays.Length windows.Length)
                     elif straddleTicks >= straddleTicksNeeded then
-                        this.actOnStraddle(baseDesktop, strays)
+                        // The old final COM recheck was independent of the
+                        // confirming read. Wait for another publication instead
+                        // of using the same cached answer as its own recheck.
+                        if VirtualDesktopGroups.Live.confirmationReady pendingStraddleGeneration state then
+                            this.actOnStraddle(baseDesktop, strays, state)
+                        else
+                            pendingStraddleGeneration <- Some state.generation
                     else
                         VirtualDesktopTrace.log (fun () ->
                             sprintf "group=%X straddle %d/%d base=%s strays=%s"
@@ -450,7 +446,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     /// nothing acts while another group is also reporting a straddle, since a
     /// person moves windows out of one group at a time, and a group waits a few
     /// seconds after acting before it acts again.
-    member private this.actOnStraddle(baseDesktop: Guid, strays: IntPtr list) =
+    member private this.actOnStraddle(baseDesktop: Guid, strays: IntPtr list, state: VirtualDesktopGroups.Live.Snapshot) =
         let now = DateTime.UtcNow
         let elsewhere =
             lock straddleGate (fun () ->
@@ -459,28 +455,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 |> Seq.length)
         lock straddleGate (fun () -> straddlingGroups.[group.hwnd] <- now)
         let tooSoon = now - lastStraddleAction < TimeSpan.FromSeconds(3.0)
-        // A second look, a moment later, at each window about to be taken out
-        // and at the windows that stayed. Every one of the first has to read as
-        // being somewhere else, and at least one of the second as being where
-        // the group is - checked against the group's desktop rather than the
-        // front window's, since the window just moved is usually the one in
-        // front.
-        let desktopOf hwnd =
-            try
-                let (hr, id) = os.windowFromHwnd(hwnd).virtualDesktopIdWithHr
-                if hr = 0 then id else Guid.Empty
-            with _ -> Guid.Empty
-        // Read as the rule reads them: a window shown on all desktops is where
-        // the group is (VirtualDesktopGroups.straddleView).
-        let shared = VirtualDesktopGroups.Live.shared()
-        let presenceOf hwnd =
-            try os.windowFromHwnd(hwnd).desktopPresence with _ -> VirtualDesktopGroups.Unsure
-        let fresh =
-            group.windows.items.list
-            |> List.map (fun hwnd ->
-                let id = desktopOf hwnd
-                (hwnd, presenceOf hwnd, (if id = Guid.Empty then None else Some(id))))
-            |> VirtualDesktopGroups.straddleView group.desktopHome (VirtualDesktopGroups.Live.current()) shared
+        // This is a later publication than the one that confirmed the
+        // straddle. Use its entire picture, including the windows that stayed.
+        let shared = state.shared
+        let presenceOf hwnd = (VirtualDesktopGroups.Live.read state hwnd).presence
+        let desktopOf hwnd = (VirtualDesktopGroups.Live.read state hwnd).desktop |> Option.defaultValue Guid.Empty
+        let fresh = VirtualDesktopGroups.Live.view state group.desktopHome group.windows.items.list
         let readsAs desktop hwnd =
             fresh |> List.exists (fun w -> w.hwnd = hwnd && (match w.desktop with Some id -> desktop id | None -> false))
         let stayedHere =
@@ -510,6 +490,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if act then
             lastStraddleAction <- now
             straddleTicks <- 0
+            pendingStraddleGeneration <- None
             // Windows that went to the same desktop went there together, so
             // they arrive as one tab group rather than as a row of single
             // tabs. Moving a group across desktops means moving its windows
@@ -522,7 +503,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // A window that is in a group of another desktop as well (it was
             // shown on all desktops, or moved and followed) already has a
             // group where it went: it only leaves this one.
-            let several = VirtualDesktopGroups.Live.inSeveral()
+            let several = state.inSeveral
             let elsewhere, alone = away |> List.partition several.Contains
             elsewhere |> List.iter (fun hwnd ->
                 if group.windows.items.count > 1 && group.windows.contains(hwnd) then
