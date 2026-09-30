@@ -1,6 +1,14 @@
 ﻿namespace Bemo
 open System.Collections.Generic
 
+// Publish immutable values with acquire/release visibility. Readers never wait
+// for the owner, and publication never holds a lock around callbacks or I/O.
+type PublishedSnapshot<'a>(initial: 'a) =
+    let mutable current = box initial
+    member this.value = unbox<'a>(System.Threading.Volatile.Read(&current))
+    member this.publish(value: 'a) = System.Threading.Volatile.Write(&current, box value)
+
+
 
 type ICellOutput<'a> =
     abstract value : 'a
@@ -135,6 +143,7 @@ and IDependency =
     abstract member version : int with get
    
 and Cell<'a>(scope:CellScope, init:'a, ?checkEq) as this=
+    let mutable snapshot : PublishedSnapshot<'a> option = None
     let mutable _prev = None
     let mutable _value = init
     let mutable _version = 0
@@ -147,6 +156,17 @@ and Cell<'a>(scope:CellScope, init:'a, ?checkEq) as this=
                 failwith "accessing cell on wrong thread"
         | None -> ()
 
+    // Call on the owner thread, and only for immutable cell contents. Reading
+    // the returned snapshot neither accesses the scope nor adds dependencies.
+    member this.createSnapshot() =
+        this.ensureScopeTid()
+        match snapshot with
+        | Some published -> published
+        | None ->
+            let published = PublishedSnapshot(_value)
+            snapshot <- Some published
+            published
+
     member this.prev = _prev
 
     member this.setBase(newValue:'a, checkForUpdate:bool):unit =
@@ -156,6 +176,10 @@ and Cell<'a>(scope:CellScope, init:'a, ?checkEq) as this=
             _prev <- Some(_value)
             _version <- scope.nextVersion()
             _value <- newValue
+            // Publish before listeners: a listener may itself query the service.
+            match snapshot with
+            | Some published -> published.publish(newValue)
+            | None -> ()
             scope.callListeners()
             changed.Trigger()
 

@@ -5,10 +5,14 @@ open System.Windows.Forms
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
 
-[<AttributeUsage(System.AttributeTargets.Method)>]
+[<AttributeUsage(System.AttributeTargets.Method ||| System.AttributeTargets.Property)>]
 type ServiceMethodAttribute() =
     inherit Attribute()
     let mutable _async = false
+
+    // Opt in only for thread-safe implementations. On properties this applies
+    // to the getter only; setters still run on the owning thread.
+    member val direct = false with get, set
 
     member this.async
         with get() = _async
@@ -59,8 +63,10 @@ type ILicenseManager =
 
 type ISettings =
     abstract member setValue: (string * obj) -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getValue: string -> obj
     abstract member notifyValue: string -> (obj -> unit) -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member root : JObject with get,set
 
 type IFilterService =
@@ -108,16 +114,22 @@ type IProgram =
     abstract member shutdown : unit -> unit
     abstract member tabLimit : int option
     abstract member setWindowNameOverride : (IntPtr * Option<string>) -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getWindowNameOverride : IntPtr -> Option<string>
     abstract member setWindowFillColor : IntPtr * Color option -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getWindowFillColor : IntPtr -> Color option
     abstract member setWindowUnderlineColor : IntPtr * Color option -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getWindowUnderlineColor : IntPtr -> Color option
     abstract member setWindowBorderColor : IntPtr * Color option -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getWindowBorderColor : IntPtr -> Color option
     abstract member setWindowPinned : IntPtr * bool -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member isWindowPinned : IntPtr -> bool
     abstract member setWindowAlignment : IntPtr * TabAlign option -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member getWindowAlignment : IntPtr -> TabAlign option
     abstract member appWindows : List2<IntPtr>
     abstract member getAutoGroupingEnabled : string -> bool
@@ -125,6 +137,7 @@ type IProgram =
     abstract member getCategoryEnabled : string * int -> bool
     abstract member getCategoryNumber : string -> int
     abstract member setCategoryEnabled : string -> int -> bool -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member tabAppearanceInfo : TabAppearanceInfo
     abstract member defaultTabAppearanceInfo : TabAppearanceInfo
     abstract member darkModeTabAppearanceInfo : TabAppearanceInfo
@@ -144,8 +157,10 @@ type IProgram =
     abstract member resumeTabMonitoring : unit -> unit
     abstract member resumeTabMonitoringAfter : int -> unit
     abstract member llMouse : IEvent<int32 * IntPtr>
+    [<ServiceMethod(direct=true)>]
     abstract member isDisabled : bool
     abstract member setDisabled : bool -> unit
+    [<ServiceMethod(direct=true)>]
     abstract member isShuttingDown : bool
     abstract member saveTabGroupsBeforeExit : unit -> unit
     abstract member launchNewWindow : IntPtr -> IntPtr -> string -> unit

@@ -46,17 +46,21 @@ type Settings(isStandAlone) as this =
     // first occurrence - the only one that still explains the incident.
     let loggedFallbacks = HashSet<string>()
     let settingChangedEvent = Event<string* obj>()
-    let valueCache = Dictionary<string, obj>()
+    let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
+    // The map contains only immutable record fields. The private JSON clone is
+    // never handed out or mutated; each root reader receives a fresh clone.
+    let snapshot = PublishedSnapshot<(Map<string, obj> * JObject) option>(None)
 
     do
         hasExistingSettings <- this.fileExists
+        this.settings |> ignore
         Services.register(this :> ISettings)
 
     member this.clearCaches() =
         cachedSettingsString <- None
         cachedSettingsJson <- None
         cachedSettingsRec <- None
-        valueCache.Clear()
+        this.settings |> ignore
 
     member this.path =
 #if DEBUG
@@ -223,7 +227,7 @@ type Settings(isStandAlone) as this =
                         cachedSettingsString <- Some(newContent)
                         cachedSettingsJson <- None
                         cachedSettingsRec <- None
-                        valueCache.Clear()
+                        this.settings |> ignore
             with
             | ex ->
                 // Log error but don't crash
@@ -279,7 +283,6 @@ type Settings(isStandAlone) as this =
                             cachedSettingsString <- Some(text)
                             cachedSettingsJson <- None
                             cachedSettingsRec <- None
-                            valueCache.Clear()
                             settingsUntrusted <- false
 #if DEBUG
                             (try
@@ -555,7 +558,8 @@ type Settings(isStandAlone) as this =
 
     member x.settings
         with get() =
-            if cachedSettingsRec.IsNone then 
+            let rebuilding = cachedSettingsRec.IsNone
+            if rebuilding then 
                 try
                     let settingsJson = this.settingsJson
                     let settings = {
@@ -668,6 +672,11 @@ type Settings(isStandAlone) as this =
             // but never kept, so it cannot outlive the state that produced it
             // and be written back once the file reads cleanly again.
             if settingsUntrusted then cachedSettingsRec <- None
+            if rebuilding then
+                let fields = FSharpType.GetRecordFields(typeof<SettingsRec>)
+                let values = FSharpValue.GetRecordFields(loaded)
+                let valueMap = Array.zip fields values |> Array.map (fun (field, value) -> field.Name, value) |> Map.ofArray
+                snapshot.publish(Some(valueMap, this.settingsJson))
             loaded
 
         and set(settings) =
@@ -716,27 +725,27 @@ type Settings(isStandAlone) as this =
     interface ISettings with
 
         member x.setValue((key,value)) =
-            valueCache.Remove(key).ignore
             let settings = x.settings
             let settings = Serialize.writeField settings key value
             x.settings <- unbox<SettingsRec>(settings)
             settingChangedEvent.Trigger(key, value)
 
-        member x.getValue(key) = 
-            match valueCache.GetValue(key) with
-            | None ->
-                let settings = x.settings
-                let value = Serialize.readField settings key
-                // Same reason as the record cache: a value read out of the
-                // defaults must not outlive them.
-                if settingsUntrusted.not then valueCache.Add(key, value)
-                value
-            | Some(value) -> value
+        member x.getValue(key) =
+            // Preserve owner-side retries after an untrusted load. Other threads
+            // only read the last published result and never do disk I/O.
+            if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then
+                this.settings |> ignore
+            let values, _ = snapshot.value.Value
+            values.[key]
 
         member x.notifyValue key f =
             settingChangedEvent.Publish.Add <| fun(changedKey, value) ->
                 if changedKey = key then f(value)
 
         member x.root
-            with get() = this.settingsJson
+            with get() =
+                if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then
+                    this.settings |> ignore
+                let _, json = snapshot.value.Value
+                json.DeepClone() :?> JObject
             and set(value) = this.settingsJson <- value 

@@ -47,7 +47,15 @@ type ServiceProxy<'a>(service:'a) =
         let key = mi.MetadataToken
         lock this <| fun() ->
             if attributeCache.ContainsKey(key).not then
-                let attributes = List2(mi.GetCustomAttributes(typeof<ServiceMethodAttribute>, true))
+                // F# emits property attributes on the property, not its accessors.
+                // Never inherit the getter's direct-dispatch permission on a setter.
+                let attributes =
+                    let own = mi.GetCustomAttributes(typeof<ServiceMethodAttribute>, true)
+                    if own.Length = 0 && mi.IsSpecialName && mi.Name.StartsWith("get_") then
+                        let prop = mi.DeclaringType.GetProperty(mi.Name.Substring(4))
+                        if isNull prop then own else prop.GetCustomAttributes(typeof<ServiceMethodAttribute>, true)
+                    else own
+                let attributes = List2(attributes)
                 let sma = attributes.map(fun(attr) -> attr.cast<ServiceMethodAttribute>()).tryHead.def(ServiceMethodAttribute())
                 attributeCache.Add(key, sma)
             attributeCache.Item(key)
@@ -80,7 +88,9 @@ type ServiceProxy<'a>(service:'a) =
     override this.Invoke(msg) =
         let sma = this.serviceMethodAttribute(msg)
         let result = 
-            if sma.async then
+            if sma.direct then
+                this.invokeMethod(msg)
+            elif sma.async then
                 this.doAsyncInvoke(msg)
             else
                 this.doSyncInvoke(msg)

@@ -244,6 +244,11 @@ type Program() as this =
     let Cell = CellScope()
     let os = OS()
     let invoker = InvokerService.invoker
+    let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
+    let readSnapshot (cell: Cell<'a>) (snapshot: PublishedSnapshot<'a>) =
+        // Keep dependency tracking for owner-thread computations.
+        if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then cell.value
+        else snapshot.value
     let isTabMonitoringSuspendedCell = Cell.create(false)
     // A tab-monitoring suspension is always meant to be paired with a resume,
     // but the pairing is not always safe: several call sites hand the resume to
@@ -267,6 +272,7 @@ type Program() as this =
     let mutable shellTraceCount = 0
     let mutable groupTraceCount = 0
     let isDisabledCell = Cell.create(false)
+    let isDisabledCellSnapshot = isDisabledCell.createSnapshot()
     let isRestoringTabGroups = Cell.create(false)
     let needsRestoreOnStartup = Cell.create(false)
     // A window pass that was skipped because a group was being moved or
@@ -315,6 +321,7 @@ type Program() as this =
     let lastPing = Cell.create(DateTime.MinValue)
     let notifiedOfUpgrade = Cell.create(false)
     let inShutdown = Cell.create(false)
+    let inShutdownSnapshot = inShutdown.createSnapshot()
     // Windows logoff / restart in progress (WM_QUERYENDSESSION, surfaced as
     // SystemEvents.SessionEnding). From that moment other applications close
     // one after another, each HSHELL_WINDOWDESTROYED shrinks the groups, and a
@@ -474,12 +481,18 @@ type Program() as this =
     // window that was in the groups of several desktops.
     let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * bool * List2<IntPtr> * Guid option * bool>>(List2())
     let windowNameOverride = Cell.create(Map2())
+    let windowNameOverrideSnapshot = windowNameOverride.createSnapshot()
     // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
     let windowFillColor = Cell.create(Map2() : Map2<IntPtr, Color>)
+    let windowFillColorSnapshot = windowFillColor.createSnapshot()
     let windowUnderlineColor = Cell.create(Map2() : Map2<IntPtr, Color>)
+    let windowUnderlineColorSnapshot = windowUnderlineColor.createSnapshot()
     let windowBorderColor = Cell.create(Map2() : Map2<IntPtr, Color>)
+    let windowBorderColorSnapshot = windowBorderColor.createSnapshot()
     let windowPinned = Cell.create(Set2<IntPtr>())
+    let windowPinnedSnapshot = windowPinned.createSnapshot()
     let windowAlignment = Cell.create(Map2() : Map2<IntPtr, TabAlign>)
+    let windowAlignmentSnapshot = windowAlignment.createSnapshot()
     // Tab groups per virtual desktop (Shared/VirtualDesktopGroups.fs, and the
     // "Virtual desktops" section below). What the passes have gathered about
     // which windows are shown on all desktops; a plan for new groups waiting
@@ -3123,7 +3136,7 @@ type Program() as this =
             windowNameOverride.set(windowNameOverride.value.add hwnd name)
 
         member x.getWindowNameOverride(hwnd) =
-            windowNameOverride.value.tryFind(hwnd).bind(id)
+            (readSnapshot windowNameOverride windowNameOverrideSnapshot).tryFind(hwnd).bind(id)
 
         member x.setWindowFillColor(hwnd, color : Color option) =
             match color with
@@ -3134,7 +3147,7 @@ type Program() as this =
             | None -> windowFillColor.set(windowFillColor.value.remove hwnd)
 
         member x.getWindowFillColor(hwnd) =
-            windowFillColor.value.tryFind(hwnd)
+            (readSnapshot windowFillColor windowFillColorSnapshot).tryFind(hwnd)
 
         member x.setWindowUnderlineColor(hwnd, color : Color option) =
             match color with
@@ -3145,7 +3158,7 @@ type Program() as this =
             | None -> windowUnderlineColor.set(windowUnderlineColor.value.remove hwnd)
 
         member x.getWindowUnderlineColor(hwnd) =
-            windowUnderlineColor.value.tryFind(hwnd)
+            (readSnapshot windowUnderlineColor windowUnderlineColorSnapshot).tryFind(hwnd)
 
         member x.setWindowBorderColor(hwnd, color : Color option) =
             match color with
@@ -3156,14 +3169,14 @@ type Program() as this =
             | None -> windowBorderColor.set(windowBorderColor.value.remove hwnd)
 
         member x.getWindowBorderColor(hwnd) =
-            windowBorderColor.value.tryFind(hwnd)
+            (readSnapshot windowBorderColor windowBorderColorSnapshot).tryFind(hwnd)
 
         member x.setWindowPinned(hwnd, pinned : bool) =
             if pinned then windowPinned.set(windowPinned.value.add hwnd)
             else windowPinned.set(windowPinned.value.remove hwnd)
 
         member x.isWindowPinned(hwnd) =
-            windowPinned.value.contains(hwnd)
+            (readSnapshot windowPinned windowPinnedSnapshot).contains(hwnd)
 
         member x.setWindowAlignment(hwnd, alignment : TabAlign option) =
             match alignment with
@@ -3171,7 +3184,7 @@ type Program() as this =
             | None -> windowAlignment.set(windowAlignment.value.remove hwnd)
 
         member x.getWindowAlignment(hwnd) =
-            windowAlignment.value.tryFind(hwnd)
+            (readSnapshot windowAlignment windowAlignmentSnapshot).tryFind(hwnd)
 
         member x.appWindows =
             os.windowsInZorder.where(this.isAppWindow).map(fun w -> w.hwnd)
@@ -3252,7 +3265,7 @@ type Program() as this =
                 this.regroupProcessWindows(procPath, fun () -> (x :> IProgram).getCategoryEnabled(procPath, categoryNum))
 
         member x.tabAppearanceInfo = 
-            settingsManager.settings.tabAppearance
+            (settingsManager :> ISettings).getValue("tabAppearance") :?> TabAppearanceInfo
 
         member x.defaultTabAppearanceInfo = settingsManager.defaultTabAppearance
 
@@ -3294,8 +3307,8 @@ type Program() as this =
         member x.notifyNewVersion() = notifyNewVersionEvt.Trigger()
         member x.newVersion = notifyNewVersionEvt.Publish
         member x.llMouse = llMouseEvent.Publish
-        member x.isDisabled = isDisabledCell.value
-        member x.isShuttingDown = inShutdown.value
+        member x.isDisabled = (readSnapshot isDisabledCell isDisabledCellSnapshot)
+        member x.isShuttingDown = (readSnapshot inShutdown inShutdownSnapshot)
         member x.saveTabGroupsBeforeExit() =
             if inSessionEnd.value.not then
                 this.saveTabGroupsToSettings()
