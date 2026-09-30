@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next9
+
+- Fixed the tab groups, colours and pins being lost when WindowTabs started slowly: the periodic save no longer runs before the startup restore.
+
 ## version ss_2026.10.01_next8
 
 ## version ss_2026.10.01_next7

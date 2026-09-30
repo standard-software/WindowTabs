@@ -2,6 +2,10 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next9
+
+- WindowTabs の起動が遅いときに、タブグループや色・ピン留めが失われる不具合を直した。定期的な保存が、起動時の復元より先に動かないようにした。
+
 ## version ss_2026.10.01_next8
 
 ## version ss_2026.10.01_next7
