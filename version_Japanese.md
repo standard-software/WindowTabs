@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next1
+
 ## version ss_2026.10.01
 
 - ウィンドウやタブグループが多いときの動作を軽く、速くした。

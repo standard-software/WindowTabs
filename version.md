@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next1
+
 ## version ss_2026.10.01
 
 - Lighter and faster with many windows and tab groups.

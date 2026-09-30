@@ -238,7 +238,7 @@ module RestoreTrace =
 #endif
 
 type Program() as this =
-    let version = "ss_2026.10.01"
+    let version = "ss_2026.10.01_next1"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
