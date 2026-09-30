@@ -56,6 +56,32 @@ module WindowMarginSettings =
     let reload() =
         marginCache <- Some(loadSettings())
 
+/// Debug-only trace of window titles and tab texts: every name-change event a
+/// group receives, every tab text it sets, and every tab whose text differs
+/// from its window's title. Truncated at each start; Release builds drop it.
+module TitleTrace =
+#if DEBUG
+    let private path =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                     "WindowTabs", "title_trace.log")
+    let mutable private started = false
+    let private gate = obj()
+#endif
+    let log (f: unit -> string) =
+#if DEBUG
+        try
+            lock gate (fun () ->
+                if not started then
+                    started <- true
+                    try File.WriteAllText(path, "") with _ -> ()
+                File.AppendAllText(path,
+                    sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff"))
+                        Thread.CurrentThread.ManagedThreadId (f())))
+        with _ -> ()
+#else
+        ignore f
+#endif
+
 type WindowGroup(plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
     let _bb = Blackboard()
@@ -685,7 +711,26 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         }
     
     member private this.setTabInfo(hwnd) =
-        this.ts.setTabInfo(Tab(hwnd), this.getTabInfo(hwnd))
+        let info = this.getTabInfo(hwnd)
+        TitleTrace.log (fun () -> sprintf "setTabInfo hwnd=%X text=[%s]" (hwnd.ToInt64()) info.text)
+        this.ts.setTabInfo(Tab(hwnd), info)
+
+    // Once a second from the group's timer. A tab follows its window's title
+    // on EVENT_OBJECT_NAMECHANGE, but not every application raises it:
+    // PowerPoint renames its window on "Save As" without one, and the tab kept
+    // the old file name. Reading a title is cheap - GetWindowText answers from
+    // the cached text for another process's window, without asking it.
+    member this.refreshTitles() =
+        for hwnd in this.windows.items.list do
+            let shown = try this.ts.tabInfo(Tab(hwnd)).text with _ -> null
+            let actual = try this.hwndText hwnd with _ -> null
+            if not (isNull shown) && not (isNull actual) && shown <> actual then
+                TitleTrace.log (fun () ->
+                    let window = this.os.windowFromHwnd(hwnd)
+                    sprintf "MISSED hwnd=%X class=%s tab=[%s] window=[%s]"
+                        (hwnd.ToInt64()) (try window.className with _ -> "?") shown actual)
+                PerfTrace.count "title.missed"
+                this.setTabInfo hwnd
 
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
@@ -1405,6 +1450,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             VirtualDesktopGroups.adoptsMoveOf false ((VirtualDesktopGroups.Live.shared()).Contains hwnd) false
         match evt with
         | WinEvent.EVENT_OBJECT_NAMECHANGE ->
+            TitleTrace.log (fun () -> sprintf "namechange(background) hwnd=%X member=%b" (hwnd.ToInt64()) (this.windows.contains(hwnd)))
             if this.windows.contains(hwnd) then this.setTabInfo hwnd
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
@@ -1549,6 +1595,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if hasActiveUWP then
                     tsWindow.makeTopMost()
         | WinEvent.EVENT_OBJECT_NAMECHANGE ->
+            TitleTrace.log (fun () -> sprintf "namechange hwnd=%X member=%b inMoveSize=%b" (hwnd.ToInt64()) (this.windows.contains(hwnd)) inMoveSize.value)
             if  this.windows.contains(hwnd) &&
                 //some windows (e.g. chrome on GoogleAnalitics page) fire namechange constantly as they are resized
                 inMoveSize.value.not 
