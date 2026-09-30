@@ -90,6 +90,7 @@ type DragCapturedState(info:DragCapturedStateInfo) as this =
             if dragBounds.containsPoint(ptScreen) then
                 info.target.dragMove(info.targetWindow.ptToClient(ptScreen))
             else
+                DragTrace.log (fun () -> sprintf "captured: out at %A, strip=%X bounds=%A" ptScreen (info.targetWindow.hwnd.ToInt64()) info.targetWindow.bounds)
                 info.target.dragExit()
                 info.onDragOut(ptScreen)
         member this.dispose() = ()
@@ -108,6 +109,7 @@ type DragFloatingState(info:DragFloatingStateInfo) =
         member this.mouseMove(ptScreen) =
             let targetHwnd = os.windowAtPt(ptScreen).hwnd
             if info.targets.tryFind(targetHwnd).IsSome then
+                DragTrace.log (fun () -> sprintf "floating: in at %A, strip=%X bounds=%A" ptScreen (targetHwnd.ToInt64()) (os.windowFromHwnd(targetHwnd).bounds))
                 animationWindow.setIsVisible(false)
                 info.onDragIn(targetHwnd, ptScreen)
             else
@@ -219,9 +221,20 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: done" dragId)
 
     member this.wndProc (msg:Win32Message) =
+        // The cursor itself, not the message's point: while a tab is dragged
+        // over some windows, WM_MOUSEMOVE arrives now and then with an empty
+        // lParam, and reading (0,0) from it dropped the tab out of the strip
+        // and back in, over and over, with the mouse standing still.
         let ptScreen() =
-            let pt = msg.lParam.location
-            let ptScreen = this.captureWindow.ptToScreen(pt)
+            let mutable cursor = POINT()
+            let ptScreen =
+                if WinUserApi.GetCursorPos(&cursor) then cursor.ToPoint().Pt
+                else this.captureWindow.ptToScreen(msg.lParam.location)
+#if DEBUG
+            let fromMsg = this.captureWindow.ptToScreen(msg.lParam.location)
+            if fromMsg <> ptScreen then
+                DragTrace.log (fun () -> sprintf "[d%d] wndProc: msg %d point %A, cursor %A" dragId msg.msg fromMsg ptScreen)
+#endif
             ptScreenCell.set(ptScreen)
             ptScreen
         match msg.msg with
