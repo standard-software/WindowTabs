@@ -3635,8 +3635,15 @@ let main argv =
     // a second instance run updateAppWindows before services are registered
     // and crash with KeyNotFoundException.
     let mutex = new Mutex(false, "BemoSoftware.WindowTabs")
+    // A watchdog restart ends the old process without releasing the mutex,
+    // and while the restart helper still holds a handle to it the next
+    // instance gets it as abandoned: that is an acquisition, not a failure.
+    // Left unhandled, it killed the instance the restart had just started.
+    let acquired () =
+        try mutex.WaitOne(TimeSpan.FromSeconds(0.5), false)
+        with :? AbandonedMutexException -> true
     if System.Diagnostics.Debugger.IsAttached.not then
-        if mutex.WaitOne(TimeSpan.FromSeconds(0.5), false).not then
+        if acquired().not then
             MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
             exit(0)
 
