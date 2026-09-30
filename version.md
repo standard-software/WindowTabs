@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next6
+
+- A Color page next to Appearance holds dark mode and the tab colour theme.
+- The settings pages share one set of margins and columns.
+
 ## version ss_2026.10.01_next5
 
 - The distance of the tabs from the window edge can be set separately for the left and the right. Upward and downward tabs are now called outer and inner tabs.
