@@ -36,12 +36,16 @@ type FilterService() as this =
         Win32Helper.IntPtrAnd(window.style, style) = style
     
     member this.isAppWindow (window:Window) =
+        // Cheapest first. This runs for every top-level window on every pass
+        // (seven or eight hundred, most of them hidden), and the tests that
+        // open the window's process cost far more than reading its styles:
+        // a hidden or tool window is turned away before its process is asked.
         let tests = List2([
-            fun() -> window.pid.canQueryProcess
-            fun() -> this.isAppWindowStyle(window)
-            fun() -> window.pid.isCurrentProcess.not
             fun() -> window.isWindow
             fun() -> window.isVisibleOnScreen
+            fun() -> this.isAppWindowStyle(window)
+            fun() -> window.pid.canQueryProcess
+            fun() -> window.pid.isCurrentProcess.not
             fun() -> this.isValidOwner(window)
             //Win32 Dialogue class
             fun() -> window.className <> "#32770"
@@ -78,7 +82,9 @@ type FilterService() as this =
             AppPath.containsApp this.includedPaths.items.list processPath
 
     member this.isTabbableWindow(window:Window) = 
-        this.getIsTabbingEnabledForProcess(window.pid.processPath) && this.isAppWindow(window)
+        // The window's own tests first: they turn most windows away without
+        // looking up the process path.
+        this.isAppWindow(window) && this.getIsTabbingEnabledForProcess(window.pid.processPath)
 
     interface IFilterService with
         

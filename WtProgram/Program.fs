@@ -1500,17 +1500,17 @@ type Program() as this =
                 PerfTrace.count (sprintf "windowsScanned.%d" (windows.count / 50 * 50))
                 this.forgetDeadParkedOrphans()
                 windows.iter <| fun window ->
-                    this.ensureWindowIsSubscribed(window)
+                    PerfTrace.time "pass.subscribe" (fun () -> this.ensureWindowIsSubscribed(window))
                     if this.isTabMonitoringSuspended.not then
                         // Before grouping: a window brought back on screen is
                         // tabbable again, and is grouped in this same pass -
                         // back into its own group when windowLastGroup still
                         // remembers it.
-                        this.rescueParkedOrphan(window)
-                        this.ensureWindowIsGrouped(window)
+                        PerfTrace.time "pass.rescue" (fun () -> this.rescueParkedOrphan(window))
+                        PerfTrace.time "pass.group" (fun () -> this.ensureWindowIsGrouped(window))
                 PerfTrace.time "syncWindowTitles" (fun () -> this.syncWindowTitles())
-            this.destroyEmptyGroups()
-            this.removeUntabableWindows()
+            PerfTrace.time "pass.destroyEmpty" (fun () -> this.destroyEmptyGroups())
+            PerfTrace.time "pass.removeUntabable" (fun () -> this.removeUntabableWindows())
             // Groups and tabs describe the state a leak would show up in: both
             // should come back down when windows close.
             PerfTrace.gauge "groups" this.desktop.groups.length
