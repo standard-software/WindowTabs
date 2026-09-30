@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next11
+
+- Fixed a window being put into more than one tab group across virtual desktops, which drew two tab strips on top of each other. Existing duplicates are removed.
+- A new workspace captures only the tab groups of the current virtual desktop.
+
 ## version ss_2026.10.01_next10
 
 - Building the settings dialog no longer rewrites the settings file several times in a row.
