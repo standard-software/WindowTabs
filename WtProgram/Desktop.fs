@@ -32,9 +32,13 @@ type GroupInfo() as this =
         // synchronous invoke into the (possibly busy) main thread here is one
         // half of the display-change deadlock — see NonBlockingSyncContext.
         // Ordering is preserved by the main thread's message queue.
-        _group.added.Add <| fun hwnd ->
+        _group.added.Add <| fun _ ->
+            let order = _group.visualOrder.list
             desktopInvoker.asyncInvoke <| fun() ->
-                windowsCell.map <| fun l -> l.where((<>) hwnd).append hwnd
+                // Preserve pending reservations while publishing the actual
+                // order, including arrivals inserted beside an existing tab.
+                windowsCell.map <| fun l ->
+                    List2(order @ (l.list |> List.filter (fun h -> not (List.contains h order))))
 
         _group.moved.Add <| fun(hwnd, index) ->
             desktopInvoker.asyncInvoke <| fun() ->
@@ -51,10 +55,13 @@ type GroupInfo() as this =
     member this.group = _group
     member this.hwnd = this.group.hwnd
     member private this.windows = windowsCell.value
-    member private this.addWindow(hwnd, withDelay) =  
-        //add it to collection up front, can't wait for async notification of add through added event
+    // Reserve membership before posting, while resolving tab state on its owner.
+    member this.addWindowWith(hwnd, add: WindowGroup -> unit) =
         windowsCell.map <| fun l -> l.append hwnd
-        this.invokeGroup <| fun() -> this.group.addWindow(hwnd, withDelay)
+        this.invokeGroup <| fun () -> add this.group
+
+    member private this.addWindow(hwnd, withDelay) =
+        this.addWindowWith(hwnd, fun group -> group.addWindow(hwnd, withDelay))
     member private this.removeWindow hwnd =
         this.invokeGroup <| fun() -> this.group.removeWindow(hwnd)
     member private this.destroy() = this.invokeGroup <| fun() -> this.group.destroy()
@@ -248,6 +255,11 @@ type Desktop(notify:IDesktopNotification) as this =
             let (Tab(hwnd)) = dragInfo.tab
             DragTrace.log (fun () -> sprintf "Desktop.dragDrop: hwnd=%X pt=%A selected=%d" (hwnd.ToInt64()) pt dragInfo.selectedHwnds.Length)
             let window = os.windowFromHwnd(hwnd)
+            // Preserve each source side before adding any detached tab. Snap
+            // realignment, when requested, may override these values below.
+            (hwnd :: dragInfo.selectedHwnds) |> List.iteri (fun i h ->
+                dragInfo.sourceTabAligns |> List.tryItem i
+                |> Option.iter (fun alignment -> Services.program.setWindowAlignment(h, Some alignment)))
             // "Snap to the screen edge when dragging a tab out": the display is
             // the one containing the drop point (nearest, for a point in a gap
             // between monitors). Off, or no display answered: the placement

@@ -1988,77 +1988,46 @@ type Program() as this =
         let detachedLock = pendingDetachedLocks.value.tryFind(hwnd)
         pendingDetachedLocks.map(fun m -> m.remove hwnd)
         if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
-        group.addWindow(hwnd, withDelay)
-
-        // Check if this is a "New Tab" launch - position after the invoking tab
         let invokerHwnd = pendingNewTabInvokers.value.tryFind(hwnd).def(IntPtr.Zero)
         pendingNewTabInvokers.map(fun m -> m.remove hwnd)
-        if invokerHwnd <> IntPtr.Zero then
-            match group :> obj with
-            | :? GroupInfo as gi ->
-                gi.invokeGroup <| fun() ->
-                    let wg = gi.group
-                    let newTab = Tab(hwnd)
-                    let invokerTab = Tab(invokerHwnd)
-                    // Set new tab's alignment to match the invoker tab
-                    let invokerAlign = wg.ts.getTabAlign(invokerTab)
-                    wg.ts.setTabAlign(newTab, invokerAlign)
-                    Services.program.setWindowAlignment(hwnd, Some(invokerAlign))
-                    // Position new tab after the invoker tab in visual order
-                    let tabs = wg.ts.visualOrder
-                    match tabs.tryFindIndex((=) invokerTab) with
-                    | Some(invokerIdx) ->
-                        match tabs.tryFindIndex((=) newTab) with
-                        | Some(curIdx) when curIdx <> invokerIdx + 1 ->
-                            wg.ts.moveTab(newTab, invokerIdx + 1)
-                        | _ -> ()
-                    | None -> ()
-                    // If invoker tab is pinned, pin the new tab too
-                    // This handles the case where the invoker is the rightmost pinned tab
-                    // in its group - without this, the new tab would end up unpinned
-                    if wg.ts.isPinned(invokerTab) && not (wg.ts.isPinned(newTab)) then
-                        wg.ts.pinTab(newTab)
-                        Services.program.setWindowPinned(hwnd, true)
-            | _ -> ()
-        else
-            // Joining an existing group: inherit the alignment of the group's
-            // last tab so a fully left-aligned group stays all-left and a group
-            // with any right-aligned tab puts the joiner on the right, regardless
-            // of the joining window's previous per-tab alignment. Then splice to
-            // the rightmost slot — normalize is a stable sort, so when the joiner
-            // ends up in the same zone as the existing tabs it would otherwise
-            // stay at its original index inside that zone instead of landing at
-            // the visual end.
-            // While saved entries for this application are still waiting, they
-            // decide the side instead: see savedAlignFor.
-            let savedAlign =
-                if explicitWindows.value.tryFind(hwnd).IsSome then None
-                else this.savedAlignFor(try window.pid.processPath with _ -> "")
-            if not isNewGroup then
-                match group :> obj with
-                | :? GroupInfo as gi ->
-                    gi.invokeGroup <| fun() ->
-                        let wg = gi.group
-                        let newTab = Tab(hwnd)
-                        let others = wg.ts.visualOrder.where(fun t -> t <> newTab)
-                        match others.list |> List.tryLast with
-                        | Some(lastTab) ->
-                            let lastAlign = wg.ts.getTabAlign(lastTab)
-                            wg.setTabAlign(hwnd, defaultArg savedAlign lastAlign)
-                            let endIndex = wg.ts.visualOrder.list.Length
-                            wg.ts.moveTab(newTab, endIndex)
-                        | None -> ()
-                | _ -> ()
-            else
-                // The window that forms the group has no tab to copy from, and
-                // the global default is what put a whole group on the wrong
-                // side at startup.
-                match savedAlign, (group :> obj) with
-                | Some(a), (:? GroupInfo as gi) ->
-                    gi.invokeGroup <| fun() -> gi.group.setTabAlign(hwnd, a)
-                | _ -> ()
+        let returningState = pendingClosedTabRestores.value.tryFind(hwnd)
+        // Capture restore correspondence on the main thread; the insertion
+        // callback must not read the mutable dictionary from the group thread.
+        let restoreOrder =
+            returningState |> Option.bind (fun info ->
+                let oldHandles = restoredFromMap |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
+                let willBind =
+                    match info.groupRef with
+                    | SavedToken token -> info.isRestoreSeed && token <> IntPtr.Zero &&
+                                          (this.findGroupForClosedInfo info).IsNone
+                    | _ -> false
+                if this.isInfoGroup group info || willBind then
+                    Some(TabOrder.placeRestoredTab info.orderSnapshot (fun h -> Map.tryFind h oldHandles)
+                             hwnd info.closedHwnd info.tabIndex)
+                else None)
+        let savedAlign =
+            if explicitWindows.value.tryFind(hwnd).IsSome then None
+            else this.savedAlignFor(try window.pid.processPath with _ -> "")
+        match group :> obj with
+        | :? GroupInfo as gi ->
+            gi.addWindowWith(hwnd, fun wg ->
+                let invoker = Tab(invokerHwnd)
+                if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
+                    wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                 pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                else
+                    let alignment =
+                        match returningState with
+                        | Some info -> info.tabAlign
+                        | None ->
+                            savedAlign |> Option.orElseWith (fun () ->
+                                if isNewGroup then None
+                                else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
+                    let pinned = returningState |> Option.map (fun info -> info.isPinned)
+                    wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
+        | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
-        if invokerHwnd = IntPtr.Zero && not isNewGroup && not isDropped && explicitWindows.value.tryFind(hwnd).IsNone then
+        if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && explicitWindows.value.tryFind(hwnd).IsNone then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -2084,9 +2053,8 @@ type Program() as this =
                         | _ -> ()
             | _ -> ()
 
-        // Closed-tab restore: reapply saved alignment and visual position after
-        // the generic join/positioning blocks above so the restored values win.
-        // The position is only meaningful inside the tab's former group.
+        // Bind the saved group token after reserving this arrival. Its saved
+        // tab state and position were already supplied to the insertion above.
         match pendingClosedTabRestores.value.tryFind(hwnd) with
         | Some(info) ->
             pendingClosedTabRestores.map(fun m -> m.remove hwnd)
@@ -2134,21 +2102,14 @@ type Program() as this =
                 // already there keep the neighbours they have.
                 isSavedGroup <- true
              | _ -> ())
+#if DEBUG
             match group :> obj with
             | :? GroupInfo as gi ->
                 gi.invokeGroup <| fun() ->
                     try
                         let wg = gi.group
-                        let newTab = Tab(hwnd)
-                        info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
-                        // Alignment and pin first, always, whether or not this
-                        // is the saved group: together they are the tab's band,
-                        // the ordering below sorts within bands, and a tab that
-                        // landed outside its saved group is not ordered at all
-                        // but still keeps what it was saved with.
-                        this.enforcePin(wg, hwnd, info)
+                        // The add used the final alignment, pin and saved slot.
                         if isSavedGroup then
-                            this.restorePlacement(wg, hwnd, info)
                             RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X rank=%d order=%s"
                                                               (hwnd.ToInt64()) info.tabIndex
                                                               (wg.ts.visualOrder.list |> List.map (fun (Tab h) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
@@ -2156,6 +2117,7 @@ type Program() as this =
                             RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X SKIPPED (not saved group)" (hwnd.ToInt64()))
                     with _ -> ()
             | _ -> ()
+#endif
         | None -> ()
 
         // Run any post-action registered for a standalone launch (position, etc.)
@@ -2944,6 +2906,8 @@ type Program() as this =
                     let createdGroup =
                         if matched.IsEmpty then None else
                         let group = Services.desktop.createGroup()
+                        // A saved group default is also known before any tab joins.
+                        g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
                         matched |> List.iter (fun t ->
                             let hwnd = t.live.Value
                             // What the plan allows onto this window: always
@@ -2971,10 +2935,12 @@ type Program() as this =
                             // (the order arithmetic resolves through this map).
                             if hwnd <> t.saved.hwnd then
                                 restoredFromMap.[hwnd] <- t.saved.hwnd
-                            group.addWindow(hwnd, false))
-                        // The group's own settings, or the global default
-                        // already applied at creation when it has none.
-                        g.tabPosition |> Option.iter (fun pos -> group.perGroupTabPositionValue <- pos)
+                            match group :> obj with
+                            | :? GroupInfo as groupInfo ->
+                                groupInfo.addWindowWith(hwnd, fun wg ->
+                                    wg.addWindow(hwnd, false, ?alignment=(e.align |> Option.map tabAlignOfSavedAlign),
+                                                 pinned=e.isPinned))
+                            | _ -> group.addWindow(hwnd, false))
                         g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
                         g.lockPosition |> Option.iter (fun v -> group.lockWindowPosition <- v)
                         group.desktopHome <- homes.[gi]
@@ -3380,10 +3346,13 @@ type Program() as this =
 
                     if validHwnds.count > 0 then
                         let group = Services.desktop.createGroup()
-                        validHwnds.iter <| fun hwnd ->
-                            group.addWindow(hwnd, false)
-                        // Restore per-group tab position
                         group.perGroupTabPositionValue <- savedTabPos
+                        validHwnds.iter <| fun hwnd ->
+                            match group :> obj with
+                            | :? GroupInfo as gi ->
+                                gi.addWindowWith(hwnd, fun wg ->
+                                    wg.addWindow(hwnd, false, pinned=pinnedHwnds.contains((=) hwnd)))
+                            | _ -> group.addWindow(hwnd, false)
                         // Restore per-group snap tab height margin
                         group.snapTabHeightMargin <- savedSnapMargin
                         // Restore whether this group's windows are locked

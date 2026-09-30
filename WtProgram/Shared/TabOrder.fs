@@ -2,7 +2,7 @@ namespace Bemo
 
 open System
 
-// The order arithmetic of the session restore, and nothing else.
+// Pure order arithmetic for session restore and new-tab placement.
 //
 // Restoring a group is spread over minutes or hours: WindowTabs starts, some
 // of the group's windows are already open, and the rest appear one at a time
@@ -29,6 +29,25 @@ module TabOrder =
         | true, false -> 1
         | false, true -> 2
         | false, false -> 3
+
+    // Known tab state wins over the group's default, before any ordering.
+    let initialState defaultAlignment alignment pinned =
+        Option.defaultValue defaultAlignment alignment, pinned
+
+    // Insert once into the final band. Existing peers keep their order;
+    // an explicit predecessor is used only inside the same band.
+    let addTab tab zone after zoneOfTab tabs =
+        if List.contains tab tabs then tabs else
+        let target =
+            after |> Option.bind (fun anchor ->
+                tabs |> List.tryFindIndex (fun t -> t = anchor && zoneOfTab t = zone))
+        match target with
+        | Some index ->
+            let before, rest = List.splitAt (index + 1) tabs
+            before @ [tab] @ rest
+        | None ->
+            let before, rest = List.splitAt (tabs |> List.takeWhile (fun t -> zoneOfTab t <= zone) |> List.length) tabs
+            before @ [tab] @ rest
 
     // A tab as the ordering sees it: the handle it has now, and the band it is
     // drawn in.
