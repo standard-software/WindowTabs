@@ -46,6 +46,18 @@ open System
 ///     themselves contradict is not used at all (trustCurrent).
 module VirtualDesktopGroups =
 
+    /// Capture the desktop where settings opened. Unknown desktop readings
+    /// retain the legacy all-groups behavior. Unassigned groups can only be
+    /// identified by visibility while that desktop is still current.
+    let captureGroup supported (opened: Guid option) (current: Guid option)
+                     (home: Guid option) shown =
+        match supported, opened, current with
+        | true, Some target, Some now ->
+            match home with
+            | Some desktop -> desktop = target && (now <> target || shown)
+            | None -> now = target && shown
+        | _ -> true
+
     // ------------------------------------------------------------ reading --
 
     type Presence =
