@@ -1908,11 +1908,9 @@ type AppearanceView() as this =
         if matchIndex >= 0 then
             colorThemeComboBox.SelectedIndex <- matchIndex
         else
-            // Current colors don't match any preset or custom theme
-            // Save them as Custom colors and add UnsavedCustom to the list
+            // Reflect current colors in memory, as refresh does. Only a user
+            // edit persists Custom colors; constructing the view is read-only.
             savedCustomColors <- Some(getCurrentColors())
-            // Persist to settings file so Custom option remains after dialog close/reopen
-            saveSavedCustomColors savedCustomColors
             refreshComboBoxItems()
             colorThemeComboBox.SelectedIndex <- themeItems.Length - 1  // Custom
         updateButtonState()

@@ -116,7 +116,6 @@ type HotKeyView() =
                 match mode with
                 | "never" | "down" | "doubleclick" -> mode
                 | _ ->
-                    Services.settings.setValue("hideTabsWhenDownByDefault", "doubleclick")
                     "doubleclick"
 
             let radioNever = new RadioButton()
@@ -206,7 +205,6 @@ type HotKeyView() =
                 match mode with
                 | "change" | "nochange" -> mode
                 | _ ->
-                    Services.settings.setValue("changeTabPositionOnSnap", "change")
                     "change"
             combo.SelectedIndex <- if currentMode = "nochange" then 1 else 0
             combo.SelectedIndexChanged.Add(fun _ ->
