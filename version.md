@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next12
+
+- The settings pages are shown in the README with the new Color page.
+
 ## version ss_2026.10.01_next11
 
 - Fixed a window being put into more than one tab group across virtual desktops, which drew two tab strips on top of each other. Existing duplicates are removed.
