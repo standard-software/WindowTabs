@@ -234,7 +234,8 @@ type Img(bitmap:Bitmap) =
         g
     member this.clip(rc:Rect) =
         let clipped = Img(rc.size)
-        clipped.graphics.DrawImage(this.bitmap, 0, 0, rc.Rectangle, GraphicsUnit.Pixel)
+        use graphics = clipped.graphics
+        graphics.DrawImage(this.bitmap, 0, 0, rc.Rectangle, GraphicsUnit.Pixel)
         clipped
     member this.crop croppedSize =
         let croppedSize = this.size.intersect(croppedSize)

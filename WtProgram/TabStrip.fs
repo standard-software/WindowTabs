@@ -26,8 +26,37 @@ type ITabStripMonitor =
     abstract member tabMoved : Tab * int -> unit
     abstract member windowMsg : Win32Message -> unit
 
+// Owns only the final strip bitmap. Window.update borrows it synchronously;
+// its temporary composite and native HBITMAP are released before returning.
+// A failed render leaves the previous entry intact so the next update retries.
+type StripRenderCache() =
+    let mutable cached : ((string * obj) list * Img) option = None
+    member this.Get(key, render: unit -> Img) =
+        match cached with
+        | Some(previous, image) when previous = key -> image, false
+        | previous ->
+            let image = PerfTrace.time "stripRender" render
+#if DEBUG
+            for name, value in key do
+                if previous |> Option.forall (fun (old, _) -> List.tryFind (fst >> (=) name) old <> Some(name, value)) then
+                    PerfTrace.count ("stripCause." + name)
+#endif
+            cached <- Some(key, image)
+            previous |> Option.iter (fun (_, old) -> old.bitmap.Dispose())
+            image, true
+    member this.Clear() =
+        let old = cached
+        cached <- None
+        old |> Option.iter (fun (_, image) -> image.bitmap.Dispose())
+    interface IDisposable with
+        member this.Dispose() = this.Clear()
+
 type TabStrip(monitor:ITabStripMonitor) as this =
     let Cell = CellScope(false, true)
+    let renderCache = new StripRenderCache()
+    let mutable destroyed = false
+    let systemAppearanceCell = Cell.create(0)
+    let mutable lastPresentation : (Img * Pt * byte) option = None
     let _os = OS()
     let taskbar = _os.getTaskbar()
     let tabMovedEvent = Event<_>()
@@ -477,9 +506,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 pendingTooltipTab := None
                 tooltipTimer.Stop()
                 tooltipForm.Visible <- false
-        this.update()
 
     member private this.wndProc(msg:Win32Message) =
+        // Monitor callbacks and mouse state changes share one strip transaction.
+        this.batch (fun () -> this.wndProcCore(msg))
+
+    member private this.wndProcCore(msg:Win32Message) =
         // The mouse point is used as-is. The strip window is per-monitor DPI
         // aware, so the client point Windows reports is in the same device
         // pixels the sprite tree was laid out in: hit test == what is drawn, at
@@ -500,6 +532,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             monitor.windowMsg(msg)
 
         match msg.msg with
+        | WindowMessages.WM_SETTINGCHANGE
+        | WindowMessages.WM_SYSCOLORCHANGE
+        | WindowMessages.WM_THEMECHANGED ->
+            systemAppearanceCell.set(systemAppearanceCell.value + 1)
+            msg.def()
         | WindowMessages.WM_MOUSEACTIVATE ->
             MouseActivateReturnCodes.MA_NOACTIVATE
         | WindowMessages.WM_MOUSEMOVE ->
@@ -525,10 +562,44 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.location = locationCell.value 
     
     member private this.update() =
-        if this.visible then
-            PerfTrace.time "stripRender" (fun () -> this.window.update(this.render, this.location, this.alpha))
-        else this.window.hide()
-    
+        if destroyed then ()
+        elif this.visible then
+            // Read the complete sprite input on every listener pass, even on a
+            // cache hit, so Cell retains all dependencies after move-only work.
+            let rendered =
+                try
+                    let ts = this.ts
+                    let shrunk = this.isShrunk && ts.direction = TabDirection.TabDown
+                    let key = ts.renderKey @ [ "sliver", box shrunk; "system", box systemAppearanceCell.value ]
+                    Some(renderCache.Get(key, fun () -> this.render(ts, shrunk)))
+                with _ ->
+                    PerfTrace.count "stripRenderFailed"
+                    None
+            let location, alpha = this.location, this.alpha
+            match rendered with
+            | Some(image, redrawn) ->
+                let unchanged =
+                    match lastPresentation with
+                    | Some(old, point, opacity) ->
+                        Object.ReferenceEquals(old, image) && point.record = location.record && opacity = alpha
+                    | None -> false
+                if not unchanged then
+#if DEBUG
+                    if not redrawn then
+                        match lastPresentation with
+                        | Some _ -> PerfTrace.count "stripMoveOnly"
+                        | None -> PerfTrace.count "stripReuseShow"
+#endif
+                    this.window.update(image, location, alpha)
+                    lastPresentation <- Some(image, location, alpha)
+            | None ->
+                use bitmap = new Bitmap(1, 1)
+                this.window.update(Img(bitmap), location, alpha)
+                lastPresentation <- None
+        else
+            this.window.hide()
+            lastPresentation <- None
+
     // No draw correction any more. The former applyDrawCorrection pre-compressed
     // the rendered strip horizontally to cancel the drift between the OS bitmap
     // stretch and the mouse virtualization of a DPI-UNAWARE layered window. A
@@ -538,23 +609,16 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // sharpness this change is about. (It would also be dead code: it derived
     // its rate from GetDeviceCaps HORZRES vs DESKTOPHORZRES, and an aware
     // process gets the same physical value from both, so the rate is always 0.)
-    member private this.render : Img =
-        try
-            let img = this.ts.render
-            if this.isShrunk && this.direction = TabDirection.TabDown then
-                // Sliver of strip left visible when auto-hidden.
-                let sliver = Dpi.px this.scale 7
-                img.clip(Rect(Pt(0, img.height - sliver), Sz(img.width, sliver)))
-            else
-                img
-        with ex ->
-            Img(Sz(1,1))
+    member private this.render(ts: TabStripSprite<Tab>, shrunk: bool) : Img =
+        let img = ts.render
+        if shrunk then
+            // The clipped image is independent; release the full-size source.
+            try img.clip(Rect(Pt(0, img.height - Dpi.px ts.scale 7), Sz(img.width, Dpi.px ts.scale 7)))
+            finally img.bitmap.Dispose()
+        else img
 
-    member private this.withUpdate f =
-        Cell.beginUpdate()
-        let result = f()
-        Cell.endUpdate()
-        result
+    member private this.withUpdate<'a> (f: unit -> 'a) : 'a =
+        this.batch f
 
     member this.hwnd = hwndRef.Value
     
@@ -583,6 +647,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // sure a recycled handle can never resurrect the previous window's
         // picture; the cache refills with one CopyImage per visible tab.
         ScaledIcon.invalidate()
+        // A removed window can recycle its icon handle before the next draw.
+        renderCache.Clear()
         Cell.beginUpdate()
         if pinnedTabsCell.value.contains(tab) then
             pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
@@ -733,7 +799,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.setSelectedTabs(newSet: Set2<Tab>) =
         if selectedTabsCell.value <> newSet then
             selectedTabsCell.set(newSet)
-            this.update()
     member this.isTabSelected(tab) = selectedTabsCell.value.contains(tab)
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
@@ -1091,7 +1156,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // WindowGroup update does not batch it: one foreground change in the
     // system rendered every group's strip about eight times in a row (zorder,
     // foreground, appearance, four placement cells, visibility).
-    member this.batch (f: unit -> 'a) : 'a =
+    member this.batch<'a> (f: unit -> 'a) : 'a =
         Cell.beginUpdate()
         try f()
         finally Cell.endUpdate()
@@ -1154,6 +1219,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         ts.render
 
     member this.destroy() = 
+        destroyed <- true
+        renderCache.Clear()
+        lastPresentation <- None
         eventHandlersCell.value.items.iter(fun d -> d.Dispose())
         layeredWindowCell.value.iter <| fun w -> (w :?> IDisposable).Dispose()
         tooltipTimer.Dispose()

@@ -548,6 +548,24 @@ type TabStripSprite<'id> when 'id : equality = {
     scale: float
     } with
 
+    // Compare values, not the identity of Map2/List2/Set2 wrappers. Exclude
+    // placement and alpha: neither is an input to this sprite's pixels.
+    member this.renderKey : (string * obj) list =
+        [ "tabs", box (this.tabs.items.list |> List.map (fun (id, info) ->
+              let font = info.textFont
+              let icon = try Some(info.icon.Handle, info.icon.Size) with _ -> None
+              let brush = match info.textBrush with | :? SolidBrush as b -> box b.Color | b -> box b
+              id, info.text, icon, (font.Name, font.Size, font.Style, font.Unit, font.GdiCharSet, font.GdiVerticalFont),
+              brush, info.bgColor, info.fillColor, info.underlineColor, info.borderColor))
+          "appearance", box this.appearance
+          "hover", box (this.hover, this.captured)
+          "order", box (this.visualOrder.list, this.zorder.list)
+          "geometry", box (this.size.record, this.scale, this.direction, this.tabAlignments.items.list)
+          "transparent", box this.transparent
+          "pins", box this.pinnedTabs.items.list
+          "selection", box this.selectedTabs.items.list
+          "drag", box (this.slide, this.dragGroup) ]
+
     member private this.px value = Dpi.px this.scale value
 
     member private this.tabOverlap = float(this.appearance.tabOverlap)
