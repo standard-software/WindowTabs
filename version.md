@@ -2,9 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.09.30_next1
+## version ss_2026.10.01
+
+- Lighter and faster with many windows and tab groups.
+  - Virtual desktops are read on a thread of their own, settings are read without waiting, and a tab strip is drawn again only when it changes.
+  - Resizing a window no longer waits for the other windows of its group to follow.
+- Fixed a tab dragged over some windows dropping out of the strip and back in, over and over.
+- Fixed the tab groups being built twice when WindowTabs, started disabled, was switched on: two tabs for one window, and windows that could not be moved or minimized.
 
 ## version ss_2026.09.30
+
+- Withdrawn because of a performance problem around virtual desktops
 
 - The tab outline can be chosen in the appearance settings.
   - It applies without restarting, and the original S curve stays the default.
