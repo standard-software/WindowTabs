@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next8
+
 ## version ss_2026.10.01_next7
 
 - After a language change the settings dialog is rebuilt before the confirmation appears, so it opens at once the next time.

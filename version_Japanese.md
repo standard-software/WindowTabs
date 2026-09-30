@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next8
+
 ## version ss_2026.10.01_next7
 
 - 言語を切り替えたとき、確認のメッセージを出す前に設定画面を作り直すようにした。次に設定画面を開くときは、すぐに開く。
