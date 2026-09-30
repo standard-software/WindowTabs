@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next4
+
+- Closing one of several tabs with the same title no longer moves the others: such a tab is not remembered for restoring, and a window is put back by at most one remembered tab.
+- A tab opened with "Right of this tab" takes that tab's fill, underline and border colours as well.
+
 ## version ss_2026.10.01_next3
 
 - A tab opened with "Right of this tab" goes right beside the tab it came from, and a restart keeps the tab order, whichever side the default tab position is.
