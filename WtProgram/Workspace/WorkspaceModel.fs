@@ -383,6 +383,7 @@ type WorkspaceModel() as this =
     let canEditChangedEvt = Event<_>()
     let _workspaces = System.Collections.Generic.List<Workspace>()
     let mutable _selected = null : obj
+    let mutable captureDesktop : Guid option = None
 
     do
         Observable.init(this)
@@ -404,9 +405,18 @@ type WorkspaceModel() as this =
         let nextNumber = this.workspaces.choose(fun(w) -> w.name.Replace("Workspace ", "").tryToInt()).maxBy 0 id + 1
         sprintf "Workspace %A" nextNumber
 
+    // Called on each visible opening, including reuse of the preloaded form.
+    member this.beginSettingsSession() =
+        captureDesktop <- VirtualDesktopGroups.Live.current()
+
     member private this.createWorkspace() =
         let zorder = os.windowZorders
-        let groups = Services.desktop.groups.enumerate.map <| fun (i, group) ->
+        let supported = VirtualDesktopHelper.IsSupported
+        let current = VirtualDesktopGroups.Live.current()
+        let capturedGroups = Services.desktop.groups.where(fun group ->
+            VirtualDesktopGroups.captureGroup supported captureDesktop current
+                group.desktopHome group.isDesktopShown)
+        let groups = capturedGroups.enumerate.map <| fun (i, group) ->
             let windowsInZorder = group.windows.sortBy(zorder.find)
             let innerZorder = Map2(windowsInZorder.enumerate.map(fun(innerZorder, hwnd) -> hwnd, innerZorder))
             let wsGroup = WorkspaceGroup(

@@ -192,6 +192,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // thing second after second writes one line rather than thousands.
     let mutable lastDesktopReading = ""
     let mutable lastDesktopGeneration = 0L
+    let mutable lastDesktopCurrent : Guid option = None
     let mutable pendingStraddleGeneration : int64 option = None
     // How many ticks running this group has looked the same way about the
     // desktops, and when it last took a window out over it.
@@ -338,17 +339,22 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // after it closes compares against it and sees every window that
             // moved.
             let state = VirtualDesktopGroups.Live.snapshot()
-            if this.shellSwitcherIsOpen then
+            if this.shellSwitcherIsOpen || not (VirtualDesktopGroups.Live.isFresh state) then
                 // Keep the pre-switch comparison, but do not reuse this
                 // publication after task view closes.
                 lastDesktopGeneration <- state.generation
                 pendingStraddleGeneration <- None
             else
+            if state.current <> lastDesktopCurrent then
+                lastDesktopCurrent <- state.current
+                pendingStraddleGeneration <- None
+                straddleTicks <- 0
             let members = group.windows.items.list
             let membershipChanged = members <> lastDesktopMembers
             lastDesktopMembers <- members
             let wait =
                 membershipChanged
+                || not (VirtualDesktopGroups.Live.canDecide state members)
                 || members.Length <= 1
                 || DateTime.UtcNow - startedAt < restoreSettles
                 // Mid-drag the windows are being moved about by us; a desktop
@@ -468,8 +474,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             |> List.exists (fun hwnd ->
                 not (List.contains hwnd strays) && readsAs (fun id -> id = baseDesktop) hwnd)
         // Never a window that is on the desktop being looked at: one shown on
-        // all desktops always is, and one moved here is given a group here and
-        // leaves this one when this group's desktop is looked at
+        // all desktops always is. An ordinary moved window leaves this group
+        // once its absence is confirmed while this desktop is looked at
         // (VirtualDesktopGroups.mayLeave).
         let away =
             strays |> List.filter (fun hwnd ->
@@ -477,6 +483,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 VirtualDesktopGroups.mayLeave (shared.Contains hwnd) (presenceOf hwnd))
         let stillAway = stayedHere && not away.IsEmpty && away.Length = strays.Length
         let act =
+            VirtualDesktopGroups.Live.canDecide state group.windows.items.list &&
             VirtualDesktopIntegrity.actOnStraddle && stillAway && not tooSoon && elsewhere = 0
         VirtualDesktopTrace.log (fun () ->
             sprintf "group=%X straddle CONFIRMED base=%s strays=%s stillAway=%b tooSoon=%b otherGroups=%d -> %s"
