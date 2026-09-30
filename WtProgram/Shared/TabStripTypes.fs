@@ -8,6 +8,8 @@ and TabInfo = {
     text: string
     iconSmall: Icon
     iconBig: Icon
+    // Geometry is available without asking the application to paint a preview.
+    previewSize: unit -> Sz
     preview: unit -> Img
     isRenamed: bool
 }

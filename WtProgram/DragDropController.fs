@@ -33,6 +33,52 @@ module DragTrace =
         ignore f
 #endif
 
+    // Snapshots cannot see every transient change or messages delivered to a
+    // foreign process. Keep watching the original thread even if foreground
+    // becomes NULL; record API failure separately from an inactive window.
+    let activation (label: unit -> string) (watchedHwnd: IntPtr) =
+#if DEBUG
+        log (fun () ->
+            let gui tid =
+                if tid = 0 then "unavailable" else
+                let mutable info = GUITHREADINFO()
+                info.cbSize <- Runtime.InteropServices.Marshal.SizeOf(info)
+                let ok = WinUserApi.GetGUIThreadInfo(tid, &info)
+                sprintf "ok=%b active=%X focus=%X capture=%X flags=%X" ok
+                    (info.hwndActive.ToInt64()) (info.hwndFocus.ToInt64())
+                    (info.hwndCapture.ToInt64()) info.flags
+            let fg = WinUserApi.GetForegroundWindow()
+            let fgThread = if fg = IntPtr.Zero then 0 else Win32Helper.GetWindowThreadId(fg)
+            let watchedThread = if watchedHwnd = IntPtr.Zero then 0 else Win32Helper.GetWindowThreadId(watchedHwnd)
+            let currentThread = WinBaseApi.GetCurrentThreadId()
+            sprintf "activation: %s fgHwnd=%X fgThread=%d fg={%s} watchedHwnd=%X watchedThread=%d watched={%s} currentThread=%d current={%s}"
+                (label()) (fg.ToInt64()) fgThread (gui fgThread)
+                (watchedHwnd.ToInt64()) watchedThread (gui watchedThread) currentThread (gui currentThread))
+#else
+        ignore label
+        ignore watchedHwnd
+#endif
+
+    let windowMessage (label: unit -> string) (msg: Win32Message) =
+#if DEBUG
+        match msg.msg with
+        | WindowMessages.WM_ACTIVATE
+        | WindowMessages.WM_NCACTIVATE
+        | WindowMessages.WM_ACTIVATEAPP
+        | WindowMessages.WM_SETFOCUS
+        | WindowMessages.WM_KILLFOCUS
+        | WindowMessages.WM_MOUSEACTIVATE
+        | WindowMessages.WM_SHOWWINDOW
+        | WindowMessages.WM_CAPTURECHANGED ->
+            activation (fun () ->
+                sprintf "%s message hwnd=%X msg=%X wParam=%X lParam=%X"
+                    (label()) (msg.hwnd.ToInt64()) msg.msg (msg.wParam.ToInt64()) (msg.lParam.ToInt64())) msg.hwnd
+        | _ -> ()
+#else
+        ignore label
+        ignore msg
+#endif
+
     // Short caller list for pinpointing which of the many suspend/resume call
     // sites leaked a suspension. Debug builds only.
     let callers (depth: int) =
@@ -146,6 +192,16 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
     let mutable moveCount = 0
     let mutable hasEnded = false
+#if DEBUG
+    let mutable traceForeground = IntPtr.Zero
+#endif
+
+    member private this.traceActivation(phase) =
+#if DEBUG
+        DragTrace.activation (fun () -> sprintf "[d%d] %s" dragId phase) traceForeground
+#else
+        ignore phase
+#endif
 
     member this.setNextState(newState:obj) =
         let newState = unbox<IDragState>(newState)
@@ -183,8 +239,11 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             let step name f =
                 try f() with ex -> DragTrace.log (fun () -> sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
             let state = dragStateCell.value
+            this.traceActivation("beforeReleaseCapture")
             step "releaseCapture" <| fun() -> this.captureWindow.releaseCapture()
+            this.traceActivation("afterReleaseCapture")
             step "disposeCaptureWindow" <| fun() -> (captureWindowCell.value.Value :?> IDisposable).Dispose()
+            this.traceActivation("afterDestroyCapture")
             step "disposeTimer" timer.Dispose
             step "disposeState" <| fun() -> state.iter(fun s -> s.dispose())
             step "disposeAnimation" <| fun() -> animationWindowCell.value.iter(fun window -> window.Dispose())
@@ -221,6 +280,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: done" dragId)
 
     member this.wndProc (msg:Win32Message) =
+        DragTrace.windowMessage (fun () -> sprintf "[d%d] capture" dragId) msg
         // The cursor itself, not the message's point: while a tab is dragged
         // over some windows, WM_MOUSEMOVE arrives now and then with an empty
         // lParam, and reading (0,0) from it dropped the tab out of the strip
@@ -307,8 +367,19 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
 
     member this.start() =
         if captureWindowCell.value.IsSome then failwith "already started"
+#if DEBUG
+        traceForeground <- WinUserApi.GetForegroundWindow()
+#endif
+        this.traceActivation("beforeCreateCapture")
         captureWindowCell.set(Some(os.createWindow this.wndProc 0 0))
+        this.traceActivation("afterCreateCapture")
+        DragTrace.log (fun () ->
+            sprintf "[d%d] captureWindow: hwnd=%X style=%X exStyle=%X visible=%b bounds=%A" dragId
+                (this.captureWindow.hwnd.ToInt64()) this.captureWindow.style this.captureWindow.styleEx
+                (WinUserApi.IsWindowVisible(this.captureWindow.hwnd)) this.captureWindow.bounds)
+        this.traceActivation("beforeSetCapture")
         this.captureWindow.setCapture()
+        this.traceActivation("afterSetCapture")
         DragTrace.log (fun () -> sprintf "[d%d] start: captureHwnd=%X hasCapture=%b lbuttonDown=%b fgHwnd=%X fgThread=%d myThread=%d" dragId
                                       (this.captureWindow.hwnd.ToInt64()) this.captureWindow.hasCapture (isLeftMouseButtonDown())
                                       (WinUserApi.GetForegroundWindow().ToInt64())

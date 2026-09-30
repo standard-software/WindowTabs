@@ -694,6 +694,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             isRenamed = this.isRenamed hwnd
             iconSmall = window.iconSmall
             iconBig = window.iconBig
+            previewSize = fun() ->
+                let size = if window.isMinimized then this.placementBounds.size else window.bounds.size
+                if size.isEmptyArea then Sz(1, 1) else size
             preview = fun() ->
                 try
                     if window.isMinimized then
@@ -706,7 +709,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         g.DrawIcon(icon, ((size.width - iconSize.width).float / 2.0).Int32, ((size.height - iconSize.height).float / 2.0).Int32)
                         img
                     else
-                        Img(Win32Helper.PrintWindow(hwnd))
+                        DragTrace.activation (fun () -> "preview.beforePrintWindow") hwnd
+                        try Img(Win32Helper.PrintWindow(hwnd))
+                        finally DragTrace.activation (fun () -> "preview.afterPrintWindow") hwnd
                 with ex -> Img(Sz(1, 1))
         }
     

@@ -3397,8 +3397,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             let clickOffsetInTab = pt.sub(originalTabLocation)
 
                             // Calculate scaled offset for preview image (always needed when dragging to different location)
-                            let dragTabLoc = this.ts.dragTabLocation tab
-                            let previewWidth = tabInfo.preview().width
+                            // Keep PrintWindow behind the drag threshold: both offset
+                            // calculations use the same geometry-only width snapshot.
+                            let previewWidth = tabInfo.previewSize().width
+                            let dragTabLoc = this.ts.dragTabLocation(tab, previewWidth)
+                            DragTrace.log (fun () -> sprintf "press.geometry: hwnd=%X previewWidth=%d" (hwnd.ToInt64()) previewWidth)
                             let originalWidth = this.ts.bounds.width
                             let scaleRatio = float(previewWidth) / float(originalWidth)
                             let scaledClickOffset = Pt(int(float(clickOffsetInTab.x) * scaleRatio), clickOffsetInTab.y)
