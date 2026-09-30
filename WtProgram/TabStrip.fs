@@ -509,7 +509,19 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member private this.wndProc(msg:Win32Message) =
         // Monitor callbacks and mouse state changes share one strip transaction.
+        DragTrace.windowMessage (fun () -> "strip") msg
+#if DEBUG
+        if msg.msg = WindowMessages.WM_LBUTTONDOWN then
+            let foreground = WinUserApi.GetForegroundWindow()
+            let tracePress phase =
+                DragTrace.activation (fun () -> sprintf "press.%s strip=%X" phase (msg.hwnd.ToInt64())) foreground
+            tracePress "before"
+            try this.batch (fun () -> this.wndProcCore(msg))
+            finally tracePress "after"
+        else this.batch (fun () -> this.wndProcCore(msg))
+#else
         this.batch (fun () -> this.wndProcCore(msg))
+#endif
 
     member private this.wndProcCore(msg:Win32Message) =
         // The mouse point is used as-is. The strip window is per-monitor DPI
@@ -1038,6 +1050,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             isRenamed = false
             iconSmall = System.Drawing.SystemIcons.Application
             iconBig = System.Drawing.SystemIcons.Application
+            previewSize = fun() -> Sz(1,1)
             preview = fun() -> Img(Sz(1,1))
         })
 
@@ -1046,10 +1059,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             
     member this.tabLocation = this.ts.tabLocation
 
-    member this.dragTabLocation (tab:Tab) : Pt=
-        // Calculate tab location for the drag preview
-        let bmpHwnd : Img = this.tabInfo(tab).preview()
-        let previewWidth = bmpHwnd.width
+    member this.dragTabLocation (tab:Tab, previewWidth:int) : Pt=
+        // MouseDown needs only geometry. Rendering here would send PrintWindow
+        // to the application even when the press never becomes a drag.
 
         // Create a TabStrip with scaled size and single tab, keeping the
         // dragged tab's alignment so a right-aligned tab stays at the right
