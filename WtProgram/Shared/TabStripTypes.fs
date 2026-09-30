@@ -76,7 +76,9 @@ and TabAppearanceInfo = {
     tabOverlap: int
     tabHeightOffset : int
     tabIndentFlipped : int
+    tabIndentFlippedRight : int
     tabIndentNormal : int
+    tabIndentNormalRight : int
     tabInactiveTextColor : Color
     tabSelectedTextColor : Color
     tabMouseOverTextColor : Color

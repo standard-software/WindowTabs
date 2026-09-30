@@ -206,7 +206,9 @@ module Dpi =
                 tabOverlap = px scale a.tabOverlap
                 tabHeightOffset = px scale a.tabHeightOffset
                 tabIndentFlipped = px scale a.tabIndentFlipped
-                tabIndentNormal = px scale a.tabIndentNormal }
+                tabIndentFlippedRight = px scale a.tabIndentFlippedRight
+                tabIndentNormal = px scale a.tabIndentNormal
+                tabIndentNormalRight = px scale a.tabIndentNormalRight }
 
     /// Opt the process into Per-Monitor-V2 awareness at runtime. The manifest
     /// normally did this already (then this call is a no-op); it exists so the

@@ -376,7 +376,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 - **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - **Vertical tab direction**: choose "Up, or down when it would be off-screen" (default) or "Always down".
-- Configure hiding tabs for full-screen windows, while moving windows, and when tabs face downward.
+- Configure hiding tabs for full-screen windows, while moving windows, and for inner tabs.
 - **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
