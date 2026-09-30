@@ -568,7 +568,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.updateGroupInfo()
             repairMarginFrames()
             // Same tick, same thread as the rest of this group's upkeep.
-            this.reconcileVirtualDesktop())
+            this.reconcileVirtualDesktop()
+            PerfTrace.time "title.refresh" group.refreshTitles)
         groupInfoTimer.Start()
         // Stop and release the timer with the group: it owns a window of this
         // group's thread, which goes away with the group.
