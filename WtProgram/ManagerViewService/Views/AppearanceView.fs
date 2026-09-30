@@ -101,7 +101,9 @@ type AppearanceView() as this =
         intConfig "tabMaxWidth" "Tab Width (Max)"
         intConfig "tabOverlap" "Tab Overlap"
         intConfig "tabIndentNormal" "Indent Normal"
+        intConfig "tabIndentNormalRight" "Right"
         intConfig "tabIndentFlipped" "Indent Flipped"
+        intConfig "tabIndentFlippedRight" "Right"
         ])
 
     // Color properties organized by state (for new grid layout)
@@ -142,7 +144,7 @@ type AppearanceView() as this =
     // - Main panel (2 rows): upper section + color grid section
     // - Upper panel: int properties + tab shape + dark mode (3 columns: label, input, reset)
     // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 3  // int props + pinned width row + tab shape + dark mode
+    let upperRowCount = intProperties.length + 1  // Seven integer fields share five rows, plus three other rows.
     let colorGridRowCount = 7  // theme row + header + 5 state rows (Inactive / Selected / MouseOver / Active / Flash)
 
     // Main container panel (vertical stack)
@@ -242,7 +244,7 @@ type AppearanceView() as this =
     let rowMinimumHeight (topMargin: int) (bottomMargin: int) = UIHelper.settingsRowHeightPx - topMargin - bottomMargin
 
     // Helper to create and place an int property editor at a specific row in upperPanel
-    let createIntEditorAt (prop: AppearanceProperty) (row: int) =
+    let createIntEditorAt (target: TableLayoutPanel) (column: int) (prop: AppearanceProperty) (row: int) =
         let label =
             let label = Label()
             label.AutoSize <- true
@@ -256,16 +258,19 @@ type AppearanceView() as this =
 
         editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
-        upperPanel.Controls.Add(label)
-        upperPanel.Controls.Add(editor.control)
-        upperPanel.SetRow(label, row)
-        upperPanel.SetColumn(label, 0)
-        upperPanel.SetRow(editor.control, row)
-        upperPanel.SetColumn(editor.control, 1)
+        target.Controls.Add(label)
+        target.Controls.Add(editor.control)
+        target.SetRow(label, row)
+        target.SetColumn(label, column)
+        target.SetRow(editor.control, row)
+        target.SetColumn(editor.control, column + 1)
 
         let resetBtn =
             let btn = Button()
             btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
+            btn.AutoSize <- true
+            btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+            btn.MinimumSize <- Size(0, SettingsField.heightPx)
             btn.Dock <- DockStyle.Fill
             btn.TextAlign <- ContentAlignment.MiddleLeft
             btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
@@ -276,9 +281,9 @@ type AppearanceView() as this =
                 this.applyAppearance()
                 suppressEvents <- false
             btn
-        upperPanel.Controls.Add(resetBtn)
-        upperPanel.SetRow(resetBtn, row)
-        upperPanel.SetColumn(resetBtn, 2)
+        target.Controls.Add(resetBtn)
+        target.SetRow(resetBtn, row)
+        target.SetColumn(resetBtn, column + 2)
 
         (prop.key, editor)
 
@@ -293,9 +298,71 @@ type AppearanceView() as this =
 
     // Size editors follow the two appearance rows, skipping the pinned width row.
     let intEditors =
-        intProperties.enumerate.map (fun (i, prop) ->
-            let row = if i >= 2 then i + 3 else i + 2
-            createIntEditorAt prop row)
+        let regular =
+            intProperties.list
+            |> List.take 3
+            |> List.mapi (fun i prop ->
+                let row = if i >= 2 then i + 3 else i + 2
+                createIntEditorAt upperPanel 0 prop row)
+        let edges =
+            ["tabIndentNormal", "Indent Normal", 6; "tabIndentFlipped", "Indent Flipped", 7]
+            |> List.collect (fun (key, caption, row) ->
+                let label = Label(AutoSize = true, Text = Localization.getString(caption),
+                                  TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Left,
+                                  Margin = Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx),
+                                  MinimumSize = Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx))
+                upperPanel.Controls.Add(label, 0, row)
+                let pair = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
+                                               Margin = Padding(0), ColumnCount = 6, RowCount = 1)
+                pair.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
+                pair.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
+                for _ in 1..2 do
+                    pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
+                    pair.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 50.0f)).ignore
+                    pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
+                pair.SuspendLayout()
+                let left = createIntEditorAt pair 0 (intConfig key "Left") 0
+                let right = createIntEditorAt pair 3 (intConfig (key + "Right") "Right") 0
+                // Auto-sized captions leave both fields equal space.
+                // A minimum field width lets the outer scroll panel handle narrow windows.
+                for column in [0; 3] do
+                    let caption = pair.GetControlFromPosition(column, 0)
+                    caption.Margin <- Padding((if column = 0 then 0 else 30), UIHelper.settingsRowMarginPx, 5, UIHelper.settingsRowMarginPx)
+                    pair.GetControlFromPosition(column + 1, 0).MinimumSize <- Size(50, SettingsField.heightPx)
+                upperPanel.Controls.Add(pair, 1, row)
+                upperPanel.SetColumnSpan(pair, 2)
+                // Follow the actual reset button in the outer panel, including
+                // its current DPI and translated caption width. Equal reset
+                // columns also keep the two distance rows aligned.
+                let referenceReset = upperPanel.GetControlFromPosition(2, 2)
+                for column in [2; 5] do
+                    let reset = pair.GetControlFromPosition(column, 0)
+                    reset.AutoSize <- false
+                    reset.Dock <- DockStyle.Right
+                    pair.ColumnStyles.[column].SizeType <- SizeType.Absolute
+                let mutable syncingResetWidths = false
+                let syncResetWidths () =
+                    if not syncingResetWidths then
+                        syncingResetWidths <- true
+                        pair.SuspendLayout()
+                        try
+                            for column in [2; 5] do
+                                let reset = pair.GetControlFromPosition(column, 0)
+                                // TableLayoutPanel can give its last column a rounding pixel.
+                                // Dock right at the measured width so that pixel cannot widen it.
+                                if reset.Width <> referenceReset.Width then reset.Width <- referenceReset.Width
+                                let width = float32 (referenceReset.Width + reset.Margin.Horizontal)
+                                if pair.ColumnStyles.[column].Width <> width then
+                                    pair.ColumnStyles.[column].Width <- width
+                        finally
+                            pair.ResumeLayout(true)
+                            syncingResetWidths <- false
+                referenceReset.SizeChanged.Add(fun _ -> syncResetWidths ())
+                pair.Layout.Add(fun _ -> syncResetWidths ())
+                syncResetWidths ()
+                pair.ResumeLayout(true)
+                [left; right])
+        List2(regular @ edges)
 
     // Custom pinned tab width row with radio buttons (row 4 in upperPanel).
     let pinnedWidthRow = 4
@@ -1088,7 +1155,9 @@ type AppearanceView() as this =
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
+            tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
             tabIndentNormal = currentAppearance.tabIndentNormal
+            tabIndentNormalRight = currentAppearance.tabIndentNormalRight
             tabInactiveTextColor = presetAppearance.tabInactiveTextColor
             tabSelectedTextColor = presetAppearance.tabSelectedTextColor
             tabMouseOverTextColor = presetAppearance.tabMouseOverTextColor
@@ -1123,7 +1192,9 @@ type AppearanceView() as this =
             tabOverlap = currentAppearance.tabOverlap
             tabHeightOffset = currentAppearance.tabHeightOffset
             tabIndentFlipped = currentAppearance.tabIndentFlipped
+            tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
             tabIndentNormal = currentAppearance.tabIndentNormal
+            tabIndentNormalRight = currentAppearance.tabIndentNormalRight
             tabInactiveTextColor = toColor theme.inactiveTextColor
             tabSelectedTextColor = toColor theme.selectedTextColor
             tabMouseOverTextColor = toColor theme.mouseOverTextColor
@@ -1888,7 +1959,9 @@ type AppearanceView() as this =
             tabOverlap = unbox(getValue "tabOverlap")
             tabHeightOffset = currentAppearance.tabHeightOffset  // Keep internal value
             tabIndentFlipped = unbox(getValue "tabIndentFlipped")
+            tabIndentFlippedRight = unbox(getValue "tabIndentFlippedRight")
             tabIndentNormal = unbox(getValue "tabIndentNormal")
+            tabIndentNormalRight = unbox(getValue "tabIndentNormalRight")
             tabInactiveTextColor = unbox(getValue "tabInactiveTextColor")
             tabSelectedTextColor = unbox(getValue "tabSelectedTextColor")
             tabMouseOverTextColor = unbox(getValue "tabMouseOverTextColor")

@@ -778,7 +778,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             decoratorHeight = appearance.tabHeight
             decoratorHeightOffset = appearance.tabHeightOffset
             decoratorIndentFlipped = appearance.tabIndentFlipped
+            decoratorIndentFlippedRight = appearance.tabIndentFlippedRight
             decoratorIndentNormal = appearance.tabIndentNormal
+            decoratorIndentNormalRight = appearance.tabIndentNormalRight
         }
         let verticalDirection =
             try Services.settings.getValue("tabVerticalDirection") :?> string

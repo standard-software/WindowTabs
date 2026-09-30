@@ -8,7 +8,9 @@ type WindowDecorator = {
     decoratorHeight : int
     decoratorHeightOffset : int
     decoratorIndentFlipped : int
+    decoratorIndentFlippedRight : int
     decoratorIndentNormal : int
+    decoratorIndentNormalRight : int
     } with
 
     // (The screen region this type used to build with GDI regions is gone: the
@@ -17,22 +19,24 @@ type WindowDecorator = {
     // collector - a drag of a window's top edge produced two thousand of them
     // a second.)
 
-    member private this.indent(isCentered) = if isCentered then this.decoratorIndentFlipped else this.decoratorIndentNormal
+    member private this.indents(isCentered) =
+        if isCentered then this.decoratorIndentFlipped, this.decoratorIndentFlippedRight
+        else this.decoratorIndentNormal, this.decoratorIndentNormalRight
 
     member private this.outsideBounds =
         let rect = this.windowBounds
-        let indent = this.indent(false)
+        let left, right = this.indents(false)
         Rect(
-            Pt(rect.x + indent, rect.y - this.decoratorHeight + this.decoratorHeightOffset),
-            Sz(rect.width - 2 * indent, this.decoratorHeight)
+            Pt(rect.x + left, rect.y - this.decoratorHeight + this.decoratorHeightOffset),
+            Sz(rect.width - left - right, this.decoratorHeight)
         )
 
     member this.insideBounds = 
         let rect = this.windowBounds
-        let indent = this.indent(true)
+        let left, right = this.indents(true)
         Rect(
-            Pt(rect.x + indent, rect.y - 1), // offset by one so it covers edge case #741
-            Sz(rect.width - 2 * indent, this.decoratorHeight)
+            Pt(rect.x + left, rect.y - 1), // offset by one so it covers edge case #741
+            Sz(rect.width - left - right, this.decoratorHeight)
         )
 
     member this.shouldShowInside =
