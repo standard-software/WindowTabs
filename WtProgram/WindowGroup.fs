@@ -199,6 +199,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let marginShrunkSizes = Cell.create(Map.empty<IntPtr, (int * int)>)
     // Where each window was before hideChildWindows parked it off screen.
     let mutable parkedBounds : Map<IntPtr, Rect> = Map.empty
+    let pendingBackgroundMoves = System.Collections.Generic.Dictionary<IntPtr, int64>()
+    let mutable backgroundMoveGeneration = 0L
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
@@ -423,7 +425,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
             not allWindowsCloaked
 
-    member private this.adjustChildWindows = fun() ->
+    member private this.adjustChildWindows = fun() -> PerfTrace.time "group.adjustChildren" <| fun () ->
         // Skip entirely while the top window cannot provide usable bounds:
         // - degenerate (0,0,0,0) bounds from a window being torn down under
         //   load (issue #13, closing LibreOffice), and
@@ -453,7 +455,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 restoredHwnd |> Option.iter (fun front ->
                     restoreFrontHwnd <- front
                     restoreFrontUntil <- DateTime.Now.AddMilliseconds(1500.0))
-            zorderCell.value.tail.iter(this.adjustWindowPlacement)
+            // Capture the final group rectangle BEFORE posting any moves.
+            // The second pass must not keep a sibling's still-old position.
+            let topWindow = this.os.windowFromHwnd(zorderCell.value.head)
+            let liveBounds = topWindow.bounds
+            let backgroundBounds =
+                if topWindow.isMaximized || liveBounds.width <= 0 || liveBounds.height <= 0 then None
+                elif this.hasExeMargin(topWindow.hwnd) then Some(this.removeExeMarginForRead(topWindow.hwnd, liveBounds))
+                else Some liveBounds
+            let queuedAsync = System.Collections.Generic.HashSet<IntPtr>()
+            zorderCell.value.tail.iter(fun hwnd ->
+                if this.adjustWindowPlacementCore(hwnd, backgroundBounds) then queuedAsync.Add(hwnd) |> ignore)
 
             // After initial placement, adjust sizes again to ensure DPI is considered
             match zorderCell.value.tryHead with
@@ -482,7 +494,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     // the group as being on no screen - a tab and its window
                     // gone together. Its move is already queued with the right
                     // size: leave it alone.
-                    if window.isMinimized.not && minimizedAtEntry.contains((=) hwnd).not then
+                    if BackgroundPlacementPolicy.needsSecondPass
+                        (queuedAsync.Contains hwnd) (minimizedAtEntry.contains((=) hwnd)) window.isMinimized then
                         // Apply per-exe margin for this background window
                         let targetBounds =
                             if topMaximized then groupBounds
@@ -928,7 +941,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.isTop(hwnd) = zorderCell.value.where(isMinimized >> not).tryHead = Some(hwnd)
 
-    member private this.saveTopWindowPlacement() =
+    member private this.saveTopWindowPlacement() = PerfTrace.time "group.saveTopPlacement" <| fun () ->
         let window = this.os.windowFromHwnd(zorderCell.value.head)
         // A dying window (e.g. LibreOffice tearing down under load) reports
         // degenerate bounds: GetWindowRect fails and yields (0,0,0,0). Never
@@ -1008,6 +1021,46 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // Same DPI: move with position and size at once for better performance
             window.move(bounds)
 
+    // The position-first DPI protocol is retained, but its wait is a timer,
+    // not a sleep on the group thread. Tickets prevent an old correction from
+    // moving a detached member or overwriting a newer placement.
+    member private this.applyBackgroundWindowBounds(hwnd: IntPtr, bounds: Rect) =
+        let window = this.os.windowFromHwnd(hwnd)
+        backgroundMoveGeneration <- backgroundMoveGeneration + 1L
+        let ticket = backgroundMoveGeneration
+        pendingBackgroundMoves.[hwnd] <- ticket
+        // restoreParkedWindows runs immediately after this pass. The queued
+        // target replaces the parked location; do not restore the old home.
+        parkedBounds <- parkedBounds.Remove hwnd
+        let isCurrent() =
+            match pendingBackgroundMoves.TryGetValue hwnd with
+            | true, current when current = ticket -> true
+            | _ -> false
+        let valid() =
+            isCurrent() && this.windows.contains(hwnd) && this.isSameWindow(hwnd) &&
+            desktopShown && not inMoveSize.value && not window.isMinimized && not window.isMaximized && not window.isInMoveSize &&
+            not ((VirtualDesktopGroups.Live.shared()).Contains hwnd)
+        let completed() =
+            if isCurrent() then pendingBackgroundMoves.Remove(hwnd) |> ignore
+#if DEBUG
+        let mutable counted = false
+        let count() =
+            if not counted then
+                counted <- true
+                PerfTrace.count "group.adjustAsync"
+#else
+        let count() = ()
+#endif
+        let targetDpi = WinUserApi.GetDpiForWindow(zorderCell.value.head)
+        let watch = System.Diagnostics.Stopwatch.StartNew()
+        let later delay f =
+            ThreadHelper.cancelablePostBack delay (fun () -> this.invokeAsync f) |> ignore
+        BackgroundPlacementPolicy.move
+            (fun () -> WinUserApi.GetDpiForWindow(hwnd)) targetDpi
+            (fun () -> watch.ElapsedMilliseconds) later valid
+            (fun () -> count(); window.setPositionOnlyAsync bounds.x bounds.y)
+            (fun () -> count(); window.moveAsync(bounds)) completed
+
     // Get per-exe margin as (top, left, right, bottom) from Settings\WindowMargin.json
     // Positive = shrink window, Negative = expand window
     member this.getExeMarginRaw(hwnd:IntPtr) =
@@ -1076,9 +1129,22 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         else bounds
 
     member private this.adjustWindowPlacement(hwnd) =
+        this.adjustWindowPlacementCore(hwnd, None) |> ignore
+
+    member private this.adjustWindowPlacementCore(hwnd, backgroundBounds: Rect option) = PerfTrace.time "group.adjustOne" <| fun () ->
+        pendingBackgroundMoves.Remove(hwnd) |> ignore
+        let mutable queuedAsync = false
         let window = this.os.windowFromHwnd(hwnd)
         if placement.value.IsSome then
             let bounds,wp = placement.value.Value
+            let sourceNormal = window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
+            let useAsync = backgroundBounds.IsSome && desktopShown &&
+                            BackgroundPlacementPolicy.useAsync true
+                                (hwnd <> this.os.foreground.hwnd && not (this.isTop hwnd))
+                                (window.tid <> WinBaseApi.GetCurrentThreadId()) sourceNormal
+                                (wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL)
+                                ((VirtualDesktopGroups.Live.shared()).Contains hwnd)
+            let bounds = if useAsync then backgroundBounds.Value else bounds
             // Skip per-exe margin when target is maximized: bounds already match the work rect.
             let targetMaximized = wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
             let adjustedBounds =
@@ -1095,7 +1161,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if  wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL &&
                 window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
                 then
-                this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                if useAsync then
+                    queuedAsync <- true
+                    this.applyBackgroundWindowBounds(hwnd, adjustedBounds)
+                else this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
             else
                 // Apply DPI-aware handling when target is maximized (regardless of source state)
                 if targetMaximized then
@@ -1132,6 +1201,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // Note: Cases not covered above (e.g., maximized -> normal) do not require DPI handling
             // because setPlacement correctly handles the transition without DPI-related issues.
             // This has been verified through testing across different DPI displays.
+
+        queuedAsync
 
     member this.setTabName(hwnd,name) =
         Services.program.setWindowNameOverride(hwnd, name)
@@ -1677,6 +1748,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.adjustChildWindows()
 
     member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
+        pendingBackgroundMoves.Remove(hwnd) |> ignore
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
             // is in no group, nothing would. Every way out of a group passes
@@ -1755,6 +1827,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.activateIndex(targetIndex, force)
                         
     member this.destroy() =
+        pendingBackgroundMoves.Clear()
         if isDestroyed.value.not then
             isDestroyed.set(true)
             this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)

@@ -6,6 +6,32 @@ open System.Runtime.InteropServices
 open System.Text
 open System.Windows.Forms
 
+// Only ordinary background siblings use the new asynchronous path. State
+// transitions and shared-desktop following retain their existing protocols.
+module BackgroundPlacementPolicy =
+    let useAsync requested background foreignThread normalSource normalTarget shared =
+        requested && background && foreignThread && normalSource && normalTarget && not shared
+    let needsSecondPass queuedAsync minimizedAtEntry minimizedNow =
+        not queuedAsync && not minimizedAtEntry && not minimizedNow
+
+    // Scheduler and native operations are supplied separately so ordering,
+    // cancellation and timeout can be checked without moving real windows.
+    let move (readDpi: unit -> uint32) targetDpi (elapsed: unit -> int64)
+             (later: int -> (unit -> unit) -> unit) valid position bounds completed =
+        let finish() =
+            try if valid() then bounds()
+            finally completed()
+        let initialDpi = readDpi()
+        if not (valid()) || initialDpi = targetDpi then finish()
+        else
+            position()
+            let rec poll() =
+                if not (valid()) then completed()
+                elif readDpi() <> initialDpi then later 20 finish
+                elif elapsed() >= 200L then finish()
+                else later 10 poll
+            later 10 poll
+
 type MouseAction =
     | MouseDown
     | MouseUp
@@ -609,6 +635,12 @@ and
             0,
             0,
             SetWindowPosFlags.SWP_NOSIZE ||| SetWindowPosFlags.SWP_NOACTIVATE ||| SetWindowPosFlags.SWP_NOZORDER) |> ignore
+
+    member this.setPositionOnlyAsync (x:int) (y:int) =
+        WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0,
+            SetWindowPosFlags.SWP_NOSIZE ||| SetWindowPosFlags.SWP_NOACTIVATE |||
+            SetWindowPosFlags.SWP_NOZORDER ||| SetWindowPosFlags.SWP_NOOWNERZORDER |||
+            SetWindowPosFlags.SWP_ASYNCWINDOWPOS) |> ignore
 
     // Position + size change posted to the target window's thread instead of
     // waiting on it. Safe where z-order is not being changed (SWP_NOZORDER):

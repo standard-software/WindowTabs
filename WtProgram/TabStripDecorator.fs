@@ -3592,7 +3592,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 this.updateTsSlide()
                 true
 
-        member this.dragMove(pt) =
+        member this.dragMove(pt) = PerfTrace.time "drag.move" <| fun () ->
             this.invokeSync <| fun() ->
                 dragPtCell.set(pt)
                 this.updateTsSlide()

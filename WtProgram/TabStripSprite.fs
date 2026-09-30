@@ -5,16 +5,40 @@ open System.Drawing.Drawing2D
 open System.Drawing.Imaging
 open System.Windows.Forms
 
+// Per group-thread, bounded cache of read-only icon pixels. Hover, capture,
+// pin and selection do not change IconSprite.image, so are not part of its key.
+module IconBitmapCache =
+    let private images = new Threading.ThreadLocal<Collections.Generic.Dictionary<IntPtr * int * int * float, Img>>(
+        fun () -> Collections.Generic.Dictionary<IntPtr * int * int * float, Img>())
+    let clear() =
+        let cache = images.Value
+        for image in cache.Values do image.bitmap.Dispose()
+        cache.Clear()
+    let get (icon: Icon) (size: Sz) scale render =
+        let handle = try icon.Handle with _ -> IntPtr.Zero
+        let key = handle, size.width, size.height, scale
+        let cache = images.Value
+        match cache.TryGetValue key with
+        | true, image ->
+            PerfTrace.count "sprite.iconHit"
+            image
+        | _ ->
+            let image = PerfTrace.time "sprite.icon" render
+            if cache.Count >= 128 then clear()
+            cache.Add(key, image)
+            image
+
 type IconSprite = {
     icon: Icon
     size: Sz
     // Device-pixel scale of the strip's monitor (1.0 = 100%).
     scale: float
     } with
+    interface IBorrowedSpriteImage
     interface ISprite with
-        member this.image =
+        member this.image = IconBitmapCache.get this.icon this.size this.scale <| fun () ->
             let bitmap = Img(this.size)
-            let g = bitmap.graphics
+            use g = bitmap.graphics
             // Fill with near-transparent color so entire icon area is hit-testable
             g.Clear(Color.FromArgb(1, 0, 0, 0))
             try
@@ -49,9 +73,9 @@ type CloseButtonSprite = {
     member private this.penColor = if this.bgColor.IsSome then Color.White else Color.Gray
     member private this.pen = new Pen(this.penColor, Dpi.pxf this.scale 1.7f)
     interface ISprite with
-        member this.image =
+        member this.image = PerfTrace.time "sprite.button" <| fun () ->
             let bitmap = Img(this.size)
-            let g = bitmap.graphics
+            use g = bitmap.graphics
             g.SmoothingMode <- SmoothingMode.AntiAlias
             // Draw rounded rectangle background
             let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
@@ -101,9 +125,9 @@ type PinButtonSprite = {
         | _ -> None
     member private this.penColor = if this.bgColor.IsSome then Color.White else Color.Gray
     interface ISprite with
-        member this.image =
+        member this.image = PerfTrace.time "sprite.button" <| fun () ->
             let bitmap = Img(this.size)
-            let g = bitmap.graphics
+            use g = bitmap.graphics
             g.SmoothingMode <- SmoothingMode.AntiAlias
             // Draw rounded rectangle background (same as close button)
             let bgColor = this.bgColor.def(Color.FromArgb(1, 1, 1, 1))
@@ -353,9 +377,9 @@ type TabSprite<'id> = {
         new SolidBrush(color)
 
     interface ISprite with
-        member this.image =
+        member this.image = PerfTrace.time "sprite.tab" <| fun () ->
             let img = Img(this.size)
-            let g = img.graphics
+            use g = img.graphics
             // Fill with near-transparent color so entire rectangular area is hit-testable
             // This prevents mouse events from passing through the gap between tab curves
             g.Clear(Color.FromArgb(1, 0, 0, 0))
@@ -752,7 +776,7 @@ type TabStripSprite<'id> when 'id : equality = {
         // Img rather than a bare Bitmap so this surface is pinned to 96 dpi
         // like every other one (see Drawing.fs).
         let img = Img(if this.size.isEmptyArea then Sz(1, 1) else this.size)
-        let gr = img.graphics
+        use gr = img.graphics
         do gr.SmoothingMode <- SmoothingMode.AntiAlias
         let bounds = Rect(Pt(), this.size)
         do  gr.FillRectangle(new SolidBrush(bgColor), bounds.Rectangle)

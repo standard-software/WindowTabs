@@ -647,6 +647,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         // sure a recycled handle can never resurrect the previous window's
         // picture; the cache refills with one CopyImage per visible tab.
         ScaledIcon.invalidate()
+        IconBitmapCache.clear()
         // A removed window can recycle its icon handle before the next draw.
         renderCache.Clear()
         Cell.beginUpdate()
@@ -1219,6 +1220,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         ts.render
 
     member this.destroy() = 
+        IconBitmapCache.clear()
+        ScaledIcon.invalidate()
         destroyed <- true
         renderCache.Clear()
         lastPresentation <- None
