@@ -2,6 +2,11 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next13
+
+- タブを押したときに、アプリのツールバーなどがちらつかないようにした。ドラッグ用の縮小画像は、ドラッグが始まってから作る。
+- 見張り役（watchdog）が WindowTabs を再起動したときに、再起動した WindowTabs が落ちることがある不具合を直した。
+
 ## version ss_2026.10.01_next12
 
 - README の設定画面の画像を、カラーページを含めて新しくした。

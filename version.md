@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next13
+
+- Pressing a tab no longer makes some applications redraw (a toolbar flickered): the drag preview is made only once a drag starts.
+- Fixed WindowTabs failing to start again after the watchdog restarted it.
+
 ## version ss_2026.10.01_next12
 
 - The settings pages are shown in the README with the new Color page.
