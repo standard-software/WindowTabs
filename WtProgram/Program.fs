@@ -3358,6 +3358,12 @@ type Program() as this =
                 // they do when WindowTabs starts.
                 if savedTabGroups.value.length = 0 then
                     this.restoreTabGroupsFromSettings()
+                // The groups are back now, one way or the other. A start in the
+                // disabled state left the startup restore pending; letting it
+                // run on the next pass built every group a second time, each
+                // window in two groups - two tabs for one window, and a second
+                // group putting a moved or minimized window back.
+                needsRestoreOnStartup.set(false)
 
                 // Restore saved tab groups
                 savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, savedLockPosition, pinnedHwnds, home, heldSeveral) ->
