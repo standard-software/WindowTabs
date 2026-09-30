@@ -3501,6 +3501,16 @@ type Program() as this =
 
         // Pay settings construction cost during startup, before the watchdog
         // is armed. Preloading never shows a window or acquires the dialog gate.
+#if DEBUG
+        // Test hook: imitate a slow start (a loaded machine) by holding the
+        // startup here, after the periodic save timer has started and before
+        // the message loop runs the startup restore.
+        match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_STARTUP_DELAY_MS")) with
+        | true, ms when ms > 0 ->
+            RestoreTrace.log (fun () -> sprintf "debug startup delay %d ms" ms)
+            System.Threading.Thread.Sleep(ms)
+        | _ -> ()
+#endif
         managerView.preload()
 
         plugins.iter <| fun p -> p.init()
