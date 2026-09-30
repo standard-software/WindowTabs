@@ -622,22 +622,28 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.hwnd = hwndRef.Value
     
+    member this.addTabWithState(tab, alignment, pinned, after, ?restoreOrder: TabOrder.Placed list -> IntPtr list) =
+        this.batch <| fun () ->
+            if not (visualOrderCell.value.contains((=) tab)) then
+                tabAlignmentCell.map(fun m -> m.add tab alignment)
+                if pinned then pinnedTabsCell.set(pinnedTabsCell.value.add(tab))
+                else pinnedTabsCell.set(pinnedTabsCell.value.remove(tab))
+                let zone = TabOrder.zoneOf (alignment = TopLeft) pinned
+                let added = TabOrder.addTab tab zone after this.visualZoneOf visualOrderCell.value.list
+                let ordered =
+                    match restoreOrder with
+                    | Some order ->
+                        added |> List.map (fun (Tab h as t) -> TabOrder.placed h (this.visualZoneOf t))
+                        |> order |> List.map Tab
+                    | None -> added
+                visualOrderCell.set(List2(ordered))
+                zorderCell.map(fun z -> z.append(tab))
+
     member this.addTabSlide tab (slide:Option<_>) =
-        Cell.beginUpdate()
-        let addToEnd(l:Cell<List2<_>>)=
-            if l.value.any((=) tab).not then
-                l.map(fun l -> l.append(tab))
-        addToEnd(visualOrderCell)
-        addToEnd(zorderCell)
-        // Set default alignment for new tab
-        if tabAlignmentCell.value.tryFind(tab).IsNone then
-            tabAlignmentCell.map(fun m -> m.add tab defaultAlignmentCell.value)
-        // Ensure the newly added tab sits in the correct visual zone
-        this.normalizeVisualOrder()
-        slide.iter <| fun slide ->
-            this.slide <- Some(slide)
-        Cell.endUpdate()
-    
+        this.batch <| fun () ->
+            this.addTabWithState(tab, this.getTabAlign(tab), this.isPinned(tab), None)
+            slide.iter <| fun slide -> this.slide <- Some(slide)
+
     member this.addTab tab = this.addTabSlide tab None
 
     member this.removeTab tab =

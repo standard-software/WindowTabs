@@ -1691,13 +1691,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 updateTabVisibility()
         | _ -> ()
       
-    member this.addWindow(hwnd, withDelay) = this.addWindowPlaced(hwnd, withDelay, true)
+    member this.addWindow(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
+                          ?restoreOrder: TabOrder.Placed list -> IntPtr list) =
+        this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
+                             ?after=after, ?restoreOrder=restoreOrder)
 
     // `place` false: the window joins where it is. A group made for a window
     // shown on all desktops, on another desktop, takes it as it is found - the
     // first member's own rectangle is the group's, and moving the others to it
     // would be switching desktops moving windows.
-    member this.addWindowPlaced(hwnd, withDelay, place) = this.withUpdate <| fun() ->
+    member this.addWindowPlaced(hwnd, withDelay, place, ?alignment: TabAlign, ?pinned: bool,
+                                ?after: IntPtr, ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun() ->
        if this.windows.contains(hwnd).not then
             if withDelay then System.Threading.Thread.Sleep(250)
             let window = this.os.windowFromHwnd(hwnd)                
@@ -1762,7 +1766,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             hookCleanup.map(fun hooks -> hooks.add hwnd dispose)
             this.setTabInfo hwnd
 
-            this.ts.addTab(Tab(hwnd))
+            let tab = Tab(hwnd)
+            let knownAlignment = alignment |> Option.orElseWith (fun () -> Services.program.getWindowAlignment(hwnd))
+            let initialAlignment, initialPinned =
+                TabOrder.initialState (this.ts.getTabAlign(tab)) knownAlignment
+                    (pinned |> Option.defaultWith (fun () -> Services.program.isWindowPinned(hwnd)))
+            this.ts.addTabWithState(tab, initialAlignment, initialPinned, after |> Option.map Tab,
+                                   ?restoreOrder=restoreOrder)
+            alignment |> Option.iter (fun a -> Services.program.setWindowAlignment(hwnd, Some a))
+            pinned |> Option.iter (fun p -> Services.program.setWindowPinned(hwnd, p))
             // Restore fill color from global (persists across group transfers)
             match Services.program.getWindowFillColor(hwnd) with
             | Some(c) -> this.ts.setTabFillColor(Tab(hwnd), Some(c))
@@ -1774,13 +1786,6 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // Restore border color from global (persists across group transfers)
             match Services.program.getWindowBorderColor(hwnd) with
             | Some(c) -> this.ts.setTabBorderColor(Tab(hwnd), Some(c))
-            | None -> ()
-            // Restore pinned state from global (persists across group transfers)
-            if Services.program.isWindowPinned(hwnd) then
-                this.ts.pinTab(Tab(hwnd))
-            // Restore per-tab alignment from global (persists across group transfers)
-            match Services.program.getWindowAlignment(hwnd) with
-            | Some(a) -> this.ts.setTabAlign(Tab(hwnd), a)
             | None -> ()
             memberIdentities.[hwnd] <- this.identityOf(hwnd)
             if place then this.adjustWindowPlacement(hwnd)

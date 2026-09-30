@@ -1150,25 +1150,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             try
                                 // Double-check window is not already in target group
                                 if not (targetGroup.windows.contains hwnd) then
-                                    targetGroup.addWindow(hwnd, false)
-                                    // Inherit the destination group's last-tab alignment
-                                    // so a fully left-aligned group stays all-left and any
-                                    // right-aligned tab puts the joiner at the right, regardless
-                                    // of the joiner's previous per-tab alignment.
-                                    // Then splice the joiner to the rightmost slot: normalize is
-                                    // a stable sort, so when the joiner ends up in the same zone
-                                    // as the existing tabs (e.g. all-left group joining all-right)
-                                    // it would otherwise stay at its original index inside that
-                                    // zone instead of landing at the visual end.
-                                    let newTab = Tab(hwnd)
-                                    let others = targetGroup.ts.visualOrder.where(fun t -> t <> newTab)
-                                    match others.list |> List.tryLast with
-                                    | Some(lastTab) ->
-                                        let lastAlign = targetGroup.ts.getTabAlign(lastTab)
-                                        targetGroup.setTabAlign(hwnd, lastAlign)
-                                        let endIndex = targetGroup.ts.visualOrder.list.Length
-                                        targetGroup.ts.moveTab(newTab, endIndex)
-                                    | None -> ()
+                                    let alignment =
+                                        targetGroup.ts.visualOrder.list |> List.tryLast
+                                        |> Option.map targetGroup.ts.getTabAlign
+                                    targetGroup.addWindow(hwnd, false, ?alignment=alignment)
                                     // Show window again (target group will handle positioning)
                                     window.showWindow(ShowWindowCommands.SW_SHOW)
                                     moveCompleted := true
@@ -3560,7 +3545,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // exits into floating-window mode as before.
                 dragPtCell.set(pt)
                 dragInfoCell.set(Some(dragInfo))
-                this.ts.addTabSlide dragInfo.tab this.tabSlide
+                let alignment =
+                    dragInfo.sourceTabAligns |> List.tryHead
+                    |> Option.defaultWith (fun () -> this.ts.getTabAlign(dragInfo.tab))
+                this.ts.addTabWithState(dragInfo.tab, alignment,
+                    Services.program.isWindowPinned(hwnd), None)
+                this.tabSlide |> Option.iter (fun slide -> this.ts.slide <- Some slide)
                 this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
                 group.addWindow(hwnd, false)
 
@@ -3576,9 +3566,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     group.clearSelected()
                     Services.program.suspendTabMonitoring()
                     try
-                        for selHwnd in dragInfo.selectedHwnds do
+                        for i, selHwnd in List.indexed dragInfo.selectedHwnds do
                             if not (group.windows.contains selHwnd) then
-                                group.addWindow(selHwnd, false)
+                                group.addWindow(selHwnd, false, ?alignment=(dragInfo.sourceTabAligns |> List.tryItem (i + 1)))
                             let selWindow = os.windowFromHwnd(selHwnd)
                             selWindow.showWindow(ShowWindowCommands.SW_SHOW)
                     finally
