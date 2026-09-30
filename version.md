@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next5
+
+- The distance of the tabs from the window edge can be set separately for the left and the right. Upward and downward tabs are now called outer and inner tabs.
+
 ## version ss_2026.10.01_next4
 
 - Closing one of several tabs with the same title no longer moves the others: such a tab is not remembered for restoring, and a window is put back by at most one remembered tab.
