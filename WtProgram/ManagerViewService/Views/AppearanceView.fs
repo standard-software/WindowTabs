@@ -140,36 +140,41 @@ type AppearanceView() as this =
         | TabShape.angularRectangle -> "TabShapeAngularRectangle"
         | _ -> "TabShapeSCurve"
 
-    // Layout structure:
-    // - Main panel (2 rows): upper section + color grid section
-    // - Upper panel: int properties + tab shape + dark mode (3 columns: label, input, reset)
-    // - Color panel: theme row + header row + 4 state rows (4 columns: state label, tab color, text color, border color)
-    let upperRowCount = intProperties.length + 1  // Seven integer fields share five rows, plus three other rows.
-    let colorGridRowCount = 7  // theme row + header + 5 state rows (Inactive / Selected / MouseOver / Active / Flash)
+    // Both pages share one set of editors and theme state.
+    // Upper panel: tab shape, then seven integer fields on five rows, and the pinned width row.
+    let upperRowCount = intProperties.length
+    let colorGridRowCount = 7  // theme + header + five states
 
-    // Main container panel (vertical stack)
-    let panel =
-        let panel = TableLayoutPanel()
-        panel.SuspendLayout()
-        panel.AutoScroll <- true
-        panel.Dock <- DockStyle.Fill
-        panel.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
-        panel.Padding <- Padding(10)
-        panel.RowCount <- 2
-        panel.ColumnCount <- 1
-        panel.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore  // Upper section
-        panel.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore  // Color grid section
-        panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
-        panel
+    let createPage rowCount =
+        let page = TableLayoutPanel()
+        page.SuspendLayout()
+        page.AutoScroll <- true
+        page.Dock <- DockStyle.Fill
+        page.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
+        page.Padding <- UIHelper.settingsPagePadding
+        page.RowCount <- rowCount
+        page.ColumnCount <- 1
+        for _ in 1..rowCount do
+            page.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
+        page.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
+        page
 
-    // Upper panel for int properties, dark mode, and theme
+    let panel = createPage 1
+    let colorPage =
+        let page = createPage 2
+        page.ColumnCount <- 2
+        page.ColumnStyles.Clear()
+        page.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore
+        page.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
+        page
+
+    // Appearance controls retain their order, starting with tab shape.
     let upperPanel =
         let p = TableLayoutPanel()
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
-        // No default 3-px margin: captions start at the same 10 px / 15 px
-        // as the Behavior and Shortcut Keys tabs.
+        // The page owns the shared inset; nested panels add no horizontal margin.
         p.Margin <- Padding(0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- upperRowCount
@@ -177,17 +182,16 @@ type AppearanceView() as this =
         // AutoSize rather than a fixed 35 px, for the same reason
         // UIHelper.buildForm is: a caption that does not fit the label column
         // wraps onto a second line, and a fixed row height cut the wrapped
-        // text off. Three captions here do overflow 250 px at the design font
-        // - "Indent Normal" and "Indent Flipped" in French and Portuguese,
-        // and "DarkMode" in French (302 px) and Portuguese (297 px) - so this
-        // panel needs the same treatment. Every label in column 0 carries a
+        // text off. "Indent Normal" and "Indent Flipped" can overflow
+        // 250 px in French and Portuguese, so this panel needs the same
+        // treatment. Every label in column 0 carries a
         // minimum height that reproduces the old 35-px row, so single-line
         // rows are unchanged and only the wrapping ones grow.
         List2([0..upperRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
         // Match BehaviorView's UIHelper.form column width (250 px) so the
         // longest translated labels still stay on a single line.
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // Label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
         p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
         p
@@ -206,7 +210,7 @@ type AppearanceView() as this =
         List2([0..colorGridRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.Absolute, float32 UIHelper.settingsRowHeightPx)).ignore
         // Match upperPanel's first column width (250px)
-        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, 250.0f)).ignore  // State label
+        p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // State label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Tab color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)).ignore   // Text color
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.34f)).ignore   // Border color
@@ -217,9 +221,8 @@ type AppearanceView() as this =
         panel.Controls.Add(upperPanel)
         panel.SetRow(upperPanel, 0)
         panel.SetColumn(upperPanel, 0)
-        panel.Controls.Add(colorPanel)
-        panel.SetRow(colorPanel, 1)
-        panel.SetColumn(colorPanel, 0)
+        colorPage.Controls.Add(colorPanel, 0, 1)
+        colorPage.SetColumnSpan(colorPanel, 2)
 
    
     let getDefaultValue key =
@@ -238,8 +241,9 @@ type AppearanceView() as this =
     // AutoSize now, so without this a row would shrink to its tallest cell
     // (the reset Button, 24 px + 10 px of margin) and every 100% layout would
     // move. Scaled with everything else: Control.Scale multiplies MinimumSize.
-    // About two characters of the settings font.
-    let colorCaptionIndentPx = 24
+    // The state captions sit under "Tab colour", indented by about two
+    // characters of the settings font (about 10 px each at 96 dpi).
+    let colorCaptionIndentPx = 20
 
     let rowMinimumHeight (topMargin: int) (bottomMargin: int) = UIHelper.settingsRowHeightPx - topMargin - bottomMargin
 
@@ -288,9 +292,9 @@ type AppearanceView() as this =
         (prop.key, editor)
 
     // Row indices for each section
-    // Upper panel: dark mode -> tab shape -> size and spacing properties.
+    // Appearance page: tab shape -> size and spacing properties.
     let darkModeRow = 0
-    let tabShapeRow = 1
+    let tabShapeRow = 0
     // Color panel: theme row (0) -> header row (1) -> state rows (2-5)
     let themeRow = 0  // Now in colorPanel
     let colorHeaderRow = 1
@@ -302,10 +306,10 @@ type AppearanceView() as this =
             intProperties.list
             |> List.take 3
             |> List.mapi (fun i prop ->
-                let row = if i >= 2 then i + 3 else i + 2
+                let row = if i >= 2 then i + 2 else i + 1
                 createIntEditorAt upperPanel 0 prop row)
         let edges =
-            ["tabIndentNormal", "Indent Normal", 6; "tabIndentFlipped", "Indent Flipped", 7]
+            ["tabIndentNormal", "Indent Normal", 5; "tabIndentFlipped", "Indent Flipped", 6]
             |> List.collect (fun (key, caption, row) ->
                 let label = Label(AutoSize = true, Text = Localization.getString(caption),
                                   TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Left,
@@ -334,7 +338,7 @@ type AppearanceView() as this =
                 // Follow the actual reset button in the outer panel, including
                 // its current DPI and translated caption width. Equal reset
                 // columns also keep the two distance rows aligned.
-                let referenceReset = upperPanel.GetControlFromPosition(2, 2)
+                let referenceReset = upperPanel.GetControlFromPosition(2, 1)
                 for column in [2; 5] do
                     let reset = pair.GetControlFromPosition(column, 0)
                     reset.AutoSize <- false
@@ -364,8 +368,8 @@ type AppearanceView() as this =
                 [left; right])
         List2(regular @ edges)
 
-    // Custom pinned tab width row with radio buttons (row 4 in upperPanel).
-    let pinnedWidthRow = 4
+    // Custom pinned tab width row with radio buttons (row 3 in upperPanel).
+    let pinnedWidthRow = 3
 
     let pinnedWidthLabel =
         let label = Label()
@@ -763,9 +767,9 @@ type AppearanceView() as this =
         label.TextAlign <- ContentAlignment.MiddleLeft
         label.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
-        upperPanel.Controls.Add(label)
-        upperPanel.SetRow(label, darkModeRow)
-        upperPanel.SetColumn(label, 0)
+        colorPage.Controls.Add(label)
+        colorPage.SetRow(label, darkModeRow)
+        colorPage.SetColumn(label, 0)
         label
 
     let darkModeCheckbox =
@@ -785,9 +789,9 @@ type AppearanceView() as this =
         // multiplies MinimumSize like every other 96-dpi design number, so
         // this scales with the rest and 100% is untouched.
         checkbox.MinimumSize <- checkbox.Size
-        upperPanel.Controls.Add(checkbox)
-        upperPanel.SetRow(checkbox, darkModeRow)
-        upperPanel.SetColumn(checkbox, 1)
+        colorPage.Controls.Add(checkbox)
+        colorPage.SetRow(checkbox, darkModeRow)
+        colorPage.SetColumn(checkbox, 1)
         checkbox
 
     let setEditorValues appearance =
@@ -1587,7 +1591,7 @@ type AppearanceView() as this =
                 try DarkMode.applyDarkThemeBranch15ToForm form true
                 with _ -> ())
 
-        let parentForm = panel.FindForm()
+        let parentForm = colorPage.FindForm()
         let result =
             if parentForm <> null then
                 form.ShowDialog(parentForm)
@@ -1662,7 +1666,7 @@ type AppearanceView() as this =
                 try DarkMode.applyDarkThemeBranch15ToForm form true
                 with _ -> ())
 
-        let parentForm = panel.FindForm()
+        let parentForm = colorPage.FindForm()
         let result =
             if parentForm <> null then
                 form.ShowDialog(parentForm)
@@ -1919,12 +1923,14 @@ type AppearanceView() as this =
         // Finish all design layout before the containing form captures DPI data.
         upperPanel.ResumeLayout(true)
         colorPanel.ResumeLayout(true)
+        colorPage.ResumeLayout(true)
         panel.ResumeLayout(true)
 
     member this.refresh() =
         let previous = suppressEvents
         suppressEvents <- true
         panel.SuspendLayout()
+        colorPage.SuspendLayout()
         try
             customThemes <- loadCustomThemes()
             savedCustomColors <- loadSavedCustomColors()
@@ -1941,6 +1947,7 @@ type AppearanceView() as this =
             updateCopyAllSavedMenuState()
         finally
             suppressEvents <- previous
+            colorPage.ResumeLayout(true)
             panel.ResumeLayout(true)
 
     member this.applyAppearance() =
@@ -1982,6 +1989,12 @@ type AppearanceView() as this =
 
         Services.settings.setValue("tabAppearance", box(newAppearance))
         
+    member this.colorView =
+        { new ISettingsView with
+            member x.key = SettingsViewType.ColorSettings
+            member x.title = Localization.getString("ColorPage")
+            member x.control = colorPage :> Control }
+
     interface ISettingsView with
         member x.key = SettingsViewType.AppearanceSettings
         member x.title = Localization.getString("Appearance")

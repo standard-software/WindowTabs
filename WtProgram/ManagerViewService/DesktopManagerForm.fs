@@ -171,9 +171,12 @@ type DesktopManagerForm() =
     // Construct every page before the first DPI design snapshot. Mixing
     // controls captured with the form and controls added after Show made a
     // monitor crossing depend on which path had created each page.
+    let programView = ProgramView()
+    let appearanceView = AppearanceView()
     let tabs = List2([
-        ProgramView() :> ISettingsView
-        AppearanceView() :> ISettingsView
+        programView :> ISettingsView
+        appearanceView :> ISettingsView
+        appearanceView.colorView
         HotKeyView() :> ISettingsView
         ShortcutKeysView() :> ISettingsView
         WorkspaceView() :> ISettingsView
