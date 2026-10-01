@@ -4,79 +4,14 @@
 
 ## version ss_2026.10.01_next19
 
-- Fixed a window flying off screen when the tab of a one-tab group was dragged onto another group. A drag that ends without a drop puts the window back. Crashes are written to crash_*.log.
-
-## version ss_2026.10.01_next18
-
-- Debug builds record what the UI thread waits on when the watchdog sees it stall.
-
-## version ss_2026.10.01_next17
-
-- Debug builds log real mouse stalls (input_stall.log) with what the tab groups were doing at the time.
-
-## version ss_2026.10.01_next16
-
-- Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front, and without holding up the tab strip. Minimizing no longer waits for each window.
-
-## version ss_2026.10.01_next15
-
-- An application that stops responding no longer holds up finding the title bar buttons of the other locked windows.
-
-## version ss_2026.10.01_next14
-
-- With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work again.
-
-## version ss_2026.10.01_next13
-
-- Pressing a tab no longer makes some applications redraw (a toolbar flickered): the drag preview is made only once a drag starts.
-- Fixed WindowTabs failing to start again after the watchdog restarted it.
-
-## version ss_2026.10.01_next12
-
-- The settings pages are shown in the README with the new Color page.
-
-## version ss_2026.10.01_next11
-
-- Fixed a window being put into more than one tab group across virtual desktops, which drew two tab strips on top of each other. Existing duplicates are removed.
-- A new workspace captures only the tab groups of the current virtual desktop.
-
-## version ss_2026.10.01_next10
-
-- Building the settings dialog no longer rewrites the settings file several times in a row.
-
-## version ss_2026.10.01_next9
-
-- Fixed the tab groups, colours and pins being lost when WindowTabs started slowly: the periodic save no longer runs before the startup restore.
-
-## version ss_2026.10.01_next8
-
-## version ss_2026.10.01_next7
-
-- After a language change the settings dialog is rebuilt before the confirmation appears, so it opens at once the next time.
-
-## version ss_2026.10.01_next6
-
-- A Color page next to Appearance holds dark mode and the tab colour theme.
-- The settings pages share one set of margins and columns.
-
-## version ss_2026.10.01_next5
-
-- The distance of the tabs from the window edge can be set separately for the left and the right. Upward and downward tabs are now called outer and inner tabs.
-
-## version ss_2026.10.01_next4
-
-- Closing one of several tabs with the same title no longer moves the others: such a tab is not remembered for restoring, and a window is put back by at most one remembered tab.
-- A tab opened with "Right of this tab" takes that tab's fill, underline and border colours as well.
-
-## version ss_2026.10.01_next3
-
-- A tab opened with "Right of this tab" goes right beside the tab it came from, and a restart keeps the tab order, whichever side the default tab position is.
-
-## version ss_2026.10.01_next2
-
-- A tab follows its window's title even when the application does not announce the change: PowerPoint kept the old file name after "Save As".
-
-## version ss_2026.10.01_next1
+- Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front and without holding up the tab strip. Minimizing no longer waits for each window.
+- With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work.
+- Fixed a window flying off screen when the tab of a one-tab group was dragged onto another group.
+- Fixed a window being put into more than one tab group across virtual desktops. A new workspace captures only the current desktop's tab groups.
+- Fixed the tab groups, colours and pins being lost when WindowTabs started slowly, and WindowTabs failing to start after the watchdog restarted it.
+- Pressing a tab no longer makes the application's toolbar flicker.
+- A Color page in the settings; the pages share the same margins, and the distance from the edge can be set separately for the left and the right.
+- A tab opened with "Right of this tab" goes right beside it with the same colours. Tab names follow applications that do not announce title changes (such as PowerPoint).
 
 ## version ss_2026.10.01
 
