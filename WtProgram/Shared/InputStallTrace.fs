@@ -33,27 +33,53 @@ module InputStallTrace =
     type Kind = Lag = 0 | Gap = 1 | Slow = 2 | Minimize = 3 | Maximize = 4 | Restore = 5 | Watchdog = 6
     type Record =
         { at: DateTime; kind: Kind; ms: float; distance: float
-          message: int; x: int; y: int; tick: uint32; hwnd: IntPtr }
+          message: int; x: int; y: int; tick: uint32; hwnd: IntPtr
+          gc0: int; gc1: int; gc2: int; gcDelta0: int; gcDelta1: int; gcDelta2: int
+          gcBaseline: int; priority: int }
 
     let private queue = new BlockingCollection<Record>(queueCapacity)
     let mutable private dropped = 0
     let mutable private started = 0
-    let private enqueue kind ms distance message x y tick hwnd =
+    let private enqueue kind ms distance message x y tick hwnd gc0 gc1 gc2 delta0 delta1 delta2 baseline priority =
         let record = { at = DateTime.Now; kind = kind; ms = ms; distance = distance
-                       message = message; x = x; y = y; tick = tick; hwnd = hwnd }
+                       message = message; x = x; y = y; tick = tick; hwnd = hwnd
+                       gc0 = gc0; gc1 = gc1; gc2 = gc2; gcDelta0 = delta0; gcDelta1 = delta1
+                       gcDelta2 = delta2; gcBaseline = baseline; priority = priority }
         if not (queue.TryAdd(record)) then Interlocked.Increment(&dropped) |> ignore
 
     // One detector per hook thread. Event stamps, not arrival times, measure
     // gaps so a delayed batch is not mistaken for a gap in generated events.
     // Require a short, moving step immediately before the gap to reject
     // rest-then-flick input without preceding motion.
-    type Detector(emit: Kind -> float -> float -> int -> int -> int -> uint32 -> IntPtr -> unit) =
+    type Detector(sink: Kind -> float -> float -> int -> int -> int -> uint32 -> IntPtr ->
+                        int -> int -> int -> int -> int -> int -> int -> int -> unit) =
+        let mutable gc0, gc1, gc2 = 0, 0, 0
+        let mutable delta0, delta1, delta2 = 0, 0, 0
+        let mutable havePrevious = false
+        let mutable baseline = 0
+        let emit kind ms distance message x y tick hwnd =
+            sink kind ms distance message x y tick hwnd gc0 gc1 gc2 delta0 delta1 delta2 baseline
+                (int Thread.CurrentThread.Priority)
         let mutable move : (uint32 * int * int) option = None
         let mutable moving = false
         member this.Reset() =
+            havePrevious <- false
             move <- None
             moving <- false
         member this.Observe(now: uint32, tick: uint32, message: int, x: int, y: int) =
+            // Sample every event, not just incidents. Counts establish correlation,
+            // not pause duration: background collections also change these counts.
+            let current0 = GC.CollectionCount(0)
+            let current1 = GC.CollectionCount(1)
+            let current2 = GC.CollectionCount(2)
+            baseline <- if havePrevious then 1 else 0
+            delta0 <- if havePrevious then current0 - gc0 else 0
+            delta1 <- if havePrevious then current1 - gc1 else 0
+            delta2 <- if havePrevious then current2 - gc2 else 0
+            gc0 <- current0
+            gc1 <- current1
+            gc2 <- current2
+            havePrevious <- true
             let lag = now - tick
             let wasMoving = moving
             let distance, gap =
@@ -79,12 +105,13 @@ module InputStallTrace =
             if ms >= slowMs then emit Kind.Slow ms distance message x y tick IntPtr.Zero
 
     let detector () = Detector(enqueue)
-    let context kind hwnd ms = enqueue kind ms 0.0 0 0 0 0u hwnd
+    let context kind hwnd ms = enqueue kind ms 0.0 0 0 0 0u hwnd -1 -1 -1 0 0 0 0 -1
 
     let format version record =
-        sprintf "%s version=%s kind=%A ms=%.2f distance=%.2f msg=0x%X x=%d y=%d tick=%u hwnd=0x%X"
+        sprintf "%s version=%s kind=%A ms=%.2f distance=%.2f msg=0x%X x=%d y=%d tick=%u hwnd=0x%X gc0=%d gc1=%d gc2=%d gcDelta0=%d gcDelta1=%d gcDelta2=%d gcBaseline=%d priority=%d"
             (record.at.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)) version
             record.kind record.ms record.distance record.message record.x record.y record.tick (record.hwnd.ToInt64())
+            record.gc0 record.gc1 record.gc2 record.gcDelta0 record.gcDelta1 record.gcDelta2 record.gcBaseline record.priority
 
     // Rotation is checked on every write, including during a multi-day run.
     let append (path: string) (line: string) =
