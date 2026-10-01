@@ -39,19 +39,27 @@ module PerfTrace =
         lock gate (fun () ->
             counts.[name] <- (match counts.TryGetValue name with | true, v -> v + 1 | _ -> 1))
 
-    let recordTime (name: string) (ms: float) =
+    // Installed by InputStallTrace. Invoke outside gate: incident recording must
+    // not hold the counter lock shared with the low-level mouse hook.
+    let mutable slowOperation : (string -> float -> int64 -> unit) = fun _ _ _ -> ()
+
+    let private recordTimeAt name ms ended =
         lock gate (fun () ->
             counts.[name] <- (match counts.TryGetValue name with | true, v -> v + 1 | _ -> 1)
             millis.[name] <- (match millis.TryGetValue name with | true, v -> v + ms | _ -> ms))
+        if ms >= 20.0 then
+            try slowOperation name ms ended with _ -> ()
+
+    let recordTime (name: string) (ms: float) =
+        recordTimeAt name ms (Stopwatch.GetTimestamp())
 
     let time (name: string) (f: unit -> 'a) =
         let start = Stopwatch.GetTimestamp()
         try f()
         finally
-            let ms = float (Stopwatch.GetTimestamp() - start) * 1000.0 / float Stopwatch.Frequency
-            lock gate (fun () ->
-                counts.[name] <- (match counts.TryGetValue name with | true, v -> v + 1 | _ -> 1)
-                millis.[name] <- (match millis.TryGetValue name with | true, v -> v + ms | _ -> ms))
+            let ended = Stopwatch.GetTimestamp()
+            let ms = float (ended - start) * 1000.0 / float Stopwatch.Frequency
+            recordTimeAt name ms ended
 
     /// A number that describes the current state rather than an event - the
     /// number of tab groups, tabs, and so on. The last value set is written.

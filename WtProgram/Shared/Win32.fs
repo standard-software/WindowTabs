@@ -586,11 +586,11 @@ and
         use b = new SolidBrush(Color.Transparent)
         gfx.FillRectangle(b, new Rectangle(Point.Empty, image.size.Size))
         gfx.DrawImageUnscaled(image.bitmap, Point.Empty)
-        Win32Helper.UpdateLayeredWindow(hwnd, location.Point, imageWithBg, alpha)
+        PerfTrace.time "layered.update" (fun () -> Win32Helper.UpdateLayeredWindow(hwnd, location.Point, imageWithBg, alpha))
         this.showNoActivate()
     
     member this.updateLocation(location:Pt) =       
-        Win32Helper.UpdateLayeredWindow(hwnd, location.Point)
+        PerfTrace.time "layered.move" (fun () -> Win32Helper.UpdateLayeredWindow(hwnd, location.Point))
 
     member this.hide() = WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_HIDE) |> ignore
 

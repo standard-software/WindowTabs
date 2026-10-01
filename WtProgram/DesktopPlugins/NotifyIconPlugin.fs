@@ -276,7 +276,17 @@ module Watchdog =
                 match uiThreadInvoker with
                 | Some invoker ->
                     try
+#if DEBUG
+                        let posted = Stopwatch.GetTimestamp()
+                        invoker.asyncInvoke(fun () ->
+                            let answered = Stopwatch.GetTimestamp()
+                            respondToPing()
+                            let ms = float (answered - posted) * 1000.0 / float Stopwatch.Frequency
+                            if ms >= 100.0 then
+                                InputStallTrace.completed InputStallTrace.Kind.PingAck "ping" ms answered)
+#else
                         invoker.asyncInvoke(fun () -> respondToPing())
+#endif
                     with _ -> ()
                 | None -> ()
 
