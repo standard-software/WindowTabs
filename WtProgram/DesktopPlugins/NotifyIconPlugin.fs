@@ -288,6 +288,7 @@ module Watchdog =
                 let quick = pingResponse.WaitOne(1500)
                 let responded =
                     if quick then true else
+                    InputStallTrace.context InputStallTrace.Kind.Watchdog IntPtr.Zero (float stallWatch.ElapsedMilliseconds)
                     log (fun () -> "STALL: UI thread has not answered for 1500 ms; hung windows: " + (try HungProbe.describe() with ex -> ex.Message))
                     logUiStack()
                     logAllStacks 0 500

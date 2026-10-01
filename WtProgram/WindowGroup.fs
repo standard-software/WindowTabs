@@ -1233,6 +1233,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let window = this.os.windowFromHwnd(hwnd)
         if placement.value.IsSome then
             let bounds,wp = placement.value.Value
+#if DEBUG
+            let sourceState = window.placement.showCmd
+            if sourceState <> wp.showCmd then
+                InputStallTrace.context
+                    (if wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then InputStallTrace.Kind.Maximize
+                     elif wp.showCmd = ShowWindowCommands.SW_SHOWMINIMIZED ||
+                          wp.showCmd = ShowWindowCommands.SW_MINIMIZE ||
+                          wp.showCmd = ShowWindowCommands.SW_SHOWMINNOACTIVE then InputStallTrace.Kind.Minimize
+                     else InputStallTrace.Kind.Restore) hwnd 0.0
+#endif
             let sourceNormal = window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
             let useAsync = backgroundBounds.IsSome && desktopShown &&
                             BackgroundPlacementPolicy.useAsync true
@@ -1652,6 +1662,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         if not desktopShown then this.backgroundEvent(hwnd, evt) else
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
+#if DEBUG
+            InputStallTrace.context InputStallTrace.Kind.Minimize hwnd 0.0
+#endif
             if this.windows.contains(hwnd) then
                 // Queued followers may finish after the initial visibility check.
                 // Consume the echo without starting another batch, but refresh visibility.
@@ -2049,6 +2062,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.showWindowAsyncNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
 
     member this.restoreAll() =
+#if DEBUG
+        InputStallTrace.context InputStallTrace.Kind.Restore this.ts.hwnd 0.0
+#endif
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.iter <| fun hwnd ->
             let window = this.os.windowFromHwnd(hwnd)
