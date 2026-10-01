@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next14
+
+- With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work again.
+
 ## version ss_2026.10.01_next13
 
 - Pressing a tab no longer makes some applications redraw (a toolbar flickered): the drag preview is made only once a drag starts.
