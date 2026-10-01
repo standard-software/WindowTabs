@@ -1486,7 +1486,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         | WinEvent.EVENT_SYSTEM_MOVESIZEEND when isSharedMember ->
             this.followSharedWindow(hwnd)
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART when isSharedMember ->
-            this.followSharedMinimize(hwnd)
+            if this.consumeMinMaxEcho(hwnd, evt) then this.updateIsVisible()
+            else this.followSharedMinimize(hwnd)
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND when isSharedMember ->
             this.followSharedRestore(hwnd)
         | _ -> ()
@@ -1559,7 +1560,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         zorderCell.value.where((<>) hwnd).reverse.iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized.not && this.isSameWindow(other) then
                 pendingMinMaxEchoes.[(other, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
-                this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWMINNOACTIVE)
+                this.showWindowAsyncNoAnimation(other, ShowWindowCommands.SW_SHOWMINNOACTIVE)
         this.updateIsVisible()
 
     member private this.followSharedRestore(hwnd) =
@@ -1581,12 +1582,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then
-                if this.consumeMinMaxEcho(hwnd, evt) then () else
+                // Queued followers may finish after the initial visibility check.
+                // Consume the echo without starting another batch, but refresh visibility.
+                if this.consumeMinMaxEcho(hwnd, evt) then this.updateIsVisible() else
                 let needsMinimized = zorderCell.value.any <| fun hwnd ->
                     this.os.windowFromHwnd(hwnd).isMinimized.not
                 suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
                 if needsMinimized then
                     this.minimizeAll()
+                    // Every minimize is already posted. This orders handles only;
+                    // it does not require the followers to be minimized yet.
                     this.os.setZorder(zorderCell.value.moveToEnd((=)hwnd))
                 this.updateIsVisible()
         //this happens when a window is restored from minimize
@@ -1944,6 +1949,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.showWindowNoAnimation(hwnd, cmd) =
         this.withoutTransitions(hwnd, fun() -> this.os.windowFromHwnd(hwnd).showWindow(cmd))
 
+    // Post without waiting for a follower's UI thread. As in async restore,
+    // leave transitions disabled briefly while the target processes the show.
+    member private this.showWindowAsyncNoAnimation(hwnd, cmd) =
+        this.disableTransitions(hwnd)
+        try
+            this.os.windowFromHwnd(hwnd).showWindowAsync(cmd)
+            ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
+        with _ ->
+            this.enableTransitions(hwnd)
+            reraise()
+
     // Consume an expected echo of our own batch operation. Returns true if
     // the event was caused by minimizeAll/restoreAll and must be ignored.
     member private this.consumeMinMaxEcho(hwnd, evt) =
@@ -1961,7 +1977,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let window = this.os.windowFromHwnd(hwnd)
             if window.isMinimized.not then
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
-                this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
+                this.showWindowAsyncNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
 
     member this.restoreAll() =
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
