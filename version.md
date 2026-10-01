@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next17
+
+- Debug builds log real mouse stalls (input_stall.log) with what the tab groups were doing at the time.
+
 ## version ss_2026.10.01_next16
 
 - Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front, and without holding up the tab strip. Minimizing no longer waits for each window.
