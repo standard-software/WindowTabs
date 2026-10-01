@@ -65,7 +65,11 @@ type CaptionButtonCache() =
             if dpi <> 0u then Some(bounds, dpi) else None
         | None -> None
 
-    let discover hwnd owner className bounds dpi = PerfTrace.time "captionButtons.query" <| fun () ->
+    let discover hwnd owner className bounds dpi =
+#if DEBUG
+        if StallExperiment.noCaptionQuery then () else
+#endif
+        PerfTrace.time "captionButtons.query" <| fun () ->
         try
             // Invalidate before querying, including explicit refreshes.
             remove hwnd

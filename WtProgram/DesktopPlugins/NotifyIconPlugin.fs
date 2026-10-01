@@ -48,6 +48,7 @@ module Watchdog =
 #if DEBUG
     let mutable private uiNativeThreadId = 0u
     let mutable private uiThread: Thread option = None
+    let mutable private switchesLogged = 0
 #endif
     let private freezeTimeout = 10000  // 10 seconds timeout for freeze detection
 #if DEBUG
@@ -341,6 +342,13 @@ module Watchdog =
                 Thread.Sleep(checkInterval)
 
     let start() =
+#if DEBUG
+        if Interlocked.Exchange(&switchesLogged, 1) = 0 then
+            log (fun () ->
+                sprintf "EXPERIMENT NO_CAPTION_QUERY=%d SYNC_FOLLOWERS=%d"
+                    (if StallExperiment.noCaptionQuery then 1 else 0)
+                    (if StallExperiment.syncFollowers then 1 else 0))
+#endif
         // Don't start watchdog when debugger is attached (prevents false positives during debugging)
         if Debugger.IsAttached then
             log (fun () -> "not armed - a debugger is attached")

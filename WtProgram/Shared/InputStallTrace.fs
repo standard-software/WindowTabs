@@ -9,6 +9,12 @@ open System.IO
 open System.Text
 open System.Threading
 
+// A/B experiments only. Module values snapshot the environment once at startup;
+// neither the switches nor their environment-variable names exist in Release.
+module StallExperiment =
+    let noCaptionQuery = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_CAPTION_QUERY") = "1"
+    let syncFollowers = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SYNC_FOLLOWERS") = "1"
+
 // Numeric evidence only. Producers never format text or touch the filesystem.
 module InputStallTrace =
     [<Literal>]
