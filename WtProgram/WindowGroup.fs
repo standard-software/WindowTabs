@@ -626,7 +626,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 // hideOffScreen uses SW_RESTORE for maximized windows, which
                 // would activate a follower before it is parked.
                 if window.isMaximized then
-                    Win32Helper.SetWindowMaximizedNoActivate(hwnd, false) |> ignore
+                    Win32Helper.RestoreWindowNoActivate(hwnd) |> ignore
                 // If the style change is refused, retain the native restore/park path.
                 window.hideOffScreen(None)))
 
@@ -1247,13 +1247,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 elif not window.isMinimized &&
                      (targetMaximized || wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL) then
                     // Native show commands raise followers even with transitions
-                    // disabled. Change only WS_MAXIMIZE, retaining z-order and
-                    // activation, then move using the existing DPI protocol.
+                    // disabled. Apply WS_MAXIMIZE and the final frame/bounds as
+                    // one position change, retaining z-order and activation.
                     this.withoutTransitions(hwnd, fun() ->
-                        if Win32Helper.SetWindowMaximizedNoActivate(hwnd, targetMaximized) then
-                            let followerBounds =
-                                if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
-                                else adjustedBounds
+                        let followerBounds =
+                            if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
+                            else adjustedBounds
+                        if Win32Helper.SetWindowMaximizedNoActivate(hwnd, targetMaximized, followerBounds.RECT) then
+                            // Correct any app/DPI adjustment, or move an already
+                            // matching state. This is a no-op when bounds match.
                             this.applyWindowBoundsWithDpiHandling(hwnd, followerBounds)
                         else
                             // A blocked or refused style change must not stop

@@ -261,10 +261,11 @@ namespace Bemo
         }
         // For visible group followers only. ShowWindow/SetWindowPlacement with
         // SW_SHOWMAXIMIZED activate and raise; even SW_SHOWNOACTIVATE can raise.
-        // Update the maximized state without asking Windows to show the window,
-        // then refresh its frame without activation or any z-order change.
-        // The caller supplies the group's bounds after this state change.
-        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized)
+        // Apply the new frame and final bounds together. A frame-only change at
+        // the old size sends an intermediate WM_SIZE (e.g. SIZE_RESTORED with
+        // maximized dimensions), which can leave application layout stale even
+        // after a subsequent MoveWindow sends the correct size.
+        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds)
         {
             if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
             int style = (int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE);
@@ -272,10 +273,32 @@ namespace Bemo
             if (updated == style) return true;
             WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(updated));
             if ((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE) != updated) return false;
-            return WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOSIZE |
+            return WinUserApi.SetWindowPos(hwnd, IntPtr.Zero,
+                bounds.Left, bounds.Top, bounds.Width, bounds.Height,
                 SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
                 SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED);
+        }
+
+        // Restore a maximized follower before parking it. Use its saved normal
+        // bounds so this path also avoids a restored frame at maximized size.
+        public static bool RestoreWindowNoActivate(IntPtr hwnd)
+        {
+            WINDOWPLACEMENT placement = WINDOWPLACEMENT.NewWindowPlacement();
+            if (WinUserApi.GetWindowPlacement(hwnd, ref placement) == 0) return false;
+            RECT bounds = placement.rcNormalPosition;
+            // Normal placement uses workspace coordinates except for tool windows;
+            // SetWindowPos always takes screen coordinates for top-level windows.
+            if (((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE) &
+                 WindowsExtendedStyles.WS_EX_TOOLWINDOW) == 0)
+            {
+                IntPtr monitor = WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST);
+                MONITORINFO info = GetMonitorInfo(monitor);
+                int dx = info.rcWork.Left - info.rcMonitor.Left;
+                int dy = info.rcWork.Top - info.rcMonitor.Top;
+                bounds.Left += dx; bounds.Right += dx;
+                bounds.Top += dy; bounds.Bottom += dy;
+            }
+            return SetWindowMaximizedNoActivate(hwnd, false, bounds);
         }
 
         public static Rectangle GetWindowRectangle(IntPtr hwnd)
