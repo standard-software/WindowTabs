@@ -107,6 +107,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let selectedTabsCell = Cell.create(Set2<IntPtr>())
     let prevTop = Cell.create(None)
     let placement = Cell.create(None:Option<Rect * OSWindowPlacement>)
+    // Actual outer bounds include the maximized frame; placement uses work-area bounds.
+    let mutable maximizedFrameBounds : Rect option = None
+    let mutable childPlacementPending = false
+    let followerPlacements = FollowerPlacementQueue()
+    let synchronousFollowers = System.Collections.Generic.HashSet<IntPtr>()
     let windowsCell = Cell.create(Set2())
     let _ts = ref None 
     let inMoveSize = Cell.create(false)
@@ -451,6 +456,38 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
             not allWindowsCloaked
 
+    // Let the event's group AND strip batches finish before touching followers.
+    // Keep only one queued pass; no HWND, bounds or showCmd is captured here.
+    member private this.queueChildPlacement() =
+        if not childPlacementPending then
+            childPlacementPending <- true
+            // Deliberately use the raw invoker: wrapping both phases in
+            // this.invokeAsync would hold the strip batch across the slow work.
+            invoker.asyncInvoke <| fun () ->
+                childPlacementPending <- false
+                if isDestroyed.value.not && desktopShown && inMoveSize.value.not then
+                    match zorderCell.value.tryHead with
+                    | Some(hwnd) ->
+                        let window = this.os.windowFromHwnd(hwnd)
+                        let bounds = window.bounds
+                        if window.isWindow && window.isMinimized.not && window.isInMoveSize.not &&
+                           bounds.width > 0 && bounds.height > 0 then
+                            // The native window may have changed again before its
+                            // throttled event reaches us. Publish that latest state
+                            // and flush the strip before applying it to followers.
+                            this.withUpdate <| fun () ->
+                                this.saveTopWindowPlacement()
+                                isMaximizedExport.update()
+                                isFullscreenExport.update()
+                                updateTabVisibility()
+                            this.withUpdate <| fun () ->
+                                let isForeground = this.os.foreground.hwnd = hwnd
+                                this.adjustChildWindows()
+                                if isForeground then this.makeTopWindowForeground()
+                                this.foreground <- this.os.foreground.hwnd
+                                this.reassertRestoreFront()
+                    | None -> ()
+
     member private this.adjustChildWindows = fun() -> PerfTrace.time "group.adjustChildren" <| fun () ->
         // Skip entirely while the top window cannot provide usable bounds:
         // - degenerate (0,0,0,0) bounds from a window being torn down under
@@ -547,7 +584,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             // untouched so this can't disturb the fronting done
                             // afterwards.
                             if siblingsWereMinimized then window.moveAsync(correctBounds)
-                            else window.move(correctBounds)
+                            else PerfTrace.time "group.follower.secondBounds" <| fun () -> window.move(correctBounds)
                         // Track the margin-shrunk size for this window
                         if this.hasExeMargin(hwnd) && not topMaximized then
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
@@ -613,13 +650,21 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // came from is remembered here so they can be put back regardless.
     member private this.hideChildWindows() =
         zorderCell.value.tail.where(isMinimized >> not).iter(fun hwnd ->
+            followerPlacements.Synchronous(hwnd, ignore)
             let window = this.os.windowFromHwnd(hwnd)
             (try
                 let bounds = window.bounds
                 if bounds.width > 0 && bounds.height > 0 then
                     parkedBounds <- parkedBounds.Add(hwnd, bounds)
              with _ -> ())
-            window.hideOffScreen(None))
+            // Parking restores maximized followers before moving them away.
+            this.withoutTransitions(hwnd, fun() ->
+                // hideOffScreen uses SW_RESTORE for maximized windows, which
+                // would activate a follower before it is parked.
+                if window.isMaximized then
+                    Win32Helper.RestoreWindowNoActivate(hwnd) |> ignore
+                // If the style change is refused, retain the native restore/park path.
+                window.hideOffScreen(None)))
 
     /// Puts back anything hideChildWindows parked that is still outside every
     /// monitor. Called after the move/size loop, whatever adjustChildWindows
@@ -1019,9 +1064,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         window.pid.exeName bounds.x bounds.y bounds.width bounds.height)
                     this.removeExeMarginForRead(window.hwnd, bounds)
                 else bounds
+            maximizedFrameBounds <- if window.isMaximized then Some liveBounds else None
             placement.set(Some(adjustedBounds, window.placement))
            
-    member private this.waitForDpiChange(hwnd: IntPtr, initialDpi: uint32, maxWaitMs: int) =
+    member private this.waitForDpiChange(hwnd: IntPtr, initialDpi: uint32, maxWaitMs: int) = PerfTrace.time "group.follower.waitDpi" <| fun () ->
         let mutable currentDpi = initialDpi
         let mutable elapsed = 0
         let checkInterval = 10 // Check every 10ms
@@ -1034,7 +1080,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         currentDpi <> initialDpi // Return true if DPI changed
 
     // Common method to apply window bounds with DPI-aware logic
-    member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect) =
+    member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect) = PerfTrace.time "group.follower.dpiBounds" <| fun () ->
         let window = this.os.windowFromHwnd(hwnd)
 
         // Skip the move if bounds already match - SetWindowPos is expensive and apps that
@@ -1058,7 +1104,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // Use different approach based on DPI change
         if currentDpi <> targetDpi then
             // Different DPI: use position-first approach to handle DPI scaling
-            window.setPositionOnly bounds.x bounds.y
+            PerfTrace.time "group.follower.position" <| fun () -> window.setPositionOnly bounds.x bounds.y
 
             // Wait for DPI change (max 200ms)
             if this.waitForDpiChange(hwnd, currentDpi, 200) then
@@ -1066,10 +1112,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 System.Threading.Thread.Sleep(20)
 
             // Apply final position with size
-            window.move(bounds)
+            PerfTrace.time "group.follower.move" <| fun () -> window.move(bounds)
         else
             // Same DPI: move with position and size at once for better performance
-            window.move(bounds)
+            PerfTrace.time "group.follower.move" <| fun () -> window.move(bounds)
 
     // The position-first DPI protocol is retained, but its wait is a timer,
     // not a sleep on the group thread. Tickets prevent an old correction from
@@ -1204,53 +1250,101 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 window.pid.exeName bounds.x bounds.y bounds.width bounds.height
                 adjustedBounds.x adjustedBounds.y adjustedBounds.width adjustedBounds.height
                 wp.showCmd window.placement.showCmd)
-            //if you remove this check, then when you drag a window into an Aero Snapp'ed window
-            //the dragged in window will be placed at the restore location for the target, instead of
-            //at its snapped location - this is because GetWindowPlacement rcNormal is the restore
-            //location for snapped windows
-            if  wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL &&
-                window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
-                then
-                if useAsync then
-                    queuedAsync <- true
-                    this.applyBackgroundWindowBounds(hwnd, adjustedBounds)
-                else this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
-            else
-                // Apply DPI-aware handling when target is maximized (regardless of source state)
-                if targetMaximized then
-                    //maximized windows won't move from one monitor to another by setting placement alone,
-                    //need to first move to the new bounds, then set placement
-                    this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
-                if window.isMinimized && not targetMaximized then
-                    // Un-minimizing a group sibling (the "restore follows the
-                    // group" path). setPlacement blocks on the target app's
-                    // thread — with several busy apps this summed to ~600-900ms
-                    // of frozen strip. Instead un-minimize and reposition
-                    // ASYNCHRONOUSLY (ShowWindowAsync + SWP_ASYNCWINDOWPOS),
-                    // reaching the same final bounds without stalling the strip.
-                    // Transitions are disabled first (re-enabled shortly after)
-                    // so only the window the user restored animates.
-                    this.disableTransitions(hwnd)
-                    window.showWindowAsync(ShowWindowCommands.SW_SHOWNOACTIVATE)
-                    window.moveAsync(adjustedBounds)
-                    // Post the sibling directly behind the restore-front window
-                    // so it surfaces already below it instead of flickering on
-                    // top. Ordered after the show on the target's queue.
-                    if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd then
-                        window.insertAfterAsync(restoreFrontHwnd)
-                    ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
-                elif window.isMinimized then
-                    this.withoutTransitions(hwnd, fun() -> window.setPlacement(wp))
+            let followerBounds =
+                if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
+                else adjustedBounds
+            let mutable nativeBounds = followerBounds.RECT
+            let source = zorderCell.value.tryHead
+            let canPost =
+                not (synchronousFollowers.Contains hwnd) && desktopShown && source.IsSome &&
+                source.Value <> hwnd && hwnd <> this.os.foreground.hwnd && window.isVisible &&
+                not window.isMinimized &&
+                (targetMaximized || wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL) &&
+                (targetMaximized || window.isMaximized || followerPlacements.HasPending(hwnd)) &&
+                not ((VirtualDesktopGroups.Live.shared()).Contains hwnd) &&
+                WinUserApi.GetDpiForWindow(hwnd) <> 0u &&
+                WinUserApi.GetDpiForWindow(hwnd) = WinUserApi.GetDpiForWindow(source.Value) &&
+                WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST) =
+                    WinUserApi.MonitorFromRect(&nativeBounds, MonitorFlags.MONITOR_DEFAULTTONEAREST)
+            if canPost then
+                queuedAsync <- true
+                followerPlacements.Post(hwnd, source.Value, this.os.windowFromHwnd(source.Value).bounds,
+                    targetMaximized, followerBounds, fun revision ->
+                        this.invokeAsync <| fun () ->
+                            if isDestroyed.value.not && desktopShown && inMoveSize.value.not && this.windows.contains(hwnd) &&
+                               followerPlacements.IsCurrent(hwnd, revision) then
+                                // Refused styles and changed DPI use the existing
+                                // synchronous path, with the newest group state.
+                                synchronousFollowers.Add(hwnd) |> ignore
+                                try
+                                    this.saveTopWindowPlacement()
+                                    this.adjustWindowPlacementCore(hwnd, None) |> ignore
+                                finally synchronousFollowers.Remove(hwnd) |> ignore) |> ignore
+            else followerPlacements.Synchronous(hwnd, fun () ->
+                //if you remove this check, then when you drag a window into an Aero Snapp'ed window
+                //the dragged in window will be placed at the restore location for the target, instead of
+                //at its snapped location - this is because GetWindowPlacement rcNormal is the restore
+                //location for snapped windows
+                if  wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL &&
+                    window.placement.showCmd = ShowWindowCommands.SW_SHOWNORMAL
+                    then
+                    if useAsync then
+                        queuedAsync <- true
+                        this.applyBackgroundWindowBounds(hwnd, adjustedBounds)
+                    else this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
                 else
-                    window.setPlacement(wp)
+                    if window.isMinimized && not targetMaximized then
+                        // Un-minimize and reposition asynchronously so busy apps do
+                        // not stall the strip. Keep transitions disabled until the
+                        // queued operations have had time to run.
+                        this.disableTransitions(hwnd)
+                        try
+                            window.showWindowAsync(ShowWindowCommands.SW_SHOWNOACTIVATE)
+                            window.moveAsync(adjustedBounds)
+                            // Post the sibling directly behind the restore-front window
+                            // so it surfaces already below it instead of flickering on
+                            // top. Ordered after the show on the target's queue.
+                            if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd then
+                                window.insertAfterAsync(restoreFrontHwnd)
+                            ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
+                        with _ ->
+                            // No delayed cleanup is guaranteed if posting fails.
+                            this.enableTransitions(hwnd)
+                            reraise()
+                    elif not window.isMinimized &&
+                         (targetMaximized || wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL) then
+                        // Native show commands raise followers even with transitions
+                        // disabled. Apply WS_MAXIMIZE and the final frame/bounds as
+                        // one position change, retaining z-order and activation.
+                        this.withoutTransitions(hwnd, fun() ->
+                            let followerBounds =
+                                if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
+                                else adjustedBounds
+                            if Win32Helper.SetWindowMaximizedNoActivate(hwnd, targetMaximized, followerBounds.RECT,
+                                    Win32Helper.PlacementTiming(fun name ms -> PerfTrace.recordTime name ms), null) then
+                                // Correct any app/DPI adjustment, or move an already
+                                // matching state. This is a no-op when bounds match.
+                                this.applyWindowBoundsWithDpiHandling(hwnd, followerBounds)
+                            else
+                                // A blocked or refused style change must not stop
+                                // the follower. Retain the native placement fallback.
+                                if targetMaximized then
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                                PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp))
+                    else
+                        // Keep native placement for minimized followers; their
+                        // restore bookkeeping must still be performed by Windows.
+                        this.withoutTransitions(hwnd, fun() ->
+                            if targetMaximized then
+                                // Placement alone cannot move a maximized window
+                                // between monitors. Suppress the preparatory move too.
+                                this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                            PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp))
 
+            )
             // Track the margin-shrunk size for this window
             if this.hasExeMargin(hwnd) && not targetMaximized then
                 marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (adjustedBounds.width, adjustedBounds.height)))
-
-            // Note: Cases not covered above (e.g., maximized -> normal) do not require DPI handling
-            // because setPlacement correctly handles the transition without DPI-related issues.
-            // This has been verified through testing across different DPI displays.
 
         queuedAsync
 
@@ -1463,7 +1557,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         | WinEvent.EVENT_SYSTEM_MOVESIZEEND when isSharedMember ->
             this.followSharedWindow(hwnd)
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART when isSharedMember ->
-            this.followSharedMinimize(hwnd)
+            if this.consumeMinMaxEcho(hwnd, evt) then this.updateIsVisible()
+            else this.followSharedMinimize(hwnd)
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND when isSharedMember ->
             this.followSharedRestore(hwnd)
         | _ -> ()
@@ -1498,6 +1593,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         sprintf "group=%X follows %X to %d,%d %dx%d (shown=%b)"
                             (this.hwnd.ToInt64()) (hwnd.ToInt64())
                             adjusted.x adjusted.y adjusted.width adjusted.height desktopShown)
+                    maximizedFrameBounds <- if window.isMaximized then Some live else None
                     placement.set(Some(adjusted, wp))
                     // Checked just before each is moved: a handle Windows has
                     // given to another window since it joined is left alone.
@@ -1535,7 +1631,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         zorderCell.value.where((<>) hwnd).reverse.iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized.not && this.isSameWindow(other) then
                 pendingMinMaxEchoes.[(other, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
-                this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWMINNOACTIVE)
+                this.showWindowAsyncNoAnimation(other, ShowWindowCommands.SW_SHOWMINNOACTIVE)
         this.updateIsVisible()
 
     member private this.followSharedRestore(hwnd) =
@@ -1557,12 +1653,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
             if this.windows.contains(hwnd) then
-                if this.consumeMinMaxEcho(hwnd, evt) then () else
+                // Queued followers may finish after the initial visibility check.
+                // Consume the echo without starting another batch, but refresh visibility.
+                if this.consumeMinMaxEcho(hwnd, evt) then this.updateIsVisible() else
                 let needsMinimized = zorderCell.value.any <| fun hwnd ->
                     this.os.windowFromHwnd(hwnd).isMinimized.not
                 suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
                 if needsMinimized then
                     this.minimizeAll()
+                    // Every minimize is already posted. This orders handles only;
+                    // it does not require the followers to be minimized yet.
                     this.os.setZorder(zorderCell.value.moveToEnd((=)hwnd))
                 this.updateIsVisible()
         //this happens when a window is restored from minimize
@@ -1641,16 +1741,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     if window.isInMoveSize then
                         this.onEnterMoveSize()
                     else
-                        let isForeground = this.os.foreground.hwnd = hwnd
                         this.saveTopWindowPlacement()
-                        this.adjustChildWindows()
-                        if isForeground then
-                            this.makeTopWindowForeground()
-                        this.foreground <- this.os.foreground.hwnd
-                        this.reassertRestoreFront()
                         isMaximizedExport.update()
                         isFullscreenExport.update()
                         updateTabVisibility()
+                        this.queueChildPlacement()
             // A window of this group that is shown on all desktops, moved by
             // something other than this group - its group on another desktop
             // following a move made there. Same as if it had been dragged
@@ -1805,6 +1900,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.adjustChildWindows()
 
     member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
+        followerPlacements.Synchronous(hwnd, ignore)
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
@@ -1884,6 +1980,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.activateIndex(targetIndex, force)
                         
     member this.destroy() =
+        followerPlacements.CancelAll()
         pendingBackgroundMoves.Clear()
         if isDestroyed.value.not then
             isDestroyed.set(true)
@@ -1912,11 +2009,25 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.withoutTransitions(hwnd: IntPtr, f: unit -> unit) =
         this.disableTransitions(hwnd)
-        f()
-        this.enableTransitions(hwnd)
+        try
+            f()
+        finally
+            this.enableTransitions(hwnd)
 
     member private this.showWindowNoAnimation(hwnd, cmd) =
         this.withoutTransitions(hwnd, fun() -> this.os.windowFromHwnd(hwnd).showWindow(cmd))
+
+    // Post without waiting for a follower's UI thread. As in async restore,
+    // leave transitions disabled briefly while the target processes the show.
+    member private this.showWindowAsyncNoAnimation(hwnd, cmd) =
+        followerPlacements.Cancel(hwnd)
+        this.disableTransitions(hwnd)
+        try
+            this.os.windowFromHwnd(hwnd).showWindowAsync(cmd)
+            ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
+        with _ ->
+            this.enableTransitions(hwnd)
+            reraise()
 
     // Consume an expected echo of our own batch operation. Returns true if
     // the event was caused by minimizeAll/restoreAll and must be ignored.
@@ -1935,7 +2046,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let window = this.os.windowFromHwnd(hwnd)
             if window.isMinimized.not then
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZESTART)] <- DateTime.Now
-                this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
+                this.showWindowAsyncNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
 
     member this.restoreAll() =
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
@@ -1946,6 +2057,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
         
     member this.tabActivate(Tab(hwnd), force) =
+        followerPlacements.Synchronous(hwnd, ignore)
         let window = this.os.windowFromHwnd(hwnd)
         let tsWindow = this.os.windowFromHwnd(this.ts.hwnd)
 

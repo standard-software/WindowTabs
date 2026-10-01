@@ -39,6 +39,11 @@ module PerfTrace =
         lock gate (fun () ->
             counts.[name] <- (match counts.TryGetValue name with | true, v -> v + 1 | _ -> 1))
 
+    let recordTime (name: string) (ms: float) =
+        lock gate (fun () ->
+            counts.[name] <- (match counts.TryGetValue name with | true, v -> v + 1 | _ -> 1)
+            millis.[name] <- (match millis.TryGetValue name with | true, v -> v + ms | _ -> ms))
+
     let time (name: string) (f: unit -> 'a) =
         let start = Stopwatch.GetTimestamp()
         try f()
@@ -111,6 +116,7 @@ module PerfTrace =
     let count (_name: string) = ()
     // Inline, so a Release build calls the timed work directly: no closure
     // is allocated for it at the call site.
+    let recordTime (_name: string) (_ms: float) = ()
     let inline time (_name: string) (f: unit -> 'a) = f()
     let gauge (_name: string) (_value: int) = ()
     let flush (_version: string) = ()

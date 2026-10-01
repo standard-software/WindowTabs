@@ -259,6 +259,75 @@ namespace Bemo
             WinUserApi.GetWindowPlacement(hwnd, ref wp);
             return wp;
         }
+        // For visible group followers only. ShowWindow/SetWindowPlacement with
+        // SW_SHOWMAXIMIZED activate and raise; even SW_SHOWNOACTIVATE can raise.
+        // Apply the new frame and final bounds together. A frame-only change at
+        // the old size sends an intermediate WM_SIZE (e.g. SIZE_RESTORED with
+        // maximized dimensions), which can leave application layout stale even
+        // after a subsequent MoveWindow sends the correct size.
+        public delegate void PlacementTiming(string stage, double milliseconds);
+        public delegate bool PlacementCurrent();
+
+        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds)
+        {
+            return SetWindowMaximizedNoActivate(hwnd, maximized, bounds, null, null);
+        }
+
+        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds,
+            PlacementTiming timing, PlacementCurrent current)
+        {
+            if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
+            if (current != null && !current()) return true;
+            int style = (int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE);
+            int updated = maximized ? style | WindowsStyles.WS_MAXIMIZE : style & ~WindowsStyles.WS_MAXIMIZE;
+            if (updated == style) return true;
+#if DEBUG
+            long started = Stopwatch.GetTimestamp();
+#endif
+            WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(updated));
+#if DEBUG
+            if (timing != null) timing("group.follower.style", (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency);
+#endif
+            // Once the style has changed, finish its frame/bounds together.
+            // Per-window serialization applies a newer request afterward;
+            // cancellation here would strand the new style at the old size.
+            if (WinUserApi.IsIconic(hwnd)) return false;
+            if ((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE) != updated) return false;
+#if DEBUG
+            started = Stopwatch.GetTimestamp();
+#endif
+            bool result = WinUserApi.SetWindowPos(hwnd, IntPtr.Zero,
+                bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+                SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
+                SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED);
+#if DEBUG
+            if (timing != null) timing("group.follower.frameBounds", (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency);
+#endif
+            return result;
+        }
+
+        // Restore a maximized follower before parking it. Use its saved normal
+        // bounds so this path also avoids a restored frame at maximized size.
+        public static bool RestoreWindowNoActivate(IntPtr hwnd)
+        {
+            WINDOWPLACEMENT placement = WINDOWPLACEMENT.NewWindowPlacement();
+            if (WinUserApi.GetWindowPlacement(hwnd, ref placement) == 0) return false;
+            RECT bounds = placement.rcNormalPosition;
+            // Normal placement uses workspace coordinates except for tool windows;
+            // SetWindowPos always takes screen coordinates for top-level windows.
+            if (((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE) &
+                 WindowsExtendedStyles.WS_EX_TOOLWINDOW) == 0)
+            {
+                IntPtr monitor = WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST);
+                MONITORINFO info = GetMonitorInfo(monitor);
+                int dx = info.rcWork.Left - info.rcMonitor.Left;
+                int dy = info.rcWork.Top - info.rcMonitor.Top;
+                bounds.Left += dx; bounds.Right += dx;
+                bounds.Top += dy; bounds.Bottom += dy;
+            }
+            return SetWindowMaximizedNoActivate(hwnd, false, bounds);
+        }
+
         public static Rectangle GetWindowRectangle(IntPtr hwnd)
         {
             RECT rect;
