@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next15
+
+- An application that stops responding no longer holds up finding the title bar buttons of the other locked windows.
+
 ## version ss_2026.10.01_next14
 
 - With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work again.
