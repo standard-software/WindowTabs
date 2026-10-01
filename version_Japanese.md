@@ -2,6 +2,10 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.01_next18
+
+- Debug 版で、見張り役が UI スレッドの停止を検知したとき、何を待っているかを記録するようにした。
+
 ## version ss_2026.10.01_next17
 
 - Debug 版で、マウスが実際に止まったときの記録（input_stall.log）を、そのときのタブグループの操作と一緒に残すようにした。

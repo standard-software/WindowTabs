@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next18
+
+- Debug builds record what the UI thread waits on when the watchdog sees it stall.
+
 ## version ss_2026.10.01_next17
 
 - Debug builds log real mouse stalls (input_stall.log) with what the tab groups were doing at the time.
