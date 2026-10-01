@@ -2,6 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.01_next19
+
+- Fixed a window flying off screen when the tab of a one-tab group was dragged onto another group. A drag that ends without a drop puts the window back. Crashes are written to crash_*.log.
+
 ## version ss_2026.10.01_next18
 
 - Debug builds record what the UI thread waits on when the watchdog sees it stall.
