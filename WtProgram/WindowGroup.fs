@@ -107,6 +107,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let selectedTabsCell = Cell.create(Set2<IntPtr>())
     let prevTop = Cell.create(None)
     let placement = Cell.create(None:Option<Rect * OSWindowPlacement>)
+    // Actual outer bounds include the maximized frame; placement uses work-area bounds.
+    let mutable maximizedFrameBounds : Rect option = None
     let windowsCell = Cell.create(Set2())
     let _ts = ref None 
     let inMoveSize = Cell.create(false)
@@ -620,7 +622,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     parkedBounds <- parkedBounds.Add(hwnd, bounds)
              with _ -> ())
             // Parking restores maximized followers before moving them away.
-            this.withoutTransitions(hwnd, fun() -> window.hideOffScreen(None)))
+            this.withoutTransitions(hwnd, fun() ->
+                // hideOffScreen uses SW_RESTORE for maximized windows, which
+                // would activate a follower before it is parked.
+                if window.isMaximized then
+                    Win32Helper.SetWindowMaximizedNoActivate(hwnd, false) |> ignore
+                // If the style change is refused, retain the native restore/park path.
+                window.hideOffScreen(None)))
 
     /// Puts back anything hideChildWindows parked that is still outside every
     /// monitor. Called after the move/size loop, whatever adjustChildWindows
@@ -1020,6 +1028,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         window.pid.exeName bounds.x bounds.y bounds.width bounds.height)
                     this.removeExeMarginForRead(window.hwnd, bounds)
                 else bounds
+            maximizedFrameBounds <- if window.isMaximized then Some liveBounds else None
             placement.set(Some(adjustedBounds, window.placement))
            
     member private this.waitForDpiChange(hwnd: IntPtr, initialDpi: uint32, maxWaitMs: int) =
@@ -1235,9 +1244,26 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         // No delayed cleanup is guaranteed if posting fails.
                         this.enableTransitions(hwnd)
                         reraise()
+                elif not window.isMinimized &&
+                     (targetMaximized || wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL) then
+                    // Native show commands raise followers even with transitions
+                    // disabled. Change only WS_MAXIMIZE, retaining z-order and
+                    // activation, then move using the existing DPI protocol.
+                    this.withoutTransitions(hwnd, fun() ->
+                        if Win32Helper.SetWindowMaximizedNoActivate(hwnd, targetMaximized) then
+                            let followerBounds =
+                                if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
+                                else adjustedBounds
+                            this.applyWindowBoundsWithDpiHandling(hwnd, followerBounds)
+                        else
+                            // A blocked or refused style change must not stop
+                            // the follower. Retain the native placement fallback.
+                            if targetMaximized then
+                                this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                            window.setPlacement(wp))
                 else
-                    // All synchronous follower state changes, including normal
-                    // -> maximized and maximized -> normal, must be silent.
+                    // Keep native placement for minimized followers; their
+                    // restore bookkeeping must still be performed by Windows.
                     this.withoutTransitions(hwnd, fun() ->
                         if targetMaximized then
                             // Placement alone cannot move a maximized window
@@ -1248,10 +1274,6 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // Track the margin-shrunk size for this window
             if this.hasExeMargin(hwnd) && not targetMaximized then
                 marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (adjustedBounds.width, adjustedBounds.height)))
-
-            // Note: Cases not covered above (e.g., maximized -> normal) do not require DPI handling
-            // because setPlacement correctly handles the transition without DPI-related issues.
-            // This has been verified through testing across different DPI displays.
 
         queuedAsync
 
@@ -1499,6 +1521,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         sprintf "group=%X follows %X to %d,%d %dx%d (shown=%b)"
                             (this.hwnd.ToInt64()) (hwnd.ToInt64())
                             adjusted.x adjusted.y adjusted.width adjusted.height desktopShown)
+                    maximizedFrameBounds <- if window.isMaximized then Some live else None
                     placement.set(Some(adjusted, wp))
                     // Checked just before each is moved: a handle Windows has
                     // given to another window since it joined is left alone.

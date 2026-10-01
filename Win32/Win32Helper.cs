@@ -259,6 +259,25 @@ namespace Bemo
             WinUserApi.GetWindowPlacement(hwnd, ref wp);
             return wp;
         }
+        // For visible group followers only. ShowWindow/SetWindowPlacement with
+        // SW_SHOWMAXIMIZED activate and raise; even SW_SHOWNOACTIVATE can raise.
+        // Update the maximized state without asking Windows to show the window,
+        // then refresh its frame without activation or any z-order change.
+        // The caller supplies the group's bounds after this state change.
+        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized)
+        {
+            if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
+            int style = (int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE);
+            int updated = maximized ? style | WindowsStyles.WS_MAXIMIZE : style & ~WindowsStyles.WS_MAXIMIZE;
+            if (updated == style) return true;
+            WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(updated));
+            if ((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE) != updated) return false;
+            return WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOSIZE |
+                SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
+                SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED);
+        }
+
         public static Rectangle GetWindowRectangle(IntPtr hwnd)
         {
             RECT rect;
