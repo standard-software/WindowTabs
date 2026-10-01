@@ -108,7 +108,7 @@ type CaptionDragPlugin() =
     let mutable worker: Thread option = None
     let dispatchGate = obj()
     let mutable dispatch: (unit -> unit) option = None
-    let wake() = lock dispatchGate (fun () -> dispatch |> Option.iter (fun post -> post()))
+    let wake() = HookThreadTiming.time "dispatch.wake" (fun () -> lock dispatchGate (fun () -> dispatch |> Option.iter (fun post -> post())))
 
     // Double-click replacement. false: post WM_NCLBUTTONDBLCLK so the window
     // makes its own maximize/restore decision. true: post SC_MAXIMIZE or
@@ -125,16 +125,17 @@ type CaptionDragPlugin() =
     let slowCallbackMs = 100.0
 
     let run() =
-        CrashLog.installThread()
-        use buttonCache = new CaptionButtonCache()
-        use context = new ApplicationContext()
-        use control = new Control()
-        control.Handle |> ignore
+        HookThreadTiming.registerCurrentThread()
+        HookThreadTiming.time "thread.installCrashHandler" CrashLog.installThread
+        use buttonCache = HookThreadTiming.time "cache.create" (fun () -> new CaptionButtonCache())
+        use context = HookThreadTiming.time "context.create" (fun () -> new ApplicationContext())
+        use control = HookThreadTiming.time "control.create" (fun () -> new Control())
+        HookThreadTiming.time "control.createHandle" (fun () -> control.Handle) |> ignore
         use timer = new System.Windows.Forms.Timer(Interval = healthCheckMs)
         // Work that must not run inside the hook callback: posted to this
         // thread's queue and executed after the callback has returned.
         let post (work: unit -> unit) =
-            try control.BeginInvoke(Action(work)) |> ignore with _ -> ()
+            try HookThreadTiming.time "control.post" (fun () -> control.BeginInvoke(Action(fun () -> HookThreadTiming.time "posted.work" work))) |> ignore with _ -> ()
         let mutable hook = IntPtr.Zero
         let mutable state = CaptionDragPolicy.empty
         let mutable lastCallbackTick = Environment.TickCount
@@ -151,14 +152,14 @@ type CaptionDragPlugin() =
         // not answer in time, or gave a caption answer that cannot be trusted.
         let hitTest (hwnd: IntPtr) (x: int) (y: int) (timeout: int) =
             let awareness =
-                try CaptionDragNative.GetAwarenessFromDpiAwarenessContext(CaptionDragNative.GetWindowDpiAwarenessContext(hwnd))
+                try (HookThreadTiming.time "native.GetAwarenessFromDpiAwarenessContext" (fun () -> CaptionDragNative.GetAwarenessFromDpiAwarenessContext((HookThreadTiming.time "native.GetWindowDpiAwarenessContext" (fun () -> CaptionDragNative.GetWindowDpiAwarenessContext(hwnd))))))
                 with _ -> -1
             let converted =
                 if awareness = CaptionDragPolicy.awarenessPerMonitor then None
                 else
                     let mutable point = CaptionDragNative.Point(x, y)
                     let ok =
-                        try CaptionDragNative.PhysicalToLogicalPointForPerMonitorDPI(hwnd, &point)
+                        try (HookThreadTiming.time "native.PhysicalToLogicalPointForPerMonitorDPI" (fun () -> CaptionDragNative.PhysicalToLogicalPointForPerMonitorDPI(hwnd, &point)))
                         with _ -> false
                     if ok then Some(point.x, point.y) else None
             match CaptionDragPolicy.hitTestPoint awareness (x, y) converted with
@@ -166,22 +167,22 @@ type CaptionDragPlugin() =
             | Some(hx, hy) ->
                 let mutable result = UIntPtr.Zero
                 let sent =
-                    CaptionDragNative.SendMessageTimeoutW(
+                    (HookThreadTiming.time "native.SendMessageTimeoutW" (fun () -> CaptionDragNative.SendMessageTimeoutW(
                         hwnd, 0x84u, IntPtr.Zero, IntPtr(CaptionDragPolicy.packPoint hx hy),
-                        0x23u (* SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT *), uint32 timeout, &result)
+                        0x23u (* SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT *), uint32 timeout, &result)))
                 if sent = IntPtr.Zero then None
                 else
                     let code = int (result.ToUInt64())
                     let clientTop () =
                         let mutable origin = CaptionDragNative.Point(0, 0)
-                        if CaptionDragNative.ClientToScreen(hwnd, &origin) then Some origin.y else None
+                        if (HookThreadTiming.time "native.ClientToScreen" (fun () -> CaptionDragNative.ClientToScreen(hwnd, &origin))) then Some origin.y else None
                     if code = CaptionDragPolicy.hitCaption &&
                        not (CaptionDragPolicy.trustCaption awareness y
                                 (if awareness = CaptionDragPolicy.awarenessPerMonitor then None else clientTop())) then None
                     else Some(code, hx, hy)
 
         let hasOwnCaption (hwnd: IntPtr) =
-            (CaptionDragNative.GetWindowLongW(hwnd, -16 (* GWL_STYLE *)) &&& 0x00C00000) = 0x00C00000
+            ((HookThreadTiming.time "native.GetWindowLongW" (fun () -> CaptionDragNative.GetWindowLongW(hwnd, -16 (* GWL_STYLE *)))) &&& 0x00C00000) = 0x00C00000
 
         // A native frame can answer HTTOP on the first caption row even
         // though pressing it moves the window. Use
@@ -190,8 +191,8 @@ type CaptionDragPlugin() =
         // at the client origin. Custom title bars keep their own hit tests.
         let isNativeCaptionBoundary hwnd x y =
             try
-                if not (hasOwnCaption hwnd) || CaptionDragNative.IsZoomed(hwnd) ||
-                   CaptionDragNative.GetAwarenessFromDpiAwarenessContext(CaptionDragNative.GetWindowDpiAwarenessContext(hwnd)) <> 2 then false
+                if not (hasOwnCaption hwnd) || (HookThreadTiming.time "native.IsZoomed" (fun () -> CaptionDragNative.IsZoomed(hwnd))) ||
+                   (HookThreadTiming.time "native.GetAwarenessFromDpiAwarenessContext" (fun () -> CaptionDragNative.GetAwarenessFromDpiAwarenessContext((HookThreadTiming.time "native.GetWindowDpiAwarenessContext" (fun () -> CaptionDragNative.GetWindowDpiAwarenessContext(hwnd)))))) <> 2 then false
                 else
                     let mutable title = CaptionDragNative.TitleBarInfo()
                     title.size <- uint32 (Marshal.SizeOf(typeof<CaptionDragNative.TitleBarInfo>))
@@ -199,12 +200,12 @@ type CaptionDragPlugin() =
                     let mutable buttons = CaptionDragNative.Rect()
                     let mutable client = CaptionDragNative.Point(0, 0)
                     let mutable rendered = 0
-                    if not (CaptionDragNative.GetTitleBarInfo(hwnd, &title)) ||
-                       not (CaptionDragNative.GetWindowRect(hwnd, &bounds)) ||
-                       not (CaptionDragNative.ClientToScreen(hwnd, &client)) ||
+                    if not ((HookThreadTiming.time "native.GetTitleBarInfo" (fun () -> CaptionDragNative.GetTitleBarInfo(hwnd, &title)))) ||
+                       not ((HookThreadTiming.time "native.GetWindowRect" (fun () -> CaptionDragNative.GetWindowRect(hwnd, &bounds)))) ||
+                       not ((HookThreadTiming.time "native.ClientToScreen" (fun () -> CaptionDragNative.ClientToScreen(hwnd, &client)))) ||
                        title.rect.bottom <> client.y ||
-                       CaptionDragNative.GetNonClientRendering(hwnd, 1u, &rendered, 4u) <> 0 || rendered = 0 ||
-                       CaptionDragNative.DwmGetWindowAttribute(hwnd, 5u, &buttons, 16u) <> 0 then false
+                       (HookThreadTiming.time "native.GetNonClientRendering" (fun () -> CaptionDragNative.GetNonClientRendering(hwnd, 1u, &rendered, 4u))) <> 0 || rendered = 0 ||
+                       (HookThreadTiming.time "native.DwmGetWindowAttribute" (fun () -> CaptionDragNative.DwmGetWindowAttribute(hwnd, 5u, &buttons, 16u))) <> 0 then false
                     else
                         let box (r: CaptionDragNative.Rect) : CaptionDragPolicy.CaptionRect =
                             { left = r.left; top = r.top; right = r.right; bottom = r.bottom }
@@ -231,15 +232,15 @@ type CaptionDragPlugin() =
                     | None -> None, None
                     | Some(code, hx, hy) ->
                         let rootHit = if isRoot then Some code else None
-                        let parent = if isRoot then IntPtr.Zero else CaptionDragNative.GetAncestor(window, 1u (* GA_PARENT *))
+                        let parent = if isRoot then IntPtr.Zero else (HookThreadTiming.time "native.GetAncestor" (fun () -> CaptionDragNative.GetAncestor(window, 1u (* GA_PARENT *))))
                         let ownCaption = not isRoot && code = CaptionDragPolicy.hitCaption && hasOwnCaption window
                         let hostsControls =
                             not isRoot && code = CaptionDragPolicy.hitCaption &&
-                            (try CaptionDragPolicy.captionHostsControls (Win32Helper.GetClassName(window)) with _ -> false)
+                            (try CaptionDragPolicy.captionHostsControls ((HookThreadTiming.time "Win32Helper.GetClassName" (fun () -> Win32Helper.GetClassName(window)))) with _ -> false)
                         let parentOnSameThread =
                             not isRoot && code = CaptionDragPolicy.hitTransparent && parent <> IntPtr.Zero &&
-                            CaptionDragNative.GetWindowThreadProcessId(window, IntPtr.Zero) =
-                                CaptionDragNative.GetWindowThreadProcessId(parent, IntPtr.Zero)
+                            (HookThreadTiming.time "native.GetWindowThreadProcessId" (fun () -> CaptionDragNative.GetWindowThreadProcessId(window, IntPtr.Zero))) =
+                                (HookThreadTiming.time "native.GetWindowThreadProcessId" (fun () -> CaptionDragNative.GetWindowThreadProcessId(parent, IntPtr.Zero)))
                         match CaptionDragPolicy.hitStep isRoot ownCaption hostsControls parentOnSameThread code with
                         | CaptionDragPolicy.CaptionHit -> Some(window, hx, hy), rootHit
                         | CaptionDragPolicy.Climb -> walk parent (depth + 1)
@@ -275,31 +276,31 @@ type CaptionDragPlugin() =
         // clicks use) is the second attempt.
         let activate (target: int64) =
             let hwnd = IntPtr(target)
-            if CaptionDragNative.IsWindow(hwnd) && CaptionDragNative.GetForegroundWindow() <> hwnd then
-                if not (CaptionDragNative.SetForegroundWindow(hwnd)) then
-                    OS().windowFromHwnd(hwnd).setForeground(true)
-                    let granted = CaptionDragNative.GetForegroundWindow() = hwnd
-                    Trace.WriteLine(sprintf "Caption drag: SetForegroundWindow refused for %X; forced path %s"
-                                        target (if granted then "succeeded" else "failed"))
+            if (HookThreadTiming.time "native.IsWindow" (fun () -> CaptionDragNative.IsWindow(hwnd))) && (HookThreadTiming.time "native.GetForegroundWindow" (fun () -> CaptionDragNative.GetForegroundWindow())) <> hwnd then
+                if not ((HookThreadTiming.time "native.SetForegroundWindow" (fun () -> CaptionDragNative.SetForegroundWindow(hwnd)))) then
+                    HookThreadTiming.time "activate.forceForeground" (fun () -> OS().windowFromHwnd(hwnd).setForeground(true))
+                    let granted = (HookThreadTiming.time "native.GetForegroundWindow" (fun () -> CaptionDragNative.GetForegroundWindow())) = hwnd
+                    (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag: SetForegroundWindow refused for %X; forced path %s"
+                                        target (if granted then "succeeded" else "failed"))))
 
         let doubleClick (click: CaptionDragPolicy.Click) =
             let root = IntPtr(click.target)
             let delivered =
                 if doubleClickBySystemCommand then
-                    let hasMaximizeBox = (CaptionDragNative.GetWindowLongW(root, -16) &&& 0x00010000) <> 0
-                    match CaptionDragPolicy.doubleClickCommand (CaptionDragNative.IsZoomed(root)) hasMaximizeBox with
-                    | Some command -> CaptionDragNative.PostMessageW(root, 0x112u, IntPtr(command), IntPtr.Zero)
+                    let hasMaximizeBox = ((HookThreadTiming.time "native.GetWindowLongW" (fun () -> CaptionDragNative.GetWindowLongW(root, -16))) &&& 0x00010000) <> 0
+                    match CaptionDragPolicy.doubleClickCommand ((HookThreadTiming.time "native.IsZoomed" (fun () -> CaptionDragNative.IsZoomed(root)))) hasMaximizeBox with
+                    | Some command -> (HookThreadTiming.time "native.PostMessageW" (fun () -> CaptionDragNative.PostMessageW(root, 0x112u, IntPtr(command), IntPtr.Zero)))
                     | None -> true
                 else
-                    CaptionDragNative.PostMessageW(
+                    (HookThreadTiming.time "native.PostMessageW" (fun () -> CaptionDragNative.PostMessageW(
                         IntPtr(click.receiver), 0xa3u, IntPtr(CaptionDragPolicy.hitCaption),
-                        IntPtr(CaptionDragPolicy.packPoint click.hitX click.hitY))
+                        IntPtr(CaptionDragPolicy.packPoint click.hitX click.hitY))))
             if not delivered then
-                Trace.WriteLine(sprintf "Caption drag: double-click could not be delivered to %X" click.receiver)
+                (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag: double-click could not be delivered to %X" click.receiver)))
 
         let primaryButtonHeld () =
-            let key = CaptionDragPolicy.primaryButtonKey (CaptionDragNative.GetSystemMetrics(23 (* SM_SWAPBUTTON *)) <> 0)
-            CaptionDragNative.GetAsyncKeyState(key) < 0s
+            let key = CaptionDragPolicy.primaryButtonKey ((HookThreadTiming.time "native.GetSystemMetrics" (fun () -> CaptionDragNative.GetSystemMetrics(23 (* SM_SWAPBUTTON *)))) <> 0)
+            (HookThreadTiming.time "native.GetAsyncKeyState" (fun () -> CaptionDragNative.GetAsyncKeyState(key))) < 0s
 
         let handleCallback code (message: IntPtr) (data: IntPtr) (pass: unit -> IntPtr) =
             if code < 0 || data = IntPtr.Zero then pass() else
@@ -308,10 +309,10 @@ type CaptionDragPlugin() =
             // How late each mouse event reaches this hook, into perf_trace.log.
             // A late hook holds up every mouse event on the desktop.
             let lag = int (uint32 Environment.TickCount - uint32 (Marshal.ReadInt32(data, 16)))
-            PerfTrace.count "hook.events"
-            if lag >= 1000 then PerfTrace.count "hookLag1000+"
-            elif lag >= 200 then PerfTrace.count "hookLag200+"
-            elif lag >= 50 then PerfTrace.count "hookLag50+"
+            HookThreadTiming.time "perf.count" (fun () -> PerfTrace.count "hook.events")
+            if lag >= 1000 then HookThreadTiming.time "perf.count" (fun () -> PerfTrace.count "hookLag1000+")
+            elif lag >= 200 then HookThreadTiming.time "perf.count" (fun () -> PerfTrace.count "hookLag200+")
+            elif lag >= 50 then HookThreadTiming.time "perf.count" (fun () -> PerfTrace.count "hookLag50+")
 #endif
             // MSLLHOOKSTRUCT: pt.x 0, pt.y 4, time 16.
             let x = Marshal.ReadInt32(data, 0)
@@ -330,18 +331,18 @@ type CaptionDragPlugin() =
                     if msg <> 0x201 then None
                     else
                         CaptionDragTargets.notePress() |> ignore
-                        if not (CaptionDragTargets.anyTarget()) then None
+                        if not ((HookThreadTiming.time "targets.any" CaptionDragTargets.anyTarget)) then None
                         else
-                            let leaf = CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(x, y))
-                            let root = CaptionDragNative.GetAncestor(leaf, 2u (* GA_ROOT *))
-                            if root = IntPtr.Zero || not (CaptionDragTargets.contains root) then
+                            let leaf = (HookThreadTiming.time "native.WindowFromPoint" (fun () -> CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(x, y))))
+                            let root = (HookThreadTiming.time "native.GetAncestor" (fun () -> CaptionDragNative.GetAncestor(leaf, 2u (* GA_ROOT *))))
+                            if root = IntPtr.Zero || not ((HookThreadTiming.time "targets.contains" (fun () -> CaptionDragTargets.contains root))) then
                                 // A press elsewhere replaces the record: a later
                                 // move loop of a managed window is not this press.
-                                CaptionDragTargets.setPress None
+                                HookThreadTiming.time "targets.setPress" (fun () -> CaptionDragTargets.setPress None)
                                 None
                             else
                                 let mutable rect = CaptionDragNative.Rect()
-                                let hasRect = CaptionDragNative.GetWindowRect(root, &rect)
+                                let hasRect = (HookThreadTiming.time "native.GetWindowRect" (fun () -> CaptionDragNative.GetWindowRect(root, &rect)))
                                 let hitStarted = Stopwatch.GetTimestamp()
                                 let caption, rootHit = inspect leaf root x y
                                 hitTestMs <- elapsedMs hitStarted
@@ -351,31 +352,31 @@ type CaptionDragPlugin() =
                                     | Some _ when hasRect && not (rootHit |> Option.exists CaptionDragPolicy.isTopBorder) ->
                                         let bounds : CaptionDragPolicy.CaptionRect =
                                             { left = rect.left; top = rect.top; right = rect.right; bottom = rect.bottom }
-                                        match buttonCache.TryButton(root, bounds, x, y) with
+                                        match (HookThreadTiming.time "buttonCache.TryButton" (fun () -> buttonCache.TryButton(root, bounds, x, y))) with
                                         | Some className ->
 #if DEBUG
-                                            PerfTrace.count "captionButtons.pass"
-                                            post (fun () -> Debug.WriteLine(sprintf
+                                            HookThreadTiming.time "perf.count" (fun () -> PerfTrace.count "captionButtons.pass")
+                                            post (fun () -> (HookThreadTiming.time "Debug.WriteLine" (fun () -> Debug.WriteLine(sprintf
                                                 "[CaptionDrag] detected button passed class=%s hit=%d"
-                                                className CaptionDragPolicy.hitCaption))
+                                                className CaptionDragPolicy.hitCaption))))
 #endif
                                             None
                                         | None -> caption
                                     | _ -> caption
                                 match caption with
-                                | Some(receiver, hx, hy) when CaptionDragTargets.contains root ->
-                                    CaptionDragTargets.setPress None
+                                | Some(receiver, hx, hy) when (HookThreadTiming.time "targets.contains" (fun () -> CaptionDragTargets.contains root)) ->
+                                    HookThreadTiming.time "targets.setPress" (fun () -> CaptionDragTargets.setPress None)
                                     Some ({ target = root.ToInt64(); receiver = receiver.ToInt64()
                                             x = x; y = y; hitX = hx; hitY = hy
                                             time = uint32 (Marshal.ReadInt32(data, 16)) } : CaptionDragPolicy.Click)
                                 | _ ->
-                                    CaptionDragTargets.setPress (
+                                    HookThreadTiming.time "targets.setPress" (fun () -> CaptionDragTargets.setPress (
                                         if not hasRect then None
                                         else
                                             Some { hwnd = root; rootHit = rootHit; x = x; y = y
                                                    bounds = CaptionDragFallback.box rect.left rect.top (rect.right - rect.left) (rect.bottom - rect.top)
                                                    tick = Environment.TickCount
-                                                   sequence = CaptionDragTargets.pressSequence() })
+                                                   sequence = CaptionDragTargets.pressSequence() }))
                                     None
                 if msg = 0x201 && CaptionDragPolicy.suspendsHook candidate.IsSome pressRootHit then
                     // The press starts a resize: take the hook off for the
@@ -385,9 +386,9 @@ type CaptionDragPlugin() =
                     Volatile.Write(&resizeSuspend, 1)
                     wake()
                 let input = if msg = 0x202 then CaptionDragPolicy.Up else CaptionDragPolicy.Down candidate
-                let next, action = CaptionDragPolicy.step (CaptionDragNative.GetDoubleClickTime())
-                                        (CaptionDragNative.GetSystemMetrics(36) / 2)
-                                        (CaptionDragNative.GetSystemMetrics(37) / 2) state input
+                let next, action = CaptionDragPolicy.step ((HookThreadTiming.time "native.GetDoubleClickTime" (fun () -> CaptionDragNative.GetDoubleClickTime())))
+                                        ((HookThreadTiming.time "native.GetSystemMetrics" (fun () -> CaptionDragNative.GetSystemMetrics(36))) / 2)
+                                        ((HookThreadTiming.time "native.GetSystemMetrics" (fun () -> CaptionDragNative.GetSystemMetrics(37))) / 2) state input
                 state <- next
                 let result =
                     match action with
@@ -403,16 +404,16 @@ type CaptionDragPlugin() =
                 let hitMs = hitTestMs
                 if callbackMs >= slowCallbackMs then
                     post (fun () ->
-                        Trace.WriteLine(sprintf "Caption drag: slow hook callback %.1f ms (hit test %.1f ms)" callbackMs hitMs))
+                        (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag: slow hook callback %.1f ms (hit test %.1f ms)" callbackMs hitMs))))
 #if DEBUG
-                if msg = 0x201 && CaptionDragTargets.anyTarget() then
+                if msg = 0x201 && (HookThreadTiming.time "targets.any" CaptionDragTargets.anyTarget) then
                     post (fun () ->
-                        Debug.WriteLine(sprintf "[CaptionDrag] down %A callback=%.2fms hitTest=%.2fms" action callbackMs hitMs))
+                        (HookThreadTiming.time "Debug.WriteLine" (fun () -> Debug.WriteLine(sprintf "[CaptionDrag] down %A callback=%.2fms hitTest=%.2fms" action callbackMs hitMs))))
 #endif
                 result
             with ex ->
                 state <- CaptionDragPolicy.empty
-                post (fun () -> Trace.WriteLine("Caption drag input failed: " + ex.Message))
+                post (fun () -> (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine("Caption drag input failed: " + ex.Message))))
                 pass()
 
 #if DEBUG
@@ -424,20 +425,20 @@ type CaptionDragPlugin() =
             let mutable downstream = 0L
             let pass () =
                 let before = Stopwatch.GetTimestamp()
-                try CaptionDragNative.CallNextHookEx(hook, code, message, data)
+                try (HookThreadTiming.time "native.CallNextHookEx" (fun () -> CaptionDragNative.CallNextHookEx(hook, code, message, data)))
                 finally downstream <- downstream + Stopwatch.GetTimestamp() - before
             if code < 0 || data = IntPtr.Zero then pass() else
             let msg = message.ToInt32()
             let x, y = Marshal.ReadInt32(data, 0), Marshal.ReadInt32(data, 4)
             let tick = uint32 (Marshal.ReadInt32(data, 16))
-            let distance = inputTrace.Observe(uint32 Environment.TickCount, tick, msg, x, y)
+            let distance = HookThreadTiming.time "inputTrace.Observe" (fun () -> inputTrace.Observe(uint32 Environment.TickCount, tick, msg, x, y))
             try handleCallback code message data pass
             finally
                 // Exclude the next hooks: slow measures this callback's own work.
                 let ms = float (Stopwatch.GetTimestamp() - started - downstream) * 1000.0 / float Stopwatch.Frequency
-                inputTrace.Complete(ms, distance, msg, x, y, tick)
+                HookThreadTiming.time "inputTrace.Complete" (fun () -> inputTrace.Complete(ms, distance, msg, x, y, tick))
 #else
-            handleCallback code message data (fun () -> CaptionDragNative.CallNextHookEx(hook, code, message, data))
+            handleCallback code message data (fun () -> (HookThreadTiming.time "native.CallNextHookEx" (fun () -> CaptionDragNative.CallNextHookEx(hook, code, message, data))))
 #endif
             )
 
@@ -447,7 +448,7 @@ type CaptionDragPlugin() =
         // hidden window. Runs once, at the first installation (never while
         // the setting stays off).
         let mutable warmedUp = false
-        let warmUp () =
+        let warmUp () = HookThreadTiming.time "hook.warmUp" <| fun () ->
             try
                 callback.Invoke(-1, IntPtr.Zero, IntPtr.Zero) |> ignore
                 inspect control.Handle control.Handle 0 0 |> ignore
@@ -455,55 +456,61 @@ type CaptionDragPlugin() =
                 CaptionDragPolicy.step 500u 1 1 CaptionDragPolicy.empty (CaptionDragPolicy.Down None) |> ignore
                 let emptyBounds : CaptionDragPolicy.CaptionRect =
                     { left = 0; top = 0; right = 0; bottom = 0 }
-                buttonCache.TryButton(control.Handle, emptyBounds, 0, 0) |> ignore
+                (HookThreadTiming.time "buttonCache.TryButton" (fun () -> buttonCache.TryButton(control.Handle, emptyBounds, 0, 0))) |> ignore
                 CaptionDragPolicy.captionButtonDecision 2 true true emptyBounds [emptyBounds] 0 0 |> ignore
-                CaptionDragTargets.contains control.Handle |> ignore
-                CaptionDragTargets.currentPress() |> ignore
-                CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(0, 0)) |> ignore
+                (HookThreadTiming.time "targets.contains" (fun () -> CaptionDragTargets.contains control.Handle)) |> ignore
+                (HookThreadTiming.time "targets.currentPress" CaptionDragTargets.currentPress) |> ignore
+                (HookThreadTiming.time "native.WindowFromPoint" (fun () -> CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(0, 0)))) |> ignore
                 primaryButtonHeld() |> ignore
             with ex ->
-                Trace.WriteLine("Caption drag warm-up failed: " + ex.Message)
+                (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine("Caption drag warm-up failed: " + ex.Message)))
 
-        let install () =
+        let install () = HookThreadTiming.time "hook.install" <| fun () ->
 #if DEBUG
             inputTrace.Reset()
 #endif
-            let fresh = CaptionDragNative.SetWindowsHookExW(14 (* WH_MOUSE_LL *), callback, CaptionDragNative.GetModuleHandleW(null), 0u)
+            let moduleHandle = HookThreadTiming.time "native.GetModuleHandleW" (fun () -> CaptionDragNative.GetModuleHandleW(null))
+            let fresh, error = HookThreadTiming.time "native.SetWindowsHookExW" (fun () ->
+                let result = CaptionDragNative.SetWindowsHookExW(14 (* WH_MOUSE_LL *), callback, moduleHandle, 0u)
+                result, Marshal.GetLastWin32Error())
             if fresh = IntPtr.Zero then
-                Trace.WriteLine(sprintf "Caption drag hook installation failed: %d" (Marshal.GetLastWin32Error()))
+                (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag hook installation failed: %d" error)))
                 false
             else
                 // A replaced handle belongs to a hook Windows already removed;
                 // unhooking it only releases the handle.
-                if hook <> IntPtr.Zero then CaptionDragNative.UnhookWindowsHookEx(hook) |> ignore
+                if hook <> IntPtr.Zero then HookThreadTiming.time "native.UnhookWindowsHookEx" (fun () -> CaptionDragNative.UnhookWindowsHookEx(hook)) |> ignore
                 hook <- fresh
                 lastCallbackTick <- Environment.TickCount
                 let mutable cursor = CaptionDragNative.Point(0, 0)
-                if CaptionDragNative.GetCursorPos(&cursor) then
+                if (HookThreadTiming.time "native.GetCursorPos" (fun () -> CaptionDragNative.GetCursorPos(&cursor))) then
                     lastHookX <- cursor.x
                     lastHookY <- cursor.y
                 true
 
-        let removeHook () =
+        let removeHook () = HookThreadTiming.time "hook.removeHook" <| fun () ->
             if hook <> IntPtr.Zero then
-                if not (CaptionDragNative.UnhookWindowsHookEx(hook)) then
-                    Trace.WriteLine(sprintf "Caption drag hook removal failed: %d" (Marshal.GetLastWin32Error()))
+                let removed, error = HookThreadTiming.time "native.UnhookWindowsHookEx" (fun () ->
+                    let result = CaptionDragNative.UnhookWindowsHookEx(hook)
+                    result, Marshal.GetLastWin32Error())
+                if not removed then
+                    (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag hook removal failed: %d" error)))
                 hook <- IntPtr.Zero
 
         let uninstall () =
             removeHook()
             state <- CaptionDragPolicy.empty
-            CaptionDragTargets.setPress None
+            HookThreadTiming.time "targets.setPress" (fun () -> CaptionDragTargets.setPress None)
 
         let cursorMovedSinceCallback () =
             let mutable cursor = CaptionDragNative.Point(0, 0)
-            CaptionDragNative.GetCursorPos(&cursor) && (cursor.x <> lastHookX || cursor.y <> lastHookY)
+            (HookThreadTiming.time "native.GetCursorPos" (fun () -> CaptionDragNative.GetCursorPos(&cursor))) && (cursor.x <> lastHookX || cursor.y <> lastHookY)
 
-        let startTimer interval =
+        let startTimer interval = HookThreadTiming.time "hook.startTimer" <| fun () ->
             timer.Interval <- interval
             timer.Start()
 
-        let synchronize() =
+        let synchronize() = HookThreadTiming.time "hook.synchronize" <| fun () ->
             // A drag that started from a resize border holds the hook off
             // until the button comes back up. The release is no longer seen -
             // there is no hook to see it - so it is polled for.
@@ -513,7 +520,11 @@ type CaptionDragPlugin() =
             // Locking is per tab group now: a group registers its windows in
             // CaptionDragTargets only while it is locked, so something being
             // registered is exactly when the hook has work to do.
-            let isEnabled = CaptionDragTargets.anyTarget() && not suspended
+            let isEnabled =
+#if DEBUG
+                not StallExperiment.noMouseHook &&
+#endif
+                (HookThreadTiming.time "targets.any" CaptionDragTargets.anyTarget) && not suspended
             if not isEnabled then
                 state <- fst (CaptionDragPolicy.step 0u 0 0 state CaptionDragPolicy.Disable)
             let plan =
@@ -522,8 +533,8 @@ type CaptionDragPlugin() =
             match plan with
             | CaptionDragPolicy.Exit ->
                 uninstall()
-                timer.Stop()
-                context.ExitThread()
+                HookThreadTiming.time "timer.stop" (fun () -> timer.Stop())
+                HookThreadTiming.time "context.exit" (fun () -> context.ExitThread())
             | CaptionDragPolicy.Install ->
                 if not warmedUp then
                     warmedUp <- true
@@ -536,7 +547,7 @@ type CaptionDragPlugin() =
                 // when the cursor moves without callbacks.
                 if CaptionDragPolicy.hookLooksLost (Environment.TickCount - lastCallbackTick) (cursorMovedSinceCallback()) then
                     reinstalls <- reinstalls + 1
-                    Trace.WriteLine(sprintf "Caption drag hook stopped receiving input; reinstalling (%d)" reinstalls)
+                    (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag hook stopped receiving input; reinstalling (%d)" reinstalls)))
                     install() |> ignore
                 // Also ends a release poll left over from a quick OFF -> ON.
                 startTimer healthCheckMs
@@ -551,16 +562,16 @@ type CaptionDragPlugin() =
                 startTimer releasePollMs
             | CaptionDragPolicy.Remove ->
                 uninstall()
-                timer.Stop()
+                HookThreadTiming.time "timer.stop" (fun () -> timer.Stop())
 
         timer.Tick.Add(fun _ -> synchronize())
-        lock dispatchGate (fun () ->
-            dispatch <- Some(fun () -> control.BeginInvoke(Action(synchronize)) |> ignore))
+        HookThreadTiming.time "dispatch.register" (fun () -> lock dispatchGate (fun () ->
+            dispatch <- Some(fun () -> HookThreadTiming.time "control.wakePost" (fun () -> control.BeginInvoke(Action(synchronize))) |> ignore)))
         synchronize()
         try
             if Volatile.Read(&stopping) = 0 then Application.Run(context)
         finally
-            lock dispatchGate (fun () -> dispatch <- None)
+            HookThreadTiming.time "dispatch.clear" (fun () -> lock dispatchGate (fun () -> dispatch <- None))
             uninstall()
             GC.KeepAlive(callback)
 

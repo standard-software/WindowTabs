@@ -12,6 +12,7 @@ open System.Threading
 // A/B experiments only. Module values snapshot the environment once at startup;
 // neither the switches nor their environment-variable names exist in Release.
 module StallExperiment =
+    let noMouseHook = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_MOUSE_HOOK") = "1"
     let noCaptionQuery = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_CAPTION_QUERY") = "1"
     let syncFollowers = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SYNC_FOLLOWERS") = "1"
 
@@ -37,7 +38,7 @@ module InputStallTrace =
     let queueCapacity = 1024
 
     type Kind = Lag = 0 | Gap = 1 | Slow = 2 | Minimize = 3 | Maximize = 4 | Restore = 5 | Watchdog = 6
-              | Operation = 7 | PingAck = 8
+              | Operation = 7 | PingAck = 8 | HookThreadBusy = 9
 
     [<System.Runtime.InteropServices.DllImport("kernel32.dll")>]
     extern uint32 GetCurrentThreadId()
@@ -153,8 +154,8 @@ module InputStallTrace =
         stream.Write(bytes, 0, bytes.Length)
 
     let private writeLoop path version =
-        let counts = Array.zeroCreate<int64> 9
-        let maxima = Array.zeroCreate<float> 9
+        let counts = Array.zeroCreate<int64> 10
+        let maxima = Array.zeroCreate<float> 10
         let minute = Stopwatch.StartNew()
         let write line = try append path line with _ -> ()
         while true do
@@ -167,9 +168,9 @@ module InputStallTrace =
             if minute.ElapsedMilliseconds >= summaryMs then
                 let lost = Interlocked.Exchange(&dropped, 0)
                 if Array.exists ((<) 0L) counts || lost > 0 then
-                    write (sprintf "%s version=%s kind=Summary lag=%d gap=%d slow=%d minimize=%d maximize=%d restore=%d watchdog=%d operation=%d pingAck=%d maxMs=%.2f lagMaxMs=%.2f gapMaxMs=%.2f slowMaxMs=%.2f dropped=%d"
+                    write (sprintf "%s version=%s kind=Summary lag=%d gap=%d slow=%d minimize=%d maximize=%d restore=%d watchdog=%d operation=%d pingAck=%d hookThreadBusy=%d maxMs=%.2f lagMaxMs=%.2f gapMaxMs=%.2f slowMaxMs=%.2f dropped=%d"
                         (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)) version
-                        counts.[0] counts.[1] counts.[2] counts.[3] counts.[4] counts.[5] counts.[6] counts.[7] counts.[8]
+                        counts.[0] counts.[1] counts.[2] counts.[3] counts.[4] counts.[5] counts.[6] counts.[7] counts.[8] counts.[9]
                         (Array.max maxima) maxima.[0] maxima.[1] maxima.[2] lost)
                 Array.Clear(counts, 0, counts.Length)
                 Array.Clear(maxima, 0, maxima.Length)
@@ -178,6 +179,7 @@ module InputStallTrace =
     let start version =
         if Interlocked.CompareExchange(&started, 1, 0) = 0 then
             PerfTrace.slowOperation <- operation
+            HookThreadTiming.completed <- fun name ms ended -> completed Kind.HookThreadBusy name ms ended
             let worker = Thread(ThreadStart(fun () ->
                 let path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                                         "WindowTabs", "input_stall.log")

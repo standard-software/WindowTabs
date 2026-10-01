@@ -345,9 +345,10 @@ module Watchdog =
 #if DEBUG
         if Interlocked.Exchange(&switchesLogged, 1) = 0 then
             log (fun () ->
-                sprintf "EXPERIMENT NO_CAPTION_QUERY=%d SYNC_FOLLOWERS=%d"
+                sprintf "EXPERIMENT NO_CAPTION_QUERY=%d SYNC_FOLLOWERS=%d NO_MOUSE_HOOK=%d"
                     (if StallExperiment.noCaptionQuery then 1 else 0)
-                    (if StallExperiment.syncFollowers then 1 else 0))
+                    (if StallExperiment.syncFollowers then 1 else 0)
+                    (if StallExperiment.noMouseHook then 1 else 0))
 #endif
         // Don't start watchdog when debugger is attached (prevents false positives during debugging)
         if Debugger.IsAttached then
