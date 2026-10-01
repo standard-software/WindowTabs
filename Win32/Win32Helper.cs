@@ -265,18 +265,45 @@ namespace Bemo
         // the old size sends an intermediate WM_SIZE (e.g. SIZE_RESTORED with
         // maximized dimensions), which can leave application layout stale even
         // after a subsequent MoveWindow sends the correct size.
+        public delegate void PlacementTiming(string stage, double milliseconds);
+        public delegate bool PlacementCurrent();
+
         public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds)
         {
+            return SetWindowMaximizedNoActivate(hwnd, maximized, bounds, null, null);
+        }
+
+        public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds,
+            PlacementTiming timing, PlacementCurrent current)
+        {
             if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
+            if (current != null && !current()) return true;
             int style = (int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE);
             int updated = maximized ? style | WindowsStyles.WS_MAXIMIZE : style & ~WindowsStyles.WS_MAXIMIZE;
             if (updated == style) return true;
+#if DEBUG
+            long started = Stopwatch.GetTimestamp();
+#endif
             WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(updated));
+#if DEBUG
+            if (timing != null) timing("group.follower.style", (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency);
+#endif
+            // Once the style has changed, finish its frame/bounds together.
+            // Per-window serialization applies a newer request afterward;
+            // cancellation here would strand the new style at the old size.
+            if (WinUserApi.IsIconic(hwnd)) return false;
             if ((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE) != updated) return false;
-            return WinUserApi.SetWindowPos(hwnd, IntPtr.Zero,
+#if DEBUG
+            started = Stopwatch.GetTimestamp();
+#endif
+            bool result = WinUserApi.SetWindowPos(hwnd, IntPtr.Zero,
                 bounds.Left, bounds.Top, bounds.Width, bounds.Height,
                 SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
                 SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED);
+#if DEBUG
+            if (timing != null) timing("group.follower.frameBounds", (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency);
+#endif
+            return result;
         }
 
         // Restore a maximized follower before parking it. Use its saved normal
