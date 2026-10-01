@@ -13,7 +13,9 @@ open System.Threading
 // through on a managed window, for the MOVESIZESTART fallback in WindowGroup
 // (see CaptionDragFallback). Both sides only take a short lock.
 module CaptionDragTargets =
-    let private targets = ConcurrentDictionary<IntPtr, obj>()
+    [<ReferenceEquality>]
+    type private Registration = { owner: obj }
+    let private targets = ConcurrentDictionary<IntPtr, Registration>()
 
     /// Set by the hook's own thread: asks it to look at the state again.
     /// A group registers its windows only while it is locked, so the hook is
@@ -25,12 +27,24 @@ module CaptionDragTargets =
 
     let add owner hwnd =
         let wasEmpty = targets.IsEmpty
-        targets.[hwnd] <- owner
+        targets.AddOrUpdate(hwnd, (fun _ -> { owner = owner }),
+            (fun _ current -> if obj.ReferenceEquals(current.owner, owner) then current else { owner = owner })) |> ignore
         if wasEmpty then notifyHook ()
     let remove owner hwnd =
-        (targets :> ICollection<KeyValuePair<IntPtr, obj>>).Remove(KeyValuePair(hwnd, owner)) |> ignore
+        match targets.TryGetValue(hwnd) with
+        | true, current when obj.ReferenceEquals(current.owner, owner) ->
+            (targets :> ICollection<KeyValuePair<IntPtr, Registration>>).Remove(KeyValuePair(hwnd, current)) |> ignore
+        | _ -> ()
         if targets.IsEmpty then notifyHook ()
     let contains hwnd = targets.ContainsKey(hwnd)
+    // Read-only snapshots for the asynchronous caption-button discovery worker.
+    // The token changes on remove/re-add even if the group owner is the same.
+    let snapshot () =
+        targets.ToArray() |> Array.map (fun entry -> KeyValuePair(entry.Key, box entry.Value))
+    let ownedBy hwnd owner =
+        match targets.TryGetValue(hwnd) with
+        | true, current -> obj.ReferenceEquals(current, owner)
+        | _ -> false
     /// Whether any window is locked at all, which is what decides whether the
     /// hook is installed.
     let anyTarget () = not targets.IsEmpty

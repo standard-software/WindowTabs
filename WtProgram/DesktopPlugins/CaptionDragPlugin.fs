@@ -125,6 +125,7 @@ type CaptionDragPlugin() =
     let slowCallbackMs = 100.0
 
     let run() =
+        use buttonCache = new CaptionButtonCache()
         use context = new ApplicationContext()
         use control = new Control()
         control.Handle |> ignore
@@ -345,6 +346,22 @@ type CaptionDragPlugin() =
                                 let caption, rootHit = inspect leaf root x y
                                 hitTestMs <- elapsedMs hitStarted
                                 pressRootHit <- rootHit
+                                let caption =
+                                    match caption with
+                                    | Some _ when hasRect && not (rootHit |> Option.exists CaptionDragPolicy.isTopBorder) ->
+                                        let bounds : CaptionDragPolicy.CaptionRect =
+                                            { left = rect.left; top = rect.top; right = rect.right; bottom = rect.bottom }
+                                        match buttonCache.TryButton(root, bounds, x, y) with
+                                        | Some className ->
+#if DEBUG
+                                            PerfTrace.count "captionButtons.pass"
+                                            post (fun () -> Debug.WriteLine(sprintf
+                                                "[CaptionDrag] detected button passed class=%s hit=%d"
+                                                className CaptionDragPolicy.hitCaption))
+#endif
+                                            None
+                                        | None -> caption
+                                    | _ -> caption
                                 match caption with
                                 | Some(receiver, hx, hy) when CaptionDragTargets.contains root ->
                                     CaptionDragTargets.setPress None
@@ -410,6 +427,10 @@ type CaptionDragPlugin() =
                 inspect control.Handle control.Handle 0 0 |> ignore
                 isNativeCaptionBoundary control.Handle 0 0 |> ignore
                 CaptionDragPolicy.step 500u 1 1 CaptionDragPolicy.empty (CaptionDragPolicy.Down None) |> ignore
+                let emptyBounds : CaptionDragPolicy.CaptionRect =
+                    { left = 0; top = 0; right = 0; bottom = 0 }
+                buttonCache.TryButton(control.Handle, emptyBounds, 0, 0) |> ignore
+                CaptionDragPolicy.captionButtonDecision 2 true true emptyBounds [emptyBounds] 0 0 |> ignore
                 CaptionDragTargets.contains control.Handle |> ignore
                 CaptionDragTargets.currentPress() |> ignore
                 CaptionDragNative.WindowFromPoint(CaptionDragNative.Point(0, 0)) |> ignore
