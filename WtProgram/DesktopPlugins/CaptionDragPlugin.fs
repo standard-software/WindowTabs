@@ -300,8 +300,7 @@ type CaptionDragPlugin() =
             let key = CaptionDragPolicy.primaryButtonKey (CaptionDragNative.GetSystemMetrics(23 (* SM_SWAPBUTTON *)) <> 0)
             CaptionDragNative.GetAsyncKeyState(key) < 0s
 
-        let callback = CaptionDragNative.Hook(fun code message data ->
-            let pass() = CaptionDragNative.CallNextHookEx(hook, code, message, data)
+        let handleCallback code (message: IntPtr) (data: IntPtr) (pass: unit -> IntPtr) =
             if code < 0 || data = IntPtr.Zero then pass() else
             lastCallbackTick <- Environment.TickCount
 #if DEBUG
@@ -413,7 +412,33 @@ type CaptionDragPlugin() =
             with ex ->
                 state <- CaptionDragPolicy.empty
                 post (fun () -> Trace.WriteLine("Caption drag input failed: " + ex.Message))
-                pass())
+                pass()
+
+#if DEBUG
+        let inputTrace = InputStallTrace.detector()
+#endif
+        let callback = CaptionDragNative.Hook(fun code message data ->
+#if DEBUG
+            let started = Stopwatch.GetTimestamp()
+            let mutable downstream = 0L
+            let pass () =
+                let before = Stopwatch.GetTimestamp()
+                try CaptionDragNative.CallNextHookEx(hook, code, message, data)
+                finally downstream <- downstream + Stopwatch.GetTimestamp() - before
+            if code < 0 || data = IntPtr.Zero then pass() else
+            let msg = message.ToInt32()
+            let x, y = Marshal.ReadInt32(data, 0), Marshal.ReadInt32(data, 4)
+            let tick = uint32 (Marshal.ReadInt32(data, 16))
+            let distance = inputTrace.Observe(uint32 Environment.TickCount, tick, msg, x, y)
+            try handleCallback code message data pass
+            finally
+                // Exclude the next hooks: slow measures this callback's own work.
+                let ms = float (Stopwatch.GetTimestamp() - started - downstream) * 1000.0 / float Stopwatch.Frequency
+                inputTrace.Complete(ms, distance, msg, x, y, tick)
+#else
+            handleCallback code message data (fun () -> CaptionDragNative.CallNextHookEx(hook, code, message, data))
+#endif
+            )
 
         // Compile the hook's code paths before the hook goes in, not on the
         // first real click: a JIT pause inside the callback counts against
@@ -439,6 +464,9 @@ type CaptionDragPlugin() =
                 Trace.WriteLine("Caption drag warm-up failed: " + ex.Message)
 
         let install () =
+#if DEBUG
+            inputTrace.Reset()
+#endif
             let fresh = CaptionDragNative.SetWindowsHookExW(14 (* WH_MOUSE_LL *), callback, CaptionDragNative.GetModuleHandleW(null), 0u)
             if fresh = IntPtr.Zero then
                 Trace.WriteLine(sprintf "Caption drag hook installation failed: %d" (Marshal.GetLastWin32Error()))

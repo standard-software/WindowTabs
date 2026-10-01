@@ -662,6 +662,9 @@ type Program() as this =
     let mutable foregroundHotKeyHook : IDisposable option = None
 
     do
+#if DEBUG
+        InputStallTrace.start version
+#endif
         Desktop(this :> IDesktopNotification).ignore
         // The hot keys follow the foreground from here on; see the hot keys
         // section. EVENT_SYSTEM_FOREGROUND is the primary signal - it fires
