@@ -619,7 +619,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if bounds.width > 0 && bounds.height > 0 then
                     parkedBounds <- parkedBounds.Add(hwnd, bounds)
              with _ -> ())
-            window.hideOffScreen(None))
+            // Parking restores maximized followers before moving them away.
+            this.withoutTransitions(hwnd, fun() -> window.hideOffScreen(None)))
 
     /// Puts back anything hideChildWindows parked that is still outside every
     /// monitor. Called after the move/size loop, whatever adjustChildWindows
@@ -1216,33 +1217,33 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.applyBackgroundWindowBounds(hwnd, adjustedBounds)
                 else this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
             else
-                // Apply DPI-aware handling when target is maximized (regardless of source state)
-                if targetMaximized then
-                    //maximized windows won't move from one monitor to another by setting placement alone,
-                    //need to first move to the new bounds, then set placement
-                    this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
                 if window.isMinimized && not targetMaximized then
-                    // Un-minimizing a group sibling (the "restore follows the
-                    // group" path). setPlacement blocks on the target app's
-                    // thread — with several busy apps this summed to ~600-900ms
-                    // of frozen strip. Instead un-minimize and reposition
-                    // ASYNCHRONOUSLY (ShowWindowAsync + SWP_ASYNCWINDOWPOS),
-                    // reaching the same final bounds without stalling the strip.
-                    // Transitions are disabled first (re-enabled shortly after)
-                    // so only the window the user restored animates.
+                    // Un-minimize and reposition asynchronously so busy apps do
+                    // not stall the strip. Keep transitions disabled until the
+                    // queued operations have had time to run.
                     this.disableTransitions(hwnd)
-                    window.showWindowAsync(ShowWindowCommands.SW_SHOWNOACTIVATE)
-                    window.moveAsync(adjustedBounds)
-                    // Post the sibling directly behind the restore-front window
-                    // so it surfaces already below it instead of flickering on
-                    // top. Ordered after the show on the target's queue.
-                    if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd then
-                        window.insertAfterAsync(restoreFrontHwnd)
-                    ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
-                elif window.isMinimized then
-                    this.withoutTransitions(hwnd, fun() -> window.setPlacement(wp))
+                    try
+                        window.showWindowAsync(ShowWindowCommands.SW_SHOWNOACTIVATE)
+                        window.moveAsync(adjustedBounds)
+                        // Post the sibling directly behind the restore-front window
+                        // so it surfaces already below it instead of flickering on
+                        // top. Ordered after the show on the target's queue.
+                        if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd then
+                            window.insertAfterAsync(restoreFrontHwnd)
+                        ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
+                    with _ ->
+                        // No delayed cleanup is guaranteed if posting fails.
+                        this.enableTransitions(hwnd)
+                        reraise()
                 else
-                    window.setPlacement(wp)
+                    // All synchronous follower state changes, including normal
+                    // -> maximized and maximized -> normal, must be silent.
+                    this.withoutTransitions(hwnd, fun() ->
+                        if targetMaximized then
+                            // Placement alone cannot move a maximized window
+                            // between monitors. Suppress the preparatory move too.
+                            this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                        window.setPlacement(wp))
 
             // Track the margin-shrunk size for this window
             if this.hasExeMargin(hwnd) && not targetMaximized then
@@ -1912,8 +1913,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.withoutTransitions(hwnd: IntPtr, f: unit -> unit) =
         this.disableTransitions(hwnd)
-        f()
-        this.enableTransitions(hwnd)
+        try
+            f()
+        finally
+            this.enableTransitions(hwnd)
 
     member private this.showWindowNoAnimation(hwnd, cmd) =
         this.withoutTransitions(hwnd, fun() -> this.os.windowFromHwnd(hwnd).showWindow(cmd))
