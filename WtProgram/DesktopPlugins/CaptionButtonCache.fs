@@ -17,6 +17,8 @@ module private CaptionButtonNative =
     [<DllImport("user32.dll")>]
     extern bool GetWindowRect(IntPtr hwnd, Rect& rect)
     [<DllImport("user32.dll")>]
+    extern bool IsHungAppWindow(IntPtr hwnd)
+    [<DllImport("user32.dll")>]
     extern IntPtr SetThreadDpiAwarenessContext(IntPtr context)
 
     [<DllImport("user32.dll")>]
@@ -63,13 +65,10 @@ type CaptionButtonCache() =
             if dpi <> 0u then Some(bounds, dpi) else None
         | None -> None
 
-    let discover hwnd owner className bounds dpi =
+    let discover hwnd owner className bounds dpi = PerfTrace.time "captionButtons.query" <| fun () ->
         try
             // Invalidate before querying, including explicit refreshes.
             remove hwnd
-#if DEBUG
-            PerfTrace.count "captionButtons.query"
-#endif
             let root = AutomationElement.FromHandle(hwnd)
             // Scope is this registered window, never the desktop.
             // Both custom and native accessibility providers expose
@@ -125,18 +124,24 @@ type CaptionButtonCache() =
                             { owner = owner; className = Win32Helper.GetClassName(hwnd); geometry = None }
                     let candidate = CaptionDragPolicy.needsCaptionButtonAreas previous.className
                     if candidate then
-                        let current = geometry hwnd
-                        let shouldQuery = CaptionDragPolicy.captionButtonRefreshNeeded candidate
-                                              hadRequest (current <> previous.geometry)
-                        // Remember this attempt even if UIA fails. The slow tick
-                        // checks only local geometry; it never retries unchanged failures.
-                        observations.[hwnd] <- { previous with geometry = current }
-                        match current with
-                        | Some(bounds, dpi) when shouldQuery ->
-                            queried <- true
-                            discover hwnd owner previous.className bounds dpi
-                        | None -> remove hwnd
-                        | _ -> ()
+                        if CaptionButtonNative.IsHungAppWindow(hwnd) then
+                            remove hwnd
+                            // No query was attempted. Retry after recovery even
+                            // if the window has not moved and no press arrives.
+                            observations.[hwnd] <- { previous with geometry = None }
+                        else
+                            let current = geometry hwnd
+                            let shouldQuery = CaptionDragPolicy.captionButtonRefreshNeeded candidate
+                                                  hadRequest (current <> previous.geometry)
+                            // Remember this attempt even if UIA fails. The slow tick
+                            // checks only local geometry; it never retries unchanged failures.
+                            observations.[hwnd] <- { previous with geometry = current }
+                            match current with
+                            | Some(bounds, dpi) when shouldQuery ->
+                                queried <- true
+                                discover hwnd owner previous.className bounds dpi
+                            | None -> remove hwnd
+                            | _ -> ()
                     else observations.[hwnd] <- previous
                 with _ -> remove hwnd
                 // Coalesce requests arriving during the query with this refresh.
