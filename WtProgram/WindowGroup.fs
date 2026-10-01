@@ -1285,16 +1285,34 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 queuedAsync <- true
                 followerPlacements.Post(hwnd, source.Value, this.os.windowFromHwnd(source.Value).bounds,
                     targetMaximized, followerBounds, fun revision ->
-                        this.invokeAsync <| fun () ->
+                        // Do not hold a strip batch across the fallback. As in
+                        // queueChildPlacement, publish/flush the live top state
+                        // before touching any follower.
+                        invoker.asyncInvoke <| fun () ->
                             if isDestroyed.value.not && desktopShown && inMoveSize.value.not && this.windows.contains(hwnd) &&
+                               not (this.isTop hwnd) && hwnd <> this.os.foreground.hwnd &&
                                followerPlacements.IsCurrent(hwnd, revision) then
-                                // Refused styles and changed DPI use the existing
-                                // synchronous path, with the newest group state.
-                                synchronousFollowers.Add(hwnd) |> ignore
-                                try
-                                    this.saveTopWindowPlacement()
-                                    this.adjustWindowPlacementCore(hwnd, None) |> ignore
-                                finally synchronousFollowers.Remove(hwnd) |> ignore) |> ignore
+                                match zorderCell.value.tryHead with
+                                | Some top ->
+                                    let sourceWindow = this.os.windowFromHwnd(top)
+                                    let liveBounds = sourceWindow.bounds
+                                    if sourceWindow.isWindow && sourceWindow.isMinimized.not && sourceWindow.isInMoveSize.not &&
+                                       liveBounds.width > 0 && liveBounds.height > 0 then
+                                        this.withUpdate <| fun () ->
+                                            this.saveTopWindowPlacement()
+                                            isMaximizedExport.update()
+                                            isFullscreenExport.update()
+                                            updateTabVisibility()
+                                        // One correction per current lane revision.
+                                        // Pending posts coalesce in the lane; a newer
+                                        // revision invalidates this callback. Forcing
+                                        // synchronous placement prevents a retry loop
+                                        // even if the source keeps changing.
+                                        this.withUpdate <| fun () ->
+                                            synchronousFollowers.Add(hwnd) |> ignore
+                                            try this.adjustWindowPlacementCore(hwnd, None) |> ignore
+                                            finally synchronousFollowers.Remove(hwnd) |> ignore
+                                | None -> ()) |> ignore
             else followerPlacements.Synchronous(hwnd, fun () ->
                 //if you remove this check, then when you drag a window into an Aero Snapp'ed window
                 //the dragged in window will be placed at the restore location for the target, instead of

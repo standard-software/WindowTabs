@@ -81,7 +81,17 @@ type FollowerPlacementQueue() =
                     let sourceCurrent = WinUserApi.GetWindowRect(source, &liveSource) &&
                                         liveSource.Rect = sourceBounds && WinUserApi.IsZoomed(source) = maximized &&
                                         not (WinUserApi.IsIconic(source))
-                    if valid() && sourceCurrent then
+                    if valid() && not sourceCurrent then
+                        // This may be the last LOCATIONCHANGE: the source can
+                        // settle after the group snapshots it. Do not silently
+                        // strand a still-current follower at its previous state.
+                        // The group rereads live state and performs one bounded
+                        // synchronous fallback; it does not repost this snapshot.
+#if DEBUG
+                        PerfTrace.count "group.follower.sourceChanged"
+#endif
+                        refused revision
+                    elif valid() && sourceCurrent then
                         if WinUserApi.IsIconic(hwnd) || WinUserApi.GetDpiForWindow(hwnd) <> dpi ||
                            WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST) <> monitor then
                             if valid() then refused revision
