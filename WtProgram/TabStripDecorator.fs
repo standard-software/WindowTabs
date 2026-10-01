@@ -3422,11 +3422,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             let selectedSnapshot =
                                 group.selectedTabs.items.list
                                 |> List.filter (fun h -> h <> hwnd)
+                            let parking = DragWindowParking()
                             let dragInfo =
                                 box({ tab = tab
                                       tabOffset = tabOffset
                                       imageOffset = imageOffset
                                       tabInfo = tabInfo
+                                      parkWindow = parking.park
+                                      restoreParked = parking.restore
+                                      retainSource = group.retainForTabDrag
                                       sourceGroupHwnd = group.hwnd
                                       selectedHwnds = selectedSnapshot
                                       sourceRestoreSize =
@@ -3609,9 +3613,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         this.ts.removeTab(tab)
                         dragInfoCell.set(None)
                         let (Tab(hwnd)) = tab
-                        let window = os.windowFromHwnd(hwnd)
                         group.removeWindow(hwnd)
-                        window.hideOffScreen(None)
+                        dragInfo.parkWindow(hwnd)
 
                         // Multi-select: also detach the selected tabs from
                         // this group so the source visibly reflects the loss
@@ -3625,8 +3628,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 this.ts.removeTab(selTab)
                             if group.windows.contains selHwnd then
                                 group.removeWindow(selHwnd)
-                            let selWindow = os.windowFromHwnd(selHwnd)
-                            selWindow.hideOffScreen(None)
+                            dragInfo.parkWindow(selHwnd)
                 | None -> ()
                 this.updateTsSlide()
 

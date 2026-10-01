@@ -22,6 +22,10 @@ and TabDragInfo = {
     // Multi-select drag continuation: source group hwnd + selection snapshot
     // (excluding the dragged tab) so the target group's dragEnter can move
     // the selected tabs across along with the dragged tab.
+    // Drag-owned parking survives removal/destruction of the source group.
+    parkWindow: IntPtr -> unit
+    restoreParked: unit -> unit
+    retainSource: unit -> IDisposable
     sourceGroupHwnd: IntPtr
     selectedHwnds: List<IntPtr>
     // Snap on drag-detach (Desktop.dragDrop): what the source group knew at
