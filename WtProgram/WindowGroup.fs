@@ -109,6 +109,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let placement = Cell.create(None:Option<Rect * OSWindowPlacement>)
     // Actual outer bounds include the maximized frame; placement uses work-area bounds.
     let mutable maximizedFrameBounds : Rect option = None
+    let mutable childPlacementPending = false
     let windowsCell = Cell.create(Set2())
     let _ts = ref None 
     let inMoveSize = Cell.create(false)
@@ -452,6 +453,38 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.isEmpty.not &&
             zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
             not allWindowsCloaked
+
+    // Let the event's group AND strip batches finish before touching followers.
+    // Keep only one queued pass; no HWND, bounds or showCmd is captured here.
+    member private this.queueChildPlacement() =
+        if not childPlacementPending then
+            childPlacementPending <- true
+            // Deliberately use the raw invoker: wrapping both phases in
+            // this.invokeAsync would hold the strip batch across the slow work.
+            invoker.asyncInvoke <| fun () ->
+                childPlacementPending <- false
+                if isDestroyed.value.not && desktopShown && inMoveSize.value.not then
+                    match zorderCell.value.tryHead with
+                    | Some(hwnd) ->
+                        let window = this.os.windowFromHwnd(hwnd)
+                        let bounds = window.bounds
+                        if window.isWindow && window.isMinimized.not && window.isInMoveSize.not &&
+                           bounds.width > 0 && bounds.height > 0 then
+                            // The native window may have changed again before its
+                            // throttled event reaches us. Publish that latest state
+                            // and flush the strip before applying it to followers.
+                            this.withUpdate <| fun () ->
+                                this.saveTopWindowPlacement()
+                                isMaximizedExport.update()
+                                isFullscreenExport.update()
+                                updateTabVisibility()
+                            this.withUpdate <| fun () ->
+                                let isForeground = this.os.foreground.hwnd = hwnd
+                                this.adjustChildWindows()
+                                if isForeground then this.makeTopWindowForeground()
+                                this.foreground <- this.os.foreground.hwnd
+                                this.reassertRestoreFront()
+                    | None -> ()
 
     member private this.adjustChildWindows = fun() -> PerfTrace.time "group.adjustChildren" <| fun () ->
         // Skip entirely while the top window cannot provide usable bounds:
@@ -1672,16 +1705,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     if window.isInMoveSize then
                         this.onEnterMoveSize()
                     else
-                        let isForeground = this.os.foreground.hwnd = hwnd
                         this.saveTopWindowPlacement()
-                        this.adjustChildWindows()
-                        if isForeground then
-                            this.makeTopWindowForeground()
-                        this.foreground <- this.os.foreground.hwnd
-                        this.reassertRestoreFront()
                         isMaximizedExport.update()
                         isFullscreenExport.update()
                         updateTabVisibility()
+                        this.queueChildPlacement()
             // A window of this group that is shown on all desktops, moved by
             // something other than this group - its group on another desktop
             // following a move made there. Same as if it had been dragged
