@@ -98,6 +98,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let foregroundEvent = Event<_>()
 
     let isDestroyed = Cell.create(false)
+    let mutable tabDragOwners = 0
+    let mutable destroyAfterTabDrag = false
     let zorderCell = Cell.create(List2<IntPtr>())
     // Set of inactive tabs that the user has "selected" via Shift/Ctrl click.
     // The active tab (zorder.head) is NEVER part of this set; treat it
@@ -1992,10 +1994,27 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         else targetIndex
                     this.activateIndex(targetIndex, force)
                         
+    // The drag's capture window and timer belong to this thread, even after
+    // its last tab has left. Release only once the terminal callback has run.
+    member this.retainForTabDrag() =
+        tabDragOwners <- tabDragOwners + 1
+        let mutable released = false
+        { new IDisposable with
+            member _.Dispose() =
+                this.invokeAsync <| fun () ->
+                    if not released then
+                        released <- true
+                        tabDragOwners <- tabDragOwners - 1
+                        if tabDragOwners = 0 && destroyAfterTabDrag then
+                            destroyAfterTabDrag <- false
+                            // It may have acquired a tab again while dragging.
+                            if this.isEmpty then this.destroy() }
+
     member this.destroy() =
-        followerPlacements.CancelAll()
-        pendingBackgroundMoves.Clear()
-        if isDestroyed.value.not then
+        if tabDragOwners > 0 && this.isEmpty then destroyAfterTabDrag <- true
+        elif isDestroyed.value.not then
+            followerPlacements.CancelAll()
+            pendingBackgroundMoves.Clear()
             isDestroyed.set(true)
             this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
             this.ts.destroy()

@@ -138,6 +138,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Dynamic.fs" />
     <Compile Include="Shared/Observable.fs" />
     <Compile Include="Shared/Blackboard.fs" />
+    <Compile Include="Shared/CrashLog.fs" />
     <Compile Include="Shared/Invoker.fs" />
     <Compile Include="Shared/PerfTrace.fs" />
     <Compile Include="Shared/InputStallTrace.fs" Condition="'$(Configuration)' == 'Debug'" />

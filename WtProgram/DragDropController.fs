@@ -98,6 +98,30 @@ module DragTrace =
         ""
 #endif
 
+// Only windows explicitly parked by this drag are eligible for recovery.
+// Targets run on different group threads; the action owns final recovery.
+type DragWindowParking() =
+    let gate = obj()
+    let os = OS()
+    let homes = Collections.Generic.Dictionary<IntPtr, int * int * Rect>()
+    member this.park(hwnd) = lock gate <| fun () ->
+        let window = os.windowFromHwnd(hwnd)
+        if window.isWindow && not window.isMinimized then
+            let bounds = window.bounds
+            if not (homes.ContainsKey(hwnd)) && bounds.width > 0 && bounds.height > 0 && os.isOnScreen(bounds) then
+                homes.[hwnd] <- (window.pid.pid, window.tid, bounds)
+            window.hideOffScreen(None)
+    member this.restore() = lock gate <| fun () ->
+        for entry in homes do
+            try
+                let window = os.windowFromHwnd(entry.Key)
+                let pid, tid, home = entry.Value
+                if window.isWindow && window.pid.pid = pid && window.tid = tid &&
+                   not window.isMinimized && not (os.isOnScreen(window.bounds)) then
+                    window.move(home)
+            with _ -> ()
+        homes.Clear()
+
 type IDragState =
     abstract member mouseMove : Pt -> unit
     abstract member dispose : unit -> unit
@@ -185,6 +209,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
     let dragStateCell = Cell.create(None:Option<IDragState>)
     let captureWindowCell = Cell.create(None:Option<IWindow>)
     let timer = new Timer()
+    let invoker = InvokerService.invoker
     let animationWindowCell = Cell.create(None:Option<AnimationWindow>)
 
     // Check if left mouse button is physically pressed using GetAsyncKeyState
@@ -228,7 +253,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
     // Abandon a drag that was left behind (see beginDrag). Releases the mouse
     // capture, the watchdog timer, the capture window and the animation window
     // before handing the slot back.
-    member this.abort() =
+    member this.abort() = invoker.invoke <| fun () ->
         DragTrace.log (fun () -> sprintf "[d%d] abort: abandoning drag" dragId)
         this.finish(ptScreenCell.value, false)
 
@@ -238,7 +263,12 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: state=%s pt=%A drop=%b" dragId (match dragStateCell.value with Some s -> s.GetType().Name | None -> "none") ptScreen dropAllowed)
             let step name f =
                 try f() with ex -> DragTrace.log (fun () -> sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
+            let restoreParked() =
+                match info.data with
+                | :? TabDragInfo as data -> step "restoreParked" data.restoreParked
+                | _ -> ()
             let state = dragStateCell.value
+            if not dropAllowed then restoreParked()
             this.traceActivation("beforeReleaseCapture")
             step "releaseCapture" <| fun() -> this.captureWindow.releaseCapture()
             this.traceActivation("afterReleaseCapture")
@@ -270,7 +300,9 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             | Some(:? DragFloatingState) ->
                 notifyTargets()
                 notifyNotifications()
-                if dropAllowed then step "onDrop" <| fun() -> info.onDrop(ptScreen)
+                if dropAllowed then
+                    try info.onDrop(ptScreen)
+                    with _ -> restoreParked()
                 step "onEnd" info.onEnd
             | _ ->
                 // No state yet (the watchdog timer can tick before dragDetect
@@ -298,7 +330,14 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             ptScreenCell.set(ptScreen)
             ptScreen
         match msg.msg with
-        | WindowMessages.WM_MOUSEMOVE ->
+        | WindowMessages.WM_CAPTURECHANGED
+        | WindowMessages.WM_CANCELMODE ->
+            // ReleaseCapture during finish re-enters here; finish is idempotent.
+            if not hasEnded then
+                // A target can change capture during synchronous dragEnter.
+                // Finish after that transition has returned to the owner loop.
+                invoker.asyncInvoke <| fun () -> this.finish(ptScreenCell.value, false)
+        | WindowMessages.WM_MOUSEMOVE when not hasEnded ->
             if moveCount < 3 then
                 moveCount <- moveCount + 1
                 DragTrace.log (fun () -> sprintf "[d%d] wndProc: WM_MOUSEMOVE #%d at %A" dragId moveCount (ptScreen()))
@@ -310,7 +349,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             else
                 dragStateCell.value.Value.mouseMove(ptScreen())
         | WindowMessages.WM_MOUSELEAVE
-        | WindowMessages.WM_LBUTTONUP ->
+        | WindowMessages.WM_LBUTTONUP when not hasEnded ->
             DragTrace.log (fun () -> sprintf "[d%d] wndProc: msg %d" dragId msg.msg)
             this.captureEnded(ptScreen())
         | _ -> ()
@@ -332,7 +371,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         let ptTarget = targetWindow.ptToClient(ptScreen)
         let accepted = target.dragEnter info.data ptTarget
         DragTrace.log (fun () -> sprintf "[d%d] dragEnter: target=%X initial=%b accepted=%b" dragId (targetHwnd.ToInt64()) isInitial accepted)
-        if accepted then
+        if not hasEnded && accepted then
             this.setNextState <| DragCapturedState({
                 target = target
                 targetHwnd = targetHwnd
@@ -343,26 +382,28 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                     | Some(target) -> this.dragEnter(targetHwnd, ptScreen, false)
                     | None -> this.dragFloat()
             })
-        else 
+        elif not hasEnded then
             if isInitial then target.dragExit()
             this.dragFloat()
 
     member this.dragDetect() =
         this.setNextState <| DragDetectingState({
             initialPt = info.initialPt
-            onBegin = fun() ->  
-                animationWindowCell.value <-
-                    let animationWindow = AnimationWindow(os)
-                    animationWindow.setAlpha(byte(0xAA))
-                    try
-                        //this may fail if the image coming back is too small
-                        animationWindow.setImage(info.image().scale(dragScale))
-                    with _ -> ()
-                    Some(animationWindow)
-                info.targets.values.iter <| fun target -> target.dragBegin()
-                info.notifications.items.iter <| fun n -> n.dragBegin()
-                info.onBegin()
-                this.dragEnter(info.initialHwnd, info.initialPt, true)
+            onBegin = fun() ->
+                let animationWindow = AnimationWindow(os)
+                // Publish before preview generation: it can pump messages and
+                // lose capture. finish must be able to dispose this window.
+                animationWindowCell.set(Some animationWindow)
+                animationWindow.setAlpha(byte(0xAA))
+                let image = try Some(info.image().scale(dragScale)) with _ -> None
+                if not hasEnded then
+                    image |> Option.iter animationWindow.setImage
+                    info.targets.values.iter <| fun target ->
+                        if not hasEnded then target.dragBegin()
+                    info.notifications.items.iter <| fun n ->
+                        if not hasEnded then n.dragBegin()
+                    if not hasEnded then info.onBegin()
+                    if not hasEnded then this.dragEnter(info.initialHwnd, info.initialPt, true)
         })
 
     member this.start() =
@@ -388,11 +429,30 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         // Use shorter interval (50ms) for more responsive mouse button state detection
         timer.Interval <- 50
         timer.Tick.Add <| fun _ ->
-            // Check if capture is lost OR if mouse button is physically released
-            // This handles the case where mouse up event is missed (e.g., released outside tab area)
-            if this.captureWindow.hasCapture.not || not (isLeftMouseButtonDown()) then
-                DragTrace.log (fun () -> sprintf "[d%d] timer: hasCapture=%b lbuttonDown=%b" dragId this.captureWindow.hasCapture (isLeftMouseButtonDown()))
-                this.captureEnded(ptScreenCell.value)
+            if not hasEnded && Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_ESCAPE) then
+                this.finish(ptScreenCell.value, false)
+            elif not hasEnded then
+                let mutable cursor = POINT()
+                // A failed cursor query (e.g. another input desktop) is not a drop.
+                if WinUserApi.GetCursorPos(&cursor) then
+                    let pt = cursor.ToPoint().Pt
+                    let moved = pt <> ptScreenCell.value
+                    ptScreenCell.set(pt)
+                    if not (isLeftMouseButtonDown()) then
+                        DragTrace.log (fun () -> sprintf "[d%d] timer: released at %A" dragId pt)
+                        // Resolve the target at the current cursor, not the last
+                        // mouse message; that message may never have arrived.
+                        match dragStateCell.value with
+                        | Some(:? DragDetectingState) -> ()
+                        | Some state -> state.mouseMove(pt)
+                        | None -> ()
+                        this.captureEnded(pt)
+                    elif this.captureWindow.hasCapture.not then
+                        this.finish(pt, false)
+                    elif moved then
+                        // A non-foreground capture window may receive no moves.
+                        // Keep detection, preview and target tracking alive too.
+                        dragStateCell.value.iter(fun state -> state.mouseMove(pt))
         timer.Start()
         this.dragDetect()
 
@@ -404,7 +464,6 @@ type DragDropController(parent:IDragDropParent) =
     let notificationsCell = Cell.create(Set2())
     let dragActionCell = Cell.create(None : DragAction option)
     let mutable nextDragId = 0
-
     interface IDragDrop with
         member x.registerNotification(notify) = withLock <| fun() ->
             notificationsCell.map(fun l -> l.add notify)
@@ -432,9 +491,15 @@ type DragDropController(parent:IDragDropParent) =
                 dragActionCell.set(None)
             | None -> ()
             if dragActionCell.value.IsNone then 
+                let targets, notifications = targetsCell.value, notificationsCell.value
+                let sourceLease =
+                    match data with
+                    | :? TabDragInfo as tabData -> Some(tabData.retainSource())
+                    | _ -> None
+                let releaseSource() = sourceLease |> Option.iter(fun lease -> lease.Dispose())
                 let dragAction = DragAction({
-                    targets = targetsCell.value
-                    notifications = notificationsCell.value
+                    targets = targets
+                    notifications = notifications
                     initialHwnd = initialHwnd
                     image = image
                     imageOffset = imageOffset
@@ -442,15 +507,21 @@ type DragDropController(parent:IDragDropParent) =
                     data = data
                     onCancel = fun() -> 
                         dragActionCell.set(None)
+                        releaseSource()
                     onBegin = fun() -> 
                         parent.dragBegin()
                     onDrop = fun pt ->
                         parent.dragDrop(pt, data)
                     onEnd = fun() ->    
-                        parent.dragEnd()
-                        dragActionCell.set(None)
+                        try parent.dragEnd()
+                        finally
+                            dragActionCell.set(None)
+                            releaseSource()
                 }, dragId)
                 dragActionCell.set(Some(dragAction))
-                dragAction.start()
+                try dragAction.start()
+                with _ ->
+                    // Even a failed start must release the source-group lease.
+                    dragAction.abort()
             ()
 

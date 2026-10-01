@@ -125,6 +125,7 @@ type CaptionDragPlugin() =
     let slowCallbackMs = 100.0
 
     let run() =
+        CrashLog.installThread()
         use buttonCache = new CaptionButtonCache()
         use context = new ApplicationContext()
         use control = new Control()

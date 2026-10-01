@@ -1,11 +1,6 @@
 ﻿namespace Bemo
-open System
 
-type ExceptionHandlerPlugin() as this =
-
-    member this.onException(e:UnhandledExceptionEventArgs) =
-        ()
-
+// Installed before any UI is created in main; retained as a compatibility plugin.
+type ExceptionHandlerPlugin() =
     interface IPlugin with
-        member x.init() =
-            AppDomain.CurrentDomain.UnhandledException.Add this.onException
+        member x.init() = ()

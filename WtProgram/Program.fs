@@ -3623,6 +3623,7 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+    CrashLog.install()
 #if DEBUG
     SettingsTiming.startStartup()
 #endif

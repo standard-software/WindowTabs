@@ -114,6 +114,7 @@ module ThreadHelper =
         let evt = ManualResetEvent(false)
         let results = ref None
         let start() =
+            CrashLog.installThread()
             // Must run before the first control is created on this thread so
             // that every SystemEvents subscription captures the non-blocking
             // context (see NonBlockingSyncContext above).
