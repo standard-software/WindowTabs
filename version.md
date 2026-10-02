@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.01_next20
+## version ss_2026.10.01_next21
 
 - Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front and without holding up the tab strip. Minimizing no longer waits for each window.
 - With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work.
@@ -12,6 +12,7 @@
 - Pressing a tab no longer makes the application's toolbar flicker.
 - A Color page in the settings; the pages share the same margins, and the distance from the edge can be set separately for the left and the right.
 - A tab opened with "Right of this tab" goes right beside it with the same colours. Tab names follow applications that do not announce title changes (such as PowerPoint).
+- A window opened from the tab menu stays where it was opened for its first 15 seconds; if it later becomes a closed tab's document, that tab's place and colours come back.
 
 ## version ss_2026.10.01
 
