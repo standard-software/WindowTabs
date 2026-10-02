@@ -9,6 +9,13 @@ open System.IO
 open System.Text
 open System.Threading
 
+// A/B experiments only. Module values snapshot the environment once at startup;
+// neither the switches nor their environment-variable names exist in Release.
+module StallExperiment =
+    let noMouseHook = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_MOUSE_HOOK") = "1"
+    let noCaptionQuery = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_CAPTION_QUERY") = "1"
+    let syncFollowers = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SYNC_FOLLOWERS") = "1"
+
 // Numeric evidence only. Producers never format text or touch the filesystem.
 module InputStallTrace =
     [<Literal>]
@@ -31,21 +38,41 @@ module InputStallTrace =
     let queueCapacity = 1024
 
     type Kind = Lag = 0 | Gap = 1 | Slow = 2 | Minimize = 3 | Maximize = 4 | Restore = 5 | Watchdog = 6
+              | Operation = 7 | PingAck = 8 | HookThreadBusy = 9
+
+    [<System.Runtime.InteropServices.DllImport("kernel32.dll")>]
+    extern uint32 GetCurrentThreadId()
     type Record =
         { at: DateTime; kind: Kind; ms: float; distance: float
           message: int; x: int; y: int; tick: uint32; hwnd: IntPtr
           gc0: int; gc1: int; gc2: int; gcDelta0: int; gcDelta1: int; gcDelta2: int
-          gcBaseline: int; priority: int }
+          gcBaseline: int; priority: int; tid: uint32; qpc: int64; stage: string }
 
     let private queue = new BlockingCollection<Record>(queueCapacity)
     let mutable private dropped = 0
     let mutable private started = 0
-    let private enqueue kind ms distance message x y tick hwnd gc0 gc1 gc2 delta0 delta1 delta2 baseline priority =
+    let private enqueueAt qpc stage kind ms distance message x y tick hwnd gc0 gc1 gc2 delta0 delta1 delta2 baseline priority =
         let record = { at = DateTime.Now; kind = kind; ms = ms; distance = distance
                        message = message; x = x; y = y; tick = tick; hwnd = hwnd
                        gc0 = gc0; gc1 = gc1; gc2 = gc2; gcDelta0 = delta0; gcDelta1 = delta1
-                       gcDelta2 = delta2; gcBaseline = baseline; priority = priority }
+                       gcDelta2 = delta2; gcBaseline = baseline; priority = priority
+                       tid = GetCurrentThreadId(); qpc = qpc; stage = stage }
         if not (queue.TryAdd(record)) then Interlocked.Increment(&dropped) |> ignore
+
+    let private enqueue kind ms distance message x y tick hwnd gc0 gc1 gc2 delta0 delta1 delta2 baseline priority =
+        enqueueAt (Stopwatch.GetTimestamp()) "-" kind ms distance message x y tick hwnd
+            gc0 gc1 gc2 delta0 delta1 delta2 baseline priority
+
+    // qpc marks completion; subtract ms * qpcHz / 1000 for the start. Preserve
+    // this stamp even if the perf counter lock delayed delivery to the queue.
+    let completed kind stage ms ended =
+        enqueueAt ended stage kind ms 0.0 0 0 0 0u IntPtr.Zero -1 -1 -1 0 0 0 0 -1
+
+    let private operation name ms ended =
+        match name with
+        | "captionButtons.query" | "group.follower.style" | "group.follower.frameBounds"
+        | "stripRender" | "layered.update" | "layered.move" -> completed Kind.Operation name ms ended
+        | _ -> ()
 
     // One detector per hook thread. Event stamps, not arrival times, measure
     // gaps so a delayed batch is not mistaken for a gap in generated events.
@@ -108,10 +135,11 @@ module InputStallTrace =
     let context kind hwnd ms = enqueue kind ms 0.0 0 0 0 0u hwnd -1 -1 -1 0 0 0 0 -1
 
     let format version record =
-        sprintf "%s version=%s kind=%A ms=%.2f distance=%.2f msg=0x%X x=%d y=%d tick=%u hwnd=0x%X gc0=%d gc1=%d gc2=%d gcDelta0=%d gcDelta1=%d gcDelta2=%d gcBaseline=%d priority=%d"
+        sprintf "%s version=%s kind=%A ms=%.2f distance=%.2f msg=0x%X x=%d y=%d tick=%u hwnd=0x%X gc0=%d gc1=%d gc2=%d gcDelta0=%d gcDelta1=%d gcDelta2=%d gcBaseline=%d priority=%d tid=%u qpc=%d qpcHz=%d stage=%s"
             (record.at.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)) version
             record.kind record.ms record.distance record.message record.x record.y record.tick (record.hwnd.ToInt64())
             record.gc0 record.gc1 record.gc2 record.gcDelta0 record.gcDelta1 record.gcDelta2 record.gcBaseline record.priority
+            record.tid record.qpc Stopwatch.Frequency record.stage
 
     // Rotation is checked on every write, including during a multi-day run.
     let append (path: string) (line: string) =
@@ -126,8 +154,8 @@ module InputStallTrace =
         stream.Write(bytes, 0, bytes.Length)
 
     let private writeLoop path version =
-        let counts = Array.zeroCreate<int64> 7
-        let maxima = Array.zeroCreate<float> 7
+        let counts = Array.zeroCreate<int64> 10
+        let maxima = Array.zeroCreate<float> 10
         let minute = Stopwatch.StartNew()
         let write line = try append path line with _ -> ()
         while true do
@@ -140,9 +168,9 @@ module InputStallTrace =
             if minute.ElapsedMilliseconds >= summaryMs then
                 let lost = Interlocked.Exchange(&dropped, 0)
                 if Array.exists ((<) 0L) counts || lost > 0 then
-                    write (sprintf "%s version=%s kind=Summary lag=%d gap=%d slow=%d minimize=%d maximize=%d restore=%d watchdog=%d maxMs=%.2f lagMaxMs=%.2f gapMaxMs=%.2f slowMaxMs=%.2f dropped=%d"
+                    write (sprintf "%s version=%s kind=Summary lag=%d gap=%d slow=%d minimize=%d maximize=%d restore=%d watchdog=%d operation=%d pingAck=%d hookThreadBusy=%d maxMs=%.2f lagMaxMs=%.2f gapMaxMs=%.2f slowMaxMs=%.2f dropped=%d"
                         (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)) version
-                        counts.[0] counts.[1] counts.[2] counts.[3] counts.[4] counts.[5] counts.[6]
+                        counts.[0] counts.[1] counts.[2] counts.[3] counts.[4] counts.[5] counts.[6] counts.[7] counts.[8] counts.[9]
                         (Array.max maxima) maxima.[0] maxima.[1] maxima.[2] lost)
                 Array.Clear(counts, 0, counts.Length)
                 Array.Clear(maxima, 0, maxima.Length)
@@ -150,6 +178,8 @@ module InputStallTrace =
 
     let start version =
         if Interlocked.CompareExchange(&started, 1, 0) = 0 then
+            PerfTrace.slowOperation <- operation
+            HookThreadTiming.completed <- fun name ms ended -> completed Kind.HookThreadBusy name ms ended
             let worker = Thread(ThreadStart(fun () ->
                 let path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                                         "WindowTabs", "input_stall.log")

@@ -173,10 +173,16 @@ namespace Bemo.Win32
                 {
                     // Normal thread contexts/stacks, plus thread info; strip module paths.
                     // Do not request full memory, handle data, or unloaded-module paths.
+                    // In-process dump capture can itself delay input. Bracket it
+                    // so an input lag is not attributed to the original stall.
+                    long started = Stopwatch.GetTimestamp();
+                    log("NATIVE dump begin mainTid=" + tid + " qpc=" + started + " qpcHz=" + Stopwatch.Frequency);
                     complete = MiniDumpWriteDump(process.Handle, (uint)process.Id,
                         file.SafeFileHandle.DangerousGetHandle(), 0x1080, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
                     int error = Marshal.GetLastWin32Error();
-                    log(complete ? "NATIVE dump=" + name + " mainTid=" + tid : "NATIVE dump error=" + error);
+                    long ended = Stopwatch.GetTimestamp();
+                    log((complete ? "NATIVE dump=" + name + " mainTid=" + tid : "NATIVE dump error=" + error) +
+                        " qpc=" + ended + " elapsedMs=" + ((ended - started) * 1000.0 / Stopwatch.Frequency).ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 }
             }
             finally { if (!complete && File.Exists(path)) File.Delete(path); }

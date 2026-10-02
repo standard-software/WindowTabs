@@ -1268,6 +1268,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let mutable nativeBounds = followerBounds.RECT
             let source = zorderCell.value.tryHead
             let canPost =
+#if DEBUG
+                not StallExperiment.syncFollowers &&
+#endif
                 not (synchronousFollowers.Contains hwnd) && desktopShown && source.IsSome &&
                 source.Value <> hwnd && hwnd <> this.os.foreground.hwnd && window.isVisible &&
                 not window.isMinimized &&
