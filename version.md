@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.01_next22
+## version ss_2026.10.03
 
 - Maximizing or restoring a tab group is smooth.
   - The other windows follow without animating and without flashing in front.
