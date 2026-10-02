@@ -1013,6 +1013,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         alignment.set(newAlignment)
         defaultAlignmentCell.set(newAlignment)
 
+    member this.clearTabAlign(tab) =
+        tabAlignmentCell.map(fun m -> m.remove tab)
+        this.normalizeVisualOrder()
+
     member this.setTabAlign(tab, newAlignment) =
         tabAlignmentCell.map(fun m -> m.add tab newAlignment)
         // Restore canonical visual ordering after changing alignment

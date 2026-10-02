@@ -343,6 +343,8 @@ type Program() as this =
     let recentlyPlacedHwnds = Cell.create(Map2() : Map2<IntPtr, DateTime>)
     let recentlyPlacedGraceMs = 2000.0
     let pendingExplicitLaunches = Cell.create<ExplicitLaunch.Request<ExplicitDestination> list>([])
+    // Retain launch provenance for post-expiry claims and full state replacement.
+    // Only ExplicitLaunch.active grants protection; expired requests are absent.
     let explicitWindows = Cell.create(Map2<IntPtr, ExplicitLaunch.Request<ExplicitDestination>>())
     let pendingNewTabInvokers = Cell.create(Map2<IntPtr, IntPtr>())
     let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
@@ -777,14 +779,14 @@ type Program() as this =
 
     member private this.suppressExplicitRestore(hwnd: IntPtr, windowTitle: string) =
         let suppressed, remaining =
-            ExplicitLaunch.suppress (explicitWindows.value.tryFind(hwnd))
+            ExplicitLaunch.suppress DateTime.Now (explicitWindows.value.tryFind(hwnd))
                 (normalizeClosedTabTitle windowTitle)
                 (fun (e: ClosedTabInfo) -> e.exePath, e.windowTitle, e.closedAt)
                 closedTabCache.value
         if remaining.Length <> closedTabCache.value.Length then
             RestoreTrace.log (fun () ->
-                sprintf "discard(explicit) hwnd=%X count=%d title=%s"
-                    (hwnd.ToInt64()) (closedTabCache.value.Length - remaining.Length) windowTitle)
+                sprintf "discard(explicit) hwnd=%X count=%d"
+                    (hwnd.ToInt64()) (closedTabCache.value.Length - remaining.Length))
         closedTabCache.set(remaining)
         suppressed
 
@@ -1091,12 +1093,15 @@ type Program() as this =
              | None -> false)
         | LiveStrip(strip) -> (try g.hwnd = strip with _ -> false)
 
+    member private this.claimState(hwnd) =
+        windowPinned.value.contains(hwnd), windowFillColor.value.tryFind(hwnd),
+        windowUnderlineColor.value.tryFind(hwnd), windowBorderColor.value.tryFind(hwnd)
+
     member private this.isPristineForClaim(hwnd) =
-        windowNameOverride.value.tryFind(hwnd).IsNone &&
-        not (windowPinned.value.contains(hwnd)) &&
-        windowFillColor.value.tryFind(hwnd).IsNone &&
-        windowUnderlineColor.value.tryFind(hwnd).IsNone &&
-        windowBorderColor.value.tryFind(hwnd).IsNone
+        // Suppression checks the protection period before this eligibility check.
+        ExplicitLaunch.canClaimState (explicitWindows.value.tryFind(hwnd))
+            (windowNameOverride.value.tryFind(hwnd).IsNone &&
+             this.claimState(hwnd) = (false, None, None, None))
 
     member private this.closedClaimDecision(hwnd, exePath, windowTitle) =
         if claimedWindows.value.Contains hwnd then ClosedTabClaim.AlreadyClaimed else
@@ -1195,6 +1200,14 @@ type Program() as this =
         match ClosedTabClaim.take hwnd (fun e -> obj.ReferenceEquals(e, info))
                                   claimedWindows.value closedTabCache.value with
         | Some(entry, claimed, remaining) ->
+            // Replace all current state, whether inherited or changed by the user.
+            if explicitWindows.value.tryFind(hwnd).IsSome then
+                windowNameOverride.map(fun m -> m.remove hwnd)
+                windowPinned.map(fun s -> s.remove hwnd)
+                windowFillColor.map(fun m -> m.remove hwnd)
+                windowUnderlineColor.map(fun m -> m.remove hwnd)
+                windowBorderColor.map(fun m -> m.remove hwnd)
+                windowAlignment.map(fun m -> m.remove hwnd)
             claimedWindows.set(claimed)
             closedTabCache.set(remaining)
             Some entry
@@ -1433,21 +1446,25 @@ type Program() as this =
                                 | _ -> ()
                                 match g :> obj with
                                 | :? GroupInfo as gi ->
+                                    let replaceCurrentState = explicitWindows.value.tryFind(hwnd).IsSome
                                     gi.invokeGroup <| fun() ->
                                         try
                                             let wg = gi.group
                                             let tab = Tab(hwnd)
-                                            info.renamedTabName |> Option.iter (fun n -> wg.setTabName(hwnd, Some(n)))
-                                            info.fillColor |> Option.iter (fun c -> wg.ts.setTabFillColor(tab, Some(c)))
-                                            info.underlineColor |> Option.iter (fun c -> wg.ts.setTabUnderlineColor(tab, Some(c)))
-                                            info.borderColor |> Option.iter (fun c -> wg.ts.setTabBorderColor(tab, Some(c)))
+                                            wg.setTabName(hwnd, info.renamedTabName)
+                                            wg.ts.setTabFillColor(tab, info.fillColor)
+                                            wg.ts.setTabUnderlineColor(tab, info.underlineColor)
+                                            wg.ts.setTabBorderColor(tab, info.borderColor)
                                             // Through the group, not the strip: wg.setTabAlign
                                             // also writes the global map the settings file is
                                             // saved from. The strip-only call left that map
                                             // holding the alignment this window had inherited
                                             // when it was auto-grouped, so the tab looked right
                                             // but came back right-aligned after the NEXT restart.
-                                            info.tabAlign |> Option.iter (fun a -> wg.setTabAlign(hwnd, a))
+                                            match info.tabAlign with
+                                            | Some a -> wg.setTabAlign(hwnd, a)
+                                            | None when replaceCurrentState -> wg.ts.clearTabAlign(tab)
+                                            | None -> ()
                                             // Alignment and pin first, always,
                                             // whether or not this is the saved
                                             // group: together they are the
@@ -2041,7 +2058,7 @@ type Program() as this =
                              hwnd info.closedHwnd info.tabIndex)
                 else None)
         let savedAlign =
-            if explicitWindows.value.tryFind(hwnd).IsSome then None
+            if (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsSome then None
             else this.savedAlignFor(try window.pid.processPath with _ -> "")
         match group :> obj with
         | :? GroupInfo as gi ->
@@ -2062,7 +2079,7 @@ type Program() as this =
                     wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
-        if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && explicitWindows.value.tryFind(hwnd).IsNone then
+        if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
