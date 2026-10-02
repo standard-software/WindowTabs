@@ -4,15 +4,30 @@
 
 ## version ss_2026.10.01_next22
 
-- Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front and without holding up the tab strip. Minimizing no longer waits for each window.
-- With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work.
-- Fixed a window flying off screen when the tab of a one-tab group was dragged onto another group.
-- Fixed a window being put into more than one tab group across virtual desktops. A new workspace captures only the current desktop's tab groups.
-- Fixed the tab groups, colours and pins being lost when WindowTabs started slowly, and WindowTabs failing to start after the watchdog restarted it.
+- Maximizing or restoring a tab group is smooth.
+  - The other windows follow without animating and without flashing in front.
+  - The tab strip moves first; minimizing no longer waits for each window.
+- Fixes for "Prevent moving windows and resizing them from the top"
+  - The minimize, maximize and close buttons work in applications that draw
+    their own title bar.
+  - Windows Terminal, HmFiler, MassiGra, ...
+- Fixed a window flying off screen when the tab of a one-tab group was dragged
+  onto another group.
+- Fixed a window being put into more than one tab group across virtual desktops.
+  - A new workspace captures only the current desktop's tab groups.
+- Fixed the tab groups, colours and pins being lost on a slow start.
+- Fixed WindowTabs quitting instead of starting again after it froze
+  and was restarted automatically.
 - Pressing a tab no longer makes the application's toolbar flicker.
-- A Color page in the settings; the pages share the same margins, and the distance from the edge can be set separately for the left and the right.
-- A tab opened with "Right of this tab" goes right beside it with the same colours. Tab names follow applications that do not announce title changes (such as PowerPoint).
-- A window opened from the tab menu stays where it was opened for its first 15 seconds; if it later becomes a closed tab's document, that tab's place and colours come back.
+- Settings
+  - A new Color page; every page has the same margins.
+  - The distance from the edge can be set separately for the left and the right.
+- A tab opened with "Right of this tab" goes right beside it, with its colours.
+- Tab names follow applications that do not announce title changes (PowerPoint).
+- Fixes for restoring closed tabs
+  - A window opened from the tab menu stays where it was opened for 15 seconds.
+  - If it then becomes a closed tab's document, that tab's place and colours
+    come back.
 
 ## version ss_2026.10.01
 
