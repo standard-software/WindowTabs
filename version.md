@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.01_next21
+## version ss_2026.10.01_next22
 
 - Maximizing or restoring a tab group is smooth: the other windows follow without animating, without flashing in front and without holding up the tab strip. Minimizing no longer waits for each window.
 - With "Prevent moving windows and resizing them from the top" on, the minimize, maximize and close buttons of applications that draw their own title bar (Windows Terminal, HmFiler, MassiGra, ...) work.
