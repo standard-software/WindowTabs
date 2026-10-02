@@ -24,6 +24,8 @@ module TopEdgeGuardPlacement =
         [<DllImport("user32.dll", EntryPoint = "SetWindowLongW")>]
         extern nativeint SetOwner32(nativeint hwnd, int index, nativeint owner)
         [<DllImport("user32.dll")>]
+        extern nativeint GetForegroundWindow()
+        [<DllImport("user32.dll")>]
         extern bool IsWindowVisible(nativeint hwnd)
         [<DllImport("user32.dll")>]
         extern bool IsWindow(nativeint hwnd)
@@ -177,3 +179,92 @@ module TopEdgeGuardPlacement =
         with _ ->
             hide band
             reraise()
+
+    // A frame owned by the target may occupy the margin outside its rectangle.
+    // Cover only the contiguous run of its owned frames. Never cross the strip
+    // or ANY unrelated window, even if that window did not take foreground.
+    let targetBelow band strip owner (rect: TopEdgeGuardPolicy.Band) =
+        let rec walk target remaining =
+            if remaining = 0 then 0n
+            else
+                let previous = above target
+                let previous = if previous = band then above band else previous
+                let isFrame =
+                    match rectOf previous with
+                    | Some r -> TopEdgeGuardPolicy.frameInBand rect r
+                    | None -> false
+                if previous <> 0n && previous <> strip && ownerOf previous = owner &&
+                   isFrame && isTopMost previous = isTopMost owner then walk previous (remaining - 1)
+                else target
+        walk owner 4096
+
+    let foregroundOwner owner = owner <> 0n && Native.GetForegroundWindow() = owner
+
+    let ownerSafe band strip owner =
+        if not (foregroundOwner owner) || not (Native.IsWindow owner) ||
+           not (visible owner) || Native.IsIconic owner || Native.IsZoomed owner then false
+        else
+            let target =
+                match rectOf band with
+                | Some rect -> targetBelow band strip owner rect
+                | None -> 0n
+            target <> 0n && ownerOf band = owner &&
+            isTopMost band = isTopMost owner && above target = band &&
+            (not (visible strip) || isAbove strip band)
+
+    // The owner belongs to another process; GWLP_HWNDPARENT is written only on
+    // our popup. Verify the relationship, since a zero API return is ambiguous.
+    // Hide during owner/layer changes, and show only in the final insertion.
+    let placeAtOwner band strip owner (rect: TopEdgeGuardPolicy.Band) =
+        let mutable ok = foregroundOwner owner && Native.IsWindow owner && visible owner &&
+                         not (Native.IsIconic owner) && not (Native.IsZoomed owner)
+        if ok && ownerSafe band strip owner && visible band && rectOf band = Some rect then true
+        else
+            hide band
+            if ok && ownerOf band <> owner then
+                if System.IntPtr.Size = 8 then Native.SetOwner64(band, -8, owner) |> ignore
+                else Native.SetOwner32(band, -8, owner) |> ignore
+                ok <- ownerOf band = owner
+            if ok && isTopMost band <> isTopMost owner then
+                let layer = if isTopMost owner then -1n else -2n
+                ok <- Native.SetWindowPos(band, layer, 0, 0, 0, 0, 0x0213u)
+            let target = if ok then targetBelow band strip owner rect else 0n
+            if target = 0n then ok <- false
+            if ok then
+                let previous = above target
+                let previous = if previous = band then above band else previous
+                // HWND_TOP keeps an ordinary band below the topmost layer.
+                let anchor = if not (isTopMost owner) && isTopMost previous then 0n else previous
+                ok <- Native.SetWindowPos(band, anchor, rect.x, rect.y, rect.width, rect.height, 0x0250u)
+                ok <- ok && ownerSafe band strip owner && rectOf band = Some rect
+            if not ok then hide band
+            ok
+
+    // Used when relinquishing foreground, including the UWP compatibility layer.
+    let hideAndDemote band =
+        hide band
+        if isTopMost band then
+            Native.SetWindowPos(band, -2n, 0, 0, 0, 0, 0x0213u) |> ignore
+
+    let safeForOwner band strip owner keepTopmost =
+        if not keepTopmost then ownerSafe band strip owner
+        elif not (foregroundOwner owner) then false
+        else
+            match rectOf band with
+            | None -> false
+            | Some rect ->
+                let observed = observe band strip owner rect
+                observed.ownerReady && observed.stripReady && observed.sameOwner &&
+                observed.stripTopmost && TopEdgeGuardPolicy.safeOrder observed
+
+    let placeForOwner band strip owner keepTopmost rect =
+        let ok =
+            if not keepTopmost then placeAtOwner band strip owner rect
+            elif foregroundOwner owner && isTopMost strip then
+                // UWP frame composition needs the same layer as its strip.
+                // Reuse its verified, non-activating insertion behind the strip.
+                let result = place band strip owner true rect
+                result.succeeded && safeForOwner band strip owner true
+            else false
+        if not ok then hideAndDemote band
+        ok

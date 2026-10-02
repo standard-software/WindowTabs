@@ -3,6 +3,13 @@
 // Physical-pixel geometry and ordering decisions, independent of Win32.
 module TopEdgeGuardPolicy =
     type Band = { x: int; y: int; width: int; height: int }
+    // Only a thin owned frame contained in the guarded band can be covered.
+    // Shared ownership alone must not let the guard cover a dialog or popup.
+    let frameInBand (band: Band) (frame: Band) =
+        frame.height > 0 && frame.y >= band.y &&
+        frame.y + frame.height <= band.y + band.height &&
+        frame.x <= band.x && frame.x + frame.width >= band.x + band.width
+
     type Stacking = Topmost | LeaveTopmost | Keep | Hide | Behind of nativeint
     type StackingInput = {
         tabsInside: bool; keepOnTop: bool; marginTop: int
@@ -26,8 +33,8 @@ module TopEdgeGuardPolicy =
 
     let stacking i =
         if not i.tabsInside then
-            // The upward branch retains its existing placement rules.
-            if i.keepOnTop || i.marginTop > 0 then Topmost
+            // A margin is geometry, never permission to enter the topmost layer.
+            if i.keepOnTop then Topmost
             elif i.bandIsTopMost then LeaveTopmost
             else Keep
         elif i.stripIsTopMost && not i.keepOnTop then

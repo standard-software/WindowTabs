@@ -564,16 +564,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // fine for a menu label.
         this.updateGroupInfo()
         let groupInfoTimer = new System.Windows.Forms.Timer(Interval = 1000)
-        let repairMarginFrames () =
-            if topEdgeGuard.followsMarginFrames && topEdgeGuard.stripChanged(this.ts.hwnd) then
+        let repairGuardOrder () = PerfTrace.time "topEdgeGuard.repair" <| fun () ->
+            if topEdgeGuard.followsStrip && topEdgeGuard.stripChanged(this.ts.hwnd) then
                 this.queueTopEdgeGuard()
         // A sibling can pass the strip without sending it WINDOWPOSCHANGED.
         // Reuse the bounded, coalesced repair path; the timer also covers apps
         // that do not publish an accessibility reorder event.
-        let marginReorder = os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ -> repairMarginFrames())
+        let guardReorder = os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ -> repairGuardOrder())
+        let guardForeground = os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> repairGuardOrder())
         groupInfoTimer.Tick.Add(fun _ ->
             this.updateGroupInfo()
-            repairMarginFrames()
+            repairGuardOrder()
             // Same tick, same thread as the rest of this group's upkeep.
             this.reconcileVirtualDesktop()
             PerfTrace.time "title.refresh" group.refreshTitles)
@@ -583,7 +584,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         group.exited.Add <| fun() ->
             groupInfoTimer.Stop()
             groupInfoTimer.Dispose()
-            marginReorder.Dispose()
+            guardReorder.Dispose()
+            guardForeground.Dispose()
 
         let capturedHwnd = ref None
 
@@ -643,6 +645,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         this.onCloseWindow hwnd
             | _ -> ()
         
+        // WindowGroup's throttled, per-window LOCATIONCHANGE path saves these
+        // bounds. Reuse it instead of installing a global location hook.
         group.bounds.changed.Add <| fun() ->
             this.updateTsPlacement()
 
@@ -667,10 +671,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Observe the final layer after WindowGroup's foreground handler.
         group.foregroundChanged.Add <| fun() ->
-            if this.ts.showInside && group.lockWindowPosition then this.queueTopEdgeGuard()
+            if group.lockWindowPosition then this.queueTopEdgeGuard()
 
         group.isFullscreen.changed.Add <| fun() ->
-            if this.ts.showInside && group.lockWindowPosition then this.queueTopEdgeGuard()
+            if group.lockWindowPosition then this.queueTopEdgeGuard()
 
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
@@ -690,6 +694,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // place. Downward tabs keep input priority over the band.
     member private this.queueTopEdgeGuard() =
         guardUpdates.Request((fun f -> this.invokeAsync f), this.updateTopEdgeGuard)
+
+    // Existing frame compatibility rule, shared by strip and guard placement.
+    member private this.isUwpForeground =
+        let foreground = os.foreground.hwnd
+        group.windows.contains(foreground) &&
+        os.windowFromHwnd(foreground).className = "ApplicationFrameWindow"
 
     member private this.updateTopEdgeGuard() =
         try
@@ -714,16 +724,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         max 0 top
                      with _ -> 0)
                 | _ -> 0
-            // A UWP window (ApplicationFrameWindow) draws above ordinary owned
-            // windows, so the strip is made topmost while one of them is in
-            // front - see updateTsPlacement - and the band has to follow the
-            // same rule or it sinks behind the window it guards.
-            let uwpInFront =
-                group.windows.items.any(fun hwnd ->
-                    let window = os.windowFromHwnd(hwnd)
-                    window.className = "ApplicationFrameWindow" && hwnd = os.foreground.hwnd)
             topEdgeGuard.update(wanted, ownerHwnd, group.bounds.value,
-                                marginTop, uwpInFront, not group.isInMoveSizeThreadSafe,
+                                marginTop, this.isUwpForeground, not group.isInMoveSizeThreadSafe,
                                 this.ts.showInside, this.ts.hwnd)
         with _ -> topEdgeGuard.hide()
 
@@ -744,26 +746,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // placement updates on the same decision prevents move-state races.
             this.ts.visible <- group.shouldShowTabs
             
-            // Handle UWP application tab visibility
-            let hasUWPWindow = group.windows.items.any(fun hwnd ->
-                let window = os.windowFromHwnd(hwnd)
-                window.className = "ApplicationFrameWindow"
-            )
-            
+            // Share the existing UWP compatibility condition with the guard.
             let tsWindow = os.windowFromHwnd(this.ts.hwnd)
-            // Make topmost for UWP apps when a UWP app is active
-            if hasUWPWindow then
-                // Check if any UWP window in the group is foreground
-                let isUWPForeground = group.windows.items.any(fun hwnd ->
-                    let window = os.windowFromHwnd(hwnd)
-                    window.className = "ApplicationFrameWindow" && hwnd = os.foreground.hwnd
-                )
-                if isUWPForeground then
-                    tsWindow.makeTopMost()
-                else
-                    tsWindow.makeNotTopMost()
-            else
-                tsWindow.makeNotTopMost()
+            if this.isUwpForeground then tsWindow.makeTopMost()
+            else tsWindow.makeNotTopMost()
 
         this.updateTopEdgeGuard()
 
@@ -3502,8 +3488,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // unsafe band synchronously, then repair after strip placement.
             let follows =
                 msg.msg = 0x0047 && topEdgeGuard.followsStrip &&
-                TopEdgeGuardPolicy.followsStrip this.ts.showInside group.lockWindowPosition
-                    group.bounds.value.IsSome group.isInMoveSizeThreadSafe group.isFullscreen.value
+                group.lockWindowPosition && group.bounds.value.IsSome &&
+                not group.isInMoveSizeThreadSafe && not group.isFullscreen.value
             TopEdgeGuardPolicy.dispatchStripMessage msg.msg follows
                 (fun () -> topEdgeGuard.stripChanged(msg.hwnd)) this.queueTopEdgeGuard
             // The strip window is per-monitor DPI aware, so Windows notifies it
