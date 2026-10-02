@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.03_next1
+
 ## version ss_2026.10.03
 
 - タブグループの最大化・元に戻すを滑らかにした。
