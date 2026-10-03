@@ -341,7 +341,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             //this is important, we dont' want to leave the parent set to the previous hwnd
             //which was removed, this can cause issues when that window gets added to another
             //group on another thread during drag / drop
-            this.updateStripOwner()
+            this.updateStripOwner("group-state")
 
         Cell.listen updateTabVisibility
 
@@ -784,24 +784,28 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 PerfTrace.count "title.missed"
                 this.setTabInfo hwnd
 
-    member private this.setTsParent(parentHwnd) =
-        this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
+    member private this.setTsParent(parentHwnd, reason) =
+        TopEdgeGuardPlacement.reownStrip this.ts.hwnd parentHwnd reason |> ignore
 
-    // The window that owns the strip. The shell shows and hides an owned tool
+    // On the active desktop, native foreground membership wins even before
+    // deferred z-order notifications run. Otherwise preserve the desktop owner
+    // policy below. The shell shows and hides an owned tool
     // window with its owner, so the strip of a group holding a window shown
     // on all desktops is owned by one of its windows that is not: it then
     // disappears in the same frame as its desktop does, instead of staying on
     // screen with the pinned window until WindowTabs notices the switch. With
     // no such window about, it is the front window, as it always was.
     member private this.stripOwnerHwnd =
+        let foreground = this.os.foreground.hwnd
         if this.isEmpty then IntPtr.Zero
+        elif desktopShown && this.windows.contains(foreground) then foreground
         else
             VirtualDesktopGroups.stripOwner zorderCell.value.list (VirtualDesktopGroups.Live.shared())
             |> Option.defaultValue zorderCell.value.head
 
-    member private this.updateStripOwner() =
+    member private this.updateStripOwner(reason) =
         let owner = this.stripOwnerHwnd
-        this.setTsParent(owner)
+        this.setTsParent(owner, reason)
         this.keepStripAboveTop(owner)
 
     // Owned by a window that is not the front one, the strip sits just above
@@ -809,8 +813,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // window, where an owned strip would have been.
     member private this.keepStripAboveTop(owner: IntPtr) =
         if owner <> IntPtr.Zero && not this.isEmpty then
-            let top = zorderCell.value.head
-            if top <> owner then
+            let foreground = this.os.foreground.hwnd
+            let top = if this.windows.contains(foreground) then foreground else zorderCell.value.head
+            if not (TopEdgeGuardPlacement.isAbove this.ts.hwnd top) then
                 try
                     let above = this.os.windowFromHwnd(top).prevZorder
                     if above.hwnd <> this.ts.hwnd then
@@ -823,7 +828,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     /// and hides the strip only where the shell has not already done so.
     member this.applyDesktopState(shown: bool) =
         desktopShown <- shown
-        this.updateStripOwner()
+        this.updateStripOwner("group-state")
         let owner = this.stripOwnerHwnd
         let ownerPresence =
             if owner = IntPtr.Zero then VirtualDesktopGroups.Unsure
@@ -1792,7 +1797,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
             this.saveZorder()
-            this.keepStripAboveTop(this.stripOwnerHwnd)
+            // Direct activation need not change the cached member order, and
+            // Cell notifications can be deferred until this batch completes.
+            // Reconcile the actual native owner before publishing guard work.
+            this.updateStripOwner("foreground")
             // Update visibility for all groups when foreground changes
             // This is critical for detecting virtual desktop switches where windows become cloaked
             this.updateIsVisible()

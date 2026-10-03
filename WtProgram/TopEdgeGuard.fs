@@ -53,6 +53,7 @@ type TopEdgeGuard(os: OS) =
     let mutable strip = IntPtr.Zero
     let mutable keepTopmost = false
     let mutable lastOrder = None
+    let mutable lastFailedOrder = None
     let traceChanges = TopEdgeGuardPolicy.ChangeTrace<obj>()
 
     // The strip of a window that starts a top resize: the sizing frame plus
@@ -302,6 +303,7 @@ type TopEdgeGuard(os: OS) =
 #endif
 
     member this.hide() =
+        lastFailedOrder <- None
         this.auditDecision("hide-enter")
         lastOrder <- None
         match window with
@@ -332,6 +334,12 @@ type TopEdgeGuard(os: OS) =
 
     member this.invalidateOrder() = lastOrder <- None
 
+    member private this.orderKey(stripHwnd: IntPtr, guard: IntPtr) =
+        (stripHwnd, TopEdgeGuardPlacement.above owner, TopEdgeGuardPlacement.above guard,
+         TopEdgeGuardPlacement.above stripHwnd, TopEdgeGuardPlacement.isTopMost owner,
+         TopEdgeGuardPlacement.isTopMost guard, TopEdgeGuardPlacement.isTopMost stripHwnd,
+         TopEdgeGuardPlacement.visible stripHwnd, TopEdgeGuardPlacement.ownerOf stripHwnd, keepTopmost)
+
     member this.stripChanged(stripHwnd: IntPtr) =
         match window with
         | Some w when this.followsStrip ->
@@ -344,24 +352,30 @@ type TopEdgeGuard(os: OS) =
                 true
             else
                 let aboveOwner = TopEdgeGuardPlacement.above owner
-                let key = (stripHwnd, aboveOwner, TopEdgeGuardPlacement.above w.hwnd,
-                           TopEdgeGuardPlacement.above stripHwnd,
-                           TopEdgeGuardPlacement.isTopMost owner,
-                           TopEdgeGuardPlacement.isTopMost w.hwnd,
-                           TopEdgeGuardPlacement.isTopMost stripHwnd,
-                           TopEdgeGuardPlacement.visible stripHwnd, keepTopmost)
+                let key = this.orderKey(stripHwnd, w.hwnd)
                 // Only direct adjacency proves no window was inserted between
                 // the guard and owner. Owned-frame chains still need validation.
                 if aboveOwner = w.hwnd && lastOrder = Some key then
                     this.auditDecision("repair-cached-safe")
                     PerfTrace.count "topEdgeGuard.repairUnchanged"
+                    TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
                     false
                 else
                     let safe = TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost
                     this.auditDecision(if safe then "repair-safe" else "repair-unsafe")
-                    if safe then lastOrder <- Some key
-                    else this.hide()
-                    not shown
+                    if safe then
+                        lastOrder <- Some key
+                        lastFailedOrder <- None
+                        TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
+                        false
+                    elif TopEdgeGuardPlacement.canKeepShown w.hwnd owner then
+                        // No repeated retry for the same failed native order.
+                        // A changed neighbour, foreground, or geometry permits
+                        // another attempt through the existing event paths.
+                        lastFailedOrder <> Some key
+                    else
+                        this.hide()
+                        true
         | _ -> false
 
     /// Cover the target's top border and its contiguous owned margin frames.
@@ -461,7 +475,11 @@ type TopEdgeGuard(os: OS) =
                         this.auditDecision("coverage-unavailable")
                         this.hide()
                         false
-                if shown then repaint()
+                if shown then
+                    if TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost then
+                        lastFailedOrder <- None
+                    else lastFailedOrder <- Some (this.orderKey(stripHwnd, w.hwnd))
+                    repaint()
 #if DEBUG
                 let previous = TopEdgeGuardPlacement.above ownerHwnd
                 let key = box (ownerHwnd, stripHwnd, w.hwnd, previous, shown)

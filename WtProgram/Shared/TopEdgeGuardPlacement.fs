@@ -161,6 +161,26 @@ module TopEdgeGuardPlacement =
 #endif
         ok
 
+    let reownStrip strip owner reason =
+        let previous = ownerOf strip
+        if Native.IsWindow strip && (owner = 0n || Native.IsWindow owner) && previous <> owner then
+            if System.IntPtr.Size = 8 then Native.SetOwner64(strip, -8, owner) |> ignore
+            else Native.SetOwner32(strip, -8, owner) |> ignore
+#if DEBUG
+            traceDecision (sprintf "strip-reown(reason=%s,old=%X,new=%X,actual=%X)"
+                reason (int64 previous) (int64 owner) (int64 (ownerOf strip))) 0n strip owner None None None
+#endif
+        ownerOf strip = owner
+
+    let repairStripAboveGuard band strip owner =
+        if Native.GetForegroundWindow() = owner && Native.IsWindow strip then
+            reownStrip strip owner "guard-placement" |> ignore
+            if visible strip && visible band && not (isAbove strip band) then
+                let previous = above band
+                // Move only the strip, immediately before the guard. Keep all
+                // unrelated windows already above the guard above the strip too.
+                setPosition strip strip owner previous 0 0 0 0 0x0213u |> ignore
+
     let hide band =
         if visible band then Native.ShowWindow(band, 0) |> ignore
 
@@ -336,8 +356,20 @@ module TopEdgeGuardPlacement =
                 | Some rect -> coverOwnedTopFrames band strip owner rect = Some rect
                 | None -> false
             covered && target <> 0n && ownerOf band = owner &&
-            isTopMost band = isTopMost owner && above target = band &&
-            (not (visible strip) || isAbove strip band)
+            isTopMost band = isTopMost owner && above target = band
+
+    // A stale frame snapshot can fail adjacency after a successful insertion.
+    // Keep that best position only while it cannot intercept another group's
+    // window: every intervening window down to the owner must belong to it.
+    let canKeepShown band owner =
+        let rec walk hwnd remaining =
+            if hwnd = owner then true
+            elif hwnd = 0n || remaining = 0 || ownerOf hwnd <> owner then false
+            else walk (Native.GetWindow(hwnd, 2u)) (remaining - 1)
+        foregroundOwner owner && visible owner && visible band &&
+        not (Native.IsIconic owner) && not (Native.IsZoomed owner) &&
+        ownerOf band = owner && isTopMost band = isTopMost owner &&
+        walk (Native.GetWindow(band, 2u)) 4096
 
     // The owner belongs to another process; GWLP_HWNDPARENT is written only on
     // our popup. Verify the relationship, since a zero API return is ambiguous.
@@ -350,7 +382,10 @@ module TopEdgeGuardPlacement =
             traceDecision "place-owner-unchanged" band strip owner (Some rect) None None
             true
         else
-            hide band
+            // Keep a previously shown band during a plain reorder. If the
+            // native call loses a race, its safe previous position still locks
+            // part of the border instead of disappearing for a retry cycle.
+            if not ok || ownerOf band <> owner || isTopMost band <> isTopMost owner then hide band
             if ok && ownerOf band <> owner then
                 if System.IntPtr.Size = 8 then Native.SetOwner64(band, -8, owner) |> ignore
                 else Native.SetOwner32(band, -8, owner) |> ignore
@@ -371,6 +406,9 @@ module TopEdgeGuardPlacement =
                 ok <- setPosition band strip owner anchor rect.x rect.y rect.width rect.height 0x0250u
                 ok <- ok && ownerSafe band strip owner && rectOf band = Some rect
                 traceDecision (if ok then "validated" else "validation-failed") band strip owner (Some rect) (Some anchor) None
+            if not ok && canKeepShown band owner then
+                traceDecision "validation-deferred-keep-shown" band strip owner (Some rect) None None
+                ok <- true
             if not ok then hide band
             ok
 
@@ -392,6 +430,7 @@ module TopEdgeGuardPlacement =
                 observed.stripTopmost && TopEdgeGuardPolicy.safeOrder observed
 
     let placeForOwner band strip owner keepTopmost rect =
+        if foregroundOwner owner then reownStrip strip owner "guard-before-placement" |> ignore
         let ok =
             if not keepTopmost then placeAtOwner band strip owner rect
             elif foregroundOwner owner && isTopMost strip then
@@ -400,6 +439,7 @@ module TopEdgeGuardPlacement =
                 let result = place band strip owner true rect
                 result.succeeded && safeForOwner band strip owner true
             else false
-        if not ok then hideAndDemote band
+        if ok then repairStripAboveGuard band strip owner
+        else hideAndDemote band
         traceDecision (if ok then "place-final-shown" else "place-final-hidden") band strip owner (Some rect) None None
         ok
