@@ -293,7 +293,16 @@ type TopEdgeGuard(os: OS) =
             buttonScan <- Some(key, value)
             value
 
+    member this.auditDecision(phase: string) =
+#if DEBUG
+        let hwnd = window |> Option.map (fun w -> w.hwnd) |> Option.defaultValue IntPtr.Zero
+        TopEdgeGuardPlacement.traceDecision phase hwnd strip owner None None None
+#else
+        ()
+#endif
+
     member this.hide() =
+        this.auditDecision("hide-enter")
         lastOrder <- None
         match window with
         | Some w ->
@@ -305,6 +314,7 @@ type TopEdgeGuard(os: OS) =
 #endif
         | None -> ()
         shown <- false
+        this.auditDecision("hide-final")
 
     member private this.trace(key: obj, build: unit -> string) =
 #if DEBUG
@@ -314,7 +324,9 @@ type TopEdgeGuard(os: OS) =
         ()
 #endif
 
-    member private this.trace(line: string) = this.trace(box line, fun () -> line)
+    member private this.trace(line: string) =
+        this.auditDecision(line)
+        this.trace(box line, fun () -> line)
 
     member this.followsStrip = eligible && not disposed
 
@@ -324,9 +336,12 @@ type TopEdgeGuard(os: OS) =
         match window with
         | Some w when this.followsStrip ->
             if not (TopEdgeGuardPlacement.foregroundOwner owner) then
+                this.auditDecision("repair-behind")
                 if shown then this.hide()
                 false
-            elif not shown then true
+            elif not shown then
+                this.auditDecision("repair-hidden-request")
+                true
             else
                 let aboveOwner = TopEdgeGuardPlacement.above owner
                 let key = (stripHwnd, aboveOwner, TopEdgeGuardPlacement.above w.hwnd,
@@ -338,10 +353,12 @@ type TopEdgeGuard(os: OS) =
                 // Only direct adjacency proves no window was inserted between
                 // the guard and owner. Owned-frame chains still need validation.
                 if aboveOwner = w.hwnd && lastOrder = Some key then
+                    this.auditDecision("repair-cached-safe")
                     PerfTrace.count "topEdgeGuard.repairUnchanged"
                     false
                 else
                     let safe = TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost
+                    this.auditDecision(if safe then "repair-safe" else "repair-unsafe")
                     if safe then lastOrder <- Some key
                     else this.hide()
                     not shown
@@ -355,6 +372,13 @@ type TopEdgeGuard(os: OS) =
         keepTopmost <- useTopmost
         strip <- stripHwnd
         eligible <- wanted && not disposed && ownerHwnd <> IntPtr.Zero && bounds.IsSome
+#if DEBUG
+        let hwnd = window |> Option.map (fun w -> w.hwnd) |> Option.defaultValue IntPtr.Zero
+        TopEdgeGuardPlacement.traceDecision
+            (sprintf "update-enter(wanted=%b,disposed=%b,bounds=%b,inside=%b,topmost=%b)"
+                wanted disposed bounds.IsSome tabsInside useTopmost)
+            hwnd stripHwnd ownerHwnd None None None
+#endif
         if disposed || not wanted || ownerHwnd = IntPtr.Zero || bounds.IsNone ||
            not (TopEdgeGuardPlacement.foregroundOwner ownerHwnd) then
             this.hide()
@@ -434,6 +458,7 @@ type TopEdgeGuard(os: OS) =
                     | Some covered ->
                         TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
                     | None ->
+                        this.auditDecision("coverage-unavailable")
                         this.hide()
                         false
                 if shown then repaint()

@@ -586,6 +586,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // One repair per 50ms event batch, including notifications produced by
         // our own SetWindowPos. Never recursively chase a frame that re-raises.
         guardRepairTimer.Tick.Add(fun _ ->
+            topEdgeGuard.auditDecision("repair-timer-fired")
             guardRepairTimer.Stop()
             guardUpdates.Request((fun f -> this.invokeAsync f), this.updateTopEdgeGuard))
         // Stop and release the timer with the group: it owns a window of this
@@ -704,6 +705,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // It follows the same events as the strip, so it is updated from the same
     // place. Downward tabs keep input priority over the band.
     member private this.queueTopEdgeGuard() =
+        topEdgeGuard.auditDecision(if guardRepairTimer.Enabled then "repair-request-coalesced" else "repair-timer-start")
         if not guardRepairTimer.Enabled then guardRepairTimer.Start()
 
     // Existing frame compatibility rule, shared by strip and guard placement.
