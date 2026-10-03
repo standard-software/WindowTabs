@@ -343,11 +343,7 @@ type TopEdgeGuard(os: OS) =
     member this.stripChanged(stripHwnd: IntPtr) =
         match window with
         | Some w when this.followsStrip ->
-            if not (TopEdgeGuardPlacement.foregroundOwner owner) then
-                this.auditDecision("repair-behind")
-                if shown then this.hide()
-                false
-            elif not shown then
+            if not shown then
                 this.auditDecision("repair-hidden-request")
                 true
             else
@@ -355,7 +351,8 @@ type TopEdgeGuard(os: OS) =
                 let key = this.orderKey(stripHwnd, w.hwnd)
                 // Only direct adjacency proves no window was inserted between
                 // the guard and owner. Owned-frame chains still need validation.
-                if aboveOwner = w.hwnd && lastOrder = Some key then
+                if aboveOwner = w.hwnd && lastOrder = Some key &&
+                   (not keepTopmost || TopEdgeGuardPlacement.foregroundOwner owner) then
                     this.auditDecision("repair-cached-safe")
                     PerfTrace.count "topEdgeGuard.repairUnchanged"
                     TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
@@ -393,8 +390,7 @@ type TopEdgeGuard(os: OS) =
                 wanted disposed bounds.IsSome tabsInside useTopmost)
             hwnd stripHwnd ownerHwnd None None None
 #endif
-        if disposed || not wanted || ownerHwnd = IntPtr.Zero || bounds.IsNone ||
-           not (TopEdgeGuardPlacement.foregroundOwner ownerHwnd) then
+        if disposed || not wanted || ownerHwnd = IntPtr.Zero || bounds.IsNone then
             this.hide()
             this.trace("hidden: unavailable")
         else
@@ -405,7 +401,7 @@ type TopEdgeGuard(os: OS) =
                 eligible <- false
                 this.hide()
                 this.trace("hidden: target unavailable")
-            elif tabsInside && not stripReady then
+            elif tabsInside && not stripReady && TopEdgeGuardPlacement.foregroundOwner ownerHwnd then
                 this.hide()
                 this.trace("hidden: StripUnavailable")
             else

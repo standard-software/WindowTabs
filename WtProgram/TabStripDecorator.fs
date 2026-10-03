@@ -718,7 +718,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         try
             let wanted =
                 TopEdgeGuardPolicy.wanted group.lockWindowPosition group.bounds.value.IsSome
-                    group.isInMoveSizeThreadSafe this.ts.showInside group.isFullscreen.value this.ts.visible
+                    group.isInMoveSizeThreadSafe this.ts.showInside group.isFullscreen.value
+                    (this.ts.visible || (group.bounds.value.IsSome && os.foreground.hwnd <> group.topWindow))
                 // A group of another virtual desktop guards nothing: a window
                 // shown on all desktops is guarded by the lock of the group of
                 // the desktop being looked at, and only by that one.
