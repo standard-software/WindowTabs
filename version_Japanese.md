@@ -2,7 +2,10 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.10.03_next1
+## version ss_2026.10.03_next2
+
+- 上端リサイズ禁止の帯が、手前にある別グループのウィンドウを覆わないようにした。
+  - LINE などの上端の影の部分からもリサイズできないようにした。
 
 ## version ss_2026.10.03
 

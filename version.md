@@ -2,7 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next1
+## version ss_2026.10.03_next2
+
+- The top-edge lock no longer covers another group's window in front of it.
+  - It also blocks resizing from the top shadow of windows such as LINE.
 
 ## version ss_2026.10.03
 
