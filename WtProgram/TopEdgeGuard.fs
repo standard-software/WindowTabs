@@ -13,7 +13,7 @@ open System
 //
 // This window owns those few pixels instead: it reports its whole area as
 // client (so no resize cursor appears over it), keeps the plain arrow, and
-// swallows presses after bringing the window it belongs to to the front. It is
+// swallows presses without changing activation. It is
 // layered at alpha 1 - invisible in practice, but still hit-tested, which a
 // fully transparent layered window would not be.
 module private TopEdgeGuardNative =
@@ -48,15 +48,12 @@ type TopEdgeGuard(os: OS) =
     let mutable buttonScan : ((IntPtr * int * int) * int) option = None
     // (window, dpi) -> how far down its own top border reaches
     let mutable borderScan : ((IntPtr * int) * int) option = None
-    let mutable inside = false
     let mutable eligible = false
     let mutable disposed = false
-    let mutable allowTopmost = false
-    let mutable marginOrder = false
-    let mutable lastRect = None
-    let mutable updates = 0L
-    let mutable placements = 0L
-    let mutable zorders = 0L
+    let mutable strip = IntPtr.Zero
+    let mutable keepTopmost = false
+    let mutable lastOrder = None
+    let mutable lastFailedOrder = None
     let traceChanges = TopEdgeGuardPolicy.ChangeTrace<obj>()
 
     // The strip of a window that starts a top resize: the sizing frame plus
@@ -88,7 +85,11 @@ type TopEdgeGuard(os: OS) =
         match msg.msg with
         // The whole window is client area: a border answer here would bring
         // the resize cursor back, which is the point of this window.
-        | 0x0084 (* WM_NCHITTEST *) -> 1 (* HTCLIENT *)
+        | 0x0084 (* WM_NCHITTEST *) ->
+            if TopEdgeGuardPlacement.safeForOwner msg.hwnd strip owner keepTopmost then 1 (* HTCLIENT *)
+            else
+                this.hide()
+                0 (* HTNOWHERE; never use cross-thread HTTRANSPARENT as a fallback *)
         | 0x0020 (* WM_SETCURSOR *) ->
             WinUserApi.SetCursor(WinUserApi.LoadCursor(IntPtr.Zero, CursorIds.IDC_ARROW)).ignore
             1
@@ -105,10 +106,9 @@ type TopEdgeGuard(os: OS) =
             WinUserApi.EndPaint(msg.hwnd, &ps).ignore
             0
         | 0x0201 | 0x0204 | 0x0207 (* button down *) ->
-            // The press is swallowed, but the window below it still comes to
-            // the front, which is what clicking a title bar would have done.
-            if owner <> IntPtr.Zero && WinUserApi.IsWindow(owner) then
-                os.windowFromHwnd(owner).setForeground(false)
+            // Foreground/reorder notifications are asynchronous. A queued press
+            // must never activate an owner that has since been covered.
+            if not (TopEdgeGuardPlacement.safeForOwner msg.hwnd strip owner keepTopmost) then this.hide()
             0
         | _ -> msg.def()
 
@@ -294,61 +294,102 @@ type TopEdgeGuard(os: OS) =
             buttonScan <- Some(key, value)
             value
 
-    member this.hide() =
-        match window with
-        | Some w -> TopEdgeGuardPlacement.hide w.hwnd
-        | None -> ()
-        shown <- false
-        lastRect <- None
-
-    member private this.trace(key: obj, build: unit -> string) =
+    member this.auditDecision(phase: string) =
 #if DEBUG
-        traceChanges.Write(key, build, fun line ->
-            Diagnostics.Trace.WriteLine(sprintf "[TopEdgeGuard] %s updates=%d placements=%d zorder=%d" line updates placements zorders))
+        let hwnd = window |> Option.map (fun w -> w.hwnd) |> Option.defaultValue IntPtr.Zero
+        TopEdgeGuardPlacement.traceDecision phase hwnd strip owner None None None
 #else
         ()
 #endif
 
-    member private this.trace(line: string) = this.trace(box line, fun () -> line)
+    member this.hide() =
+        lastFailedOrder <- None
+        this.auditDecision("hide-enter")
+        lastOrder <- None
+        match window with
+        | Some w ->
+            TopEdgeGuardPlacement.hideAndDemote w.hwnd
+#if DEBUG
+            if shown then
+                Diagnostics.Trace.WriteLine(sprintf "[TopEdgeGuard] hidden owner=%X guard=%X foreground=%X"
+                    (int64 owner) (int64 w.hwnd) (int64 (WinUserApi.GetForegroundWindow())))
+#endif
+        | None -> ()
+        shown <- false
+        this.auditDecision("hide-final")
 
-    member this.followsStrip = inside && eligible && not disposed
-    member this.followsMarginFrames = marginOrder && this.followsStrip
+    member private this.trace(key: obj, build: unit -> string) =
+#if DEBUG
+        traceChanges.Write(key, build, fun line ->
+            Diagnostics.Trace.WriteLine(sprintf "[TopEdgeGuard] %s" line))
+#else
+        ()
+#endif
 
-    member this.stripChanged(strip: IntPtr) =
-        let safe () =
-            match window, lastRect with
-            | Some w, Some rect ->
-                let observed = TopEdgeGuardPlacement.observe w.hwnd strip owner rect
-                TopEdgeGuardPolicy.safeOrder observed && observed.ownerReady &&
-                (not marginOrder || TopEdgeGuardPlacement.marginSafe w.hwnd strip owner) &&
-                not (observed.stripTopmost && not allowTopmost)
-            | _ -> false
-        TopEdgeGuardPolicy.stripNotification this.followsStrip disposed shown
-            (fun () -> TopEdgeGuardPlacement.visible strip) safe this.hide
+    member private this.trace(line: string) =
+        this.auditDecision(line)
+        this.trace(box line, fun () -> line)
 
-    /// Put the guard over the top edge of `ownerHwnd`, or take it away when
-    /// the setting is off, the window is gone or maximized (no top border to
-    /// grab).
-    /// `marginTop` is the per-exe margin of the window in front (0 for most).
-    /// An application with one - LINE - hangs its own frame windows in that
-    /// band, above its main window, and resizes from them; the guard then
-    /// starts at the outer edge of that frame and is raised above it. Every
-    /// other window keeps the plain band over its own top border, owned by it,
-    /// so nothing of another application is ever covered.
-    /// `tabsInside`: the tabs are drawn inside the window, over the band's own
-    /// rows. The strip is transparent between and after the tabs, so the band
-    /// is still needed there, but it goes directly behind the strip - the tabs
-    /// take every press on a tab, the band every press that falls through the
-    /// strip's transparent part - and it is never put above the strip, margin
-    /// or not (TopEdgeGuardPolicy.decide).
-    member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, keepOnTop: bool, mayScan: bool,
+    member this.followsStrip = eligible && not disposed
+
+    member this.invalidateOrder() = lastOrder <- None
+
+    member private this.orderKey(stripHwnd: IntPtr, guard: IntPtr) =
+        (stripHwnd, TopEdgeGuardPlacement.above owner, TopEdgeGuardPlacement.above guard,
+         TopEdgeGuardPlacement.above stripHwnd, TopEdgeGuardPlacement.isTopMost owner,
+         TopEdgeGuardPlacement.isTopMost guard, TopEdgeGuardPlacement.isTopMost stripHwnd,
+         TopEdgeGuardPlacement.visible stripHwnd, TopEdgeGuardPlacement.ownerOf stripHwnd, keepTopmost)
+
+    member this.stripChanged(stripHwnd: IntPtr) =
+        match window with
+        | Some w when this.followsStrip ->
+            if not shown then
+                this.auditDecision("repair-hidden-request")
+                true
+            else
+                let aboveOwner = TopEdgeGuardPlacement.above owner
+                let key = this.orderKey(stripHwnd, w.hwnd)
+                // Only direct adjacency proves no window was inserted between
+                // the guard and owner. Owned-frame chains still need validation.
+                if aboveOwner = w.hwnd && lastOrder = Some key &&
+                   (not keepTopmost || TopEdgeGuardPlacement.foregroundOwner owner) then
+                    this.auditDecision("repair-cached-safe")
+                    PerfTrace.count "topEdgeGuard.repairUnchanged"
+                    TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
+                    false
+                else
+                    let safe = TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost
+                    this.auditDecision(if safe then "repair-safe" else "repair-unsafe")
+                    if safe then
+                        lastOrder <- Some key
+                        lastFailedOrder <- None
+                        TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
+                        false
+                    elif TopEdgeGuardPlacement.canKeepShown w.hwnd owner then
+                        // No repeated retry for the same failed native order.
+                        // A changed neighbour, foreground, or geometry permits
+                        // another attempt through the existing event paths.
+                        lastFailedOrder <> Some key
+                    else
+                        this.hide()
+                        true
+        | _ -> false
+
+    /// Cover the target's top border and its contiguous owned margin frames.
+    /// The strip and unrelated windows always keep their input priority.
+    member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, useTopmost: bool, mayScan: bool,
                        tabsInside: bool, stripHwnd: IntPtr) =
-        updates <- updates + 1L
-        inside <- tabsInside
-        marginOrder <- TopEdgeGuardPolicy.useMarginOrder tabsInside marginTop
-        let keepOnTop = keepOnTop && not marginOrder
-        allowTopmost <- keepOnTop
+        lastOrder <- None
+        keepTopmost <- useTopmost
+        strip <- stripHwnd
         eligible <- wanted && not disposed && ownerHwnd <> IntPtr.Zero && bounds.IsSome
+#if DEBUG
+        let hwnd = window |> Option.map (fun w -> w.hwnd) |> Option.defaultValue IntPtr.Zero
+        TopEdgeGuardPlacement.traceDecision
+            (sprintf "update-enter(wanted=%b,disposed=%b,bounds=%b,inside=%b,topmost=%b)"
+                wanted disposed bounds.IsSome tabsInside useTopmost)
+            hwnd stripHwnd ownerHwnd None None None
+#endif
         if disposed || not wanted || ownerHwnd = IntPtr.Zero || bounds.IsNone then
             this.hide()
             this.trace("hidden: unavailable")
@@ -360,19 +401,15 @@ type TopEdgeGuard(os: OS) =
                 eligible <- false
                 this.hide()
                 this.trace("hidden: target unavailable")
-            elif tabsInside && not stripReady then
+            elif tabsInside && not stripReady && TopEdgeGuardPlacement.foregroundOwner ownerHwnd then
                 this.hide()
                 this.trace("hidden: StripUnavailable")
-            elif tabsInside && not marginOrder && TopEdgeGuardPlacement.isTopMost stripHwnd && not keepOnTop then
-                this.hide()
-                this.trace("hidden: StripRaisedForSwitch")
             else
                 let bounds = bounds.Value
                 let w = this.ensureWindow()
                 if owner <> ownerHwnd then
                     this.hide()
-                    // The shared downward placement sets the native owner while hidden.
-                    if not tabsInside then os.windowFromHwnd(w.hwnd).setParent(target)
+                    // Shared placement sets and verifies the native owner while hidden.
                     owner <- ownerHwnd
                 // The window's own scale, not the primary monitor's: the band
                 // has to be as tall as the resize border of the monitor this
@@ -413,67 +450,41 @@ type TopEdgeGuard(os: OS) =
                 // margin: the band starts there and reaches past the window's
                 // own top border.
                 let rect = TopEdgeGuardPolicy.rectangle bounds.location.x bounds.location.y width marginTop band leftGap
-                let x, y, cx, cy = rect.x, rect.y, rect.width, rect.height
-                lastRect <- Some rect
+                let rect =
+                    match TopEdgeGuardPlacement.rectOf ownerHwnd with
+                    | Some nativeBounds -> TopEdgeGuardPolicy.clipHorizontal nativeBounds leftGap rect
+                    | None -> { rect with width = 0 }
                 let repaint () =
                     if TopEdgeGuardOptions.showBand then
                         // A plain move asks for no paint of its own.
                         WinUserApi.RedrawWindow(w.hwnd, IntPtr.Zero, IntPtr.Zero,
                             RedrawWindowFlags.RDW_INVALIDATE ||| RedrawWindowFlags.RDW_ERASE |||
                             RedrawWindowFlags.RDW_UPDATENOW).ignore
-                if tabsInside then
-                    // Margin frames share the owner. Raise only within the
-                    // ordinary layer, then use the same guarded band placement.
-                    let result =
-                        if marginOrder then TopEdgeGuardPlacement.placeMargin w.hwnd stripHwnd ownerHwnd rect
-                        else TopEdgeGuardPlacement.place w.hwnd stripHwnd ownerHwnd keepOnTop rect
-                    placements <- placements + int64 result.placements
-                    zorders <- zorders + int64 result.zorders
-                    shown <- result.after.bandVisible
-                    PerfTrace.count (if result.zorders > 0 then "topEdgeGuard.inserted"
-                                     elif result.placements > 0 then "topEdgeGuard.moved"
-                                     elif shown then "topEdgeGuard.unchanged" else "topEdgeGuard.hidden")
-                    if not shown then lastRect <- None
-                    let reason = TopEdgeGuardPolicy.hiddenReason keepOnTop result.after
-                    let key = box (ownerHwnd, stripHwnd, w.hwnd, rect, shown, reason, result.succeeded)
-                    this.trace(key, fun () ->
-                        sprintf "owner=%X strip=%X guard=%X rect=%A prev=%X decision=%A hiddenReason=%A success=%b before=%A after=%A"
-                            (int64 ownerHwnd) (int64 stripHwnd) (int64 w.hwnd)
-                            (TopEdgeGuardPlacement.rectOf w.hwnd) (int64 (TopEdgeGuardPlacement.above w.hwnd))
-                            result.decision reason result.succeeded result.before result.after)
-                    if result.placements > 0 && shown then repaint()
-                else
-                    // With a margin the band has to start above the window's own
-                    // rectangle, where that application's frame windows are, and
-                    // be raised over them. They are ordinary windows, not topmost,
-                    // so this only ever reaches over the application's own frame.
-                    // A window with a margin keeps raising its own frame windows
-                    // above everything of its own, so being merely at the top of
-                    // the ordinary order is not enough while it is the tab in
-                    // front: the band is topmost for as long as it shows, and goes
-                    // back to ordinary the moment another tab does.
-                    let insertAfter, flags =
-                        match TopEdgeGuardPolicy.stacking
-                            { tabsInside = false; keepOnTop = keepOnTop; marginTop = marginTop
-                              bandIsTopMost = os.windowFromHwnd(w.hwnd).isTopMost
-                              strip = stripHwnd; stripIsTopMost = false; immediatelyBehind = false } with
-                        | TopEdgeGuardPolicy.Topmost ->
-                            WindowHandleTypes.HWND_TOPMOST, SetWindowPosFlags.SWP_NOACTIVATE
-                        | TopEdgeGuardPolicy.LeaveTopmost ->
-                            WindowHandleTypes.HWND_NOTOPMOST, SetWindowPosFlags.SWP_NOACTIVATE
-                        | _ ->
-                            IntPtr.Zero, SetWindowPosFlags.SWP_NOACTIVATE ||| SetWindowPosFlags.SWP_NOZORDER
-                    // The band is owned by the window it guards, and moving an
-                    // owned window carries its owner up with it unless this is
-                    // said. The band is placed again on every event the window
-                    // sends, so without it the guarded window kept being raised -
-                    // over a window the application had just opened, among others.
-                    let flags = flags ||| SetWindowPosFlags.SWP_NOOWNERZORDER
-                    WinUserApi.SetWindowPos(w.hwnd, insertAfter, x, y, cx, cy, flags).ignore
-                    repaint ()
-                    if not shown then
-                        WinUserApi.ShowWindow(w.hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE).ignore
-                        shown <- true
+                // An owned resize frame may lie above the native rectangle
+                // even when no margin was configured. Extend upward before
+                // z-order selection so frameInBand also admits that frame.
+                shown <-
+                    match TopEdgeGuardPlacement.coverOwnedTopFrames w.hwnd stripHwnd ownerHwnd rect with
+                    | Some covered ->
+                        TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
+                    | None ->
+                        this.auditDecision("coverage-unavailable")
+                        this.hide()
+                        false
+                if shown then
+                    if TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost then
+                        lastFailedOrder <- None
+                    else lastFailedOrder <- Some (this.orderKey(stripHwnd, w.hwnd))
+                    repaint()
+#if DEBUG
+                let previous = TopEdgeGuardPlacement.above ownerHwnd
+                let key = box (ownerHwnd, stripHwnd, w.hwnd, previous, shown)
+                this.trace(key, fun () ->
+                    sprintf "owner=%X strip=%X guard=%X aboveOwner=%X aboveGuard=%X foreground=%X shown=%b"
+                        (int64 ownerHwnd) (int64 stripHwnd) (int64 w.hwnd) (int64 previous)
+                        (int64 (TopEdgeGuardPlacement.above w.hwnd))
+                        (int64 (WinUserApi.GetForegroundWindow())) shown)
+#endif
 
     member this.dispose() =
         disposed <- true

@@ -24,6 +24,8 @@ module TopEdgeGuardPlacement =
         [<DllImport("user32.dll", EntryPoint = "SetWindowLongW")>]
         extern nativeint SetOwner32(nativeint hwnd, int index, nativeint owner)
         [<DllImport("user32.dll")>]
+        extern nativeint GetForegroundWindow()
+        [<DllImport("user32.dll")>]
         extern bool IsWindowVisible(nativeint hwnd)
         [<DllImport("user32.dll")>]
         extern bool IsWindow(nativeint hwnd)
@@ -56,6 +58,131 @@ module TopEdgeGuardPlacement =
             else walk (Native.GetWindow(hwnd, 2u)) (remaining - 1)
         upper <> 0n && lower <> 0n && upper <> lower &&
         walk (Native.GetWindow(upper, 2u)) 4096
+
+    // Snapshots are taken on the window thread; only immutable text goes to
+    // the writer. No titles, class names, executable names or exception text.
+#if DEBUG
+    module private FileTrace =
+        let enabled = System.Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_GUARD_TRACE") = "1"
+        let gate = obj()
+        let pending = System.Collections.Generic.Queue<string>()
+        let mutable writing = false
+        let mutable sequence = 0L
+        let mutable dropped = 0
+        let append line =
+            let start =
+                lock gate (fun () ->
+                    sequence <- sequence + 1L
+                    if pending.Count < 4096 then
+                        pending.Enqueue(sprintf "%d %s %s" sequence
+                            (System.DateTime.UtcNow.ToString("O")) line)
+                    else dropped <- dropped + 1
+                    if writing then false
+                    else
+                        writing <- true
+                        true)
+            if start then
+                System.Threading.ThreadPool.QueueUserWorkItem(fun _ ->
+                    let mutable running = true
+                    while running do
+                        let batch =
+                            lock gate (fun () ->
+                                if pending.Count = 0 then
+                                    writing <- false
+                                    running <- false
+                                    [||]
+                                else
+                                    let lines = pending.ToArray()
+                                    pending.Clear()
+                                    let lost = dropped
+                                    dropped <- 0
+                                    if lost = 0 then lines
+                                    else Array.append [| sprintf "dropped=%d" lost |] lines)
+                        if batch.Length > 0 then
+                            try
+                                let directory = System.IO.Path.Combine(
+                                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "WindowTabs")
+                                System.IO.Directory.CreateDirectory(directory) |> ignore
+                                let path = System.IO.Path.Combine(directory, "guard_trace.log")
+                                if System.IO.File.Exists(path) && System.IO.FileInfo(path).Length > 8388608L then
+                                    let previous = path + ".1"
+                                    if System.IO.File.Exists(previous) then System.IO.File.Delete(previous)
+                                    System.IO.File.Move(path, previous)
+                                System.IO.File.AppendAllLines(path, batch, System.Text.Encoding.UTF8)
+                            with _ -> ()) |> ignore
+#endif
+
+    let traceDecision phase band strip owner (requested: TopEdgeGuardPolicy.Band option)
+                      (anchor: nativeint option) (swp: bool option) =
+#if DEBUG
+        // Off unless WINDOWTABS_DEBUG_GUARD_TRACE=1: every decision walks the z-order.
+        if FileTrace.enabled then
+            try
+                let ownerRect = rectOf owner
+                let guardRect = rectOf band
+                let foreground = Native.GetForegroundWindow()
+                let bandRect = match requested with Some _ -> requested | None -> guardRect
+                // One bounded front-to-back read supplies ranks and frame candidates.
+                let rec walk hwnd rank rows =
+                    if hwnd = 0n then true, List.rev rows
+                    elif rank = 4096 then false, List.rev rows
+                    else
+                        let parent = ownerOf hwnd
+                        let rows =
+                            if hwnd = owner || hwnd = band || hwnd = strip || (owner <> 0n && parent = owner) then
+                                let rect = rectOf hwnd
+                                let covered, external =
+                                    match bandRect, ownerRect, rect with
+                                    | Some b, Some o, Some r ->
+                                        TopEdgeGuardPolicy.frameInBand b r, TopEdgeGuardPolicy.topFrame o b r
+                                    | _ -> false, false
+                                let row = sprintf "{hwnd=%X owner=%X rect=%A z=%d prev=%X next=%X visible=%b topmost=%b covered=%b external=%b}"
+                                              (int64 hwnd) (int64 parent) rect rank (int64 (above hwnd))
+                                              (int64 (Native.GetWindow(hwnd, 2u))) (visible hwnd) (isTopMost hwnd) covered external
+                                row :: rows
+                            else rows
+                        walk (Native.GetWindow(hwnd, 2u)) (rank + 1) rows
+                let complete, rows = walk (Native.GetTopWindow 0n) 0 []
+                let line = sprintf "phase=%s owner=%X ownerRect=%A guard=%X strip=%X foreground=%X behind=%b aboveOwner=%X requested=%A insertAfter=%s swp=%A finalRect=%A visible=%b ownerValid=%b ownerVisible=%b iconic=%b zoomed=%b stripVisible=%b stripAboveGuard=%b complete=%b z=[%s]"
+                               phase (int64 owner) ownerRect (int64 band) (int64 strip) (int64 foreground)
+                               (owner = 0n || foreground <> owner) (int64 (above owner)) requested
+                               (anchor |> Option.map (fun hwnd -> sprintf "0x%X" (int64 hwnd)) |> Option.defaultValue "not-called") swp guardRect (visible band)
+                               (Native.IsWindow owner) (visible owner) (Native.IsIconic owner) (Native.IsZoomed owner)
+                               (visible strip) (isAbove strip band) complete (System.String.Join(";", rows))
+                FileTrace.append (line.Replace("\r", " ").Replace("\n", " "))
+            with _ -> ()
+#else
+        ()
+#endif
+
+    let private setPosition band strip owner anchor x y width height flags =
+        let ok = Native.SetWindowPos(band, anchor, x, y, width, height, flags)
+        // Capture BEFORE validation can hide the guard or a queued repair runs.
+#if DEBUG
+        let requested : TopEdgeGuardPolicy.Band = { x = x; y = y; width = width; height = height }
+        traceDecision (sprintf "SetWindowPos(flags=%X)" flags) band strip owner (Some requested) (Some anchor) (Some ok)
+#endif
+        ok
+
+    let reownStrip strip owner reason =
+        let previous = ownerOf strip
+        if Native.IsWindow strip && (owner = 0n || Native.IsWindow owner) && previous <> owner then
+            if System.IntPtr.Size = 8 then Native.SetOwner64(strip, -8, owner) |> ignore
+            else Native.SetOwner32(strip, -8, owner) |> ignore
+#if DEBUG
+            traceDecision (sprintf "strip-reown(reason=%s,old=%X,new=%X,actual=%X)"
+                reason (int64 previous) (int64 owner) (int64 (ownerOf strip))) 0n strip owner None None None
+#endif
+        ownerOf strip = owner
+
+    let repairStripAboveGuard band strip owner =
+        if Native.GetForegroundWindow() = owner && Native.IsWindow strip then
+            reownStrip strip owner "guard-placement" |> ignore
+            if visible strip && visible band && not (isAbove strip band) then
+                let previous = above band
+                // Move only the strip, immediately before the guard. Keep all
+                // unrelated windows already above the guard above the strip too.
+                setPosition strip strip owner previous 0 0 0 0 0x0213u |> ignore
 
     let hide band =
         if visible band then Native.ShowWindow(band, 0) |> ignore
@@ -101,7 +228,7 @@ module TopEdgeGuardPlacement =
                     hide band
                     placements <- placements + 1
                     zorders <- zorders + 1
-                    ok <- Native.SetWindowPos(band, -1n, 0, 0, 0, 0, 0x0213u)
+                    ok <- setPosition band strip owner -1n 0 0 0 0 0x0213u
                 // Owner changes may reorder owned windows. Re-read before deciding.
                 let current = observe band strip owner rect
                 let action = TopEdgeGuardPolicy.decide keepOnTop current
@@ -113,8 +240,8 @@ module TopEdgeGuardPlacement =
                     placements <- placements + 1
                     zorders <- zorders + (if reorder then 1 else 0)
                     let flags = 0x0250u ||| (if reorder then 0u else 0x0004u)
-                    ok <- Native.SetWindowPos(band, (if reorder then strip else 0n),
-                                             rect.x, rect.y, rect.width, rect.height, flags)
+                    ok <- setPosition band strip owner (if reorder then strip else 0n)
+                                      rect.x rect.y rect.width rect.height flags
                 // Never accept adjacency alone, or a successful API return alone.
                 let final = observe band strip owner rect
                 if not ok || TopEdgeGuardPolicy.decide keepOnTop final <> TopEdgeGuardPolicy.Unchanged then
@@ -177,3 +304,143 @@ module TopEdgeGuardPlacement =
         with _ ->
             hide band
             reraise()
+
+    // Discover external top frames independently of configured margins. Only
+    // visible windows directly owned by this target participate; no class or
+    // process names, and no messages are sent to another process.
+    let coverOwnedTopFrames band strip owner rect =
+        match rectOf owner with
+        | None -> None
+        | Some ownerRect ->
+            let rect = TopEdgeGuardPolicy.clipHorizontal ownerRect 0 rect
+            let rec walk hwnd remaining frames =
+                if hwnd = 0n then Some (TopEdgeGuardPolicy.coverTopFrames ownerRect rect frames)
+                elif remaining = 0 then None
+                else
+                    let frames =
+                        if hwnd <> band && hwnd <> strip && ownerOf hwnd = owner && visible hwnd then
+                            match rectOf hwnd with
+                            | Some frame -> frame :: frames
+                            | None -> frames
+                        else frames
+                    walk (above hwnd) (remaining - 1) frames
+            if rect.width <= 0 then None else walk (above owner) 4096 []
+
+    // Find the highest covered frame in the whole order above the owner.
+    // Insertion immediately before that frame preserves every window above it;
+    // stopping at the first unrelated sibling could leave a higher frame exposed.
+    let targetBelow band strip owner (rect: TopEdgeGuardPolicy.Band) =
+        let rec walk hwnd remaining candidates =
+            if hwnd = 0n then
+                TopEdgeGuardPolicy.highestCoveredFrame owner (List.rev candidates)
+            elif remaining = 0 then 0n
+            else
+                let covered =
+                    hwnd <> band && hwnd <> strip && ownerOf hwnd = owner &&
+                    visible hwnd && isTopMost hwnd = isTopMost owner &&
+                    (match rectOf hwnd with
+                     | Some frame -> TopEdgeGuardPolicy.frameInBand rect frame
+                     | None -> false)
+                walk (above hwnd) (remaining - 1) ((hwnd, covered) :: candidates)
+        walk (above owner) 4096 []
+
+    let foregroundOwner owner = owner <> 0n && Native.GetForegroundWindow() = owner
+
+    let ownerSafe band strip owner =
+        if not (Native.IsWindow owner) ||
+           not (visible owner) || Native.IsIconic owner || Native.IsZoomed owner then false
+        else
+            let target =
+                match rectOf band with
+                | Some rect -> targetBelow band strip owner rect
+                | None -> 0n
+            // Foreground and strip order do not determine whether an exposed
+            // background border is locked. Only the guard's own native order does.
+            target <> 0n && ownerOf band = owner &&
+            not (isTopMost band) && above target = band
+
+    // A stale frame snapshot can fail adjacency after a successful insertion.
+    // Keep that best position only while it cannot intercept another group's
+    // window: every intervening window down to the owner must belong to it.
+    let canKeepShown band owner =
+        let rec walk hwnd remaining =
+            if hwnd = owner then true
+            elif hwnd = 0n || remaining = 0 || ownerOf hwnd <> owner then false
+            else walk (Native.GetWindow(hwnd, 2u)) (remaining - 1)
+        foregroundOwner owner && visible owner && visible band &&
+        not (Native.IsIconic owner) && not (Native.IsZoomed owner) &&
+        ownerOf band = owner && isTopMost band = isTopMost owner &&
+        walk (Native.GetWindow(band, 2u)) 4096
+
+    // The owner belongs to another process; GWLP_HWNDPARENT is written only on
+    // our popup. Verify the relationship, since a zero API return is ambiguous.
+    // Hide during owner/layer changes, and show only in the final insertion.
+    let placeAtOwner band strip owner (rect: TopEdgeGuardPolicy.Band) =
+        traceDecision "place-owner-enter" band strip owner (Some rect) None None
+        let mutable ok = Native.IsWindow owner && visible owner &&
+                         not (Native.IsIconic owner) && not (Native.IsZoomed owner)
+        if ok && ownerSafe band strip owner && visible band && rectOf band = Some rect then
+            traceDecision "place-owner-unchanged" band strip owner (Some rect) None None
+            true
+        else
+            // Keep a previously shown band during a plain reorder. If the
+            // native call loses a race, its safe previous position still locks
+            // part of the border instead of disappearing for a retry cycle.
+            if not ok || ownerOf band <> owner || isTopMost band then hide band
+            if ok && ownerOf band <> owner then
+                if System.IntPtr.Size = 8 then Native.SetOwner64(band, -8, owner) |> ignore
+                else Native.SetOwner32(band, -8, owner) |> ignore
+                ok <- ownerOf band = owner
+            if ok && isTopMost band then
+                ok <- setPosition band strip owner -2n 0 0 0 0 0x0213u
+            let target = if ok then targetBelow band strip owner rect else 0n
+#if DEBUG
+            traceDecision (sprintf "selected-frame(target=%X)" (int64 target)) band strip owner (Some rect) None None
+#endif
+            if target = 0n then ok <- false
+            if ok then
+                let previous = above target
+                let previous = if previous = band then above band else previous
+                // HWND_TOP keeps an ordinary band below the topmost layer.
+                let anchor = if isTopMost previous then 0n else previous
+                ok <- setPosition band strip owner anchor rect.x rect.y rect.width rect.height 0x0250u
+                ok <- ok && ownerSafe band strip owner && rectOf band = Some rect
+                traceDecision (if ok then "validated" else "validation-failed") band strip owner (Some rect) (Some anchor) None
+            if not ok && canKeepShown band owner then
+                traceDecision "validation-deferred-keep-shown" band strip owner (Some rect) None None
+                ok <- true
+            if not ok then hide band
+            ok
+
+    // Used when relinquishing foreground, including the UWP compatibility layer.
+    let hideAndDemote band =
+        hide band
+        if isTopMost band then
+            setPosition band 0n (ownerOf band) -2n 0 0 0 0 0x0213u |> ignore
+
+    let safeForOwner band strip owner keepTopmost =
+        if not keepTopmost || not (foregroundOwner owner) then ownerSafe band strip owner
+        else
+            match rectOf band with
+            | None -> false
+            | Some rect ->
+                let observed = observe band strip owner rect
+                observed.ownerReady && observed.stripReady && observed.sameOwner &&
+                observed.stripTopmost && TopEdgeGuardPolicy.safeOrder observed
+
+    let placeForOwner band strip owner keepTopmost rect =
+        // A stale UWP request must fall back to ordinary placement on focus loss.
+        let keepTopmost = keepTopmost && foregroundOwner owner
+        if foregroundOwner owner then reownStrip strip owner "guard-before-placement" |> ignore
+        let ok =
+            if not keepTopmost then placeAtOwner band strip owner rect
+            elif foregroundOwner owner && isTopMost strip then
+                // UWP frame composition needs the same layer as its strip.
+                // Reuse its verified, non-activating insertion behind the strip.
+                let result = place band strip owner true rect
+                result.succeeded && safeForOwner band strip owner true
+            else false
+        if ok then repairStripAboveGuard band strip owner
+        else hideAndDemote band
+        traceDecision (if ok then "place-final-shown" else "place-final-hidden") band strip owner (Some rect) None None
+        ok
