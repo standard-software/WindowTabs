@@ -748,7 +748,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.stripOwnerHwnd =
         if this.isEmpty then IntPtr.Zero
         else
-            VirtualDesktopGroups.stripOwner zorderCell.value.list (VirtualDesktopGroups.Live.shared())
+            let state = VirtualDesktopGroups.Live.snapshot()
+            VirtualDesktopGroups.stripOwnerHere zorderCell.value.list (VirtualDesktopGroups.Live.shared())
+                (VirtualDesktopGroups.Live.isHere state)
             |> Option.defaultValue zorderCell.value.head
 
     member private this.updateStripOwner() =
@@ -769,12 +771,31 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         this.os.windowFromHwnd(this.ts.hwnd).insertAfter(above)
                 with _ -> ()
 
+    // The tabs of the windows that are on another desktop are drawn dimmed.
+    // The front tab is never one of them: when the front window is elsewhere,
+    // the frontmost window that is here takes its place in the group's own
+    // order. No window is touched - raising one of another desktop would
+    // switch to it.
+    member private this.updateDimmedTabs(shown: bool) =
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let away =
+            if this.isEmpty || not (VirtualDesktopGroups.Live.isFresh state) then []
+            else
+                VirtualDesktopGroups.dimmed shown
+                    (fun h -> (VirtualDesktopGroups.Live.read state h).presence) zorderCell.value.list
+        if not away.IsEmpty && List.contains zorderCell.value.head away then
+            zorderCell.value.list
+            |> List.tryFind (VirtualDesktopGroups.Live.isHere state)
+            |> Option.iter this.bringToTop
+        this.ts.setDimmedTabs(away |> List.map Tab)
+
     /// Called by the main thread's desktop pass (through GroupInfo): whether
     /// this group is the one of the desktop being looked at. Re-chooses the
     /// strip's owner (the set of windows shown everywhere may have changed),
     /// and hides the strip only where the shell has not already done so.
     member this.applyDesktopState(shown: bool) =
         desktopShown <- shown
+        this.updateDimmedTabs(shown)
         this.updateStripOwner()
         let owner = this.stripOwnerHwnd
         let ownerPresence =

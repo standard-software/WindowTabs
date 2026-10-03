@@ -297,7 +297,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | true, d -> d.group.isDesktopShownThreadSafe
                 | _ -> true)
         let state = VirtualDesktopGroups.Live.snapshot()
-        shown && (info.tabHwnds |> List.forall (VirtualDesktopGroups.Live.isHere state))
+        // Drawn here with some of its windows elsewhere, it is still this
+        // desktop's group.
+        shown && (if VirtualDesktopGroups.keepAway then info.tabHwnds |> List.exists (VirtualDesktopGroups.Live.isHere state)
+                  else info.tabHwnds |> List.forall (VirtualDesktopGroups.Live.isHere state))
 
     /// A tab group is one window to the person using it, so it belongs on one
     /// virtual desktop. Nothing stops a tabbed window from being sent to
@@ -485,7 +488,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let stillAway = stayedHere && not away.IsEmpty && away.Length = strays.Length
         let act =
             VirtualDesktopGroups.Live.canDecide state group.windows.items.list &&
-            VirtualDesktopIntegrity.actOnStraddle && stillAway && not tooSoon && elsewhere = 0
+            VirtualDesktopIntegrity.actOnStraddle && not VirtualDesktopGroups.keepAway &&
+            stillAway && not tooSoon && elsewhere = 0
         VirtualDesktopTrace.log (fun () ->
             sprintf "group=%X straddle CONFIRMED base=%s strays=%s stillAway=%b tooSoon=%b otherGroups=%d -> %s"
                 (group.hwnd.ToInt64()) ((string baseDesktop).Substring(0, 8))

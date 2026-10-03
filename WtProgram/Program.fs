@@ -490,6 +490,8 @@ type Program() as this =
     // trusted to be the one looked at; and the pass's scheduling.
     let mutable desktopEvidence : Map<IntPtr, VirtualDesktopGroups.Evidence> = Map.empty
     let mutable pendingDesktopVisits : VirtualDesktopGroups.Visit list = []
+    // The groups that had a dimmed tab on the last desktop pass.
+    let mutable straddlingDesktopGroups : Set<IntPtr> = Set.empty
     let mutable desktopTransferPending = false
     let mutable previousDesktop : Guid option = None
     let mutable desktopPassPending = false
@@ -2636,6 +2638,15 @@ type Program() as this =
                 let states =
                     states |> List.map (fun s ->
                         { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) leaving)) })
+                // A window shown on all desktops is left in one group.
+                let surplus = VirtualDesktopGroups.surplusCopies d readMap states
+                for (i, h) in surplus do
+                    VirtualDesktopTrace.log (fun () ->
+                        sprintf "surplus copy removed: hwnd=%X group=%X" (h.ToInt64()) (try keyed.[i].hwnd.ToInt64() with _ -> 0L))
+                    keyed.[i].removeWindow(h)
+                let states =
+                    states |> List.map (fun s ->
+                        { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) surplus)) })
                 let decisions = VirtualDesktopGroups.decide d readMap shared states
                 let sharedChanged = shared <> wasShared
                 for dec in decisions do
@@ -2646,7 +2657,18 @@ type Program() as this =
                     // pass: its strip's owner, and whether that owner is here,
                     // change without its display changing.
                     let holdsShared = g.windows.any(fun h -> shared.Contains h || wasShared.Contains h || several.Contains h)
-                    if shown <> g.isDesktopShown || sharedChanged || holdsShared then
+                    // So is a group with windows on another desktop, and once
+                    // more after the last of them is back: which tabs are
+                    // dimmed changes without its display changing.
+                    let presenceOf h =
+                        match readMap.TryFind h with
+                        | Some r -> r.presence
+                        | None -> VirtualDesktopGroups.Unsure
+                    let straddles = not (VirtualDesktopGroups.dimmed shown presenceOf g.windows.list).IsEmpty
+                    let straddled = straddlingDesktopGroups.Contains g.hwnd
+                    straddlingDesktopGroups <-
+                        if straddles then straddlingDesktopGroups.Add g.hwnd else straddlingDesktopGroups.Remove g.hwnd
+                    if shown <> g.isDesktopShown || sharedChanged || holdsShared || straddles || straddled then
                         if shown && not g.isDesktopShown then
                             g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
                         g.setDesktopShown(shown)
@@ -2663,10 +2685,14 @@ type Program() as this =
                         not (isDroppedAndAwaitingGrouping.value.contains h) &&
                         (try this.isTabbableWindow(os.windowFromHwnd(h)) with _ -> false)
                     let state = VirtualDesktopGroups.Live.snapshot()
-                    let moves = VirtualDesktopGroups.Live.movesNow state withDisplay eligible
+                    let moves =
+                        if VirtualDesktopGroups.keepAway then []
+                        else VirtualDesktopGroups.Live.movesNow state withDisplay eligible
                     moves |> List.tryHead |> Option.iter (fun move ->
                         this.moveDesktopGroup(keyed.[move.source], move.members, c))
-                    let visits = VirtualDesktopGroups.Live.visitsNow state withDisplay eligible
+                    let visits =
+                        if VirtualDesktopGroups.keepAway then []
+                        else VirtualDesktopGroups.Live.visitsNow state withDisplay eligible
                     if VirtualDesktopGroups.sameVisits pendingDesktopVisits visits then
                         pendingDesktopVisits <- []
                         for v in visits do
