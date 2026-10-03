@@ -115,7 +115,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.10.03_next2**
+最新のバージョン: **ss_2026.10.03_next3**
 
 詳細は [version_Japanese.md](version_Japanese.md) を参照してください。
 
@@ -312,7 +312,6 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 - `WindowTabs.exe` と同じ場所の `Settings\` に既定値があります
     - `VersionFolder.json` — バージョンごとにフォルダが変わるアプリを同一視する設定
-    - `WindowMargin.json` — ウィンドウの枠が太いアプリに対応する設定
     - `Language\FileList.json` と `Language\言語.json` — 言語ファイル
 - ここのファイルはバージョンアップのたびに上書きされます。変更するときは `%APPDATA%\WindowTabs\Settings\` に同名のファイルを置いてください。項目単位で同梱のものに重なります
 - 言語を追加するには、`MyLanguage.json` と、それを載せた `FileList.json` を `%APPDATA%\WindowTabs\Settings\Language` に置きます
@@ -322,7 +321,8 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 ### ss_2026.09.02 以前の設定ファイルについて
 
 - ss_2026.09.02 までは、言語ファイルは `Language\` に、余白設定は `Settings\Window_Margin.json` にあり、直接編集する仕様でした。現在のバージョンはどちらも読みません (MSI は削除し、zip では残ります)
-- 編集していた場合は、バージョンアップの前に `%APPDATA%\WindowTabs\Settings\Language\` と `%APPDATA%\WindowTabs\Settings\WindowMargin.json` へ移してください
+- 言語ファイルを編集していた場合は、バージョンアップの前に `%APPDATA%\WindowTabs\Settings\Language\` へ移してください
+- 余白はもう手で設定しません。アプリが自分のウィンドウの周りに持つ外枠のウィンドウを、WindowTabs が見分けます
 
 ### 最新バージョンの確認
 

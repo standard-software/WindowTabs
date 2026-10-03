@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next2**
+Latest version: **ss_2026.10.03_next3**
 
 See [version.md](version.md) for details.
 
@@ -312,7 +312,6 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 - `Settings\` beside `WindowTabs.exe` holds the defaults
     - `VersionFolder.json` - applications whose path changes with every version are treated as one application
-    - `WindowMargin.json` - settings for applications with thick window frames
     - `Language\FileList.json` and `Language\<language>.json` - the language files
 - Those files are replaced by every upgrade. To change one, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
 - To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
@@ -322,7 +321,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Settings files from ss_2026.09.02 and earlier
 
 - Up to ss_2026.09.02 the language files sat in `Language\` and the margins in `Settings\Window_Margin.json`, edited in place. The current version reads neither (the MSI removes them on upgrade; the zip leaves them)
-- If you edited them, move your copies before upgrading, to `%APPDATA%\WindowTabs\Settings\Language\` and `%APPDATA%\WindowTabs\Settings\WindowMargin.json`
+- If you edited the language files, move your copies before upgrading, to `%APPDATA%\WindowTabs\Settings\Language\`
+- Margins are no longer set by hand: WindowTabs finds the frame windows an application draws around its own window
 
 ### Check for Updates
 

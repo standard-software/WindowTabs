@@ -2,10 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next2
+## version ss_2026.10.03_next3
 
 - The top-edge lock no longer covers another group's window in front of it.
   - It also blocks resizing from the top shadow of windows such as LINE.
+- WindowMargin.json is gone; frame windows around a window are found by themselves.
+  - The lock now also works on apps with such frames, e.g. WPF glow borders.
 
 ## version ss_2026.10.03
 
