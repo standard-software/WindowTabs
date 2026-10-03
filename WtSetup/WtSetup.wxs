@@ -57,14 +57,11 @@
                     installed. Nothing here is backed up, because nothing the
                     user writes lives here. -->
                <Directory Id="SettingsFolder" Name="Settings">
-                  <Component Id="SettingsFiles" Guid="E9F1A2B3-4C5D-6E7F-8A9B-0C1D2E3F4A5B" Win64="yes">
+                  <Component Id="SettingsFiles" Guid="30060313-F307-4D5C-B7F6-E94898B794FE" Win64="yes">
                      <RemoveFile Id="RemoveStaleSettingsJson" Name="*.json" On="install" />
 
-                     <File Id="WindowMarginJson"
-                           Source="$(var.WtProgram.TargetDir)Settings\WindowMargin.json"
-                           KeyPath="yes" />
                      <File Id="VersionFolderJson"
-                           Source="$(var.WtProgram.TargetDir)Settings\VersionFolder.json" />
+                           Source="$(var.WtProgram.TargetDir)Settings\VersionFolder.json" KeyPath="yes" />
                   </Component>
 
                   <!-- Languages moved here from <install>\Language. A new

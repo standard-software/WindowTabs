@@ -21,10 +21,8 @@ open Newtonsoft.Json.Linq
 // told apart. Store applications need no entry - Windows decides their
 // layout, so AppPath always handles them.
 //
-// The same shape as Settings\WindowMargin.json, which already names this
-// application for a different reason, so adding one is a matter of editing a
-// file rather than rebuilding. A value of false keeps an entry while turning
-// it off.
+// Adding an entry requires editing settings rather than rebuilding. A value
+// of false keeps an entry while turning it off.
 //
 // This lives apart from AppPath so that AppPath keeps no dependency on
 // Newtonsoft or the file system, and its checks can run under fsi without a

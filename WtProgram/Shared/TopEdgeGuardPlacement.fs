@@ -4,6 +4,11 @@ open System.Runtime.InteropServices
 
 // The production native operation is also used by the isolated-desktop probe.
 module TopEdgeGuardPlacement =
+    let private guards = System.Collections.Concurrent.ConcurrentDictionary<nativeint, byte>()
+    let registerGuard hwnd = guards.[hwnd] <- 0uy
+    let unregisterGuard hwnd = guards.TryRemove(hwnd) |> ignore
+    let isGuard hwnd = guards.ContainsKey hwnd
+
     module private Native =
         [<Struct; StructLayout(LayoutKind.Sequential)>]
         type RECT =

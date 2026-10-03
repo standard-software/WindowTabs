@@ -126,6 +126,7 @@ type TopEdgeGuard(os: OS) =
             // land on. Alpha 0 would let every press through to the border.
             let alpha = if TopEdgeGuardOptions.showBand then 160uy else 1uy
             WinUserApi.SetLayeredWindowAttributes(w.hwnd, 0, alpha, 2 (* LWA_ALPHA *)).ignore
+            TopEdgeGuardPlacement.registerGuard w.hwnd
             window <- Some(w)
             w
 
@@ -490,5 +491,7 @@ type TopEdgeGuard(os: OS) =
         disposed <- true
         eligible <- false
         this.hide()
-        window |> Option.iter (fun w -> (w :?> IDisposable).Dispose())
+        window |> Option.iter (fun w ->
+            TopEdgeGuardPlacement.unregisterGuard w.hwnd
+            (w :?> IDisposable).Dispose())
         window <- None
