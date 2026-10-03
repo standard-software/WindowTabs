@@ -63,6 +63,7 @@ module TopEdgeGuardPlacement =
     // the writer. No titles, class names, executable names or exception text.
 #if DEBUG
     module private FileTrace =
+        let enabled = System.Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_GUARD_TRACE") = "1"
         let gate = obj()
         let pending = System.Collections.Generic.Queue<string>()
         let mutable writing = false
@@ -114,40 +115,42 @@ module TopEdgeGuardPlacement =
     let traceDecision phase band strip owner (requested: TopEdgeGuardPolicy.Band option)
                       (anchor: nativeint option) (swp: bool option) =
 #if DEBUG
-        try
-            let ownerRect = rectOf owner
-            let guardRect = rectOf band
-            let foreground = Native.GetForegroundWindow()
-            let bandRect = match requested with Some _ -> requested | None -> guardRect
-            // One bounded front-to-back read supplies ranks and frame candidates.
-            let rec walk hwnd rank rows =
-                if hwnd = 0n then true, List.rev rows
-                elif rank = 4096 then false, List.rev rows
-                else
-                    let parent = ownerOf hwnd
-                    let rows =
-                        if hwnd = owner || hwnd = band || hwnd = strip || (owner <> 0n && parent = owner) then
-                            let rect = rectOf hwnd
-                            let covered, external =
-                                match bandRect, ownerRect, rect with
-                                | Some b, Some o, Some r ->
-                                    TopEdgeGuardPolicy.frameInBand b r, TopEdgeGuardPolicy.topFrame o b r
-                                | _ -> false, false
-                            let row = sprintf "{hwnd=%X owner=%X rect=%A z=%d prev=%X next=%X visible=%b topmost=%b covered=%b external=%b}"
-                                          (int64 hwnd) (int64 parent) rect rank (int64 (above hwnd))
-                                          (int64 (Native.GetWindow(hwnd, 2u))) (visible hwnd) (isTopMost hwnd) covered external
-                            row :: rows
-                        else rows
-                    walk (Native.GetWindow(hwnd, 2u)) (rank + 1) rows
-            let complete, rows = walk (Native.GetTopWindow 0n) 0 []
-            let line = sprintf "phase=%s owner=%X ownerRect=%A guard=%X strip=%X foreground=%X behind=%b aboveOwner=%X requested=%A insertAfter=%s swp=%A finalRect=%A visible=%b ownerValid=%b ownerVisible=%b iconic=%b zoomed=%b stripVisible=%b stripAboveGuard=%b complete=%b z=[%s]"
-                           phase (int64 owner) ownerRect (int64 band) (int64 strip) (int64 foreground)
-                           (owner = 0n || foreground <> owner) (int64 (above owner)) requested
-                           (anchor |> Option.map (fun hwnd -> sprintf "0x%X" (int64 hwnd)) |> Option.defaultValue "not-called") swp guardRect (visible band)
-                           (Native.IsWindow owner) (visible owner) (Native.IsIconic owner) (Native.IsZoomed owner)
-                           (visible strip) (isAbove strip band) complete (System.String.Join(";", rows))
-            FileTrace.append (line.Replace("\r", " ").Replace("\n", " "))
-        with _ -> ()
+        // Off unless WINDOWTABS_DEBUG_GUARD_TRACE=1: every decision walks the z-order.
+        if FileTrace.enabled then
+            try
+                let ownerRect = rectOf owner
+                let guardRect = rectOf band
+                let foreground = Native.GetForegroundWindow()
+                let bandRect = match requested with Some _ -> requested | None -> guardRect
+                // One bounded front-to-back read supplies ranks and frame candidates.
+                let rec walk hwnd rank rows =
+                    if hwnd = 0n then true, List.rev rows
+                    elif rank = 4096 then false, List.rev rows
+                    else
+                        let parent = ownerOf hwnd
+                        let rows =
+                            if hwnd = owner || hwnd = band || hwnd = strip || (owner <> 0n && parent = owner) then
+                                let rect = rectOf hwnd
+                                let covered, external =
+                                    match bandRect, ownerRect, rect with
+                                    | Some b, Some o, Some r ->
+                                        TopEdgeGuardPolicy.frameInBand b r, TopEdgeGuardPolicy.topFrame o b r
+                                    | _ -> false, false
+                                let row = sprintf "{hwnd=%X owner=%X rect=%A z=%d prev=%X next=%X visible=%b topmost=%b covered=%b external=%b}"
+                                              (int64 hwnd) (int64 parent) rect rank (int64 (above hwnd))
+                                              (int64 (Native.GetWindow(hwnd, 2u))) (visible hwnd) (isTopMost hwnd) covered external
+                                row :: rows
+                            else rows
+                        walk (Native.GetWindow(hwnd, 2u)) (rank + 1) rows
+                let complete, rows = walk (Native.GetTopWindow 0n) 0 []
+                let line = sprintf "phase=%s owner=%X ownerRect=%A guard=%X strip=%X foreground=%X behind=%b aboveOwner=%X requested=%A insertAfter=%s swp=%A finalRect=%A visible=%b ownerValid=%b ownerVisible=%b iconic=%b zoomed=%b stripVisible=%b stripAboveGuard=%b complete=%b z=[%s]"
+                               phase (int64 owner) ownerRect (int64 band) (int64 strip) (int64 foreground)
+                               (owner = 0n || foreground <> owner) (int64 (above owner)) requested
+                               (anchor |> Option.map (fun hwnd -> sprintf "0x%X" (int64 hwnd)) |> Option.defaultValue "not-called") swp guardRect (visible band)
+                               (Native.IsWindow owner) (visible owner) (Native.IsIconic owner) (Native.IsZoomed owner)
+                               (visible strip) (isAbove strip band) complete (System.String.Join(";", rows))
+                FileTrace.append (line.Replace("\r", " ").Replace("\n", " "))
+            with _ -> ()
 #else
         ()
 #endif
