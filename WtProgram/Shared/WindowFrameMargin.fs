@@ -19,18 +19,23 @@ module WindowFrameMargin =
             length * 2 >= extent
         let horizontal (r: Bounds) = spans r.x r.width owner.x owner.width
         let vertical (r: Bounds) = spans r.y r.height owner.y owner.height
-        let thin n = n > 0 && n <= limit
+        // A frame may overlap the owner by up to two logical pixels. Only
+        // its outside portion contributes margin; gaps and inside-only pieces do not.
+        let overlapLimit = max 1 ((2 * max 96 dpi + 95) / 96)
+        let outside thickness extent =
+            thickness > 0 && thickness <= limit && extent > 0 &&
+            thickness - extent >= 0 && thickness - extent <= overlapLimit
         if owner.width <= 0 || owner.height <= 0 then zero
         else
             frames |> List.fold (fun m r ->
-                { top = if thin r.height && horizontal r && r.y + r.height = owner.y
-                        then max m.top r.height else m.top
-                  bottom = if thin r.height && horizontal r && r.y = owner.y + owner.height
-                           then max m.bottom r.height else m.bottom
-                  left = if thin r.width && vertical r && r.x + r.width = owner.x
-                         then max m.left r.width else m.left
-                  right = if thin r.width && vertical r && r.x = owner.x + owner.width
-                          then max m.right r.width else m.right }) zero
+                { top = if outside r.height (owner.y - r.y) && horizontal r
+                        then max m.top (owner.y - r.y) else m.top
+                  bottom = if outside r.height (r.y + r.height - owner.y - owner.height) && horizontal r
+                           then max m.bottom (r.y + r.height - owner.y - owner.height) else m.bottom
+                  left = if outside r.width (owner.x - r.x) && vertical r
+                         then max m.left (owner.x - r.x) else m.left
+                  right = if outside r.width (r.x + r.width - owner.x - owner.width) && vertical r
+                          then max m.right (r.x + r.width - owner.x - owner.width) else m.right }) zero
 
     let scale fromDpi toDpi (margin: Margin) =
         let px value = int (Math.Round(float value * float (max 1 toDpi) / float (max 1 fromDpi), MidpointRounding.AwayFromZero))

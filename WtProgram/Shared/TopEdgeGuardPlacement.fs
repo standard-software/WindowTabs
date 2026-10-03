@@ -19,6 +19,8 @@ module TopEdgeGuardPlacement =
         [<DllImport("user32.dll")>]
         extern bool GetWindowRect(nativeint hwnd, RECT& rect)
         [<DllImport("user32.dll")>]
+        extern uint32 GetDpiForWindow(nativeint hwnd)
+        [<DllImport("user32.dll")>]
         extern nativeint GetWindow(nativeint hwnd, uint32 command)
         [<DllImport("user32.dll")>]
         extern nativeint GetTopWindow(nativeint hwnd)
@@ -42,6 +44,8 @@ module TopEdgeGuardPlacement =
         extern bool ShowWindow(nativeint hwnd, int command)
         [<DllImport("user32.dll")>]
         extern bool SetWindowPos(nativeint hwnd, nativeint after, int x, int y, int width, int height, uint32 flags)
+
+    let private dpiOf hwnd = try max 96 (int (Native.GetDpiForWindow hwnd)) with _ -> 96
 
     let visible hwnd = Native.IsWindowVisible hwnd
     let isTopMost hwnd = Native.GetWindowLongW(hwnd, -20) &&& 8 <> 0
@@ -139,7 +143,7 @@ module TopEdgeGuardPlacement =
                                 let covered, external =
                                     match bandRect, ownerRect, rect with
                                     | Some b, Some o, Some r ->
-                                        TopEdgeGuardPolicy.frameInBand b r, TopEdgeGuardPolicy.topFrame o b r
+                                        TopEdgeGuardPolicy.frameInBand b r, TopEdgeGuardPolicy.topFrame (dpiOf owner) o b r
                                     | _ -> false, false
                                 let row = sprintf "{hwnd=%X owner=%X rect=%A z=%d prev=%X next=%X visible=%b topmost=%b covered=%b external=%b}"
                                               (int64 hwnd) (int64 parent) rect rank (int64 (above hwnd))
@@ -317,9 +321,10 @@ module TopEdgeGuardPlacement =
         match rectOf owner with
         | None -> None
         | Some ownerRect ->
+            let dpi = dpiOf owner
             let rect = TopEdgeGuardPolicy.clipHorizontal ownerRect 0 rect
             let rec walk hwnd remaining frames =
-                if hwnd = 0n then Some (TopEdgeGuardPolicy.coverTopFrames ownerRect rect frames)
+                if hwnd = 0n then Some (TopEdgeGuardPolicy.coverTopFrames dpi ownerRect rect frames)
                 elif remaining = 0 then None
                 else
                     let frames =
