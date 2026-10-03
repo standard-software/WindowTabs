@@ -187,6 +187,7 @@ module TopEdgeGuardPlacement =
         match rectOf owner with
         | None -> None
         | Some ownerRect ->
+            let rect = TopEdgeGuardPolicy.clipHorizontal ownerRect 0 rect
             let rec walk hwnd remaining frames =
                 if hwnd = 0n then Some (TopEdgeGuardPolicy.coverTopFrames ownerRect rect frames)
                 elif remaining = 0 then None
@@ -198,28 +199,25 @@ module TopEdgeGuardPlacement =
                             | None -> frames
                         else frames
                     walk (above hwnd) (remaining - 1) frames
-            walk (above owner) 4096 []
+            if rect.width <= 0 then None else walk (above owner) 4096 []
 
-    // A frame owned by the target may occupy the margin outside its rectangle.
-    // Cover only the contiguous run of its owned frames. Never cross the strip
-    // or ANY unrelated window, even if that window did not take foreground.
+    // Find the highest covered frame in the whole order above the owner.
+    // Insertion immediately before that frame preserves every window above it;
+    // stopping at the first unrelated sibling could leave a higher frame exposed.
     let targetBelow band strip owner (rect: TopEdgeGuardPolicy.Band) =
-        let ownerRect = rectOf owner
-        let rec walk target remaining =
-            if remaining = 0 then 0n
+        let rec walk hwnd remaining candidates =
+            if hwnd = 0n then
+                TopEdgeGuardPolicy.highestCoveredFrame owner (List.rev candidates)
+            elif remaining = 0 then 0n
             else
-                let previous = above target
-                let previous = if previous = band then above band else previous
-                let isFrame =
-                    match rectOf previous with
-                    | Some r ->
-                        TopEdgeGuardPolicy.frameInBand rect r ||
-                        (ownerRect |> Option.exists (fun bounds -> TopEdgeGuardPolicy.otherEdgeFrame bounds rect r))
-                    | None -> false
-                if previous <> 0n && previous <> strip && ownerOf previous = owner &&
-                   isFrame && isTopMost previous = isTopMost owner then walk previous (remaining - 1)
-                else target
-        walk owner 4096
+                let covered =
+                    hwnd <> band && hwnd <> strip && ownerOf hwnd = owner &&
+                    visible hwnd && isTopMost hwnd = isTopMost owner &&
+                    (match rectOf hwnd with
+                     | Some frame -> TopEdgeGuardPolicy.frameInBand rect frame
+                     | None -> false)
+                walk (above hwnd) (remaining - 1) ((hwnd, covered) :: candidates)
+        walk (above owner) 4096 []
 
     let foregroundOwner owner = owner <> 0n && Native.GetForegroundWindow() = owner
 

@@ -3,6 +3,18 @@
 // Physical-pixel geometry and ordering decisions, independent of Win32.
 module TopEdgeGuardPolicy =
     type Band = { x: int; y: int; width: int; height: int }
+    // Group margins can extend horizontally beyond the native window. Keep
+    // the intentional corner gap relative to the native edge, and clip right.
+    let clipHorizontal (owner: Band) leftGap (band: Band) =
+        let left = max band.x (owner.x + leftGap)
+        let right = min (band.x + band.width) (owner.x + owner.width)
+        { band with x = left; width = max 0 (right - left) }
+
+    // Candidates arrive from nearest-owner to highest in z-order. Intervening
+    // non-frame windows do not terminate the search for an owned top frame.
+    let highestCoveredFrame owner (candidates: (nativeint * bool) list) =
+        candidates |> List.fold (fun target (hwnd, covered) -> if covered then hwnd else target) owner
+
     // Only a thin owned frame contained in the guarded band can be covered.
     // Shared ownership alone must not let the guard cover a dialog or popup.
     let frameInBand (band: Band) (frame: Band) =

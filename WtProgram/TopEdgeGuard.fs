@@ -318,6 +318,8 @@ type TopEdgeGuard(os: OS) =
 
     member this.followsStrip = eligible && not disposed
 
+    member this.invalidateOrder() = lastOrder <- None
+
     member this.stripChanged(stripHwnd: IntPtr) =
         match window with
         | Some w when this.followsStrip ->
@@ -414,6 +416,10 @@ type TopEdgeGuard(os: OS) =
                 // margin: the band starts there and reaches past the window's
                 // own top border.
                 let rect = TopEdgeGuardPolicy.rectangle bounds.location.x bounds.location.y width marginTop band leftGap
+                let rect =
+                    match TopEdgeGuardPlacement.rectOf ownerHwnd with
+                    | Some nativeBounds -> TopEdgeGuardPolicy.clipHorizontal nativeBounds leftGap rect
+                    | None -> { rect with width = 0 }
                 let repaint () =
                     if TopEdgeGuardOptions.showBand then
                         // A plain move asks for no paint of its own.

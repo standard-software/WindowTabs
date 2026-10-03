@@ -203,6 +203,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let mutable lastStraddleAction = DateTime.MinValue
     let topEdgeGuard = TopEdgeGuard(os)
     let guardUpdates = TopEdgeGuardPolicy.UpdateQueue()
+    let guardRepairTimer = new System.Windows.Forms.Timer(Interval = 50)
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
@@ -570,7 +571,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // A sibling can pass the strip without sending it WINDOWPOSCHANGED.
         // Reuse the bounded, coalesced repair path; the timer also covers apps
         // that do not publish an accessibility reorder event.
-        let guardReorder = os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ -> repairGuardOrder())
+        let guardReorder = os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ ->
+            // A frame can pass other siblings without changing owner adjacency.
+            topEdgeGuard.invalidateOrder()
+            repairGuardOrder())
         let guardForeground = os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> repairGuardOrder())
         groupInfoTimer.Tick.Add(fun _ ->
             this.updateGroupInfo()
@@ -579,6 +583,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             this.reconcileVirtualDesktop()
             PerfTrace.time "title.refresh" group.refreshTitles)
         groupInfoTimer.Start()
+        // One repair per 50ms event batch, including notifications produced by
+        // our own SetWindowPos. Never recursively chase a frame that re-raises.
+        guardRepairTimer.Tick.Add(fun _ ->
+            guardRepairTimer.Stop()
+            guardUpdates.Request((fun f -> this.invokeAsync f), this.updateTopEdgeGuard))
         // Stop and release the timer with the group: it owns a window of this
         // group's thread, which goes away with the group.
         group.exited.Add <| fun() ->
@@ -678,6 +687,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
+            guardRepairTimer.Stop()
+            guardRepairTimer.Dispose()
             guardUpdates.Dispose()
             topEdgeGuard.dispose()
     
@@ -693,7 +704,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // It follows the same events as the strip, so it is updated from the same
     // place. Downward tabs keep input priority over the band.
     member private this.queueTopEdgeGuard() =
-        guardUpdates.Request((fun f -> this.invokeAsync f), this.updateTopEdgeGuard)
+        if not guardRepairTimer.Enabled then guardRepairTimer.Start()
 
     // Existing frame compatibility rule, shared by strip and guard placement.
     member private this.isUwpForeground =
