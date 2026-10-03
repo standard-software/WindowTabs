@@ -420,7 +420,16 @@ type TopEdgeGuard(os: OS) =
                         WinUserApi.RedrawWindow(w.hwnd, IntPtr.Zero, IntPtr.Zero,
                             RedrawWindowFlags.RDW_INVALIDATE ||| RedrawWindowFlags.RDW_ERASE |||
                             RedrawWindowFlags.RDW_UPDATENOW).ignore
-                shown <- TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost rect
+                // An owned resize frame may lie above the native rectangle
+                // even when no margin was configured. Extend upward before
+                // z-order selection so frameInBand also admits that frame.
+                shown <-
+                    match TopEdgeGuardPlacement.coverOwnedTopFrames w.hwnd stripHwnd ownerHwnd rect with
+                    | Some covered ->
+                        TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
+                    | None ->
+                        this.hide()
+                        false
                 if shown then repaint()
 #if DEBUG
                 let previous = TopEdgeGuardPlacement.above ownerHwnd

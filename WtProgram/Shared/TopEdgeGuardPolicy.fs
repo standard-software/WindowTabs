@@ -10,6 +10,38 @@ module TopEdgeGuardPolicy =
         frame.y + frame.height <= band.y + band.height &&
         frame.x <= band.x && frame.x + frame.width >= band.x + band.width
 
+    // An external resize frame touches the owner's top from above, spans the
+    // protected width, and is at most twice the internal resize-border depth.
+    // Use the ORIGINAL band for every candidate; accepted frames cannot grow
+    // the threshold and accidentally admit a larger popup on a later pass.
+    let topFrame (owner: Band) (band: Band) (frame: Band) =
+        let depth = max 1 (band.y + band.height - owner.y)
+        frame.height > 0 && frame.height <= 2 * depth &&
+        frame.y < owner.y && frame.y + frame.height = owner.y &&
+        frame.x <= band.x && frame.x + frame.width >= band.x + band.width
+
+    // Other pieces of the same resize frame can intervene in the owned
+    // z-order. They do not enlarge the band, but must not prevent reaching
+    // the top piece. A dialog is never identified by ownership alone.
+    let otherEdgeFrame (owner: Band) (band: Band) (frame: Band) =
+        let thin = 2 * max 1 (band.y + band.height - owner.y)
+        let bottom =
+            frame.height > 0 && frame.height <= thin &&
+            frame.y = owner.y + owner.height &&
+            frame.x <= band.x && frame.x + frame.width >= band.x + band.width
+        let side =
+            frame.width > 0 && frame.width <= thin &&
+            (frame.x + frame.width = owner.x || frame.x = owner.x + owner.width) &&
+            frame.y <= owner.y && frame.y + frame.height >= owner.y + owner.height
+        bottom || side
+
+    let coverTopFrames (owner: Band) (band: Band) (ownedFrames: Band list) =
+        let top =
+            ownedFrames
+            |> List.filter (topFrame owner band)
+            |> List.fold (fun y frame -> min y frame.y) band.y
+        { band with y = top; height = band.y + band.height - top }
+
     type Stacking = Topmost | LeaveTopmost | Keep | Hide | Behind of nativeint
     type StackingInput = {
         tabsInside: bool; keepOnTop: bool; marginTop: int

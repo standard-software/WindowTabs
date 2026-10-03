@@ -180,10 +180,31 @@ module TopEdgeGuardPlacement =
             hide band
             reraise()
 
+    // Discover external top frames independently of configured margins. Only
+    // visible windows directly owned by this target participate; no class or
+    // process names, and no messages are sent to another process.
+    let coverOwnedTopFrames band strip owner rect =
+        match rectOf owner with
+        | None -> None
+        | Some ownerRect ->
+            let rec walk hwnd remaining frames =
+                if hwnd = 0n then Some (TopEdgeGuardPolicy.coverTopFrames ownerRect rect frames)
+                elif remaining = 0 then None
+                else
+                    let frames =
+                        if hwnd <> band && hwnd <> strip && ownerOf hwnd = owner && visible hwnd then
+                            match rectOf hwnd with
+                            | Some frame -> frame :: frames
+                            | None -> frames
+                        else frames
+                    walk (above hwnd) (remaining - 1) frames
+            walk (above owner) 4096 []
+
     // A frame owned by the target may occupy the margin outside its rectangle.
     // Cover only the contiguous run of its owned frames. Never cross the strip
     // or ANY unrelated window, even if that window did not take foreground.
     let targetBelow band strip owner (rect: TopEdgeGuardPolicy.Band) =
+        let ownerRect = rectOf owner
         let rec walk target remaining =
             if remaining = 0 then 0n
             else
@@ -191,7 +212,9 @@ module TopEdgeGuardPlacement =
                 let previous = if previous = band then above band else previous
                 let isFrame =
                     match rectOf previous with
-                    | Some r -> TopEdgeGuardPolicy.frameInBand rect r
+                    | Some r ->
+                        TopEdgeGuardPolicy.frameInBand rect r ||
+                        (ownerRect |> Option.exists (fun bounds -> TopEdgeGuardPolicy.otherEdgeFrame bounds rect r))
                     | None -> false
                 if previous <> 0n && previous <> strip && ownerOf previous = owner &&
                    isFrame && isTopMost previous = isTopMost owner then walk previous (remaining - 1)
@@ -208,7 +231,11 @@ module TopEdgeGuardPlacement =
                 match rectOf band with
                 | Some rect -> targetBelow band strip owner rect
                 | None -> 0n
-            target <> 0n && ownerOf band = owner &&
+            let covered =
+                match rectOf band with
+                | Some rect -> coverOwnedTopFrames band strip owner rect = Some rect
+                | None -> false
+            covered && target <> 0n && ownerOf band = owner &&
             isTopMost band = isTopMost owner && above target = band &&
             (not (visible strip) || isAbove strip band)
 
