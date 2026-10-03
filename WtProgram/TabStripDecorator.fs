@@ -578,6 +578,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let guardForeground = os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> repairGuardOrder())
         groupInfoTimer.Tick.Add(fun _ ->
             this.updateGroupInfo()
+            group.refreshWindowMargins()
             repairGuardOrder()
             // Same tick, same thread as the rest of this group's upkeep.
             this.reconcileVirtualDesktop()
@@ -734,7 +735,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 match group.bounds.value with
                 | Some(b) when wanted ->
                     (try
-                        let (top, _, _, _) = group.getExeMargin(ownerHwnd, b)
+                        let (top, _, _, _) = group.getWindowMargin(ownerHwnd, b)
                         max 0 top
                      with _ -> 0)
                 | _ -> 0
@@ -1723,7 +1724,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceWorkArea = sourceScreen.WorkingArea
 
         // Use group bounds (expanded by margin) for percentage calculation
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
+        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
         let groupWidth = bounds.size.width + mLeft + mRight
         let groupHeight = bounds.size.height + mTop + mBottom
         let groupX = bounds.location.x - mLeft
@@ -1777,9 +1778,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             System.Threading.Thread.Sleep(20)
 
         let moveBounds = Rect(Pt(finalX, finalY), Sz(newWidth, newHeight))
-        let finalBounds = group.applyExeMarginForWrite(activeHwnd, moveBounds)
+        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, moveBounds)
         window.move(finalBounds)
-        if group.hasExeMargin(activeHwnd) then
+        if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
     // Whether the "change tab position on left/right snap" setting is enabled.
@@ -1819,7 +1820,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
+        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
         let snapWidth = bounds.size.width + mLeft + mRight
         let snapHeight = bounds.size.height + mTop + mBottom
 
@@ -1830,11 +1831,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             snapHeight)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
-        // Apply per-exe margin (e.g., LINE.exe always needs 30px margin)
-        let finalBounds = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        // Apply detected frame margin
+        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
         window.move(finalBounds)
         // Record shrunk size for tracking
-        if group.hasExeMargin(activeHwnd) then
+        if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
         this.applyGroupSnapRealign(snapDirection)
 
@@ -1847,7 +1848,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let sourceWorkArea = sourceScreen.WorkingArea
 
         // Use group bounds (expanded by margin) for percentage calculation
-        let (mTop, mLeft, mRight, mBottom) = group.getExeMargin(activeHwnd, bounds)
+        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
         let groupWidth = bounds.size.width + mLeft + mRight
         let groupHeight = bounds.size.height + mTop + mBottom
 
@@ -1886,10 +1887,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             System.Threading.Thread.Sleep(20)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))
-        // Apply per-exe margin (e.g., LINE.exe always needs 30px margin)
-        let finalBounds2 = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        // Apply detected frame margin
+        let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
         window.move(finalBounds2)
-        if group.hasExeMargin(activeHwnd) then
+        if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)
 
@@ -1908,9 +1909,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             screen.WorkingArea)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
-        let finalBounds = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
         window.move(finalBounds)
-        if group.hasExeMargin(activeHwnd) then
+        if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
         this.applyGroupSnapRealign(snapDirection)
 
@@ -1942,9 +1943,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             System.Threading.Thread.Sleep(20)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
-        let finalBounds2 = group.applyExeMarginForWrite(activeHwnd, snapBounds)
+        let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
         window.move(finalBounds2)
-        if group.hasExeMargin(activeHwnd) then
+        if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)
 

@@ -11,51 +11,6 @@ open System.Windows.Forms
 open Bemo.Win32.Forms
 open Newtonsoft.Json.Linq
 
-// Per-exe margin settings loaded from Settings\WindowMargin.json - the shipped
-// default under <exe>\Settings with the user's own under
-// %APPDATA%\WindowTabs\Settings laid over it, entry by entry. An entry the
-// user names replaces the shipped one as a whole (all four numbers), and the
-// entries they do not name keep their defaults. See UserOverrides.
-module WindowMarginSettings =
-    // Cache: exe name (lowercase) -> (top, left, right, bottom)
-    let mutable private marginCache : Dictionary<string, (int * int * int * int)> option = None
-
-    let private loadSettings() =
-        let dict = Dictionary<string, (int * int * int * int)>(StringComparer.OrdinalIgnoreCase)
-        try
-            match UserOverrides.loadObject UserOverrides.settingsDir "WindowMargin.json" with
-            | Some(jobj) ->
-                for prop in jobj.Properties() do
-                    let exeName = prop.Name
-                    match prop.Value with
-                    | :? JObject as marginObj ->
-                        let getInt (key:string) =
-                            match marginObj.getInt32(key) with
-                            | Some(v) -> v
-                            | None -> 0
-                        let top = getInt "top"
-                        let left = getInt "left"
-                        let right = getInt "right"
-                        let bottom = getInt "bottom"
-                        dict.[exeName] <- (top, left, right, bottom)
-                        System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Loaded: %s -> (%d,%d,%d,%d)" exeName top left right bottom)
-                    | _ -> ()
-            | None ->
-                System.Diagnostics.Debug.WriteLine("[WindowMargin] no WindowMargin.json beside the executable or under %APPDATA%")
-        with ex ->
-            System.Diagnostics.Debug.WriteLine(sprintf "[WindowMargin] Error loading settings: %s" ex.Message)
-        dict
-
-    let getMargin(exeName: string) =
-        if marginCache.IsNone then
-            marginCache <- Some(loadSettings())
-        match marginCache.Value.TryGetValue(exeName) with
-        | true, margin -> margin
-        | false, _ -> (0, 0, 0, 0)
-
-    let reload() =
-        marginCache <- Some(loadSettings())
-
 /// Debug-only trace of window titles and tab texts: every name-change event a
 /// group receives, every tab text it sets, and every tab whose text differs
 /// from its window's title. Truncated at each start; Release builds drop it.
@@ -87,6 +42,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let _bb = Blackboard()
     let invoker = InvokerService.invoker
     let _os = OS()
+    let frameMargins = WindowFrameMargin.Cache()
+    let mutable marginPollIndex = 0
     let addedEvent = Event<_>()
     let movedEvent = Event<IntPtr*int>()
     let removedEvent = Event<_>()
@@ -526,7 +483,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let liveBounds = topWindow.bounds
             let backgroundBounds =
                 if topWindow.isMaximized || liveBounds.width <= 0 || liveBounds.height <= 0 then None
-                elif this.hasExeMargin(topWindow.hwnd) then Some(this.removeExeMarginForRead(topWindow.hwnd, liveBounds))
+                elif this.hasWindowMargin(topWindow.hwnd) then Some(this.removeWindowMarginForRead(topWindow.hwnd, liveBounds))
                 else Some liveBounds
             let queuedAsync = System.Collections.Generic.HashSet<IntPtr>()
             zorderCell.value.tail.iter(fun hwnd ->
@@ -538,13 +495,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 let topWindow = this.os.windowFromHwnd(topHwnd)
                 let topBounds = topWindow.bounds
                 // When the top window is maximized, its bounds already match the
-                // monitor work rect — skip per-exe margin on both sides.
+                // monitor work rect — skip detected frame margin on both sides.
                 let topMaximized = topWindow.isMaximized
 
                 // If the top window has a margin, always expand to get group bounds
                 let groupBounds =
-                    if this.hasExeMargin(topHwnd) && not topMaximized then
-                        this.removeExeMarginForRead(topHwnd, topBounds)
+                    if this.hasWindowMargin(topHwnd) && not topMaximized then
+                        this.removeWindowMarginForRead(topHwnd, topBounds)
                     else topBounds
 
                 // Move all background windows again with the correct size
@@ -561,10 +518,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     // size: leave it alone.
                     if BackgroundPlacementPolicy.needsSecondPass
                         (queuedAsync.Contains hwnd) (minimizedAtEntry.contains((=) hwnd)) window.isMinimized then
-                        // Apply per-exe margin for this background window
+                        // Apply detected frame margin for this background window
                         let targetBounds =
                             if topMaximized then groupBounds
-                            else this.applyExeMarginForWrite(hwnd, groupBounds)
+                            else this.applyWindowMarginForWrite(hwnd, groupBounds)
                         let currentBounds = window.bounds
                         // Keep current position but use correct size - unless
                         // the position is the iconic one, which is nowhere.
@@ -572,11 +529,6 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         let correctBounds =
                             if atIconicPosition then targetBounds
                             else Rect(currentBounds.location, targetBounds.size)
-                        System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] 2nd pass: %s group=(%d,%d,%d,%d) target=(%d,%d,%d,%d) correct=(%d,%d,%d,%d)"
-                            window.pid.exeName
-                            groupBounds.x groupBounds.y groupBounds.width groupBounds.height
-                            targetBounds.x targetBounds.y targetBounds.width targetBounds.height
-                            correctBounds.x correctBounds.y correctBounds.width correctBounds.height)
                         // Skip the move if size already matches - SetWindowPos is expensive and apps that
                         // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
                         // otherwise trigger redundant work and follow-up events on every spurious change.
@@ -588,7 +540,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             if siblingsWereMinimized then window.moveAsync(correctBounds)
                             else PerfTrace.time "group.follower.secondBounds" <| fun () -> window.move(correctBounds)
                         // Track the margin-shrunk size for this window
-                        if this.hasExeMargin(hwnd) && not topMaximized then
+                        if this.hasWindowMargin(hwnd) && not topMaximized then
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
                 )
             | None -> ()
@@ -1058,13 +1010,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     | None -> window.bounds
                 else window.bounds
             // If the foreground window has a margin, always compensate to get the real group bounds.
-            // LINE.exe always has 30px margin, so its bounds are always smaller than the group bounds.
+            // Owned resize frames lie outside the native rectangle.
             // Skip when maximized: bounds already match the work rect.
             let adjustedBounds =
-                if this.hasExeMargin(window.hwnd) && not window.isMaximized then
-                    System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] saveTopPlacement: compensating %s bounds=(%d,%d,%d,%d)"
-                        window.pid.exeName bounds.x bounds.y bounds.width bounds.height)
-                    this.removeExeMarginForRead(window.hwnd, bounds)
+                if this.hasWindowMargin(window.hwnd) && not window.isMaximized then
+                    this.removeWindowMarginForRead(window.hwnd, bounds)
                 else bounds
             maximizedFrameBounds <- if window.isMaximized then Some liveBounds else None
             placement.set(Some(adjustedBounds, window.placement))
@@ -1159,38 +1109,32 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             (fun () -> count(); window.setPositionOnlyAsync bounds.x bounds.y)
             (fun () -> count(); window.moveAsync(bounds)) completed
 
-    // Get per-exe margin as (top, left, right, bottom) from Settings\WindowMargin.json
-    // Positive = shrink window, Negative = expand window
-    member this.getExeMarginRaw(hwnd:IntPtr) =
-        let window = this.os.windowFromHwnd(hwnd)
-        let exeName = window.pid.exeName
-        WindowMarginSettings.getMargin(exeName)
+    // Cache-only reads: geometry, hotkeys and strip placement never scan windows.
+    member this.getWindowMargin(hwnd:IntPtr, bounds:Rect) =
+        let dpi = try int (Math.Round(Dpi.scaleForRect bounds * 96.0)) with _ -> 96
+        frameMargins.Get(hwnd, dpi)
 
-    // The same margin in device pixels for the monitor `bounds` lives on.
-    //
-    // The JSON values compensate for an app's invisible resize border. That
-    // border is itself DPI-scaled by the app, and the values were authored
-    // while every coordinate WindowTabs saw was virtualized to 96 dpi. Window
-    // rects are real device pixels now, so the margin has to be scaled too.
-    //
-    // The scale comes from the RECTANGLE being adjusted, not from the group's
-    // current monitor: apply-on-write and remove-on-read then use the same
-    // factor for the same window on the same monitor, and a window that has
-    // moved to a 100% monitor gets the 100% margin removed - which is correct,
-    // because its invisible border is now 100% wide as well. Deriving the
-    // factor from a single group-level value would make shrink and un-shrink
-    // disagree by the ratio of the two monitors.
-    member this.getExeMargin(hwnd:IntPtr, bounds:Rect) =
-        let (top, left, right, bottom) = this.getExeMarginRaw(hwnd)
-        let scale = try Dpi.scaleForRect bounds with _ -> 1.0
-        if scale = 1.0 then (top, left, right, bottom)
-        else (Dpi.px scale top, Dpi.px scale left, Dpi.px scale right, Dpi.px scale bottom)
-
-    // Check if a window has any non-zero margin. Scale-independent: Dpi.px
-    // maps 0 to 0 and never turns a non-zero value into zero.
-    member this.hasExeMargin(hwnd:IntPtr) =
-        let (top, left, right, bottom) = this.getExeMarginRaw(hwnd)
+    member this.hasWindowMargin(hwnd:IntPtr) =
+        let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
         top <> 0 || left <> 0 || right <> 0 || bottom <> 0
+
+    member private this.refreshWindowMargin(hwnd) =
+        frameMargins.Refresh(hwnd, fun candidate ->
+            // Our strip and guard are owned popups too. Neither is an app frame.
+            candidate = this.ts.hwnd || TopEdgeGuardPlacement.isGuard candidate)
+
+    // The front member plus one rotating follower per existing upkeep tick
+    // discovers late frames without global hooks or scans in painting.
+    member this.refreshWindowMargins() = this.withUpdate <| fun () ->
+        if not inMoveSize.value && not this.isEmpty then
+            let members = this.windows.items.list
+            let hwnd = members.[marginPollIndex % members.Length]
+            marginPollIndex <- (marginPollIndex + 1) % members.Length
+            let targets = if hwnd = this.topWindow then [hwnd] else [this.topWindow; hwnd]
+            for target in targets do
+                if this.refreshWindowMargin(target) then
+                    if target = this.topWindow then this.saveTopWindowPlacement()
+                    else this.adjustWindowPlacement(target)
 
     // Record that margin was applied to a window (for tracking shrunk state)
     member this.recordMarginApplied(hwnd:IntPtr, width:int, height:int) =
@@ -1199,30 +1143,22 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Apply margin when writing bounds to a window (shrink by margin)
     // Left/Top: +margin (move inward), Width/Height: -(left+right)/(top+bottom)
     // Result: window becomes smaller by margin on each side
-    member this.applyExeMarginForWrite(hwnd:IntPtr, bounds:Rect) : Rect =
-        if this.hasExeMargin(hwnd) then
-            let (top, left, right, bottom) = this.getExeMargin(hwnd, bounds)
+    member this.applyWindowMarginForWrite(hwnd:IntPtr, bounds:Rect) : Rect =
+        if this.hasWindowMargin(hwnd) then
+            let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
             let result = Rect(Pt(bounds.x + left, bounds.y + top),
                               Sz(bounds.width - left - right, bounds.height - top - bottom))
-            System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] Write: %s margin=(%d,%d,%d,%d) input=(%d,%d,%d,%d) output=(%d,%d,%d,%d)"
-                (this.os.windowFromHwnd(hwnd).pid.exeName) top left right bottom
-                bounds.x bounds.y bounds.width bounds.height
-                result.x result.y result.width result.height)
             result
         else bounds
 
     // Apply reverse margin when reading bounds from a foreground window (expand by margin)
     // Left/Top: -margin (move outward), Width/Height: +(left+right)/(top+bottom)
     // Result: reported bounds become larger by margin on each side
-    member private this.removeExeMarginForRead(hwnd:IntPtr, bounds:Rect) : Rect =
-        if this.hasExeMargin(hwnd) then
-            let (top, left, right, bottom) = this.getExeMargin(hwnd, bounds)
+    member private this.removeWindowMarginForRead(hwnd:IntPtr, bounds:Rect) : Rect =
+        if this.hasWindowMargin(hwnd) then
+            let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
             let result = Rect(Pt(bounds.x - left, bounds.y - top),
                               Sz(bounds.width + left + right, bounds.height + top + bottom))
-            System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] Read: %s margin=(%d,%d,%d,%d) input=(%d,%d,%d,%d) output=(%d,%d,%d,%d)"
-                (this.os.windowFromHwnd(hwnd).pid.exeName) top left right bottom
-                bounds.x bounds.y bounds.width bounds.height
-                result.x result.y result.width result.height)
             result
         else bounds
 
@@ -1253,15 +1189,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 (wp.showCmd = ShowWindowCommands.SW_SHOWNORMAL)
                                 ((VirtualDesktopGroups.Live.shared()).Contains hwnd)
             let bounds = if useAsync then backgroundBounds.Value else bounds
-            // Skip per-exe margin when target is maximized: bounds already match the work rect.
+            // Skip detected frame margin when target is maximized: bounds already match the work rect.
             let targetMaximized = wp.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
             let adjustedBounds =
                 if targetMaximized then bounds
-                else this.applyExeMarginForWrite(hwnd, bounds)
-            System.Diagnostics.Debug.WriteLine(sprintf "[ExeMargin] adjustWindowPlacement: %s bounds=(%d,%d,%d,%d) adjusted=(%d,%d,%d,%d) showCmd=%A windowShowCmd=%A"
-                window.pid.exeName bounds.x bounds.y bounds.width bounds.height
-                adjustedBounds.x adjustedBounds.y adjustedBounds.width adjustedBounds.height
-                wp.showCmd window.placement.showCmd)
+                else this.applyWindowMarginForWrite(hwnd, bounds)
             let followerBounds =
                 if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
                 else adjustedBounds
@@ -1376,7 +1308,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
             )
             // Track the margin-shrunk size for this window
-            if this.hasExeMargin(hwnd) && not targetMaximized then
+            if this.hasWindowMargin(hwnd) && not targetMaximized then
                 marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (adjustedBounds.width, adjustedBounds.height)))
 
         queuedAsync
@@ -1614,7 +1546,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         | None -> live
                     else live
                 let adjusted =
-                    if this.hasExeMargin(hwnd) && not window.isMaximized then this.removeExeMarginForRead(hwnd, bounds)
+                    if this.hasWindowMargin(hwnd) && not window.isMaximized then this.removeWindowMarginForRead(hwnd, bounds)
                     else bounds
                 let wp = window.placement
                 let unchanged =
@@ -1682,6 +1614,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.dispatchEvent(hwnd, evt, fallbackPress)
 
     member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
+        if this.windows.contains(hwnd) &&
+           (evt = WinEvent.EVENT_OBJECT_LOCATIONCHANGE || evt = WinEvent.EVENT_OBJECT_SHOW ||
+            evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND ||
+            evt = WinEvent.EVENT_SYSTEM_FOREGROUND) &&
+           (not inMoveSize.value || evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND) then
+            if this.refreshWindowMargin(hwnd) then
+                // Foreground processing may still change the front member in
+                // this batch. Publish the new outer bounds after it settles.
+                this.invokeAsync <| fun () ->
+                    if this.windows.contains(hwnd) && hwnd = this.topWindow then
+                        this.saveTopWindowPlacement()
         if not desktopShown then this.backgroundEvent(hwnd, evt) else
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
@@ -1840,6 +1783,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 ?after: IntPtr, ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun() ->
        if this.windows.contains(hwnd).not then
             if withDelay then System.Threading.Thread.Sleep(250)
+            frameMargins.Attach(hwnd)
+            this.refreshWindowMargin(hwnd) |> ignore
             let window = this.os.windowFromHwnd(hwnd)                
             // Per-event leading throttle intervals. LOCATIONCHANGE fires very frequently for
             // some apps (e.g. LibreOffice) even when the window has not actually moved, so throttle
@@ -1884,10 +1829,31 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 throttled()
                         | _ -> Helper.conflate interval handler
                     | None -> handler
-                window.setWinEventHook evt handler
+                if evt = WinEvent.EVENT_OBJECT_SHOW then
+                    // Reuse the member's SHOW hook, restricted to its process.
+                    // CREATE/SHOW for owned frames wakes a coalesced refresh;
+                    // no global hook or enumeration in the callback.
+                    let refreshFrames = Helper.conflateWithTrailing (TimeSpan.FromMilliseconds(50.0)) (fun () ->
+                        this.invokeAsync <| fun () ->
+                            if this.windows.contains(hwnd) then
+                                frameMargins.Invalidate(hwnd)
+                                if this.refreshWindowMargin(hwnd) then
+                                    if hwnd = this.topWindow then this.saveTopWindowPlacement()
+                                    else this.adjustWindowPlacement(hwnd))
+                    this.os.setWinEventHook(WinEvent.EVENT_OBJECT_CREATE, WinEvent.EVENT_OBJECT_SHOW,
+                        (fun _ event candidate _ _ _ _ ->
+                            if event = int WinEvent.EVENT_OBJECT_CREATE || event = int WinEvent.EVENT_OBJECT_SHOW then
+                                if candidate = hwnd then
+                                    handler()
+                                    refreshFrames()
+                                elif TopEdgeGuardPlacement.ownerOf candidate = hwnd &&
+                                     WindowFrameMargin.isExternalFrame candidate then
+                                    refreshFrames()), window.pid.pid, 0)
+                else window.setWinEventHook evt handler
             let hooks = 
                 List2([
                     WinEvent.EVENT_OBJECT_NAMECHANGE
+                    WinEvent.EVENT_OBJECT_SHOW
                     WinEvent.EVENT_OBJECT_LOCATIONCHANGE
                     WinEvent.EVENT_SYSTEM_MOVESIZESTART
                     WinEvent.EVENT_SYSTEM_MOVESIZEEND
@@ -1938,6 +1904,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
         followerPlacements.Synchronous(hwnd, ignore)
         pendingBackgroundMoves.Remove(hwnd) |> ignore
+        frameMargins.Remove(hwnd)
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
             // is in no group, nothing would. Every way out of a group passes
@@ -2034,6 +2001,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.destroy() =
         if tabDragOwners > 0 && this.isEmpty then destroyAfterTabDrag <- true
         elif isDestroyed.value.not then
+            frameMargins.Clear()
             followerPlacements.CancelAll()
             pendingBackgroundMoves.Clear()
             isDestroyed.set(true)
@@ -2129,7 +2097,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
         // Temporarily set TOPMOST for non-UWP windows when tabs are inside to prevent flashing
         let temporaryTopmost =
-            TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasExeMargin(hwnd)) this.lockWindowPosition
+            TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasWindowMargin(hwnd)) this.lockWindowPosition
         if temporaryTopmost then
             tsWindow.makeTopMost()
 

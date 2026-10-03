@@ -9,7 +9,6 @@ open Newtonsoft.Json.Linq
 // file of the same name under %APPDATA%\WindowTabs is the user's own. What
 // the program reads is the two laid over one another.
 //
-//     <exe>\Settings\WindowMargin.json                 default, replaced every upgrade
 //     <exe>\Settings\VersionFolder.json
 //     <exe>\Settings\Language\Japanese.json
 //     <exe>\Settings\Language\FileList.json
