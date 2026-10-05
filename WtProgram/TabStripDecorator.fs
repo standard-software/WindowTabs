@@ -2026,7 +2026,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let explorerDesktop =
             let mutable id = Guid.Empty
             if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
-        let usable = state.current.IsSome && (fresh || explorerDesktop = state.current)
+        let usable = VirtualDesktopGroups.Live.usable fresh explorerDesktop state
 #if DEBUG
         let mutable menuReadingLogged = false
 #endif
