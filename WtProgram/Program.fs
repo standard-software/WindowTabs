@@ -1840,9 +1840,21 @@ type Program() as this =
                 // group via the multi-select drag-detach path — they may
                 // still be at the dragExit off-screen parking location
                 // while their adjustChildWindows hasn't run yet.
+                // The reading that says a window is here can be a moment old:
+                // in the middle of a desktop switch the shell has already
+                // cloaked the windows of the desktop being left while the
+                // last reading still calls them here. Taken at its word, it
+                // threw every window of that desktop out of its group. The
+                // shell's own cloak, read now, says the window is on another
+                // desktop, and is believed over the reading.
+                let cloakedByShell =
+                    match window.cloakedValue with
+                    | Some c -> c &&& 2 <> 0
+                    | None -> false
                 let untabbable =
                     this.isTabbableWindow(window).not &&
                     not (isRecentlyPlaced(hwnd)) &&
+                    not cloakedByShell &&
                     this.isOnDesktopFromReader(hwnd)
                 // A live, visible, un-minimized window of a tabbed application
                 // sitting at the iconic position (-32000,-32000) has not left:
