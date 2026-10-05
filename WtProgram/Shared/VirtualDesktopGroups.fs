@@ -57,18 +57,6 @@ module VirtualDesktopGroups =
     /// is drawn at the same ratio, so a dimmed tab in one is left a quarter.
     let dimmedAlpha = 0x80
 
-    /// Capture the desktop where settings opened. Unknown desktop readings
-    /// retain the legacy all-groups behavior. Unassigned groups can only be
-    /// identified by visibility while that desktop is still current.
-    let captureGroup supported (opened: Guid option) (current: Guid option)
-                     (home: Guid option) shown =
-        match supported, opened, current with
-        | true, Some target, Some now ->
-            match home with
-            | Some desktop -> desktop = target && (now <> target || shown)
-            | None -> now = target && shown
-        | _ -> true
-
     // ------------------------------------------------------------ reading --
 
     type Presence =
@@ -99,6 +87,21 @@ module VirtualDesktopGroups =
         /// GetWindowDesktopId, None when the call failed or said nothing.
         desktop: Guid option
     }
+
+    /// Capture members independently of where their group is filed. Unreadable
+    /// members stay included so a partial reading cannot silently lose them.
+    let captureWindows supported (opened: Guid option) (current: Guid option)
+                       (shared: Set<IntPtr>) (reads: Map<IntPtr, WindowRead>) members =
+        match supported, opened, current with
+        | true, Some target, Some now ->
+            members |> List.filter (fun hwnd ->
+                shared.Contains hwnd ||
+                match reads.TryFind hwnd with
+                | None -> true
+                | Some r ->
+                    r.presence = Unsure || r.desktop.IsNone ||
+                    (now = target && r.presence <> Away) || r.desktop = Some target)
+        | _ -> members
 
     // Unreadable windows stay at the top level so a partial reading cannot
     // hide a destination. Here also includes windows shown on all desktops.
@@ -760,6 +763,10 @@ module VirtualDesktopGroups =
         let freshAfter changedAt (state: Snapshot) = state.readAt >= changedAt && state.current.IsSome
         let accepts readAt = lock gate (fun () -> readAt >= invalidatedAt)
         let isFresh state = lock gate (fun () -> freshAfter invalidatedAt state)
+        // Cloak notifications can invalidate readings without a desktop switch.
+        // Explorer confirming the same desktop keeps that publication usable.
+        let usable fresh (explorerDesktop: Guid option) (state: Snapshot) =
+            state.current.IsSome && (fresh || explorerDesktop = state.current)
         let snapshot () = lock gate (fun () -> latest)
         let shared () =
             let state = snapshot()

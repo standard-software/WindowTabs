@@ -407,17 +407,28 @@ type WorkspaceModel() as this =
 
     // Called on each visible opening, including reuse of the preloaded form.
     member this.beginSettingsSession() =
-        captureDesktop <- VirtualDesktopGroups.Live.current()
+        captureDesktop <-
+            VirtualDesktopGroups.Live.current()
+            |> Option.orElseWith (fun () ->
+                let mutable id = Guid.Empty
+                if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None)
 
     member private this.createWorkspace() =
         let zorder = os.windowZorders
         let supported = VirtualDesktopHelper.IsSupported
-        let current = VirtualDesktopGroups.Live.current()
-        let capturedGroups = Services.desktop.groups.where(fun group ->
-            VirtualDesktopGroups.captureGroup supported captureDesktop current
-                group.desktopHome group.isDesktopShown)
-        let groups = capturedGroups.enumerate.map <| fun (i, group) ->
-            let windowsInZorder = group.windows.sortBy(zorder.find)
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let fresh = VirtualDesktopGroups.Live.isFresh state
+        let explorerDesktop =
+            let mutable id = Guid.Empty
+            if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
+        let current =
+            if VirtualDesktopGroups.Live.usable fresh explorerDesktop state then state.current else None
+        let capturedGroups = Services.desktop.groups.choose(fun group ->
+            let members = VirtualDesktopGroups.captureWindows supported captureDesktop current
+                              state.shared state.reads group.windows.list
+            if List.isEmpty members then None else Some(group, members))
+        let groups = capturedGroups.enumerate.map <| fun (i, (group, members)) ->
+            let windowsInZorder = List2(members).sortBy(zorder.find)
             let innerZorder = Map2(windowsInZorder.enumerate.map(fun(innerZorder, hwnd) -> hwnd, innerZorder))
             let wsGroup = WorkspaceGroup(
                 name = sprintf "Group %d" (i + 1),
@@ -430,8 +441,12 @@ type WorkspaceModel() as this =
                     Dpi.withUnawareContext <| fun() -> os.windowFromHwnd(hwnd).placement)
             )
             // The strip's order, for putting the tabs back in it.
-            let stripOrder = (try group.visualOrderThreadSafe.list with _ -> [])
-            group.windows.enumerate.iter <| fun (j, hwnd) ->
+            let saved = Set.ofList members
+            let stripOrder =
+                (try group.visualOrderThreadSafe.list with _ -> [])
+                |> List.filter saved.Contains
+            let windowsInStripOrder = List2((stripOrder @ members) |> List.distinct)
+            windowsInStripOrder.enumerate.iter <| fun (j, hwnd) ->
                 let window = os.windowFromHwnd(hwnd)
                 let ww = WorkspaceWindow()
                 ww.name <- window.pid.exeName
@@ -457,7 +472,7 @@ type WorkspaceModel() as this =
                             align =
                                 Services.program.getWindowAlignment(hwnd)
                                 |> Option.map (function TopLeft -> "TopLeft" | TopRight -> "TopRight")
-                            order = stripOrder |> List.tryFindIndex ((=) hwnd) |> Option.defaultValue j
+                            order = j
                         }
                     with _ -> None
                 wsGroup.addWindow(ww)
