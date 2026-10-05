@@ -53,9 +53,9 @@ module VirtualDesktopGroups =
     /// desktop it arrived on.
     let mutable keepAway = true
 
-    /// How much of a dimmed tab is left: the same ratio the strip of an
-    /// inactive group is drawn with, so the two multiply.
-    let dimmedAlpha = 0x60
+    /// How much of a dimmed tab is left: half. The strip of an inactive group
+    /// is drawn at the same ratio, so a dimmed tab in one is left a quarter.
+    let dimmedAlpha = 0x80
 
     /// Capture the desktop where settings opened. Unknown desktop readings
     /// retain the legacy all-groups behavior. Unassigned groups can only be
