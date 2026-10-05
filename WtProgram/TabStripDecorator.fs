@@ -2345,7 +2345,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
                 image = None
-                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems @ [newWindowLinkGroupItem])
+                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems
+                              @ [CmiSeparator; newWindowLinkGroupItem])
                 flags = List2()
             })
 
@@ -3052,8 +3053,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                 // Wrap detach menus in parent submenu (the detach-position part
                 // expands to one item per display on multi-monitor setups)
+                // Inside a submenu the link entry is set apart from the
+                // position entries above it.
                 let subMenuItems =
-                    (detachTabPositionItems |> List.map Some) @ [ moveTabMenu ]
+                    (detachTabPositionItems |> List.map Some)
+                    @ (if moveTabMenu.IsSome && not detachTabPositionItems.IsEmpty then [ Some CmiSeparator ] else [])
+                    @ [ moveTabMenu ]
                     |> List.choose id
 
                 if subMenuItems.IsEmpty then None
@@ -3120,7 +3125,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(systemSubMenu)
-            Some(CmiSeparator)
             Some(managerItem)
         ]).choose(id)
 
