@@ -1233,10 +1233,31 @@ module DarkMode =
         override _.SeparatorDark = darkBorder
         override _.SeparatorLight = darkBorder
         override _.ToolStripBorder = darkBorder
+        override _.ToolStripGradientBegin = darkPanel
+        override _.ToolStripGradientMiddle = darkPanel
+        override _.ToolStripGradientEnd = darkPanel
+        override _.ButtonSelectedGradientBegin = darkAccent
+        override _.ButtonSelectedGradientMiddle = darkAccent
+        override _.ButtonSelectedGradientEnd = darkAccent
+        override _.ButtonSelectedBorder = darkAccent
+        override _.ButtonPressedGradientBegin = darkAccent
+        override _.ButtonPressedGradientMiddle = darkAccent
+        override _.ButtonPressedGradientEnd = darkAccent
+        override _.ButtonPressedBorder = darkAccent
         override _.MenuItemPressedGradientBegin = darkAccent
         override _.MenuItemPressedGradientEnd = darkAccent
 
-    let private darkRenderer = new ToolStripProfessionalRenderer(DarkColorTable())
+    let private darkRenderer =
+        { new ToolStripProfessionalRenderer(DarkColorTable()) with
+            override this.OnRenderArrow(e: ToolStripArrowRenderEventArgs) =
+                e.ArrowColor <- darkText
+                base.OnRenderArrow(e) }
+
+    // Toolbar drop-downs use the same palette as their popup menus.
+    let attachDarkToolStripTheme (strip: ToolStrip) =
+        strip.Renderer <- darkRenderer
+        strip.BackColor <- darkPanel
+        strip.ForeColor <- darkText
 
     let attachDarkContextMenuStripTheme (cms: ContextMenuStrip) =
         cms.Renderer <- darkRenderer

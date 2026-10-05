@@ -93,6 +93,8 @@
 
   "Workspace": "ワークスペース",
   "New": "新規",
+  "WorkspaceTabsCurrentDesktop": "現在のデスクトップのタブ",
+  "WorkspaceTabsAllDesktops": "全てのデスクトップのタブ",
   "Restore": "復元",
   "Edit": "編集",
   "Remove": "削除",

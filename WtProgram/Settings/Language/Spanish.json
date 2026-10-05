@@ -93,6 +93,8 @@
 
   "Workspace": "Espacio de trabajo",
   "New": "Nuevo",
+  "WorkspaceTabsCurrentDesktop": "Pestañas en el escritorio actual",
+  "WorkspaceTabsAllDesktops": "Pestañas en todos los escritorios",
   "Restore": "Restaurar",
   "Edit": "Editar",
   "Remove": "Quitar",

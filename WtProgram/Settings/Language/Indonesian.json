@@ -93,6 +93,8 @@
 
   "Workspace": "Ruang Kerja",
   "New": "Baru",
+  "WorkspaceTabsCurrentDesktop": "Tab di desktop saat ini",
+  "WorkspaceTabsAllDesktops": "Tab di semua desktop",
   "Restore": "Pulihkan",
   "Edit": "Edit",
   "Remove": "Hapus",

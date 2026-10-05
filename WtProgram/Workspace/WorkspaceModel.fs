@@ -413,7 +413,7 @@ type WorkspaceModel() as this =
                 let mutable id = Guid.Empty
                 if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None)
 
-    member private this.createWorkspace() =
+    member private this.createWorkspace(allDesktops: bool) =
         let zorder = os.windowZorders
         let supported = VirtualDesktopHelper.IsSupported
         let state = VirtualDesktopGroups.Live.snapshot()
@@ -424,8 +424,10 @@ type WorkspaceModel() as this =
         let current =
             if VirtualDesktopGroups.Live.usable fresh explorerDesktop state then state.current else None
         let capturedGroups = Services.desktop.groups.choose(fun group ->
-            let members = VirtualDesktopGroups.captureWindows supported captureDesktop current
-                              state.shared state.reads group.windows.list
+            let members =
+                if allDesktops then group.windows.list
+                else VirtualDesktopGroups.captureWindows supported captureDesktop current
+                         state.shared state.reads group.windows.list
             if List.isEmpty members then None else Some(group, members))
         let groups = capturedGroups.enumerate.map <| fun (i, (group, members)) ->
             let windowsInZorder = List2(members).sortBy(zorder.find)
@@ -576,8 +578,8 @@ type WorkspaceModel() as this =
         this.attachWorkspace(ws)
         this.saveSettings()
          
-    member this.create() =
-        let ws = this.createWorkspace()
+    member this.create(allDesktops: bool) =
+        let ws = this.createWorkspace(allDesktops)
         this.addWorkspace(ws)
     
     member this.remove() =

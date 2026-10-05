@@ -93,6 +93,8 @@
 
   "Workspace": "工作区",
   "New": "新建",
+  "WorkspaceTabsCurrentDesktop": "当前桌面的标签页",
+  "WorkspaceTabsAllDesktops": "所有桌面的标签页",
   "Restore": "恢复",
   "Edit": "编辑",
   "Remove": "删除",

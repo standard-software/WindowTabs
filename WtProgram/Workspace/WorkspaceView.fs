@@ -126,7 +126,31 @@ type WorkspaceView() as this =
     member this.newButton : ToolStripButton = Cell.cacheProp this <| fun() ->
         let btn = ToolStripButton(Localization.getString("New"))
         btn.Image <- Services.openImage("add.png")
-        btn.Click.Add <| fun _ -> this.onNewButton()
+        btn.Click.Add <| fun _ -> this.wm.create(false)
+        btn
+
+    member this.newDropDownButton : ToolStripDropDownButton = Cell.cacheProp this <| fun() ->
+        let btn = ToolStripDropDownButton(Localization.getString("New"))
+        btn.Image <- Services.openImage("add.png")
+        let menu = new ContextMenuStrip()
+        let addItem key allDesktops =
+            let item = new ToolStripMenuItem(Localization.getString(key))
+            item.Click.Add <| fun _ -> this.wm.create(allDesktops)
+            menu.Items.Add(item).ignore
+        addItem "WorkspaceTabsCurrentDesktop" false
+        addItem "WorkspaceTabsAllDesktops" true
+        // Like DropdownButton, the popup needs its own theme and scaled font.
+        // Refresh the font on opening because the dialog can change monitors.
+        let menuFont = menu.Font
+        btn.DropDownOpening.Add <| fun _ ->
+            menu.Font <-
+                if SettingsDpi.current() = 1.0 then menuFont
+                else SettingsDpi.font (SettingsDpi.current()) |> Option.defaultValue menuFont
+        if DropdownButton.UseDarkMode then
+            DarkMode.attachDarkContextMenuStripTheme menu
+        btn.DropDown <- menu
+        btn.Visible <- false
+        btn.Disposed.Add <| fun _ -> menu.Dispose()
         btn
 
     member this.restoreButton : ToolStripButton = Cell.cacheProp this <| fun() ->
@@ -160,10 +184,38 @@ type WorkspaceView() as this =
         ts.GripStyle  <- ToolStripGripStyle.Hidden
         ts.Dock <- DockStyle.Top
         ts.Items.Add(this.newButton).ignore
+        ts.Items.Add(this.newDropDownButton).ignore
         ts.Items.Add(this.restoreButton).ignore
         ts.Items.Add(this.editButton).ignore
         ts.Items.Add(this.removeButton).ignore
         ts
+
+    member private this.plainToolbarStyle = Cell.cacheProp this <| fun() ->
+        let ts = this.toolbar
+        ts.Renderer, ts.BackColor, ts.ForeColor
+
+    // The choice belongs to a visible opening, not to background refreshes.
+    member this.beginSettingsSession() =
+        this.wm.beginSettingsSession()
+        let showMenu =
+            VirtualDesktopHelper.IsSupported &&
+            (match VirtualDesktopHelper.TryReadDesktopIds() with
+             | null -> false
+             | ids -> ids.Length > 1)
+        let ts = this.toolbar
+        let renderer, backColor, foreColor = this.plainToolbarStyle
+        ts.SuspendLayout()
+        try
+            this.newButton.Visible <- not showMenu
+            this.newDropDownButton.Visible <- showMenu
+            // Keep the original toolbar renderer for the original plain button.
+            ts.Renderer <- renderer
+            ts.BackColor <- backColor
+            ts.ForeColor <- foreColor
+            if showMenu && DropdownButton.UseDarkMode then
+                DarkMode.attachDarkToolStripTheme ts
+        finally
+            ts.ResumeLayout(true)
 
     member this.findNode(node:TreeNodeAdv) =
         this.model.FindNode(this.tree.GetPath(node)) :?> WorkspaceNode
@@ -176,9 +228,6 @@ type WorkspaceView() as this =
             else
                 null
         this.wm.selected <- model
-
-    member this.onNewButton() =
-        this.wm.create()
 
     member this.onRestoreButton() =
         this.wm.restore()

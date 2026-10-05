@@ -93,6 +93,8 @@
 
   "Workspace": "Espaço de trabalho",
   "New": "Novo",
+  "WorkspaceTabsCurrentDesktop": "Guias na área de trabalho atual",
+  "WorkspaceTabsAllDesktops": "Guias em todas as áreas de trabalho",
   "Restore": "Restaurar",
   "Edit": "Editar",
   "Remove": "Remover",

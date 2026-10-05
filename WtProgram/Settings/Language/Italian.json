@@ -93,6 +93,8 @@
 
   "Workspace": "Area di lavoro",
   "New": "Nuovo",
+  "WorkspaceTabsCurrentDesktop": "Schede sul desktop corrente",
+  "WorkspaceTabsAllDesktops": "Schede su tutti i desktop",
   "Restore": "Ripristina",
   "Edit": "Modifica",
   "Remove": "Rimuovi",

@@ -93,6 +93,8 @@
 
   "Workspace": "작업 영역",
   "New": "새로 만들기",
+  "WorkspaceTabsCurrentDesktop": "현재 데스크톱의 탭",
+  "WorkspaceTabsAllDesktops": "모든 데스크톱의 탭",
   "Restore": "복원",
   "Edit": "편집",
   "Remove": "제거",

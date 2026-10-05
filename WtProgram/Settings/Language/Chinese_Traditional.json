@@ -93,6 +93,8 @@
 
   "Workspace": "工作區",
   "New": "新增",
+  "WorkspaceTabsCurrentDesktop": "目前桌面的分頁",
+  "WorkspaceTabsAllDesktops": "所有桌面的分頁",
   "Restore": "還原",
   "Edit": "編輯",
   "Remove": "刪除",
