@@ -2,8 +2,21 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next3
+## version ss_2026.10.03_next5
 
+- A window sent to another virtual desktop stays in its tab group.
+  - Its tab is drawn at half opacity; clicking it switches to that desktop.
+  - A tab group is shown on every desktop that has one of its windows.
+  - A window shown on all desktops is kept in one tab group.
+- The "Link to another tab group" menus work across virtual desktops.
+  - Tab groups of other desktops are listed under an item per desktop.
+  - A linked window moves to that group's position; the desktop stays.
+  - An entry counts the tabs on this desktop, then those on other desktops.
+  - The menus used to say "Link to another group".
+- The tabs of an inactive tab group are drawn at 50% opacity (was about 38%).
+- Fixed a crash when a tab group held a pop-up style window, such as a
+  borderless full-screen one.
+- Tab menu: no separator between System and Settings.
 - The top-edge lock no longer covers another group's window in front of it.
   - It also blocks resizing from the top shadow of windows such as LINE.
 - WindowMargin.json is gone; frame windows around a window are found by themselves.

@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next3**
+Latest version: **ss_2026.10.03_next5**
 
 See [version.md](version.md) for details.
 
@@ -296,8 +296,8 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 - Tab groups are preserved when switching virtual desktops (Win+Tab)
 - Tab group state is restored across all virtual desktops on WindowTabs restart
-- A tab group stays on one virtual desktop. Drag a tabbed window to another desktop in task view and it leaves its group, so a group is never split across desktops
-- Groups on another virtual desktop are left out of the menus that link a tab, or a whole group, into another group
+- A window sent to another virtual desktop (in task view) stays in its tab group. The group is shown on every desktop that has one of its windows, and the tabs of windows on other desktops are drawn at half opacity. Clicking such a tab switches to its desktop
+- The menus that link a tab, or a whole group, into another tab group list the tab groups of other desktops under an item per desktop. A linked window moves to that group's position without switching desktops
 
 ### UWP Application Support
 
