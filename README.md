@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next5**
+Latest version: **ss_2026.10.03_next7**
 
 See [version.md](version.md) for details.
 
@@ -163,6 +163,7 @@ New tab : execute (exe name)
   Right of this tab
   ---
   Position (same submenu as "Position Move")
+  ---
   Link to another tab group
 ---
 Position Move
@@ -183,6 +184,7 @@ Link this tab group to another tab group (submenu lists other tab groups; choose
 ---
 Detach this tab
   Position (same submenu as "Position Move")
+  ---
   Link to another tab group
 ---
 Close Tab
@@ -229,7 +231,6 @@ System
   ---
   Open folder of (exe name)
   Force kill this process
----
 Settings...
 ```
 
@@ -251,6 +252,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Link this tab group to another tab group
 
 - Move all tabs of the current group into another tab group.
+- Tab groups on other virtual desktops can be chosen too, under an item per desktop ([Virtual Desktop Support](#virtual-desktop-support))
 
 ![Link this tab group to another tab group](README_Image/MoveTabGroupToGroup.png)
 
@@ -294,10 +296,11 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Virtual Desktop Support
 
-- Tab groups are preserved when switching virtual desktops (Win+Tab)
+- A tab group is one group across virtual desktops. The tab of a window on another desktop is drawn at half opacity
+- Clicking such a tab switches to its desktop
+- A tab group with no window on the current desktop is not shown
+- The "Link to another tab group" menus also list the tab groups of other desktops, per desktop. Linking does not switch desktops
 - Tab group state is restored across all virtual desktops on WindowTabs restart
-- A window sent to another virtual desktop (in task view) stays in its tab group. The group is shown on every desktop that has one of its windows, and the tabs of windows on other desktops are drawn at half opacity. Clicking such a tab switches to its desktop
-- The menus that link a tab, or a whole group, into another tab group list the tab groups of other desktops under an item per desktop. A linked window moves to that group's position without switching desktops
 
 ### UWP Application Support
 
@@ -311,18 +314,25 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Settings Files
 
 - `Settings\` beside `WindowTabs.exe` holds the defaults
-    - `VersionFolder.json` - applications whose path changes with every version are treated as one application
-    - `Language\FileList.json` and `Language\<language>.json` - the language files
-- Those files are replaced by every upgrade. To change one, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
+    - `Settings\VersionFolder.json` - treats an application whose folder name changes with every update as one application
+        - Per-application settings are stored against the path of the exe, so an application with a version-number folder in its path loses them every time it is updated.
+        - To deal with that, name the exe here, and folders made only of digits and dots are ignored for it
+        - The bundled file lists `LineMediaPlayer.exe` (its exe sits under a version folder, as in `...\LineMediaPlayer\1.2.0.635\LineMediaPlayer.exe`)
+        - Only the applications listed are affected. A folder such as `C:\Program Files\Microsoft Visual Studio\18\...` has the same shape, and some people want two versions kept apart
+        - Store applications carry the version in their folder name too, but are recognised as one application without being listed here
+    - `Settings\Language\FileList.json` and `Settings\Language\<language>.json` - the language files
+- Those files are replaced by every upgrade. To change a translation yourself, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
 - To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
   - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
   - `FileList.json` replaces the shipped list whole, so it can also hide languages from the tray menu
 
-### Settings files from ss_2026.09.02 and earlier
+### Settings files that are no longer read
 
-- Up to ss_2026.09.02 the language files sat in `Language\` and the margins in `Settings\Window_Margin.json`, edited in place. The current version reads neither (the MSI removes them on upgrade; the zip leaves them)
-- If you edited the language files, move your copies before upgrading, to `%APPDATA%\WindowTabs\Settings\Language\`
-- Margins are no longer set by hand: WindowTabs finds the frame windows an application draws around its own window
+- Language files: up to ss_2026.09.02 they sat in `Language\`, not `Settings\Language\`, and were edited in place. If you edited them, move your copies to `%APPDATA%\WindowTabs\Settings\Language\`
+- Margins: WindowTabs now finds the frame windows an application draws around its own window, so nothing has to be set. These files are no longer read
+    - `Settings\Window_Margin.json` (up to ss_2026.09.02)
+    - `Settings\WindowMargin.json` and `%APPDATA%\WindowTabs\Settings\WindowMargin.json` (up to ss_2026.10.03)
+- Old files next to `WindowTabs.exe` are removed by the MSI and left in place by the zip. Files you put under `%APPDATA%` stay. Either way they do no harm
 
 ### Check for Updates
 
@@ -383,6 +393,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - **Outer or inner tabs**: choose "Outer, or inner when it would go off the display" (default) or "Always inner".
 - Configure hiding tabs for full-screen windows, while moving windows, and for inner tabs.
+- **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
 - **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
@@ -396,6 +407,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 ### Workspace Tab
 
 - Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
+- [New] saves the tab groups and tabs on the current desktop. With several virtual desktops it offers "Tabs on the current desktop" and "Tabs on all desktops"
 
 ## Building from Source
 
