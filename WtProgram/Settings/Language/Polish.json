@@ -240,6 +240,8 @@
   "DetachTabSamePosition": "Ta sama pozycja",
   "DetachAndDockingTabToGroup": "Połącz z inną grupą kart",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "OtherDesktopTabsSuffix": "Karty na innych pulpitach: {0}",
+  "OtherDesktopGroupsMenu": "Grupy kart na pulpicie {0}",
 
   "SystemMenu": "System",
   "SystemCopyExePath": "Kopiuj ścieżkę {0}",

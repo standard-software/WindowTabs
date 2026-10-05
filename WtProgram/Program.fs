@@ -803,8 +803,10 @@ type Program() as this =
             this.suppressExplicitRestore(window.hwnd, window.text) |> ignore
             match r.destination with
             | JoinGroup(groupHwnd, invokerHwnd) ->
-                // Only a group drawn on the desktop in front of us (joinableGroups).
-                match this.joinableGroups |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
+                // An explicitly chosen destination may be hidden on another desktop.
+                // Automatic grouping still uses only groups drawn here.
+                let targets = if VirtualDesktopGroups.keepAway then this.desktop.groups.list else this.joinableGroups
+                match targets |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
                 | Some(g) ->
                     let anchor = if g.windows.contains((=) invokerHwnd) then invokerHwnd else IntPtr.Zero
                     pendingNewTabInvokers.map(fun m -> m.add window.hwnd anchor)
@@ -2062,13 +2064,25 @@ type Program() as this =
         let savedAlign =
             if (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsSome then None
             else this.savedAlignFor(try window.pid.processPath with _ -> "")
+        let explicitLink =
+            ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
+            |> Option.exists (fun request ->
+                match request.destination with JoinGroup _ -> true | _ -> false)
         match group :> obj with
         | :? GroupInfo as gi ->
             gi.addWindowWith(hwnd, fun wg ->
+                let state = VirtualDesktopGroups.Live.snapshot()
+                let away = VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
+                           (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away
+                let linked = explicitLink && (away || not wg.isDesktopShownThreadSafe)
                 let invoker = Tab(invokerHwnd)
                 if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
-                    wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                 pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                    if linked then
+                        wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                           pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                    else
+                        wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                     pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
                 else
                     let alignment =
                         match returningState with
@@ -2078,7 +2092,10 @@ type Program() as this =
                                 if isNewGroup then None
                                 else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
                     let pinned = returningState |> Option.map (fun info -> info.isPinned)
-                    wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
+                    if linked then
+                        wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder)
+                    else
+                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
         if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
@@ -2620,7 +2637,7 @@ type Program() as this =
                     members
                     |> List.filter (fun h -> (groups |> List.filter (fun g -> g.windows.contains((=) h))).Length > 1)
                     |> Set.ofList
-                VirtualDesktopGroups.Live.publish shared several current readAt readMap desktopResults
+                VirtualDesktopGroups.Live.publish shared several current listed readAt readMap desktopResults
                 let keyed = groups |> List.mapi (fun i g -> i, g) |> Map.ofList
                 let stateOf (i: int) (g: IGroup) : VirtualDesktopGroups.GroupState =
                     { key = i

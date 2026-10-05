@@ -1796,6 +1796,71 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
                              ?after=after, ?restoreOrder=restoreOrder)
 
+    // Explicit links place only the joining window. Reading the destination's
+    // placement must never restore or activate one of its existing members.
+    member this.addWindowLinked(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
+                                ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun () ->
+        if not (this.windows.contains(hwnd)) then
+            let target =
+                zorderCell.value.tryHead |> Option.bind (fun front ->
+                    let window = this.os.windowFromHwnd(front)
+                    let wp = window.placement
+                    if window.isMinimized then
+                        // rcNormalPosition uses workspace coordinates except for tool
+                        // windows, as in Win32Helper.RestoreWindowNoActivate.
+                        let normal =
+                            if int(window.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then wp.rcNormalPosition
+                            else
+                                match Mon.fromHwnd(front) with
+                                | Some mon -> wp.rcNormalPosition.move(mon.workRect.x - mon.displayRect.x,
+                                                                      mon.workRect.y - mon.displayRect.y)
+                                | None -> wp.rcNormalPosition
+                        Some(this.removeWindowMarginForRead(front, normal), false,
+                             { wp with showCmd = ShowWindowCommands.SW_SHOWNORMAL; flags = 0 })
+                    else
+                        // Read without publishing placement: its listeners update the
+                        // strip and guard. Linking needs only the destination rectangle.
+                        let bounds = window.bounds
+                        if window.isWindow && bounds.width > 0 && bounds.height > 0 then
+                            let maximized = window.isMaximized
+                            let bounds = if maximized then bounds else this.removeWindowMarginForRead(front, bounds)
+                            Some(bounds, maximized, wp)
+                        else
+                            placement.value |> Option.map (fun (bounds, cached) ->
+                                let maximized = cached.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
+                                (if maximized then maximizedFrameBounds |> Option.defaultValue bounds else bounds),
+                                maximized, cached))
+            // Place before registering membership and window event hooks, so
+            // the joiner's restore cannot trigger a restore of existing members.
+            frameMargins.Attach(hwnd)
+            try
+                this.refreshWindowMargin(hwnd) |> ignore
+                target |> Option.iter (fun (bounds, maximized, _) ->
+                    if bounds.width > 0 && bounds.height > 0 then
+                        let window = this.os.windowFromHwnd(hwnd)
+                        let bounds = if maximized then bounds else this.applyWindowMarginForWrite(hwnd, bounds)
+                        followerPlacements.Synchronous(hwnd, fun () ->
+                            this.withoutTransitions(hwnd, fun () ->
+                                // Only the joiner may need restoring, including a joiner
+                                // on another desktop. Its restoration must not activate it.
+                                if window.isMinimized then
+                                    window.showWindow(ShowWindowCommands.SW_SHOWNOACTIVATE)
+                                if Win32Helper.SetWindowMaximizedNoActivate(hwnd, maximized, bounds.RECT) then
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
+                                else
+                                    // A refused style change must not stop the link. The
+                                    // bounds are still applied, to the joiner only, and
+                                    // without a placement call: SetWindowPlacement activates
+                                    // the window, and a joiner on another desktop would
+                                    // switch to it.
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, bounds)))
+                        if this.hasWindowMargin(hwnd) && not maximized then
+                            marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (bounds.width, bounds.height))))
+                this.addWindowPlaced(hwnd, withDelay, false, ?alignment=alignment, ?pinned=pinned,
+                                     ?after=after, ?restoreOrder=restoreOrder)
+            finally
+                if not (this.windows.contains(hwnd)) then frameMargins.Remove(hwnd)
+
     // `place` false: the window joins where it is. A group made for a window
     // shown on all desktops, on another desktop, takes it as it is found - the
     // first member's own rectangle is the group's, and moving the others to it

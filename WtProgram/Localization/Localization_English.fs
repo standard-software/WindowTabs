@@ -243,6 +243,8 @@ module Localization_English =
         ("DetachTabSamePosition", "Same position")
         ("DetachAndDockingTabToGroup", "Link to another tab group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
+        ("OtherDesktopTabsSuffix", "Tabs on other desktops: {0}")
+        ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 
         ("SystemMenu", "System")
         ("SystemCopyExePath", "Copy {0} path")

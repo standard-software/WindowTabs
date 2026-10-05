@@ -240,6 +240,8 @@
   "DetachTabSamePosition": "Cùng vị trí",
   "DetachAndDockingTabToGroup": "Liên kết với nhóm thẻ khác",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "OtherDesktopTabsSuffix": "Thẻ trên các màn hình nền khác: {0}",
+  "OtherDesktopGroupsMenu": "Nhóm thẻ trên màn hình nền {0}",
 
   "SystemMenu": "Hệ thống",
   "SystemCopyExePath": "Sao chép đường dẫn {0}",

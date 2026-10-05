@@ -100,6 +100,25 @@ module VirtualDesktopGroups =
         desktop: Guid option
     }
 
+    // Unreadable windows stay at the top level so a partial reading cannot
+    // hide a destination. Here also includes windows shown on all desktops.
+    // So does a window that names a desktop Explorer does not list: it has no
+    // parent item to go under, and leaving it out would drop its group from
+    // the menu altogether.
+    let menuTabs current (listed: Guid list option) (reads: Map<IntPtr, WindowRead>) tabs =
+        let isListed desktop = listed |> Option.exists (List.contains desktop)
+        let elsewhere (hwnd, _) =
+            match Map.tryFind hwnd reads with
+            | Some({ presence = Away; desktop = Some desktop }) when Some desktop <> current && isListed desktop ->
+                Some desktop
+            | _ -> None
+        let here = tabs |> List.filter (elsewhere >> Option.isNone)
+        let others =
+            listed |> Option.defaultValue [] |> List.mapi (fun i desktop ->
+                i + 1, desktop, tabs |> List.filter (fun tab -> elsewhere tab = Some desktop))
+            |> List.filter (fun (_, desktop, members) -> Some desktop <> current && not members.IsEmpty)
+        here, others
+
     type Desktops = {
         /// The desktop being looked at, when it can be trusted (trustCurrent).
         current: Guid option
@@ -726,13 +745,14 @@ module VirtualDesktopGroups =
             shared: Set<IntPtr>
             inSeveral: Set<IntPtr>
             current: Guid option
+            listed: Guid list option
             reads: Map<IntPtr, WindowRead>
             desktopResults: Map<IntPtr, int * Guid>
         }
         let private gate = obj()
         let mutable private latest = {
             generation = 0L; readAt = DateTime.MinValue
-            shared = Set.empty; inSeveral = Set.empty; current = None
+            shared = Set.empty; inSeveral = Set.empty; current = None; listed = None
             reads = Map.empty; desktopResults = Map.empty }
         let mutable private invalidatedAt = DateTime.MinValue
         // Cloaking/uncloaking invalidates in-flight as well as published reads.
@@ -781,9 +801,9 @@ module VirtualDesktopGroups =
         let mayMove state (home: Guid option) hwnd =
             isHere state hwnd && not (state.shared.Contains hwnd) &&
             home.IsSome && home <> state.current && (read state hwnd).desktop = state.current
-        let publish s several current readAt reads desktopResults =
+        let publish s several current listed readAt reads desktopResults =
             lock gate (fun () ->
                 latest <- {
                     generation = latest.generation + 1L; readAt = readAt
-                    shared = s; inSeveral = several; current = current
+                    shared = s; inSeveral = several; current = current; listed = listed
                     reads = reads; desktopResults = desktopResults })

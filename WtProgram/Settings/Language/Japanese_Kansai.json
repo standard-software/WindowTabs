@@ -240,6 +240,8 @@
   "DetachTabSamePosition": "同じ位置",
   "DetachAndDockingTabToGroup": "他のタブグループにくっつける",
   "MoveTabGroupFormat": "{0}{1}: {2}",
+  "OtherDesktopTabsSuffix": "他のデスクトップに{0}タブあるで",
+  "OtherDesktopGroupsMenu": "デスクトップ{0}のタブグループ",
 
   "SystemMenu": "システムやで",
   "SystemCopyExePath": "{0}のパスコピーするで",

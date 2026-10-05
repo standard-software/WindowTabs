@@ -240,6 +240,8 @@
   "DetachTabSamePosition": "Posisi sama",
   "DetachAndDockingTabToGroup": "Tautkan ke grup tab lain",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "OtherDesktopTabsSuffix": "Tab di desktop lain: {0}",
+  "OtherDesktopGroupsMenu": "Grup tab di desktop {0}",
 
   "SystemMenu": "Sistem",
   "SystemCopyExePath": "Salin jalur {0}",
