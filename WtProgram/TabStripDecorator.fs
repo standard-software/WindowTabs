@@ -21,6 +21,7 @@ type TabGroupInfo = {
     firstTabIcon: Img option
     firstTabIconSmall: Img option
     tabHwnds: IntPtr list
+    tabIcons: Map<IntPtr, Img option * Img option>
 }
 
 // Tab color decoration definitions
@@ -179,9 +180,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let iconClickProtectUntil = ref System.DateTime.MinValue
     let iconClickHideProtection = System.TimeSpan.FromSeconds(1.0)
     let firstClickTab = ref None  // Track the tab that was clicked first in potential double-click
-    // What the last groupInfos entry was built from, so the periodic refresh
-    // rebuilds the icon bitmaps only when the tabs actually changed.
-    let mutable groupInfoSource : (IntPtr list * string list * obj * obj) option = None
+    // What the last groupInfos entry was built from, so an unchanged periodic
+    // refresh does not republish the snapshot.
+    let mutable groupInfoSource : (IntPtr list * string list * (obj * obj) list) option = None
+    // Pictures belong to each tab's icon objects, not its changing title.
+    // Only this decorator's owning thread reads or updates the cache.
+    let mutable tabIconCache : Map<IntPtr, obj * obj * (Img option * Img option)> = Map.empty
     // What the virtual desktops of this group's windows looked like on the
     // previous tick, and which windows they were. A straddle is acted on only
     // when the same one is seen twice, and never right after the group gained
@@ -227,6 +231,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             // If no tabs remain, remove from groupInfos
             if tabs.count = 0 then
+                tabIconCache <- Map.empty
+                groupInfoSource <- None
                 lock groupInfos (fun () -> groupInfos.Remove(group.hwnd) |> ignore)
             else
                 let tabNames =
@@ -236,51 +242,57 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     )
                 let tabHwnds =
                     tabs.list |> List.map (fun (Tab(hwnd)) -> hwnd)
-                let firstTabInfo =
-                    if tabs.count > 0 then Some(this.ts.tabInfo(tabs.at(0))) else None
-                let source =
-                    tabHwnds, tabNames,
-                    (firstTabInfo |> Option.map (fun info -> box info.iconSmall) |> Option.toObj),
-                    (firstTabInfo |> Option.map (fun info -> box info.iconBig) |> Option.toObj)
+                let tabInfos = tabs.list |> List.map this.ts.tabInfo
+                let source = tabHwnds, tabNames, (tabInfos |> List.map (fun info -> box info.iconSmall, box info.iconBig))
                 let unchanged =
                     match groupInfoSource with
-                    | Some(hwnds, names, small, big) ->
-                        let (h, n, s, b) = source
-                        hwnds = h && names = n && Object.ReferenceEquals(small, s) && Object.ReferenceEquals(big, b)
-                        && lock groupInfos (fun () -> groupInfos.ContainsKey(group.hwnd))
+                    | Some(h, n, icons) ->
+                        let (_, _, currentIcons) = source
+                        h = tabHwnds && n = tabNames && icons.Length = currentIcons.Length &&
+                        List.forall2 (fun (s, b) (s2, b2) -> Object.ReferenceEquals(s, s2) && Object.ReferenceEquals(b, b2)) icons currentIcons &&
+                        lock groupInfos (fun () -> groupInfos.ContainsKey(group.hwnd))
                     | None -> false
                 if not unchanged then
-                    groupInfoSource <- Some(source)
-                    // 32 px, for menus drawn above 100%. Win32Menu resizes this to
-                    // 16 px * the menu monitor's scale, so a scaled menu SHRINKS a
-                    // large picture instead of stretching a 16 px one - which is
-                    // precisely the blur this change removes everywhere else.
-                    let firstTabIcon =
-                        firstTabInfo |> Option.bind (fun info ->
-                            try
-                                let source =
-                                    if Object.ReferenceEquals(info.iconBig, SystemIcons.Application)
-                                    then info.iconSmall else info.iconBig
-                                Some(ScaledIcon.at source 32 |> fun i -> i.ToBitmap().img.resize(Sz(32,32)))
-                            with _ -> None)
-                    // The unchanged, pre-DPI-work expression. A 100% monitor must
-                    // show the icon the application actually drew for 16 px, not a
-                    // 32 px picture reduced to 16 - many applications simplify
-                    // their small icon rather than scale it down, so the two are
-                    // visibly different pictures, and "100% is untouched" has to
-                    // hold for the context menu as well as for the strip.
-                    let firstTabIconSmall =
-                        firstTabInfo |> Option.bind (fun info ->
-                            try Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
-                            with _ -> None)
+                    // Rebuilding the map drops departed tabs while preserving pictures
+                    // for unchanged icon objects, even when names or order changed.
+                    let cache =
+                        List.zip tabHwnds tabInfos |> List.map (fun (hwnd, info) ->
+                            let smallSource, bigSource = box info.iconSmall, box info.iconBig
+                            let pictures =
+                                match Map.tryFind hwnd tabIconCache with
+                                | Some(small, big, pictures) when
+                                    Object.ReferenceEquals(small, smallSource) && Object.ReferenceEquals(big, bigSource) -> pictures
+                                | _ ->
+                                    // Menus above 100% shrink a 32 px picture to the
+                                    // monitor's menu size instead of stretching 16 px artwork.
+                                    let big =
+                                        try
+                                            let source = if Object.ReferenceEquals(info.iconBig, SystemIcons.Application) then info.iconSmall else info.iconBig
+                                            Some(ScaledIcon.at source 32 |> fun i -> i.ToBitmap().img.resize(Sz(32,32)))
+                                        with _ -> None
+                                    // At 100%, use the application's own 16 px artwork.
+                                    // Applications may simplify this icon rather than scale
+                                    // it down, so it must not be made from the 32 px picture.
+                                    let small =
+                                        try Some(info.iconSmall.ToBitmap().img.resize(Sz(16,16)))
+                                        with _ -> None
+                                    big, small
+                            hwnd, (smallSource, bigSource, pictures)) |> Map.ofList
+                    // An open menu may still hold a replaced picture; as before,
+                    // release our references without disposing those pictures here.
+                    tabIconCache <- cache
+                    let icons = cache |> Map.map (fun _ (_, _, pictures) -> pictures)
+                    let big, small = icons.[tabHwnds.Head]
                     let info = {
                         hwnd = group.hwnd
                         tabNames = tabNames
                         tabCount = tabs.count
-                        firstTabIcon = firstTabIcon
-                        firstTabIconSmall = firstTabIconSmall
+                        firstTabIcon = big
+                        firstTabIconSmall = small
                         tabHwnds = tabHwnds
+                        tabIcons = icons
                     }
+                    groupInfoSource <- Some source
                     lock groupInfos (fun () -> groupInfos.[group.hwnd] <- info)
         with _ -> ()
 
@@ -290,14 +302,46 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     /// not make a group look as if it straddles.
     /// A group of another desktop holding only windows shown on all desktops
     /// has every window here, and is still not this desktop's group.
-    member private this.isOnCurrentDesktop(info: TabGroupInfo) =
+    member private this.isOnCurrentDesktop(state: VirtualDesktopGroups.Live.Snapshot, usable: bool) (info: TabGroupInfo) =
         let shown =
             lock decorators (fun () ->
                 match decorators.TryGetValue(info.hwnd) with
                 | true, d -> d.group.isDesktopShownThreadSafe
                 | _ -> true)
-        let state = VirtualDesktopGroups.Live.snapshot()
-        shown && (info.tabHwnds |> List.forall (VirtualDesktopGroups.Live.isHere state))
+        // Drawn here with some of its windows elsewhere, it is still this
+        // desktop's group.
+        if not usable then true
+        elif not shown then false
+        elif VirtualDesktopGroups.keepAway then
+            info.tabHwnds |> List.exists (fun hwnd ->
+                let r = VirtualDesktopGroups.Live.read state hwnd
+                r.presence <> VirtualDesktopGroups.Away || r.desktop.IsNone)
+        else
+            info.tabHwnds |> List.forall (fun hwnd ->
+                (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Here)
+
+    /// A group as a menu of this desktop names it: only its tabs that are
+    /// here are counted and listed. The tabs of its windows on another desktop
+    /// are drawn dimmed in its strip, and a menu entry that counted them would
+    /// not match what is seen. The icon is chosen the same way (updateGroupInfo).
+    member private this.hereInfo(state: VirtualDesktopGroups.Live.Snapshot, usable: bool) (info: TabGroupInfo) =
+        if not VirtualDesktopGroups.keepAway || not usable ||
+           info.tabNames.Length <> info.tabHwnds.Length then info
+        else
+            let here =
+                List.zip info.tabHwnds info.tabNames
+                |> List.filter (fun (hwnd, _) ->
+                    let r = VirtualDesktopGroups.Live.read state hwnd
+                    r.presence <> VirtualDesktopGroups.Away || r.desktop.IsNone)
+            let big, small =
+                here |> List.tryHead |> Option.bind (fun (h, _) -> Map.tryFind h info.tabIcons)
+                |> Option.defaultValue (info.firstTabIcon, info.firstTabIconSmall)
+            { info with
+                firstTabIcon = big
+                firstTabIconSmall = small
+                tabHwnds = here |> List.map fst
+                tabNames = here |> List.map snd
+                tabCount = here.Length }
 
     /// A tab group is one window to the person using it, so it belongs on one
     /// virtual desktop. Nothing stops a tabbed window from being sent to
@@ -485,7 +529,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let stillAway = stayedHere && not away.IsEmpty && away.Length = strays.Length
         let act =
             VirtualDesktopGroups.Live.canDecide state group.windows.items.list &&
-            VirtualDesktopIntegrity.actOnStraddle && stillAway && not tooSoon && elsewhere = 0
+            VirtualDesktopIntegrity.actOnStraddle && not VirtualDesktopGroups.keepAway &&
+            stillAway && not tooSoon && elsewhere = 0
         VirtualDesktopTrace.log (fun () ->
             sprintf "group=%X straddle CONFIRMED base=%s strays=%s stillAway=%b tooSoon=%b otherGroups=%d -> %s"
                 (group.hwnd.ToInt64()) ((string baseDesktop).Substring(0, 8))
@@ -1123,6 +1168,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let tab = Tab(hwnd)
             let window = os.windowFromHwnd(hwnd)
 
+            let state = VirtualDesktopGroups.Live.snapshot()
+            let away = VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
+                       (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away
+            let linked = away || not targetGroup.isDesktopShownThreadSafe
+
             try
                 // Suspend tab monitoring to prevent auto-grouping during the move
                 Services.program.suspendTabMonitoring()
@@ -1146,10 +1196,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         System.Threading.Thread.Sleep(50)
 
                         // Hide window temporarily to prevent flashing
-                        window.hideOffScreen(None)
+                        if not linked then window.hideOffScreen(None)
 
                         // Restore window state if necessary
-                        if wasMinimized || wasMaximized then
+                        if not linked && (wasMinimized || wasMaximized) then
                             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
                         // Use synchronous invoke to ensure completion
@@ -1163,9 +1213,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     let alignment =
                                         targetGroup.ts.visualOrder.list |> List.tryLast
                                         |> Option.map targetGroup.ts.getTabAlign
-                                    targetGroup.addWindow(hwnd, false, ?alignment=alignment)
+                                    if linked then
+                                        targetGroup.addWindowLinked(hwnd, false, ?alignment=alignment)
+                                    else
+                                        targetGroup.addWindow(hwnd, false, ?alignment=alignment)
                                     // Show window again (target group will handle positioning)
-                                    window.showWindow(ShowWindowCommands.SW_SHOW)
+                                    if not away then window.showWindow(ShowWindowCommands.SW_SHOW)
                                     moveCompleted := true
                             with ex ->
                                 moveException := Some ex
@@ -1177,12 +1230,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             // Restore to original group on failure
                             System.Diagnostics.Debug.WriteLine(sprintf "Move failed, restoring to original group: %s" ex.Message)
                             group.addWindow(hwnd, false)
-                            window.showWindow(ShowWindowCommands.SW_SHOW)
+                            if not away then window.showWindow(ShowWindowCommands.SW_SHOW)
                             raise ex
                         | None when not !moveCompleted ->
                             // Move didn't complete, restore
                             group.addWindow(hwnd, false)
-                            window.showWindow(ShowWindowCommands.SW_SHOW)
+                            if not away then window.showWindow(ShowWindowCommands.SW_SHOW)
                         | None ->
                             // Move successful - wait a bit for UI to update
                             System.Threading.Thread.Sleep(100)
@@ -1966,6 +2019,94 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let groupMenuIcon (info: TabGroupInfo) =
             if menuScale = 1.0 then info.firstTabIconSmall else info.firstTabIcon
 
+        // A cloak notification may invalidate readings without changing desktops.
+        // Share one registry read and one usability decision across all three menus.
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let fresh = VirtualDesktopGroups.Live.isFresh state
+        let explorerDesktop =
+            let mutable id = Guid.Empty
+            if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
+        let usable = state.current.IsSome && (fresh || explorerDesktop = state.current)
+#if DEBUG
+        let mutable menuReadingLogged = false
+#endif
+
+        // All link menus use one immutable reading and the same presentation.
+        let linkGroupItems exclude click =
+            this.updateGroupInfo()
+#if DEBUG
+            let mutable listedGroups = Set.empty<IntPtr>
+#endif
+            let extended = VirtualDesktopGroups.keepAway && usable &&
+                           (state.listed |> Option.exists (fun ds -> ds.Length > 1 && state.current |> Option.exists (fun c -> List.contains c ds)))
+            let infos = lock groupInfos (fun () -> groupInfos.Values |> List.ofSeq)
+                        |> List.filter (fun info -> info.hwnd <> group.hwnd && info.tabCount > 0 && not (exclude info))
+                        |> List.distinctBy (fun info -> info.hwnd)
+            let entry (info: TabGroupInfo) members otherCount =
+                try
+                    let target = lock decorators (fun () ->
+                        match decorators.TryGetValue(info.hwnd) with
+                        | true, d when WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) -> Some d
+                        | _ -> None)
+                    target |> Option.map (fun decorator ->
+                        let count = List.length members
+                        let limit = if count = 1 then 22 elif count = 2 then 9 else 5
+                        let names = members |> List.truncate 3 |> List.map (fun (_, name: string) ->
+                            if name.Length > limit then name.Substring(0, limit) + "..." else name)
+                        let names = String.Join(" ", names) + (if count > 3 then "..." else "")
+                        let word = Localization.getString(if count = 1 then "TabSingular" else "TabPlural")
+                        let text = String.Format(Localization.getString("MoveTabGroupFormat"), count, word, names)
+                        let text = if otherCount > 0 then text + ": " + String.Format(Localization.getString("OtherDesktopTabsSuffix"), otherCount) else text
+                        let big, small = info.tabIcons |> Map.tryFind (fst members.Head) |> Option.defaultValue (None, None)
+#if DEBUG
+                        listedGroups <- listedGroups.Add info.hwnd
+#endif
+                        CmiRegular({ text = text; image = groupMenuIcon { info with firstTabIcon = big; firstTabIconSmall = small }
+                                     click = (fun () -> click decorator); flags = List2() }))
+                with _ -> None
+            let views = infos |> List.map (fun info ->
+                let tabs = List.zip info.tabHwnds info.tabNames
+                let here, others = VirtualDesktopGroups.menuTabs state.current state.listed state.reads tabs
+                info, here, others)
+            let hereItems =
+                if extended then
+                    views |> List.choose (fun (info, here, _) ->
+                        if here.IsEmpty then None else entry info here (info.tabCount - here.Length))
+                else
+                    infos |> List.map (this.hereInfo(state, usable))
+                    |> List.filter (this.isOnCurrentDesktop(state, usable))
+                    |> List.choose (fun info -> if info.tabCount = 0 then None else entry info (List.zip info.tabHwnds info.tabNames) 0)
+            let parents =
+                if not extended then [] else
+                state.listed.Value |> List.mapi (fun i desktop ->
+                    let children = views |> List.choose (fun (info, here, others) ->
+                        if not here.IsEmpty then None else
+                        others |> List.tryFind (fun (_, d, _) -> d = desktop)
+                        |> Option.bind (fun (_, _, tabs) -> entry info tabs (info.tabCount - tabs.Length)))
+                    let text = String.Format(Localization.getString("OtherDesktopGroupsMenu"), i + 1)
+                    if Some desktop = state.current then None
+                    elif children.IsEmpty then
+                        // Keep empty desktops visible without offering a submenu.
+                        Some(CmiRegular({ text = text; image = None; click = (fun () -> ())
+                                          flags = List2([MenuFlags.MF_GRAYED]) }))
+                    else
+                        Some(CmiPopUp({ text = text; image = None
+                                        items = List2(children); flags = List2() }))) |> List.choose id
+#if DEBUG
+            // The first link menu lists all destinations; log it once per context
+            // menu, not once for each of the three presentations of that list.
+            if not fresh && not menuReadingLogged then
+                menuReadingLogged <- true
+                VirtualDesktopTrace.log (fun () ->
+                    let prefix (desktop: Guid option) =
+                        desktop |> Option.map (fun id -> id.ToString("N").Substring(0, 8)) |> Option.defaultValue "none"
+                    let age = if state.readAt = DateTime.MinValue then -1.0 else (DateTime.UtcNow - state.readAt).TotalMilliseconds
+                    sprintf "link-menu case=%s ageMs=%.0f currentKnown=%b listedKnown=%b current=%s explorer=%s groups=%d"
+                        (if usable then "stale-but-same-desktop" else "fallback") age
+                        state.current.IsSome state.listed.IsSome (prefix state.current) (prefix explorerDesktop) listedGroups.Count)
+#endif
+            hereItems @ (if parents.IsEmpty then [] else CmiSeparator :: parents)
+
         // Build the "Snap Percent" submenu (e.g. "Snap 90%") containing Left/Right/Top/Bottom,
         // corner variants, and Center options at the given percent.
         let buildSnapPercentSubMenu (snapPercentFn: string -> int -> unit) (pct: int) =
@@ -2188,64 +2329,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Item 3: "New window (link to group)" submenu — launch as a new tab docked into an existing other group
         let newWindowLinkGroupItem =
-            // Other groups refresh their own entries (the timer in init);
-            // only this group's is brought up to date here.
-            this.updateGroupInfo()
-            let otherGroupInfos = lock groupInfos (fun () ->
-                groupInfos.Values
-                |> List.ofSeq
-                |> List.filter (fun info ->
-                    info.hwnd <> group.hwnd && info.tabCount > 0 &&
-                    // A group on another virtual desktop is not offered: a
-                    // group belongs on one desktop (VirtualDesktopIntegrity).
-                    this.isOnCurrentDesktop info))
-            let groupItems =
-                if List.isEmpty otherGroupInfos then []
-                else
-                    let uniqueGroupInfos = otherGroupInfos |> List.distinctBy (fun info -> info.hwnd)
-                    uniqueGroupInfos
-                    |> List.choose (fun info ->
-                        try
-                            let targetDecorator = lock decorators (fun () ->
-                                decorators.Values
-                                |> Seq.tryFind (fun d ->
-                                    d.group.hwnd = info.hwnd &&
-                                    WinUserApi.IsWindow(d.group.hwnd) &&
-                                    WinUserApi.IsWindow(d.ts.hwnd)))
-                            match targetDecorator with
-                            | Some decorator ->
-                                let fullNameString =
-                                    if info.tabCount = 1 then
-                                        let tabName = info.tabNames |> List.head
-                                        if tabName.Length > 22 then tabName.Substring(0, 22) + "..." else tabName
-                                    elif info.tabCount = 2 then
-                                        let tabNames = info.tabNames |> List.take 2
-                                        let truncatedNames =
-                                            tabNames
-                                            |> List.map (fun name -> if name.Length > 9 then name.Substring(0, 9) + "..." else name)
-                                        String.Join(" ", truncatedNames)
-                                    else
-                                        let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
-                                        let truncatedNames =
-                                            tabNames
-                                            |> List.map (fun name -> if name.Length > 5 then name.Substring(0, 5) + "..." else name)
-                                        let nameString = String.Join(" ", truncatedNames)
-                                        if info.tabCount > 3 then nameString + "..." else nameString
-                                let formatString = Localization.getString("MoveTabGroupFormat")
-                                let tabWord =
-                                    if info.tabCount = 1 then Localization.getString("TabSingular")
-                                    else Localization.getString("TabPlural")
-                                let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
-                                Some(CmiRegular({
-                                    text = menuText
-                                    image = groupMenuIcon info
-                                    click = fun() ->
-                                        handleLaunchError (fun path ->
-                                            Services.program.launchNewWindow decorator.group.hwnd hwnd processPath)
-                                    flags = List2()
-                                }))
-                            | None -> None
-                        with _ -> None)
+            let groupItems = linkGroupItems (fun _ -> false) (fun decorator ->
+                handleLaunchError (fun path -> Services.program.launchNewWindow decorator.group.hwnd hwnd path))
             CmiPopUp({
                 text = Localization.getString("NewWindowLinkGroupMenu")
                 image = None
@@ -2260,7 +2345,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
                 image = None
-                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems @ [newWindowLinkGroupItem])
+                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems
+                              @ [CmiSeparator; newWindowLinkGroupItem])
                 flags = List2()
             })
 
@@ -2932,109 +3018,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 }) ]
 
         let moveTabGroupToGroupMenu =
-            // Other groups refresh their own entries (the timer in init);
-            // only this group's is brought up to date here.
-            this.updateGroupInfo()
-
-            // Now get the updated group infos
-            let allGroupInfos = lock groupInfos (fun () ->
-                groupInfos.Values
-                |> List.ofSeq
-                |> List.filter (fun info ->
-                    info.hwnd <> group.hwnd && // Not current group
-                    info.tabCount > 0 && // Has at least one tab
-                    // Only groups on this virtual desktop
-                    this.isOnCurrentDesktop info
-                )
-            )
-
-            if not (List.isEmpty allGroupInfos) then
-                // Build menu items for each other group
-                let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
-                let menuItems =
-                    uniqueGroupInfos
-                    |> List.choose (fun info ->
-                        try
-                            // Get the decorator for this group to handle the click
-                            let targetDecorator = lock decorators (fun () ->
-                                decorators.Values |> Seq.tryFind (fun d ->
-                                    d.group.hwnd = info.hwnd &&
-                                    WinUserApi.IsWindow(d.group.hwnd) &&
-                                    WinUserApi.IsWindow(d.ts.hwnd)
-                                )
-                            )
-
-                            // Only create menu item if we have a valid decorator
-                            match targetDecorator with
-                            | Some decorator ->
-                                // Build menu text with tab names (same as moveTabMenu)
-                                let fullNameString =
-                                    if info.tabCount = 1 then
-                                        let tabName = info.tabNames |> List.head
-                                        if tabName.Length > 22 then
-                                            tabName.Substring(0, 22) + "..."
-                                        else
-                                            tabName
-                                    elif info.tabCount = 2 then
-                                        let tabNames = info.tabNames |> List.take 2
-                                        let truncatedNames = tabNames |> List.map (fun name ->
-                                            if name.Length > 9 then
-                                                name.Substring(0, 9) + "..."
-                                            else
-                                                name
-                                        )
-                                        String.Join(" ", truncatedNames)
-                                    else
-                                        let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
-                                        let truncatedNames = tabNames |> List.map (fun name ->
-                                            if name.Length > 5 then
-                                                name.Substring(0, 5) + "..."
-                                            else
-                                                name
-                                        )
-                                        let nameString = String.Join(" ", truncatedNames)
-                                        if info.tabCount > 3 then
-                                            nameString + "..."
-                                        else
-                                            nameString
-
-                                let formatString = Localization.getString("MoveTabGroupFormat")
-                                let tabWord =
-                                    if info.tabCount = 1 then
-                                        Localization.getString("TabSingular")
-                                    else
-                                        Localization.getString("TabPlural")
-                                let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
-
-                                Some(CmiRegular({
-                                    text = menuText
-                                    image = groupMenuIcon info
-                                    click = fun() ->
-                                        // Move all tabs to the target group
-                                        this.moveTabGroupToGroup(decorator.group)
-                                    flags = List2()
-                                }))
-                            | None ->
-                                None
-                        with ex ->
-                            System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)
-                            None
-                    )
-
-                CmiPopUp({
-                    text = Localization.getString("DockingTabGroupToGroup")
-                    image = None
-                    items = List2(menuItems)
-                    flags = List2()
-                })
-            else
-                // No other groups available - show disabled menu
-                CmiPopUp({
-                    text = Localization.getString("DockingTabGroupToGroup")
-                    image = None
-                    items = List2([])
-                    flags = List2([MenuFlags.MF_GRAYED])
-                })
+            let items = linkGroupItems (fun _ -> false) (fun decorator -> this.moveTabGroupToGroup(decorator.group))
+            CmiPopUp({
+                text = Localization.getString("DockingTabGroupToGroup")
+                image = None
+                items = List2(items)
+                flags = if items.IsEmpty then List2([MenuFlags.MF_GRAYED]) else List2()
+            })
 
         List2(
             [
@@ -3049,130 +3039,26 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(CmiSeparator)
             // Tab Detach and Split submenu containing both detach and link menus
             (
-                // Other groups refresh their own entries (the timer in init);
-                // only this group's is brought up to date here.
-                this.updateGroupInfo()
-
-                // Now get the updated group infos (shared by all menus that need group info)
-                let allGroupInfos = lock groupInfos (fun () ->
-                    groupInfos.Values
-                    |> List.ofSeq
-                    |> List.filter (fun info ->
-                        info.hwnd <> group.hwnd && // Not current group
-                        info.tabCount > 0 && // Has at least one tab
-                        // Only groups on this virtual desktop
-                        this.isOnCurrentDesktop info &&
-                        // Don't show groups that contain the tab we're moving
-                        not (info.tabHwnds |> List.contains hwnd)
-                    )
-                )
-
+                let items = linkGroupItems (fun info -> List.contains hwnd info.tabHwnds) (fun decorator ->
+                    this.actionTargetsInVisualOrder(hwnd)
+                    |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group)))
                 let moveTabMenu =
-                    if not (List.isEmpty allGroupInfos) then
-                        // Build menu items for each other group
-                        // Use distinctBy to prevent duplicates
-                        let uniqueGroupInfos = allGroupInfos |> List.distinctBy (fun info -> info.hwnd)
-                        let menuItems =
-                            uniqueGroupInfos
-                            |> List.choose (fun info ->
-                                try
-                                    // Get the decorator for this group to handle the click
-                                    let targetDecorator = lock decorators (fun () ->
-                                        decorators.Values |> Seq.tryFind (fun d ->
-                                            d.group.hwnd = info.hwnd &&
-                                            WinUserApi.IsWindow(d.group.hwnd) &&
-                                            WinUserApi.IsWindow(d.ts.hwnd)
-                                        )
-                                    )
-
-                                    // Only create menu item if we have a valid decorator
-                                    match targetDecorator with
-                                    | Some decorator ->
-                                        // Build menu text with tab names
-                                        let fullNameString =
-                                            if info.tabCount = 1 then
-                                                // Single tab: show first 22 chars
-                                                let tabName = info.tabNames |> List.head
-                                                if tabName.Length > 22 then
-                                                    tabName.Substring(0, 22) + "..."
-                                                else
-                                                    tabName
-                                            elif info.tabCount = 2 then
-                                                // 2 tabs: show 9 chars each
-                                                let tabNames = info.tabNames |> List.take 2
-                                                let truncatedNames = tabNames |> List.map (fun name ->
-                                                    if name.Length > 9 then
-                                                        name.Substring(0, 9) + "..."
-                                                    else
-                                                        name
-                                                )
-                                                String.Join(" ", truncatedNames)
-                                            else
-                                                // 3+ tabs: show first 3 tabs with 5 chars each
-                                                let tabNames = info.tabNames |> List.take (min 3 info.tabCount)
-                                                let truncatedNames = tabNames |> List.map (fun name ->
-                                                    if name.Length > 5 then
-                                                        name.Substring(0, 5) + "..."
-                                                    else
-                                                        name
-                                                )
-                                                let nameString = String.Join(" ", truncatedNames)
-                                                // For 4+ tabs, still show only 3 tab names
-                                                if info.tabCount > 3 then
-                                                    nameString + "..."
-                                                else
-                                                    nameString
-
-                                        // Use same pattern as CloseTabsToTheRight
-                                        let formatString = Localization.getString("MoveTabGroupFormat")
-                                        let tabWord =
-                                            if info.tabCount = 1 then
-                                                Localization.getString("TabSingular")
-                                            else
-                                                Localization.getString("TabPlural")
-                                        let menuText = String.Format(formatString, info.tabCount, tabWord, fullNameString)
-
-                                        Some(CmiRegular({
-                                            text = menuText
-                                            image = groupMenuIcon info
-                                            click = fun() ->
-                                                // Move the right-clicked tab plus any
-                                                // selected tabs (and the active tab) to
-                                                // the target group when multi-select is
-                                                // active. Otherwise just move the
-                                                // right-clicked tab.
-                                                // Iterate in visual (left-to-right) order
-                                                // so the joiners land in the destination
-                                                // group's tail in the same order they had
-                                                // in the source strip.
-                                                this.actionTargetsInVisualOrder(hwnd)
-                                                |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group))
-                                            flags = List2()
-                                        }))
-                                    | None ->
-                                        // No valid decorator found, skip this item
-                                        None
-                                with ex ->
-                                    System.Diagnostics.Debug.WriteLine(sprintf "Exception in menu item creation: %s" ex.Message)
-                                    None
-                            )
-
-                        // The tab name / selected-tab count now lives on the
-                        // parent "Tab detach" menu
-                        Some(CmiPopUp({
-                            text = Localization.getString("DetachAndDockingTabToGroup")
-                            image = None
-                            items = List2(menuItems)
-                            flags = if group.zorder.value.length <= 1 then List2([MenuFlags.MF_GRAYED]) else List2()
-                        }))
-                    else
-                        // No other groups available
-                        None
+                    if items.IsEmpty then None else
+                    Some(CmiPopUp({
+                        text = Localization.getString("DetachAndDockingTabToGroup")
+                        image = None
+                        items = List2(items)
+                        flags = if group.zorder.value.length <= 1 then List2([MenuFlags.MF_GRAYED]) else List2()
+                    }))
 
                 // Wrap detach menus in parent submenu (the detach-position part
                 // expands to one item per display on multi-monitor setups)
+                // Inside a submenu the link entry is set apart from the
+                // position entries above it.
                 let subMenuItems =
-                    (detachTabPositionItems |> List.map Some) @ [ moveTabMenu ]
+                    (detachTabPositionItems |> List.map Some)
+                    @ (if moveTabMenu.IsSome && not detachTabPositionItems.IsEmpty then [ Some CmiSeparator ] else [])
+                    @ [ moveTabMenu ]
                     |> List.choose id
 
                 if subMenuItems.IsEmpty then None
@@ -3239,7 +3125,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             Some(tabNameSubMenu)
             Some(CmiSeparator)
             Some(systemSubMenu)
-            Some(CmiSeparator)
             Some(managerItem)
         ]).choose(id)
 

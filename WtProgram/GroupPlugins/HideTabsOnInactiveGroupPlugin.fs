@@ -19,7 +19,7 @@ type HideTabsOnInactiveGroupPlugin() =
 
     member private this.onShowCompactChanged() =
         if this.shouldShowCompact then
-            this.tabStrip.alpha <- byte(0x60)
+            this.tabStrip.alpha <- byte(VirtualDesktopGroups.dimmedAlpha)
         else
             this.tabStrip.alpha <- byte(0xFF)
 

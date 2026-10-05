@@ -115,7 +115,7 @@
   "NewLaunchMenu": "新增分頁 : 啟動{0}",
   "NewTabInGroup": "此分頁的右側",
   "NewWindowPositionMenu": "位置指定",
-  "NewWindowLinkGroupMenu": "連接到其他群組",
+  "NewWindowLinkGroupMenu": "連接到其他分頁群組",
   "NewLaunchErrorUWP": "啟動新視窗失敗。\n\n此應用程式 ({0}) 是 UWP 應用,\n無法直接啟動。\n\n請改從開始選單啟動。",
   "NewLaunchErrorProcess": "啟動程序失敗。\n\n路徑: {0}\n錯誤: {1}",
   "NewLaunchErrorUnexpected": "啟動程序時發生意外錯誤:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "主",
   "CurrentDisplaySuffix": "(目前)",
 
-  "DockingTabGroupToGroup": "將此分頁群組連結到其他群組",
+  "DockingTabGroupToGroup": "將此分頁群組連結到其他分頁群組",
 
   "CloseTabMenu": "關閉分頁",
   "CloseTab": "關閉此分頁",
@@ -238,8 +238,10 @@
   "TabDetachSelectedPlusTargetFormat": "分離已選{0}個分頁+目標分頁",
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "在原位置分離",
-  "DetachAndDockingTabToGroup": "連結到其他群組",
+  "DetachAndDockingTabToGroup": "連結到其他分頁群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
+  "OtherDesktopTabsSuffix": "其他桌面的分頁：{0}",
+  "OtherDesktopGroupsMenu": "桌面{0}的分頁群組",
 
   "SystemMenu": "系統",
   "SystemCopyExePath": "複製{0}路徑",

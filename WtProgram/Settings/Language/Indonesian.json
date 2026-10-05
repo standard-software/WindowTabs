@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Tab baru : jalankan {0}",
   "NewTabInGroup": "Di kanan tab ini",
   "NewWindowPositionMenu": "Posisi",
-  "NewWindowLinkGroupMenu": "Tautkan ke grup lain",
+  "NewWindowLinkGroupMenu": "Tautkan ke grup tab lain",
   "NewLaunchErrorUWP": "Gagal memulai jendela baru.\n\nAplikasi ini ({0}) adalah aplikasi UWP dan\ntidak dapat diluncurkan secara langsung.\n\nSilakan luncurkan dari menu Mulai.",
   "NewLaunchErrorProcess": "Gagal meluncurkan proses.\n\nJalur: {0}\nKesalahan: {1}",
   "NewLaunchErrorUnexpected": "Kesalahan tak terduga saat memulai proses:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Utama",
   "CurrentDisplaySuffix": "(di sini)",
 
-  "DockingTabGroupToGroup": "Tautkan grup tab ini ke grup lain",
+  "DockingTabGroupToGroup": "Tautkan grup tab ini ke grup tab lain",
 
   "CloseTabMenu": "Tutup Tab",
   "CloseTab": "Tutup tab",
@@ -238,8 +238,10 @@
   "TabDetachSelectedPlusTargetFormat": "Lepaskan {0} tab yang dipilih + tab target",
   "DetachAndMovePosTab": "Posisi",
   "DetachTabSamePosition": "Posisi sama",
-  "DetachAndDockingTabToGroup": "Tautkan ke grup lain",
+  "DetachAndDockingTabToGroup": "Tautkan ke grup tab lain",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "OtherDesktopTabsSuffix": "Tab di desktop lain: {0}",
+  "OtherDesktopGroupsMenu": "Grup tab di desktop {0}",
 
   "SystemMenu": "Sistem",
   "SystemCopyExePath": "Salin jalur {0}",

@@ -118,7 +118,7 @@ module Localization_English =
         ("NewLaunchMenu", "New tab : execute {0}")
         ("NewTabInGroup", "Right of this tab : {0}")
         ("NewWindowPositionMenu", "Position")
-        ("NewWindowLinkGroupMenu", "Link to another group")
+        ("NewWindowLinkGroupMenu", "Link to another tab group")
         ("NewLaunchErrorUWP", "Failed to start new window.\n\nThis application ({0}) is a UWP app and\ncannot be launched directly.\n\nPlease launch it from the Start menu instead.")
         ("NewLaunchErrorProcess", "Failed to launch process.\n\nPath: {0}\nError: {1}")
         ("NewLaunchErrorUnexpected", "Unexpected error starting process:\n{0}")
@@ -162,7 +162,7 @@ module Localization_English =
         ("Main", "Main")
         ("CurrentDisplaySuffix", "(here)")
 
-        ("DockingTabGroupToGroup", "Link this tab group to another group")
+        ("DockingTabGroupToGroup", "Link this tab group to another tab group")
 
         ("CloseTabMenu", "Close Tab")
         ("CloseTab", "Close tab : {0}")
@@ -241,8 +241,10 @@ module Localization_English =
         ("TabDetachSelectedPlusTargetFormat", "Detach {0} selected tabs + target tab")
         ("DetachAndMovePosTab", "Position")
         ("DetachTabSamePosition", "Same position")
-        ("DetachAndDockingTabToGroup", "Link to another group")
+        ("DetachAndDockingTabToGroup", "Link to another tab group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
+        ("OtherDesktopTabsSuffix", "Tabs on other desktops: {0}")
+        ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 
         ("SystemMenu", "System")
         ("SystemCopyExePath", "Copy {0} path")

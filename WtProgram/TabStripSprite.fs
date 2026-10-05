@@ -205,6 +205,9 @@ type TabSprite<'id> = {
     size: Sz
     onlyIcon: bool
     isPinned: bool
+    // The window is on another virtual desktop: the whole tab, icon and
+    // buttons included, is drawn at VirtualDesktopGroups.dimmedAlpha.
+    dimmed: bool
     direction: TabDirection
     hover: TabPart option
     captured: TabPart option
@@ -376,8 +379,7 @@ type TabSprite<'id> = {
                 else inactive
         new SolidBrush(color)
 
-    interface ISprite with
-        member this.image = PerfTrace.time "sprite.tab" <| fun () ->
+    member private this.fullImage = PerfTrace.time "sprite.tab" <| fun () ->
             let img = Img(this.size)
             use g = img.graphics
             // Fill with near-transparent color so entire rectangular area is hit-testable
@@ -492,7 +494,8 @@ type TabSprite<'id> = {
                 g.Restore(state)
             | None -> ()
             img
-        member this.children =
+
+    member private this.parts =
             let isHoverOrCaptured = this.hover.IsSome || this.captured.IsSome
             let iconRight = this.iconLocation.x + this.iconSize.width
             // Hide close button if it would overlap with program icon
@@ -506,6 +509,43 @@ type TabSprite<'id> = {
                 (if showCloseButton then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
                 (if showPinButton then Some(this.pinButtonLocation, this.pinButtonSprite) else None)
                 ]).choose(id)
+
+    // A dimmed tab is one flat image: its parts are drawn into it first and
+    // the result faded as a whole, since the icon is a shared, cached surface
+    // that must not be altered. Which part the cursor is over does not depend
+    // on child sprites (partAt). A pixel that was drawn stays just visible to
+    // the hit test, which looks for a non-zero alpha.
+    member private this.dimmedImage =
+        let img = this.fullImage
+        try
+            (use g = img.graphics
+             this.parts.reverse.iter (fun (location: Pt, part: ISprite) ->
+                let image = part.render
+                try g.DrawImageUnscaled(image.bitmap, location.Point)
+                finally image.bitmap.Dispose()))
+            let bitmap = img.bitmap
+            let data =
+                bitmap.LockBits(Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                                Imaging.ImageLockMode.ReadWrite, Imaging.PixelFormat.Format32bppArgb)
+            try
+                let bytes : byte[] = Array.zeroCreate (abs data.Stride * data.Height)
+                System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, bytes.Length)
+                let mutable i = 3
+                while i < bytes.Length do
+                    let a = int bytes.[i]
+                    if a > 0 then bytes.[i] <- byte (max 1 (a * VirtualDesktopGroups.dimmedAlpha / 255))
+                    i <- i + 4
+                System.Runtime.InteropServices.Marshal.Copy(bytes, 0, data.Scan0, bytes.Length)
+            finally
+                bitmap.UnlockBits(data)
+            img
+        with _ ->
+            img.bitmap.Dispose()
+            reraise()
+
+    interface ISprite with
+        member this.image = if this.dimmed then this.dimmedImage else this.fullImage
+        member this.children = if this.dimmed then List2() else this.parts
 
     // Resolve which interactive part a tab-local point hits, by RECTANGLE (not
     // glyph alpha). The sprite-tree hit tests non-transparent pixels, so a point
@@ -561,6 +601,7 @@ type TabStripSprite<'id> when 'id : equality = {
     transparent: bool
     pinnedTabs: Set2<'id>
     selectedTabs: Set2<'id>
+    dimmedTabs: Set2<'id>
     // Multi-tab drag group (variant A boundary): the pivot tab is
     // dragGroup.[0] and matches slide.tab. Other elements are dragged
     // along with the pivot, drawn at pivot.x + their relative offset.
@@ -588,6 +629,7 @@ type TabStripSprite<'id> when 'id : equality = {
           "transparent", box this.transparent
           "pins", box this.pinnedTabs.items.list
           "selection", box this.selectedTabs.items.list
+          "dimmed", box this.dimmedTabs.items.list
           "drag", box (this.slide, this.dragGroup) ]
 
     member private this.px value = Dpi.px this.scale value
@@ -756,6 +798,7 @@ type TabStripSprite<'id> when 'id : equality = {
             size = Sz(int(tabLen), (this.size.height) - 1)
             onlyIcon = isPinned && this.appearance.tabPinnedTabWidthIcon
             isPinned = isPinned
+            dimmed = this.dimmedTabs.contains(tab)
             direction = this.direction
             hover =
                 match this.hover with

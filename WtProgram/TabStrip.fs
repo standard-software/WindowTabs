@@ -93,6 +93,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Selected tabs (multi-select via Shift/Ctrl click). The active tab is
     // never part of this set — it is the implicit primary action target.
     let selectedTabsCell = Cell.create(Set2<Tab>())
+    // Tabs of windows that are on another virtual desktop.
+    let dimmedTabsCell = Cell.create(Set2<Tab>())
     let tabAlignmentCell = Cell.create(Map2<Tab, TabAlign>())
     [<VolatileField>]
     let mutable tabAlignmentSnapshot = Map2<Tab, TabAlign>()
@@ -295,6 +297,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             tabAlignments = tabAlignmentCell.value
             pinnedTabs = pinnedTabsCell.value
             selectedTabs = selectedTabsCell.value
+            dimmedTabs = dimmedTabsCell.value
             transparent = this.transparent
             appearance = this.appearance
             dragGroup = dragGroupCell.value
@@ -1210,6 +1213,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             // instead of being re-derived here so the decorator and the strip can
             // never disagree about which monitor the strip is on.
             if scaleCell.value <> placement.scale then scaleCell.set(placement.scale)
+
+    member this.setDimmedTabs(tabs: Tab list) =
+        if dimmedTabsCell.value.items.list <> (Set2(List2(tabs))).items.list then
+            dimmedTabsCell.set(Set2(List2(tabs)))
 
     member this.alpha
         with get() = alphaCell.value

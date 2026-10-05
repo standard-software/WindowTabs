@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Yeni sekme : {0} çalıştır",
   "NewTabInGroup": "Bu sekmenin sağında",
   "NewWindowPositionMenu": "Konum",
-  "NewWindowLinkGroupMenu": "Başka bir gruba bağla",
+  "NewWindowLinkGroupMenu": "Başka bir sekme grubuna bağla",
   "NewLaunchErrorUWP": "Yeni pencere başlatılamadı.\n\nBu uygulama ({0}) bir UWP uygulamasıdır ve\ndoğrudan başlatılamaz.\n\nLütfen bunun yerine Başlat menüsünden başlatın.",
   "NewLaunchErrorProcess": "İşlem başlatılamadı.\n\nYol: {0}\nHata: {1}",
   "NewLaunchErrorUnexpected": "İşlem başlatılırken beklenmeyen hata:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Ana",
   "CurrentDisplaySuffix": "(burada)",
 
-  "DockingTabGroupToGroup": "Bu sekme grubunu başka bir gruba bağla",
+  "DockingTabGroupToGroup": "Bu sekme grubunu başka bir sekme grubuna bağla",
 
   "CloseTabMenu": "Sekmeyi Kapat",
   "CloseTab": "Sekmeyi kapat",
@@ -238,8 +238,10 @@
   "TabDetachSelectedPlusTargetFormat": "Seçili {0} sekmeyi + hedef sekmeyi ayır",
   "DetachAndMovePosTab": "Konum",
   "DetachTabSamePosition": "Aynı konum",
-  "DetachAndDockingTabToGroup": "Başka bir gruba bağla",
+  "DetachAndDockingTabToGroup": "Başka bir sekme grubuna bağla",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "OtherDesktopTabsSuffix": "Diğer masaüstlerindeki sekmeler: {0}",
+  "OtherDesktopGroupsMenu": "Masaüstü {0} üzerindeki sekme grupları",
 
   "SystemMenu": "Sistem",
   "SystemCopyExePath": "{0} yolunu kopyala",

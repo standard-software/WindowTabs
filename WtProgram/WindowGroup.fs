@@ -748,7 +748,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.stripOwnerHwnd =
         if this.isEmpty then IntPtr.Zero
         else
-            VirtualDesktopGroups.stripOwner zorderCell.value.list (VirtualDesktopGroups.Live.shared())
+            let state = VirtualDesktopGroups.Live.snapshot()
+            VirtualDesktopGroups.stripOwnerHere zorderCell.value.list (VirtualDesktopGroups.Live.shared())
+                (VirtualDesktopGroups.Live.isHere state)
             |> Option.defaultValue zorderCell.value.head
 
     member private this.updateStripOwner() =
@@ -769,12 +771,31 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         this.os.windowFromHwnd(this.ts.hwnd).insertAfter(above)
                 with _ -> ()
 
+    // The tabs of the windows that are on another desktop are drawn dimmed.
+    // The front tab is never one of them: when the front window is elsewhere,
+    // the frontmost window that is here takes its place in the group's own
+    // order. No window is touched - raising one of another desktop would
+    // switch to it.
+    member private this.updateDimmedTabs(shown: bool) =
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let away =
+            if this.isEmpty || not (VirtualDesktopGroups.Live.isFresh state) then []
+            else
+                VirtualDesktopGroups.dimmed shown
+                    (fun h -> (VirtualDesktopGroups.Live.read state h).presence) zorderCell.value.list
+        if not away.IsEmpty && List.contains zorderCell.value.head away then
+            zorderCell.value.list
+            |> List.tryFind (VirtualDesktopGroups.Live.isHere state)
+            |> Option.iter this.bringToTop
+        this.ts.setDimmedTabs(away |> List.map Tab)
+
     /// Called by the main thread's desktop pass (through GroupInfo): whether
     /// this group is the one of the desktop being looked at. Re-chooses the
     /// strip's owner (the set of windows shown everywhere may have changed),
     /// and hides the strip only where the shell has not already done so.
     member this.applyDesktopState(shown: bool) =
         desktopShown <- shown
+        this.updateDimmedTabs(shown)
         this.updateStripOwner()
         let owner = this.stripOwnerHwnd
         let ownerPresence =
@@ -1774,6 +1795,71 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                           ?restoreOrder: TabOrder.Placed list -> IntPtr list) =
         this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
                              ?after=after, ?restoreOrder=restoreOrder)
+
+    // Explicit links place only the joining window. Reading the destination's
+    // placement must never restore or activate one of its existing members.
+    member this.addWindowLinked(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
+                                ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun () ->
+        if not (this.windows.contains(hwnd)) then
+            let target =
+                zorderCell.value.tryHead |> Option.bind (fun front ->
+                    let window = this.os.windowFromHwnd(front)
+                    let wp = window.placement
+                    if window.isMinimized then
+                        // rcNormalPosition uses workspace coordinates except for tool
+                        // windows, as in Win32Helper.RestoreWindowNoActivate.
+                        let normal =
+                            if int(window.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then wp.rcNormalPosition
+                            else
+                                match Mon.fromHwnd(front) with
+                                | Some mon -> wp.rcNormalPosition.move(mon.workRect.x - mon.displayRect.x,
+                                                                      mon.workRect.y - mon.displayRect.y)
+                                | None -> wp.rcNormalPosition
+                        Some(this.removeWindowMarginForRead(front, normal), false,
+                             { wp with showCmd = ShowWindowCommands.SW_SHOWNORMAL; flags = 0 })
+                    else
+                        // Read without publishing placement: its listeners update the
+                        // strip and guard. Linking needs only the destination rectangle.
+                        let bounds = window.bounds
+                        if window.isWindow && bounds.width > 0 && bounds.height > 0 then
+                            let maximized = window.isMaximized
+                            let bounds = if maximized then bounds else this.removeWindowMarginForRead(front, bounds)
+                            Some(bounds, maximized, wp)
+                        else
+                            placement.value |> Option.map (fun (bounds, cached) ->
+                                let maximized = cached.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
+                                (if maximized then maximizedFrameBounds |> Option.defaultValue bounds else bounds),
+                                maximized, cached))
+            // Place before registering membership and window event hooks, so
+            // the joiner's restore cannot trigger a restore of existing members.
+            frameMargins.Attach(hwnd)
+            try
+                this.refreshWindowMargin(hwnd) |> ignore
+                target |> Option.iter (fun (bounds, maximized, _) ->
+                    if bounds.width > 0 && bounds.height > 0 then
+                        let window = this.os.windowFromHwnd(hwnd)
+                        let bounds = if maximized then bounds else this.applyWindowMarginForWrite(hwnd, bounds)
+                        followerPlacements.Synchronous(hwnd, fun () ->
+                            this.withoutTransitions(hwnd, fun () ->
+                                // Only the joiner may need restoring, including a joiner
+                                // on another desktop. Its restoration must not activate it.
+                                if window.isMinimized then
+                                    window.showWindow(ShowWindowCommands.SW_SHOWNOACTIVATE)
+                                if Win32Helper.SetWindowMaximizedNoActivate(hwnd, maximized, bounds.RECT) then
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, bounds)
+                                else
+                                    // A refused style change must not stop the link. The
+                                    // bounds are still applied, to the joiner only, and
+                                    // without a placement call: SetWindowPlacement activates
+                                    // the window, and a joiner on another desktop would
+                                    // switch to it.
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, bounds)))
+                        if this.hasWindowMargin(hwnd) && not maximized then
+                            marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (bounds.width, bounds.height))))
+                this.addWindowPlaced(hwnd, withDelay, false, ?alignment=alignment, ?pinned=pinned,
+                                     ?after=after, ?restoreOrder=restoreOrder)
+            finally
+                if not (this.windows.contains(hwnd)) then frameMargins.Remove(hwnd)
 
     // `place` false: the window joins where it is. A group made for a window
     // shown on all desktops, on another desktop, takes it as it is found - the

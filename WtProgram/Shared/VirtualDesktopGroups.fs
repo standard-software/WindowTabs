@@ -46,6 +46,17 @@ open System
 ///     themselves contradict is not used at all (trustCurrent).
 module VirtualDesktopGroups =
 
+    /// A window sent to another desktop stays in its tab group. The group is
+    /// drawn on every desktop that has one of its own windows, and the tabs of
+    /// the windows that are elsewhere are drawn dimmed. Off, such a window
+    /// leaves the group (the straddle rule) or is handed to a group of the
+    /// desktop it arrived on.
+    let mutable keepAway = true
+
+    /// How much of a dimmed tab is left: half. The strip of an inactive group
+    /// is drawn at the same ratio, so a dimmed tab in one is left a quarter.
+    let dimmedAlpha = 0x80
+
     /// Capture the desktop where settings opened. Unknown desktop readings
     /// retain the legacy all-groups behavior. Unassigned groups can only be
     /// identified by visibility while that desktop is still current.
@@ -88,6 +99,25 @@ module VirtualDesktopGroups =
         /// GetWindowDesktopId, None when the call failed or said nothing.
         desktop: Guid option
     }
+
+    // Unreadable windows stay at the top level so a partial reading cannot
+    // hide a destination. Here also includes windows shown on all desktops.
+    // So does a window that names a desktop Explorer does not list: it has no
+    // parent item to go under, and leaving it out would drop its group from
+    // the menu altogether.
+    let menuTabs current (listed: Guid list option) (reads: Map<IntPtr, WindowRead>) tabs =
+        let isListed desktop = listed |> Option.exists (List.contains desktop)
+        let elsewhere (hwnd, _) =
+            match Map.tryFind hwnd reads with
+            | Some({ presence = Away; desktop = Some desktop }) when Some desktop <> current && isListed desktop ->
+                Some desktop
+            | _ -> None
+        let here = tabs |> List.filter (elsewhere >> Option.isNone)
+        let others =
+            listed |> Option.defaultValue [] |> List.mapi (fun i desktop ->
+                i + 1, desktop, tabs |> List.filter (fun tab -> elsewhere tab = Some desktop))
+            |> List.filter (fun (_, desktop, members) -> Some desktop <> current && not members.IsEmpty)
+        here, others
 
     type Desktops = {
         /// The desktop being looked at, when it can be trusted (trustCurrent).
@@ -284,6 +314,31 @@ module VirtualDesktopGroups =
         home: Guid option
     }
 
+    /// With windows kept in their group across desktops (keepAway), a window
+    /// shown on all desktops needs one group only, and the copies made for it
+    /// per desktop are surplus. Of two groups holding the same window, the one
+    /// with more windows is the group; then the one filed under the desktop
+    /// being looked at; then the earlier one.
+    let betterHolder (current: Guid option) (g: GroupState) (o: GroupState) =
+        let homedHere (x: GroupState) = current.IsSome && x.home = current
+        o.key <> g.key &&
+        (o.members.Length > g.members.Length ||
+         (o.members.Length = g.members.Length &&
+          ((homedHere o && not (homedHere g)) || (homedHere o = homedHere g && o.key < g.key))))
+
+    /// The (group key, window) pairs to take out so that each window is left
+    /// in its one group. Only windows read as here: nothing is decided on a
+    /// window that could not be read.
+    let surplusCopies (d: Desktops) (reads: Map<IntPtr, WindowRead>) (groups: GroupState list) =
+        if not keepAway || d.current.IsNone then []
+        else
+            groups |> List.collect (fun g ->
+                g.members
+                |> List.filter (fun h ->
+                    (match reads.TryFind h with Some r -> r.presence = Here | None -> false) &&
+                    groups |> List.exists (fun o -> betterHolder d.current g o && List.contains h o.members))
+                |> List.map (fun h -> g.key, h))
+
     /// Which groups are drawn on the desktop being looked at, and which desktop
     /// each belongs to.
     ///
@@ -323,7 +378,27 @@ module VirtualDesktopGroups =
                     g.members |> List.exists (fun h ->
                         not (shared.Contains h) && presenceOf h = Away && desktopOf h = Some home)
                 | None -> false
-            if leftHome then { keep with display = Hidden }
+            let heldByBetter h =
+                groups |> List.exists (fun o -> betterHolder d.current g o && List.contains h o.members)
+            // Only a surplus copy: the group that keeps these windows draws them.
+            if keepAway && not here.IsEmpty && here |> List.forall heldByBetter then
+                { keep with display = Hidden }
+            elif keepAway && not here.IsEmpty then
+                // A window of it is here: drawn here, whichever desktop the
+                // group is filed under, and whether or not that window is
+                // shown on all desktops. It is filed here only once all of it
+                // is here.
+                let allHere =
+                    away.IsEmpty && here.Length = g.members.Length &&
+                    not (g.members |> List.exists shared.Contains)
+                let home =
+                    match d.current with
+                    | Some c when g.home.IsNone || allHere -> Some c
+                    | _ -> g.home
+                { keep with display = Shown; home = home }
+            // Every tab of it would be dimmed.
+            elif keepAway && here.IsEmpty && not away.IsEmpty then { keep with display = Hidden }
+            elif leftHome then { keep with display = Hidden }
             else
             match d.current, g.home with
             | None, _ -> keep
@@ -410,6 +485,24 @@ module VirtualDesktopGroups =
         | top :: _ when not (shared.Contains top) -> Some top
         | top :: _ ->
             Some(zorder |> List.tryFind (shared.Contains >> not) |> Option.defaultValue top)
+
+    /// With windows of the group on several desktops, the strip belongs to the
+    /// frontmost one that is here and lives on this desktop only, so that it
+    /// still comes and goes with the desktop.
+    let stripOwnerHere (zorder: IntPtr list) (shared: Set<IntPtr>) (isHere: IntPtr -> bool) =
+        let here =
+            if keepAway then
+                zorder |> List.tryFind (fun h -> isHere h && not (shared.Contains h))
+                |> Option.orElseWith (fun () -> zorder |> List.tryFind isHere)
+            else None
+        match here with
+        | Some _ -> here
+        | None -> stripOwner zorder shared
+
+    /// The members whose tabs are drawn dimmed: the windows of a group drawn
+    /// here that are on another desktop.
+    let dimmed (shown: bool) (presenceOf: IntPtr -> Presence) (members: IntPtr list) =
+        if keepAway && shown then members |> List.filter (fun h -> presenceOf h = Away) else []
 
     /// Whether WindowTabs has to hide a group's strip itself. Only when the
     /// group is not drawn here AND its owner is here - otherwise the shell has
@@ -652,13 +745,14 @@ module VirtualDesktopGroups =
             shared: Set<IntPtr>
             inSeveral: Set<IntPtr>
             current: Guid option
+            listed: Guid list option
             reads: Map<IntPtr, WindowRead>
             desktopResults: Map<IntPtr, int * Guid>
         }
         let private gate = obj()
         let mutable private latest = {
             generation = 0L; readAt = DateTime.MinValue
-            shared = Set.empty; inSeveral = Set.empty; current = None
+            shared = Set.empty; inSeveral = Set.empty; current = None; listed = None
             reads = Map.empty; desktopResults = Map.empty }
         let mutable private invalidatedAt = DateTime.MinValue
         // Cloaking/uncloaking invalidates in-flight as well as published reads.
@@ -707,9 +801,9 @@ module VirtualDesktopGroups =
         let mayMove state (home: Guid option) hwnd =
             isHere state hwnd && not (state.shared.Contains hwnd) &&
             home.IsSome && home <> state.current && (read state hwnd).desktop = state.current
-        let publish s several current readAt reads desktopResults =
+        let publish s several current listed readAt reads desktopResults =
             lock gate (fun () ->
                 latest <- {
                     generation = latest.generation + 1L; readAt = readAt
-                    shared = s; inSeveral = several; current = current
+                    shared = s; inSeveral = several; current = current; listed = listed
                     reads = reads; desktopResults = desktopResults })

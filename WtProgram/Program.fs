@@ -490,6 +490,8 @@ type Program() as this =
     // trusted to be the one looked at; and the pass's scheduling.
     let mutable desktopEvidence : Map<IntPtr, VirtualDesktopGroups.Evidence> = Map.empty
     let mutable pendingDesktopVisits : VirtualDesktopGroups.Visit list = []
+    // The groups that had a dimmed tab on the last desktop pass.
+    let mutable straddlingDesktopGroups : Set<IntPtr> = Set.empty
     let mutable desktopTransferPending = false
     let mutable previousDesktop : Guid option = None
     let mutable desktopPassPending = false
@@ -801,8 +803,10 @@ type Program() as this =
             this.suppressExplicitRestore(window.hwnd, window.text) |> ignore
             match r.destination with
             | JoinGroup(groupHwnd, invokerHwnd) ->
-                // Only a group drawn on the desktop in front of us (joinableGroups).
-                match this.joinableGroups |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
+                // An explicitly chosen destination may be hidden on another desktop.
+                // Automatic grouping still uses only groups drawn here.
+                let targets = if VirtualDesktopGroups.keepAway then this.desktop.groups.list else this.joinableGroups
+                match targets |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
                 | Some(g) ->
                     let anchor = if g.windows.contains((=) invokerHwnd) then invokerHwnd else IntPtr.Zero
                     pendingNewTabInvokers.map(fun m -> m.add window.hwnd anchor)
@@ -2060,13 +2064,25 @@ type Program() as this =
         let savedAlign =
             if (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsSome then None
             else this.savedAlignFor(try window.pid.processPath with _ -> "")
+        let explicitLink =
+            ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
+            |> Option.exists (fun request ->
+                match request.destination with JoinGroup _ -> true | _ -> false)
         match group :> obj with
         | :? GroupInfo as gi ->
             gi.addWindowWith(hwnd, fun wg ->
+                let state = VirtualDesktopGroups.Live.snapshot()
+                let away = VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
+                           (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away
+                let linked = explicitLink && (away || not wg.isDesktopShownThreadSafe)
                 let invoker = Tab(invokerHwnd)
                 if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
-                    wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                 pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                    if linked then
+                        wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                           pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                    else
+                        wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                     pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
                 else
                     let alignment =
                         match returningState with
@@ -2076,7 +2092,10 @@ type Program() as this =
                                 if isNewGroup then None
                                 else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
                     let pinned = returningState |> Option.map (fun info -> info.isPinned)
-                    wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
+                    if linked then
+                        wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder)
+                    else
+                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
         if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
@@ -2618,7 +2637,7 @@ type Program() as this =
                     members
                     |> List.filter (fun h -> (groups |> List.filter (fun g -> g.windows.contains((=) h))).Length > 1)
                     |> Set.ofList
-                VirtualDesktopGroups.Live.publish shared several current readAt readMap desktopResults
+                VirtualDesktopGroups.Live.publish shared several current listed readAt readMap desktopResults
                 let keyed = groups |> List.mapi (fun i g -> i, g) |> Map.ofList
                 let stateOf (i: int) (g: IGroup) : VirtualDesktopGroups.GroupState =
                     { key = i
@@ -2636,6 +2655,15 @@ type Program() as this =
                 let states =
                     states |> List.map (fun s ->
                         { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) leaving)) })
+                // A window shown on all desktops is left in one group.
+                let surplus = VirtualDesktopGroups.surplusCopies d readMap states
+                for (i, h) in surplus do
+                    VirtualDesktopTrace.log (fun () ->
+                        sprintf "surplus copy removed: hwnd=%X group=%X" (h.ToInt64()) (try keyed.[i].hwnd.ToInt64() with _ -> 0L))
+                    keyed.[i].removeWindow(h)
+                let states =
+                    states |> List.map (fun s ->
+                        { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) surplus)) })
                 let decisions = VirtualDesktopGroups.decide d readMap shared states
                 let sharedChanged = shared <> wasShared
                 for dec in decisions do
@@ -2646,7 +2674,18 @@ type Program() as this =
                     // pass: its strip's owner, and whether that owner is here,
                     // change without its display changing.
                     let holdsShared = g.windows.any(fun h -> shared.Contains h || wasShared.Contains h || several.Contains h)
-                    if shown <> g.isDesktopShown || sharedChanged || holdsShared then
+                    // So is a group with windows on another desktop, and once
+                    // more after the last of them is back: which tabs are
+                    // dimmed changes without its display changing.
+                    let presenceOf h =
+                        match readMap.TryFind h with
+                        | Some r -> r.presence
+                        | None -> VirtualDesktopGroups.Unsure
+                    let straddles = not (VirtualDesktopGroups.dimmed shown presenceOf g.windows.list).IsEmpty
+                    let straddled = straddlingDesktopGroups.Contains g.hwnd
+                    straddlingDesktopGroups <-
+                        if straddles then straddlingDesktopGroups.Add g.hwnd else straddlingDesktopGroups.Remove g.hwnd
+                    if shown <> g.isDesktopShown || sharedChanged || holdsShared || straddles || straddled then
                         if shown && not g.isDesktopShown then
                             g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
                         g.setDesktopShown(shown)
@@ -2663,10 +2702,14 @@ type Program() as this =
                         not (isDroppedAndAwaitingGrouping.value.contains h) &&
                         (try this.isTabbableWindow(os.windowFromHwnd(h)) with _ -> false)
                     let state = VirtualDesktopGroups.Live.snapshot()
-                    let moves = VirtualDesktopGroups.Live.movesNow state withDisplay eligible
+                    let moves =
+                        if VirtualDesktopGroups.keepAway then []
+                        else VirtualDesktopGroups.Live.movesNow state withDisplay eligible
                     moves |> List.tryHead |> Option.iter (fun move ->
                         this.moveDesktopGroup(keyed.[move.source], move.members, c))
-                    let visits = VirtualDesktopGroups.Live.visitsNow state withDisplay eligible
+                    let visits =
+                        if VirtualDesktopGroups.keepAway then []
+                        else VirtualDesktopGroups.Live.visitsNow state withDisplay eligible
                     if VirtualDesktopGroups.sameVisits pendingDesktopVisits visits then
                         pendingDesktopVisits <- []
                         for v in visits do
