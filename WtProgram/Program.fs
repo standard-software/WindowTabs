@@ -733,9 +733,25 @@ type Program() as this =
         cloakHook <- Some(
             os.setWinEventHook(WinEvent.EVENT_OBJECT_CLOAKED, WinEvent.EVENT_OBJECT_UNCLOAKED,
                                (fun _ _ _ _ _ _ _ ->
-                                   VirtualDesktopGroups.Live.invalidate()
-                                   pendingDesktopVisits <- []
-                                   this.scheduleDesktopPass(15)), 0, 0))
+                                   let invalidate () =
+                                       VirtualDesktopGroups.Live.invalidate()
+                                       pendingDesktopVisits <- []
+                                       this.scheduleDesktopPass(15)
+#if DEBUG
+                                   // Test hook: act on the shell's cloaking late, so
+                                   // that the last desktop reading is still taken as
+                                   // fresh while the windows of the desktop being left
+                                   // are already cloaked. A desktop switch then meets
+                                   // that state every time instead of once in a while.
+                                   match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_CLOAK_INVALIDATE_DELAY_MS")) with
+                                   | true, ms when ms > 0 ->
+                                       System.Threading.Tasks.Task.Delay(ms).ContinueWith(fun (_: System.Threading.Tasks.Task) ->
+                                           invoker.asyncInvoke invalidate) |> ignore
+                                   | _ -> invalidate()
+#else
+                                   invalidate()
+#endif
+                                   ), 0, 0))
 
     member this.desktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -1848,9 +1864,14 @@ type Program() as this =
                 // shell's own cloak, read now, says the window is on another
                 // desktop, and is believed over the reading.
                 let cloakedByShell =
-                    match window.cloakedValue with
-                    | Some c -> c &&& 2 <> 0
-                    | None -> false
+#if DEBUG
+                    // Test hook: decide as before this check existed, to show
+                    // what it prevents (with the cloak delay above).
+                    Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_PRUNE_TRUST_READING") <> "1" &&
+#endif
+                    (match window.cloakedValue with
+                     | Some c -> c &&& 2 <> 0
+                     | None -> false)
                 let untabbable =
                     this.isTabbableWindow(window).not &&
                     not (isRecentlyPlaced(hwnd)) &&
@@ -3669,6 +3690,10 @@ type Program() as this =
         // Test hook: imitate a slow start (a loaded machine) by holding the
         // startup here, after the periodic save timer has started and before
         // the message loop runs the startup restore.
+        RestoreTrace.log (fun () ->
+            sprintf "debug hooks: cloak invalidate delay=%s, prune trusts reading=%s"
+                (match Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_CLOAK_INVALIDATE_DELAY_MS") with null -> "off" | v -> v)
+                (match Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_PRUNE_TRUST_READING") with null -> "off" | v -> v))
         match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_STARTUP_DELAY_MS")) with
         | true, ms when ms > 0 ->
             RestoreTrace.log (fun () -> sprintf "debug startup delay %d ms" ms)
