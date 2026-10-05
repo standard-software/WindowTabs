@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Nouvel onglet : exécuter {0}",
   "NewTabInGroup": "À droite de cet onglet",
   "NewWindowPositionMenu": "Position",
-  "NewWindowLinkGroupMenu": "Lier à un autre groupe",
+  "NewWindowLinkGroupMenu": "Lier à un autre groupe d'onglets",
   "NewLaunchErrorUWP": "Échec du démarrage de la nouvelle fenêtre.\n\nCette application ({0}) est une application UWP et\nne peut pas être lancée directement.\n\nVeuillez la lancer depuis le menu Démarrer.",
   "NewLaunchErrorProcess": "Échec du lancement du processus.\n\nChemin : {0}\nErreur : {1}",
   "NewLaunchErrorUnexpected": "Erreur inattendue lors du démarrage du processus :\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Principal",
   "CurrentDisplaySuffix": "(ici)",
 
-  "DockingTabGroupToGroup": "Lier ce groupe d'onglets à un autre groupe",
+  "DockingTabGroupToGroup": "Lier ce groupe d'onglets à un autre groupe d'onglets",
 
   "CloseTabMenu": "Fermer l'onglet",
   "CloseTab": "Fermer l'onglet",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Détacher les {0} onglets sélectionnés + onglet cible",
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Même position",
-  "DetachAndDockingTabToGroup": "Lier à un autre groupe",
+  "DetachAndDockingTabToGroup": "Lier à un autre groupe d'onglets",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "Système",

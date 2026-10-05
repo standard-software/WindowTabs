@@ -115,7 +115,7 @@
   "NewLaunchMenu": "新しいタブやで : {0} 起動",
   "NewTabInGroup": "このタブの右やで",
   "NewWindowPositionMenu": "位置指定やで",
-  "NewWindowLinkGroupMenu": "他のグループへ連結やで",
+  "NewWindowLinkGroupMenu": "他のタブグループへ連結やで",
   "NewLaunchErrorUWP": "新規ウィンドウの起動に失敗してもうたで。\n\nこのアプリ ({0}) はUWPアプリやから、\n直接起動できひんのや。\n\n代わりにスタートメニューから起動してな。",
   "NewLaunchErrorProcess": "プロセスの起動に失敗してもうたで。\n\nパス: {0}\nエラー: {1}",
   "NewLaunchErrorUnexpected": "プロセスの起動で変なエラー出たで:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "メイン",
   "CurrentDisplaySuffix": "(ここやで)",
 
-  "DockingTabGroupToGroup": "このタブグループを他のグループにくっつける",
+  "DockingTabGroupToGroup": "このタブグループを他のタブグループにくっつける",
 
   "CloseTabMenu": "タブを閉じるで",
   "CloseTab": "このタブ閉じるで",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "選んだ{0}タブ+対象タブの分離やで",
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "同じ位置",
-  "DetachAndDockingTabToGroup": "他のグループにくっつける",
+  "DetachAndDockingTabToGroup": "他のタブグループにくっつける",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
   "SystemMenu": "システムやで",

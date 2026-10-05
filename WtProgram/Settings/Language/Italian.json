@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Nuova scheda : esegui {0}",
   "NewTabInGroup": "A destra di questa scheda",
   "NewWindowPositionMenu": "Posizione",
-  "NewWindowLinkGroupMenu": "Collega a un altro gruppo",
+  "NewWindowLinkGroupMenu": "Collega a un altro gruppo di schede",
   "NewLaunchErrorUWP": "Impossibile avviare una nuova finestra.\n\nQuesta applicazione ({0}) è un'app UWP e\nnon può essere avviata direttamente.\n\nAvviala dal menu Start.",
   "NewLaunchErrorProcess": "Impossibile avviare il processo.\n\nPercorso: {0}\nErrore: {1}",
   "NewLaunchErrorUnexpected": "Errore imprevisto durante l'avvio del processo:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Principale",
   "CurrentDisplaySuffix": "(qui)",
 
-  "DockingTabGroupToGroup": "Collega questo gruppo di schede a un altro gruppo",
+  "DockingTabGroupToGroup": "Collega questo gruppo di schede a un altro gruppo di schede",
 
   "CloseTabMenu": "Chiudi scheda",
   "CloseTab": "Chiudi scheda",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Stacca {0} schede selezionate + scheda di destinazione",
   "DetachAndMovePosTab": "Posizione",
   "DetachTabSamePosition": "Stessa posizione",
-  "DetachAndDockingTabToGroup": "Collega a un altro gruppo",
+  "DetachAndDockingTabToGroup": "Collega a un altro gruppo di schede",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "Sistema",

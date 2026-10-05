@@ -115,7 +115,7 @@
   "NewLaunchMenu": "新建标签页 : 启动{0}",
   "NewTabInGroup": "此标签页的右侧",
   "NewWindowPositionMenu": "位置指定",
-  "NewWindowLinkGroupMenu": "连接到其他组",
+  "NewWindowLinkGroupMenu": "连接到其他标签页组",
   "NewLaunchErrorUWP": "启动新窗口失败。\n\n此应用程序 ({0}) 是 UWP 应用,\n无法直接启动。\n\n请改从开始菜单启动。",
   "NewLaunchErrorProcess": "启动进程失败。\n\n路径: {0}\n错误: {1}",
   "NewLaunchErrorUnexpected": "启动进程时发生意外错误:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "主",
   "CurrentDisplaySuffix": "(当前)",
 
-  "DockingTabGroupToGroup": "将此标签页组连接到其他组",
+  "DockingTabGroupToGroup": "将此标签页组连接到其他标签页组",
 
   "CloseTabMenu": "关闭标签页",
   "CloseTab": "关闭此标签页",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "分离已选{0}个标签页+目标标签页",
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "在原位置分离",
-  "DetachAndDockingTabToGroup": "连接到其他组",
+  "DetachAndDockingTabToGroup": "连接到其他标签页组",
   "MoveTabGroupFormat": "{0}{1}: {2}",
 
   "SystemMenu": "系统",

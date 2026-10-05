@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Nueva pestaña : ejecutar {0}",
   "NewTabInGroup": "A la derecha de esta pestaña",
   "NewWindowPositionMenu": "Posición",
-  "NewWindowLinkGroupMenu": "Vincular a otro grupo",
+  "NewWindowLinkGroupMenu": "Vincular a otro grupo de pestañas",
   "NewLaunchErrorUWP": "No se pudo iniciar una nueva ventana.\n\nEsta aplicación ({0}) es una aplicación UWP y\nno se puede iniciar directamente.\n\nIníciela desde el menú Inicio.",
   "NewLaunchErrorProcess": "No se pudo iniciar el proceso.\n\nRuta: {0}\nError: {1}",
   "NewLaunchErrorUnexpected": "Error inesperado al iniciar el proceso:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Principal",
   "CurrentDisplaySuffix": "(aquí)",
 
-  "DockingTabGroupToGroup": "Vincular este grupo de pestañas a otro grupo",
+  "DockingTabGroupToGroup": "Vincular este grupo de pestañas a otro grupo de pestañas",
 
   "CloseTabMenu": "Cerrar pestaña",
   "CloseTab": "Cerrar pestaña",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Separar {0} pestañas seleccionadas + pestaña de destino",
   "DetachAndMovePosTab": "Posición",
   "DetachTabSamePosition": "Misma posición",
-  "DetachAndDockingTabToGroup": "Vincular a otro grupo",
+  "DetachAndDockingTabToGroup": "Vincular a otro grupo de pestañas",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "Sistema",

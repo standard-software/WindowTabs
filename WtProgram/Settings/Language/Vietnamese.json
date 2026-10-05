@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Thẻ mới : chạy {0}",
   "NewTabInGroup": "Bên phải thẻ này",
   "NewWindowPositionMenu": "Vị trí",
-  "NewWindowLinkGroupMenu": "Liên kết với nhóm khác",
+  "NewWindowLinkGroupMenu": "Liên kết với nhóm thẻ khác",
   "NewLaunchErrorUWP": "Không thể khởi động cửa sổ mới.\n\nỨng dụng này ({0}) là ứng dụng UWP và\nkhông thể khởi chạy trực tiếp.\n\nVui lòng khởi chạy từ menu Start.",
   "NewLaunchErrorProcess": "Không thể khởi chạy tiến trình.\n\nĐường dẫn: {0}\nLỗi: {1}",
   "NewLaunchErrorUnexpected": "Lỗi không mong muốn khi khởi động tiến trình:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Chính",
   "CurrentDisplaySuffix": "(ở đây)",
 
-  "DockingTabGroupToGroup": "Liên kết nhóm thẻ này với nhóm khác",
+  "DockingTabGroupToGroup": "Liên kết nhóm thẻ này với nhóm thẻ khác",
 
   "CloseTabMenu": "Đóng thẻ",
   "CloseTab": "Đóng thẻ",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Tách {0} thẻ đã chọn + thẻ đích",
   "DetachAndMovePosTab": "Vị trí",
   "DetachTabSamePosition": "Cùng vị trí",
-  "DetachAndDockingTabToGroup": "Liên kết với nhóm khác",
+  "DetachAndDockingTabToGroup": "Liên kết với nhóm thẻ khác",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "Hệ thống",

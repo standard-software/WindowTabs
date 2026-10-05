@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Nova guia : executar {0}",
   "NewTabInGroup": "À direita desta guia",
   "NewWindowPositionMenu": "Posição",
-  "NewWindowLinkGroupMenu": "Vincular a outro grupo",
+  "NewWindowLinkGroupMenu": "Vincular a outro grupo de guias",
   "NewLaunchErrorUWP": "Falha ao iniciar uma nova janela.\n\nEste aplicativo ({0}) é um aplicativo UWP e\nnão pode ser iniciado diretamente.\n\nInicie-o pelo menu Iniciar.",
   "NewLaunchErrorProcess": "Falha ao iniciar o processo.\n\nCaminho: {0}\nErro: {1}",
   "NewLaunchErrorUnexpected": "Erro inesperado ao iniciar o processo:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Principal",
   "CurrentDisplaySuffix": "(aqui)",
 
-  "DockingTabGroupToGroup": "Vincular este grupo de guias a outro grupo",
+  "DockingTabGroupToGroup": "Vincular este grupo de guias a outro grupo de guias",
 
   "CloseTabMenu": "Fechar guia",
   "CloseTab": "Fechar guia",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Desanexar {0} guias selecionadas + guia de destino",
   "DetachAndMovePosTab": "Posição",
   "DetachTabSamePosition": "Mesma posição",
-  "DetachAndDockingTabToGroup": "Vincular a outro grupo",
+  "DetachAndDockingTabToGroup": "Vincular a outro grupo de guias",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "Sistema",

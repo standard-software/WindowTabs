@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Nowa karta : uruchom {0}",
   "NewTabInGroup": "Na prawo od tej karty",
   "NewWindowPositionMenu": "Pozycja",
-  "NewWindowLinkGroupMenu": "Połącz z inną grupą",
+  "NewWindowLinkGroupMenu": "Połącz z inną grupą kart",
   "NewLaunchErrorUWP": "Nie udało się otworzyć nowego okna.\n\nTa aplikacja ({0}) jest aplikacją UWP i\nnie można jej uruchomić bezpośrednio.\n\nUruchom ją z menu Start.",
   "NewLaunchErrorProcess": "Nie udało się uruchomić procesu.\n\nŚcieżka: {0}\nBłąd: {1}",
   "NewLaunchErrorUnexpected": "Nieoczekiwany błąd podczas uruchamiania procesu:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Główny",
   "CurrentDisplaySuffix": "(tutaj)",
 
-  "DockingTabGroupToGroup": "Połącz tę grupę kart z inną grupą",
+  "DockingTabGroupToGroup": "Połącz tę grupę kart z inną grupą kart",
 
   "CloseTabMenu": "Zamykanie kart",
   "CloseTab": "Zamknij kartę",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "Odłącz {0} zaznaczonych kart + kartę docelową",
   "DetachAndMovePosTab": "Pozycja",
   "DetachTabSamePosition": "Ta sama pozycja",
-  "DetachAndDockingTabToGroup": "Połącz z inną grupą",
+  "DetachAndDockingTabToGroup": "Połącz z inną grupą kart",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "System",

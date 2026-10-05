@@ -115,7 +115,7 @@
   "NewLaunchMenu": "Neuer Tab : {0} ausführen",
   "NewTabInGroup": "Rechts von diesem Tab",
   "NewWindowPositionMenu": "Position",
-  "NewWindowLinkGroupMenu": "Mit anderer Gruppe verknüpfen",
+  "NewWindowLinkGroupMenu": "Mit anderer Tab-Gruppe verknüpfen",
   "NewLaunchErrorUWP": "Neues Fenster konnte nicht gestartet werden.\n\nDiese Anwendung ({0}) ist eine UWP-App und\nkann nicht direkt gestartet werden.\n\nBitte starten Sie sie stattdessen über das Startmenü.",
   "NewLaunchErrorProcess": "Prozess konnte nicht gestartet werden.\n\nPfad: {0}\nFehler: {1}",
   "NewLaunchErrorUnexpected": "Unerwarteter Fehler beim Starten des Prozesses:\n{0}",
@@ -159,7 +159,7 @@
   "Main": "Hauptbildschirm",
   "CurrentDisplaySuffix": "(hier)",
 
-  "DockingTabGroupToGroup": "Diese Tab-Gruppe mit einer anderen Gruppe verknüpfen",
+  "DockingTabGroupToGroup": "Diese Tab-Gruppe mit einer anderen Tab-Gruppe verknüpfen",
 
   "CloseTabMenu": "Tab schließen",
   "CloseTab": "Tab schließen",
@@ -238,7 +238,7 @@
   "TabDetachSelectedPlusTargetFormat": "{0} ausgewählte Tabs + Ziel-Tab abtrennen",
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Gleiche Position",
-  "DetachAndDockingTabToGroup": "Mit anderer Gruppe verknüpfen",
+  "DetachAndDockingTabToGroup": "Mit anderer Tab-Gruppe verknüpfen",
   "MoveTabGroupFormat": "{0} {1}: {2}",
 
   "SystemMenu": "System",
