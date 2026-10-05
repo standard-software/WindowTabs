@@ -97,6 +97,8 @@ module Localization_English =
 
         ("Workspace", "Workspace")
         ("New", "New")
+        ("WorkspaceTabsCurrentDesktop", "Tabs on the current desktop")
+        ("WorkspaceTabsAllDesktops", "Tabs on all desktops")
         ("Restore", "Restore")
         ("Edit", "Edit")
         ("Remove", "Remove")

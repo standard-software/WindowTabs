@@ -93,6 +93,8 @@
 
   "Workspace": "Obszar roboczy",
   "New": "Nowy",
+  "WorkspaceTabsCurrentDesktop": "Karty na bieżącym pulpicie",
+  "WorkspaceTabsAllDesktops": "Karty na wszystkich pulpitach",
   "Restore": "Przywróć",
   "Edit": "Edytuj",
   "Remove": "Usuń",

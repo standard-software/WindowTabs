@@ -364,7 +364,7 @@ type DesktopManagerForm() =
         prepareHidden()
         tabs.iter(fun view ->
             match view with
-            | :? WorkspaceView as workspaces -> workspaces.wm.beginSettingsSession()
+            | :? WorkspaceView as workspaces -> workspaces.beginSettingsSession()
             | :? AppearanceView as appearance -> appearance.refresh()
             | :? HotKeyView as behavior -> behavior.refresh()
             | :? ShortcutKeysView as shortcuts -> shortcuts.refresh()

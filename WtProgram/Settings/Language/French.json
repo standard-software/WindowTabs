@@ -93,6 +93,8 @@
 
   "Workspace": "Espace de travail",
   "New": "Nouveau",
+  "WorkspaceTabsCurrentDesktop": "Onglets sur le bureau actuel",
+  "WorkspaceTabsAllDesktops": "Onglets sur tous les bureaux",
   "Restore": "Restaurer",
   "Edit": "Modifier",
   "Remove": "Supprimer",

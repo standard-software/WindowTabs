@@ -93,6 +93,8 @@
 
   "Workspace": "Arbeitsbereich",
   "New": "Neu",
+  "WorkspaceTabsCurrentDesktop": "Tabs auf dem aktuellen Desktop",
+  "WorkspaceTabsAllDesktops": "Tabs auf allen Desktops",
   "Restore": "Wiederherstellen",
   "Edit": "Bearbeiten",
   "Remove": "Entfernen",

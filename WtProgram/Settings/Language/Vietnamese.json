@@ -93,6 +93,8 @@
 
   "Workspace": "Không gian làm việc",
   "New": "Mới",
+  "WorkspaceTabsCurrentDesktop": "Thẻ trên màn hình nền hiện tại",
+  "WorkspaceTabsAllDesktops": "Thẻ trên tất cả màn hình nền",
   "Restore": "Khôi phục",
   "Edit": "Chỉnh sửa",
   "Remove": "Xóa",

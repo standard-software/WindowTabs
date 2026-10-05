@@ -93,6 +93,8 @@
 
   "Workspace": "Çalışma Alanı",
   "New": "Yeni",
+  "WorkspaceTabsCurrentDesktop": "Geçerli masaüstündeki sekmeler",
+  "WorkspaceTabsAllDesktops": "Tüm masaüstlerindeki sekmeler",
   "Restore": "Geri Yükle",
   "Edit": "Düzenle",
   "Remove": "Kaldır",
