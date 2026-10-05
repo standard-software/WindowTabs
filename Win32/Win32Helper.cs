@@ -268,6 +268,13 @@ namespace Bemo
         public delegate void PlacementTiming(string stage, double milliseconds);
         public delegate bool PlacementCurrent();
 
+        // A style with the top bit set (WS_POPUP) does not fit a checked
+        // IntPtr -> int conversion in a 64-bit process.
+        private static int WindowLongAsInt(IntPtr value)
+        {
+            return unchecked((int)value.ToInt64());
+        }
+
         public static bool SetWindowMaximizedNoActivate(IntPtr hwnd, bool maximized, RECT bounds)
         {
             return SetWindowMaximizedNoActivate(hwnd, maximized, bounds, null, null);
@@ -278,7 +285,7 @@ namespace Bemo
         {
             if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
             if (current != null && !current()) return true;
-            int style = (int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE);
+            int style = WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE));
             int updated = maximized ? style | WindowsStyles.WS_MAXIMIZE : style & ~WindowsStyles.WS_MAXIMIZE;
             if (updated == style) return true;
 #if DEBUG
@@ -292,7 +299,7 @@ namespace Bemo
             // Per-window serialization applies a newer request afterward;
             // cancellation here would strand the new style at the old size.
             if (WinUserApi.IsIconic(hwnd)) return false;
-            if ((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE) != updated) return false;
+            if (WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE)) != updated) return false;
 #if DEBUG
             started = Stopwatch.GetTimestamp();
 #endif
@@ -315,7 +322,7 @@ namespace Bemo
             RECT bounds = placement.rcNormalPosition;
             // Normal placement uses workspace coordinates except for tool windows;
             // SetWindowPos always takes screen coordinates for top-level windows.
-            if (((int)WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE) &
+            if ((WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE)) &
                  WindowsExtendedStyles.WS_EX_TOOLWINDOW) == 0)
             {
                 IntPtr monitor = WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST);
