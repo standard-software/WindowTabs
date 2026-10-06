@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next10**
+Latest version: **ss_2026.10.03_next11**
 
 See [version.md](version.md) for details.
 
@@ -408,6 +408,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 - Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
 - [New] saves the tab groups and tabs on the current desktop. With several virtual desktops it offers "Tabs on the current desktop" and "Tabs on all desktops"
+- [Restore] brings back the tab groups and their positions. It does not move a window to another virtual desktop: each window joins its tab group on the desktop it is on now, and one that is on another desktop becomes a dimmed tab
 
 ## Building from Source
 
