@@ -103,6 +103,50 @@ module VirtualDesktopGroups =
                     (now = target && r.presence <> Away) || r.desktop = Some target)
         | _ -> members
 
+    // Exit and completion may race. Once work starts, only its finally may
+    // release the step; a queued action abandoned on exit must never run late.
+    let runWorkspaceGroupStep subscribe isExited tryPost postMain gone action complete =
+        let gate = obj()
+        let mutable phase = 0 // Waiting, running, finished.
+        let mutable exited = false
+        let mutable subscription : IDisposable option = None
+        let deliver error =
+            let cleanup = lock gate (fun () -> subscription)
+            cleanup |> Option.iter(fun token -> token.Dispose())
+            postMain (fun () -> complete error)
+        let finishWaiting error =
+            let won = lock gate (fun () ->
+                if phase = 0 then phase <- 2; true else false)
+            if won then deliver error
+        let onExit () =
+            let waiting = lock gate (fun () ->
+                exited <- true
+                if phase = 0 then phase <- 2; true else false)
+            if waiting then deliver gone
+        try
+            let token = subscribe onExit
+            let alreadyFinished = lock gate (fun () ->
+                subscription <- Some token
+                phase = 2)
+            if alreadyFinished then token.Dispose()
+            elif isExited() then finishWaiting gone
+            else
+                let work () =
+                    let run = lock gate (fun () ->
+                        if phase = 0 then phase <- 1; true else false)
+                    if run then
+                        let mutable error = None
+                        try
+                            try action()
+                            with e -> error <- Some e
+                        finally
+                            let result = lock gate (fun () ->
+                                phase <- 2
+                                if exited then error |> Option.orElse gone else error)
+                            deliver result
+                if not (tryPost work) then finishWaiting gone
+        with error -> finishWaiting (Some error)
+
     // Continuations serialize restore steps without blocking their owner threads.
     // Dispatch is supplied by the caller; tests can drain a queue without Windows.
     let runWorkspaceSteps post completed (steps: ((exn option -> unit) -> unit) list) =

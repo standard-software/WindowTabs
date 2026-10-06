@@ -49,6 +49,7 @@ type GroupInfo() as this =
                 windowsCell.map <| fun l -> l.where((<>) hwnd)
 
     member this.invokeGroup = invoker.asyncInvoke
+    member this.tryInvokeGroup = invoker.tryAsyncInvoke
     member this.isExited = _isExited
     member this.exited = _group.exited
     member this.removed = _group.removed

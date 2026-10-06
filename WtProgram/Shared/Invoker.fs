@@ -32,6 +32,17 @@ type Invoker() as this =
         lockDispose <| fun() ->
             form.BeginInvoke(MethodInvoker(fun() -> f())).ignore
 
+    // Restore needs to distinguish a queued action from a disposed target.
+    // Existing asyncInvoke callers retain their original behavior.
+    member this.tryAsyncInvoke f =
+        lock this <| fun () ->
+            if form.IsDisposed || not form.IsHandleCreated then false
+            else
+                try
+                    form.BeginInvoke(MethodInvoker(fun () -> f())) |> ignore
+                    true
+                with :? InvalidOperationException -> false
+
     interface IDisposable with
         member this.Dispose() =
             lockDispose <| fun() ->

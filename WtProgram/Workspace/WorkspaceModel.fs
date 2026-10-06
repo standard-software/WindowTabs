@@ -557,18 +557,15 @@ type WorkspaceModel() as this =
                     error |> Option.iter (logError index kind)
                     trace index kind "end" members
                     complete error
+                let gone =
+                    if sourceOnly then None
+                    else Some(InvalidOperationException("The tab group closed before restore completed.") :> exn)
                 try
-                    if sourceOnly && info.isExited then
-                        trace index kind "source-closed" members
-                        report None
-                    else
-                        if not sourceOnly then info.reserveWorkspaceWindows(members)
-                        info.invokeGroup <| fun () ->
-                            let mutable error = None
-                            try
-                                try action info.group
-                                with e -> error <- Some e
-                            finally main.asyncInvoke(fun () -> report error)
+                    if not sourceOnly then info.reserveWorkspaceWindows(members)
+                    VirtualDesktopGroups.runWorkspaceGroupStep
+                        (fun onExit -> info.exited.Subscribe(fun () -> onExit()))
+                        (fun () -> info.isExited) info.tryInvokeGroup main.asyncInvoke gone
+                        (fun () -> action info.group) report
                 with error -> report (Some error)
             let groups = workspace.children.enumerate.map(fun (index, groupInfo) -> fun complete ->
                 trace index "group" "start" []
@@ -646,6 +643,10 @@ type WorkspaceModel() as this =
                                     logError index "add-window" error
                                     group.recoverWorkspaceWindow(hwnd)
                                 trace index "add-window" "end" [hwnd]
+                            // The first member is the window that was in front when
+                            // the workspace was saved: the saved rectangle is its own.
+                            (try members |> List.tryHead |> Option.iter group.settleWorkspacePlacement
+                             with error -> logError index "settle" error)
                             let withState = resolved.list |> List.choose(fun (w, hwnd) ->
                                 match w with
                                 | :? WorkspaceWindow as ww -> ww.tabState |> Option.map(fun st -> st, hwnd)
