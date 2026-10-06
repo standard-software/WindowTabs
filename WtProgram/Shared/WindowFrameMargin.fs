@@ -71,6 +71,8 @@ module WindowFrameMargin =
         [<DllImport("user32.dll")>]
         extern nativeint GetWindow(nativeint hwnd, uint32 command)
         [<DllImport("user32.dll")>]
+        extern nativeint GetTopWindow(nativeint hwnd)
+        [<DllImport("user32.dll")>]
         extern bool IsWindowVisible(nativeint hwnd)
         [<DllImport("user32.dll")>]
         extern bool IsWindow(nativeint hwnd)
@@ -166,8 +168,10 @@ module WindowFrameMargin =
                                 if not (excluded candidate) && Native.GetWindow(candidate, 4u) = hwnd && Native.IsWindowVisible candidate && isExternalFrame candidate then
                                     match bounds candidate with Some r -> r :: frames | None -> frames
                                 else frames
-                            walk (Native.GetWindow(candidate, 3u)) (remaining - 1) frames
-                    match walk (Native.GetWindow(hwnd, 3u)) 4096 [] with
+                            walk (Native.GetWindow(candidate, 2u)) (remaining - 1) frames
+                    // Owned frame pieces can sit behind their owner after a reorder.
+                    // Search both sides of the owner in the top-level order.
+                    match walk (Native.GetTopWindow(0n)) 4096 [] with
                     | None -> false // Incomplete order is not evidence of zero margin.
                     | Some frames ->
                         let dpi = try max 96 (int (Native.GetDpiForWindow hwnd)) with _ -> 96
