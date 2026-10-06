@@ -119,7 +119,7 @@
   "NewLaunchMenu": "新しいタブやで : {0} 起動",
   "NewTabInGroup": "このタブの右やで",
   "NewWindowPositionMenu": "位置指定やで",
-  "NewWindowLinkGroupMenu": "他のタブグループへ連結やで",
+  "NewWindowLinkGroupMenu": "他のタブグループに連結やで",
   "NewLaunchErrorUWP": "新規ウィンドウの起動に失敗してもうたで。\n\nこのアプリ ({0}) はUWPアプリやから、\n直接起動できひんのや。\n\n代わりにスタートメニューから起動してな。",
   "NewLaunchErrorProcess": "プロセスの起動に失敗してもうたで。\n\nパス: {0}\nエラー: {1}",
   "NewLaunchErrorUnexpected": "プロセスの起動で変なエラー出たで:\n{0}",
@@ -163,7 +163,7 @@
   "Main": "メイン",
   "CurrentDisplaySuffix": "(ここやで)",
 
-  "DockingTabGroupToGroup": "このタブグループを他のタブグループにくっつける",
+  "DockingTabGroupToGroup": "このグループを他のタブグループにくっつける",
 
   "CloseTabMenu": "タブを閉じるで",
   "CloseTab": "このタブ閉じるで",

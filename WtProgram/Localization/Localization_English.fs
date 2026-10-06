@@ -168,7 +168,7 @@ module Localization_English =
         ("Main", "Main")
         ("CurrentDisplaySuffix", "(here)")
 
-        ("DockingTabGroupToGroup", "Link this tab group to another tab group")
+        ("DockingTabGroupToGroup", "Link this group to another tab group")
 
         ("CloseTabMenu", "Close Tab")
         ("CloseTab", "Close tab : {0}")
