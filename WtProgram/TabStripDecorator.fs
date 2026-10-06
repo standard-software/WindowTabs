@@ -320,10 +320,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             info.tabHwnds |> List.forall (fun hwnd ->
                 (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Here)
 
-    /// A group as a menu of this desktop names it: only its tabs that are
-    /// here are counted and listed. The tabs of its windows on another desktop
-    /// are drawn dimmed in its strip, and a menu entry that counted them would
-    /// not match what is seen. The icon is chosen the same way (updateGroupInfo).
+    /// The local view used to decide visibility and which tabs lead a menu entry.
+    /// The entry itself uses the full group for its total count and remaining names.
     member private this.hereInfo(state: VirtualDesktopGroups.Live.Snapshot, usable: bool) (info: TabGroupInfo) =
         if not VirtualDesktopGroups.keepAway || not usable ||
            info.tabNames.Length <> info.tabHwnds.Length then info
@@ -2031,6 +2029,35 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let mutable menuReadingLogged = false
 #endif
 
+        // Read native geometry once per menu, without invoking another group thread.
+        // Use the same member regardless of activation or visual tab order, so frame
+        // margins cannot make otherwise stationary groups exchange places.
+        let linkScreens = this.getAllScreensSorted()
+        let layoutBounds (rect: System.Drawing.Rectangle) : LinkGroupLayout.Bounds =
+            { x = rect.X; y = rect.Y; width = rect.Width; height = rect.Height }
+        let linkDisplays = linkScreens |> Array.map (fun screen -> layoutBounds screen.Bounds) |> Array.toList
+        let linkBounds =
+            lock groupInfos (fun () -> groupInfos.Values |> List.ofSeq)
+            |> List.map (fun info ->
+                let bounds =
+                    info.tabHwnds |> List.sort |> List.tryFind WinUserApi.IsWindow
+                    |> Option.map (fun memberHwnd ->
+                        let memberWindow = os.windowFromHwnd(memberHwnd)
+                        let rect =
+                            if not memberWindow.isMinimized then memberWindow.bounds else
+                            let normal = memberWindow.placement.rcNormalPosition
+                            if int(memberWindow.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+                            else
+                                match Mon.fromHwnd(memberHwnd) with
+                                | Some mon -> normal.move(mon.workRect.x - mon.displayRect.x,
+                                                          mon.workRect.y - mon.displayRect.y)
+                                | None -> normal
+                        ({ x = rect.x; y = rect.y
+                           width = rect.size.width; height = rect.size.height } : LinkGroupLayout.Bounds))
+                    |> Option.defaultValue { x = 0; y = 0; width = 0; height = 0 }
+                info.hwnd, bounds)
+            |> Map.ofList
+
         // All link menus use one immutable reading and the same presentation.
         let linkGroupItems exclude click =
             this.updateGroupInfo()
@@ -2042,21 +2069,28 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let infos = lock groupInfos (fun () -> groupInfos.Values |> List.ofSeq)
                         |> List.filter (fun info -> info.hwnd <> group.hwnd && info.tabCount > 0 && not (exclude info))
                         |> List.distinctBy (fun info -> info.hwnd)
-            let entry (info: TabGroupInfo) members otherCount =
+                        |> List.filter (fun info -> Map.containsKey info.hwnd linkBounds)
+                        |> List.sortBy (fun info -> LinkGroupLayout.orderKey linkBounds.[info.hwnd] (info.hwnd.ToInt64()))
+            let entry (info: TabGroupInfo) preferred =
                 try
                     let target = lock decorators (fun () ->
                         match decorators.TryGetValue(info.hwnd) with
                         | true, d when WinUserApi.IsWindow(d.group.hwnd) && WinUserApi.IsWindow(d.ts.hwnd) -> Some d
                         | _ -> None)
                     target |> Option.map (fun decorator ->
-                        let count = List.length members
+                        let members, count = LinkGroupTabs.ordered preferred (List.zip info.tabHwnds info.tabNames)
                         let limit = if count = 1 then 22 elif count = 2 then 9 else 5
                         let names = members |> List.truncate 3 |> List.map (fun (_, name: string) ->
                             if name.Length > limit then name.Substring(0, limit) + "..." else name)
                         let names = String.Join(" ", names) + (if count > 3 then "..." else "")
                         let word = Localization.getString(if count = 1 then "TabSingular" else "TabPlural")
                         let text = String.Format(Localization.getString("MoveTabGroupFormat"), count, word, names)
-                        let text = if otherCount > 0 then text + ": " + String.Format(Localization.getString("OtherDesktopTabsSuffix"), otherCount) else text
+                        let text =
+                            match LinkGroupLayout.displayIndex linkBounds.[info.hwnd] linkDisplays with
+                            | LinkGroupLayout.OnDisplay index -> String.Format(Localization.getString("LinkGroupDisplayFormat"),
+                                                                                this.getScreenName(linkScreens.[index]), text)
+                            | LinkGroupLayout.OnNoDisplay -> String.Format(Localization.getString("LinkGroupDisplayFormat"), "-", text)
+                            | LinkGroupLayout.NoPrefix -> text
                         let big, small = info.tabIcons |> Map.tryFind (fst members.Head) |> Option.defaultValue (None, None)
 #if DEBUG
                         listedGroups <- listedGroups.Add info.hwnd
@@ -2071,18 +2105,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let hereItems =
                 if extended then
                     views |> List.choose (fun (info, here, _) ->
-                        if here.IsEmpty then None else entry info here (info.tabCount - here.Length))
+                        if here.IsEmpty then None else entry info here)
                 else
-                    infos |> List.map (this.hereInfo(state, usable))
-                    |> List.filter (this.isOnCurrentDesktop(state, usable))
-                    |> List.choose (fun info -> if info.tabCount = 0 then None else entry info (List.zip info.tabHwnds info.tabNames) 0)
+                    infos |> List.choose (fun info ->
+                        let here = this.hereInfo(state, usable) info
+                        if here.tabCount = 0 || not (this.isOnCurrentDesktop(state, usable) here) then None
+                        else entry info (List.zip here.tabHwnds here.tabNames))
             let parents =
                 if not extended then [] else
                 state.listed.Value |> List.mapi (fun i desktop ->
                     let children = views |> List.choose (fun (info, here, others) ->
                         if not here.IsEmpty then None else
                         others |> List.tryFind (fun (_, d, _) -> d = desktop)
-                        |> Option.bind (fun (_, _, tabs) -> entry info tabs (info.tabCount - tabs.Length)))
+                        |> Option.bind (fun (_, _, tabs) -> entry info tabs))
                     let text = String.Format(Localization.getString("OtherDesktopGroupsMenu"), i + 1)
                     if Some desktop = state.current then None
                     elif children.IsEmpty then
@@ -2257,8 +2292,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Disabled header at the top of the menu showing which tab it targets
         let targetTabHeaderItem =
+            let caption = TabNameHelper.format (Localization.getString("TargetTabHeader")) currentTabName
+            let count = this.ts.visualOrder.count
+            let size = String.Format(Localization.getString(TabGroupHeader.formatKey count), count)
             CmiRegular({
-                text = TabNameHelper.format (Localization.getString("TargetTabHeader")) currentTabName
+                text = TabGroupHeader.append caption size
                 image = None
                 flags = List2([MenuFlags.MF_GRAYED])
                 click = fun() -> ()

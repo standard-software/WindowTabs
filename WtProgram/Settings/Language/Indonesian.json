@@ -114,6 +114,8 @@
   "Reset": "Reset",
 
   "TargetTabHeader": "Tab target : {TabName}",
+  "TabGroupSizeSingularFormat": "Grup dengan {0} tab",
+  "TabGroupSizePluralFormat": "Grup dengan {0} tab",
   "NewLaunchMenu": "Tab baru : jalankan {0}",
   "NewTabInGroup": "Di kanan tab ini",
   "NewWindowPositionMenu": "Posisi",
@@ -161,7 +163,7 @@
   "Main": "Utama",
   "CurrentDisplaySuffix": "(di sini)",
 
-  "DockingTabGroupToGroup": "Tautkan grup tab ini ke grup tab lain",
+  "DockingTabGroupToGroup": "Tautkan grup ini ke grup tab lain",
 
   "CloseTabMenu": "Tutup Tab",
   "CloseTab": "Tutup tab",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Posisi",
   "DetachTabSamePosition": "Posisi sama",
   "DetachAndDockingTabToGroup": "Tautkan ke grup tab lain",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Tab di desktop lain: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grup tab di desktop {0}",
 
   "SystemMenu": "Sistem",

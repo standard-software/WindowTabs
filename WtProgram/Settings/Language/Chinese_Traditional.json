@@ -114,6 +114,8 @@
   "Reset": "重設",
 
   "TargetTabHeader": "目標分頁 : {TabName}",
+  "TabGroupSizeSingularFormat": "含{0}個分頁的群組",
+  "TabGroupSizePluralFormat": "含{0}個分頁的群組",
   "NewLaunchMenu": "新增分頁 : 啟動{0}",
   "NewTabInGroup": "此分頁的右側",
   "NewWindowPositionMenu": "位置指定",
@@ -161,7 +163,7 @@
   "Main": "主",
   "CurrentDisplaySuffix": "(目前)",
 
-  "DockingTabGroupToGroup": "將此分頁群組連結到其他分頁群組",
+  "DockingTabGroupToGroup": "將此群組連結到其他分頁群組",
 
   "CloseTabMenu": "關閉分頁",
   "CloseTab": "關閉此分頁",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "在原位置分離",
   "DetachAndDockingTabToGroup": "連結到其他分頁群組",
-  "MoveTabGroupFormat": "{0}{1}: {2}",
-  "OtherDesktopTabsSuffix": "其他桌面的分頁：{0}",
+  "MoveTabGroupFormat": "{0}{1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "桌面{0}的分頁群組",
 
   "SystemMenu": "系統",

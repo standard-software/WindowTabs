@@ -117,6 +117,10 @@ module Localization_English =
         ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")
 
+        ("TargetTabHeader", "Target tab : {TabName}")
+        ("TabGroupSizeSingularFormat", "{0}-tab group")
+        ("TabGroupSizePluralFormat", "{0}-tab group")
+
         ("NewLaunchMenu", "New tab : execute {0}")
         ("NewTabInGroup", "Right of this tab : {0}")
         ("NewWindowPositionMenu", "Position")
@@ -164,7 +168,7 @@ module Localization_English =
         ("Main", "Main")
         ("CurrentDisplaySuffix", "(here)")
 
-        ("DockingTabGroupToGroup", "Link this tab group to another tab group")
+        ("DockingTabGroupToGroup", "Link this group to another tab group")
 
         ("CloseTabMenu", "Close Tab")
         ("CloseTab", "Close tab : {0}")
@@ -244,8 +248,8 @@ module Localization_English =
         ("DetachAndMovePosTab", "Position")
         ("DetachTabSamePosition", "Same position")
         ("DetachAndDockingTabToGroup", "Link to another tab group")
-        ("MoveTabGroupFormat", "{0} {1}: {2}")
-        ("OtherDesktopTabsSuffix", "Tabs on other desktops: {0}")
+        ("MoveTabGroupFormat", "{0} {1} : {2}")
+        ("LinkGroupDisplayFormat", "{0} : {1}")
         ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 
         ("SystemMenu", "System")

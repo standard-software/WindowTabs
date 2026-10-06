@@ -114,6 +114,8 @@
   "Reset": "重置",
 
   "TargetTabHeader": "目标标签页 : {TabName}",
+  "TabGroupSizeSingularFormat": "含{0}个标签页的组",
+  "TabGroupSizePluralFormat": "含{0}个标签页的组",
   "NewLaunchMenu": "新建标签页 : 启动{0}",
   "NewTabInGroup": "此标签页的右侧",
   "NewWindowPositionMenu": "位置指定",
@@ -161,7 +163,7 @@
   "Main": "主",
   "CurrentDisplaySuffix": "(当前)",
 
-  "DockingTabGroupToGroup": "将此标签页组连接到其他标签页组",
+  "DockingTabGroupToGroup": "将此组连接到其他标签页组",
 
   "CloseTabMenu": "关闭标签页",
   "CloseTab": "关闭此标签页",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "在原位置分离",
   "DetachAndDockingTabToGroup": "连接到其他标签页组",
-  "MoveTabGroupFormat": "{0}{1}: {2}",
-  "OtherDesktopTabsSuffix": "其他桌面的标签页：{0}",
+  "MoveTabGroupFormat": "{0}{1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "桌面{0}的标签页组",
 
   "SystemMenu": "系统",

@@ -114,6 +114,8 @@
   "Reset": "Réinitialiser",
 
   "TargetTabHeader": "Onglet cible : {TabName}",
+  "TabGroupSizeSingularFormat": "Groupe de {0} onglet",
+  "TabGroupSizePluralFormat": "Groupe de {0} onglets",
   "NewLaunchMenu": "Nouvel onglet : exécuter {0}",
   "NewTabInGroup": "À droite de cet onglet",
   "NewWindowPositionMenu": "Position",
@@ -161,7 +163,7 @@
   "Main": "Principal",
   "CurrentDisplaySuffix": "(ici)",
 
-  "DockingTabGroupToGroup": "Lier ce groupe d'onglets à un autre groupe d'onglets",
+  "DockingTabGroupToGroup": "Lier ce groupe à un autre groupe d'onglets",
 
   "CloseTabMenu": "Fermer l'onglet",
   "CloseTab": "Fermer l'onglet",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Même position",
   "DetachAndDockingTabToGroup": "Lier à un autre groupe d'onglets",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Onglets sur les autres bureaux : {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Groupes d’onglets sur le bureau {0}",
 
   "SystemMenu": "Système",

@@ -114,6 +114,8 @@
   "Reset": "Đặt lại",
 
   "TargetTabHeader": "Thẻ đích : {TabName}",
+  "TabGroupSizeSingularFormat": "Nhóm gồm {0} thẻ",
+  "TabGroupSizePluralFormat": "Nhóm gồm {0} thẻ",
   "NewLaunchMenu": "Thẻ mới : chạy {0}",
   "NewTabInGroup": "Bên phải thẻ này",
   "NewWindowPositionMenu": "Vị trí",
@@ -161,7 +163,7 @@
   "Main": "Chính",
   "CurrentDisplaySuffix": "(ở đây)",
 
-  "DockingTabGroupToGroup": "Liên kết nhóm thẻ này với nhóm thẻ khác",
+  "DockingTabGroupToGroup": "Liên kết nhóm này với nhóm thẻ khác",
 
   "CloseTabMenu": "Đóng thẻ",
   "CloseTab": "Đóng thẻ",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Vị trí",
   "DetachTabSamePosition": "Cùng vị trí",
   "DetachAndDockingTabToGroup": "Liên kết với nhóm thẻ khác",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Thẻ trên các màn hình nền khác: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Nhóm thẻ trên màn hình nền {0}",
 
   "SystemMenu": "Hệ thống",

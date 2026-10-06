@@ -180,7 +180,7 @@ Position Move
   Move
     Left Edge / Right Edge / Top Edge / Bottom Edge
     Top Left / Top Right / Bottom Left / Bottom Right
-Link this tab group to another tab group (submenu lists other tab groups; choose the destination)
+Link this group to another tab group (submenu lists other tab groups; choose the destination)
 ---
 Detach this tab
   Position (same submenu as "Position Move")
@@ -249,12 +249,12 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
 
-### Link this tab group to another tab group
+### Link this group to another tab group
 
 - Move all tabs of the current group into another tab group.
 - Tab groups on other virtual desktops can be chosen too, under an item per desktop ([Virtual Desktop Support](#virtual-desktop-support))
 
-![Link this tab group to another tab group](README_Image/MoveTabGroupToGroup.png)
+![Link this group to another tab group](README_Image/MoveTabGroupToGroup.png)
 
 ### Detach Tab
 

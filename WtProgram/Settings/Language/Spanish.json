@@ -114,6 +114,8 @@
   "Reset": "Restablecer",
 
   "TargetTabHeader": "Pestaña de destino : {TabName}",
+  "TabGroupSizeSingularFormat": "Grupo con {0} pestaña",
+  "TabGroupSizePluralFormat": "Grupo con {0} pestañas",
   "NewLaunchMenu": "Nueva pestaña : ejecutar {0}",
   "NewTabInGroup": "A la derecha de esta pestaña",
   "NewWindowPositionMenu": "Posición",
@@ -161,7 +163,7 @@
   "Main": "Principal",
   "CurrentDisplaySuffix": "(aquí)",
 
-  "DockingTabGroupToGroup": "Vincular este grupo de pestañas a otro grupo de pestañas",
+  "DockingTabGroupToGroup": "Vincular este grupo a otro grupo de pestañas",
 
   "CloseTabMenu": "Cerrar pestaña",
   "CloseTab": "Cerrar pestaña",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Posición",
   "DetachTabSamePosition": "Misma posición",
   "DetachAndDockingTabToGroup": "Vincular a otro grupo de pestañas",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Pestañas en otros escritorios: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grupos de pestañas en el escritorio {0}",
 
   "SystemMenu": "Sistema",

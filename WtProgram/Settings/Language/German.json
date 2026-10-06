@@ -114,6 +114,8 @@
   "Reset": "Zurücksetzen",
 
   "TargetTabHeader": "Ziel-Tab : {TabName}",
+  "TabGroupSizeSingularFormat": "Gruppe mit {0} Tab",
+  "TabGroupSizePluralFormat": "Gruppe mit {0} Tabs",
   "NewLaunchMenu": "Neuer Tab : {0} ausführen",
   "NewTabInGroup": "Rechts von diesem Tab",
   "NewWindowPositionMenu": "Position",
@@ -161,7 +163,7 @@
   "Main": "Hauptbildschirm",
   "CurrentDisplaySuffix": "(hier)",
 
-  "DockingTabGroupToGroup": "Diese Tab-Gruppe mit einer anderen Tab-Gruppe verknüpfen",
+  "DockingTabGroupToGroup": "Diese Gruppe mit einer anderen Tab-Gruppe verknüpfen",
 
   "CloseTabMenu": "Tab schließen",
   "CloseTab": "Tab schließen",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Gleiche Position",
   "DetachAndDockingTabToGroup": "Mit anderer Tab-Gruppe verknüpfen",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Tabs auf anderen Desktops: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Tab-Gruppen auf Desktop {0}",
 
   "SystemMenu": "System",

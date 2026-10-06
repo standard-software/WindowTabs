@@ -114,6 +114,8 @@
   "Reset": "Resetuj",
 
   "TargetTabHeader": "Karta docelowa : {TabName}",
+  "TabGroupSizeSingularFormat": "Grupa : {0} karta",
+  "TabGroupSizePluralFormat": "Grupa : {0} karty",
   "NewLaunchMenu": "Nowa karta : uruchom {0}",
   "NewTabInGroup": "Na prawo od tej karty",
   "NewWindowPositionMenu": "Pozycja",
@@ -161,7 +163,7 @@
   "Main": "Główny",
   "CurrentDisplaySuffix": "(tutaj)",
 
-  "DockingTabGroupToGroup": "Połącz tę grupę kart z inną grupą kart",
+  "DockingTabGroupToGroup": "Połącz tę grupę z inną grupą kart",
 
   "CloseTabMenu": "Zamykanie kart",
   "CloseTab": "Zamknij kartę",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Pozycja",
   "DetachTabSamePosition": "Ta sama pozycja",
   "DetachAndDockingTabToGroup": "Połącz z inną grupą kart",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Karty na innych pulpitach: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grupy kart na pulpicie {0}",
 
   "SystemMenu": "System",

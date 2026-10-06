@@ -114,6 +114,8 @@
   "Reset": "Sıfırla",
 
   "TargetTabHeader": "Hedef sekme : {TabName}",
+  "TabGroupSizeSingularFormat": "{0} sekmeli grup",
+  "TabGroupSizePluralFormat": "{0} sekmeli grup",
   "NewLaunchMenu": "Yeni sekme : {0} çalıştır",
   "NewTabInGroup": "Bu sekmenin sağında",
   "NewWindowPositionMenu": "Konum",
@@ -161,7 +163,7 @@
   "Main": "Ana",
   "CurrentDisplaySuffix": "(burada)",
 
-  "DockingTabGroupToGroup": "Bu sekme grubunu başka bir sekme grubuna bağla",
+  "DockingTabGroupToGroup": "Bu grubu başka bir sekme grubuna bağla",
 
   "CloseTabMenu": "Sekmeyi Kapat",
   "CloseTab": "Sekmeyi kapat",
@@ -241,8 +243,8 @@
   "DetachAndMovePosTab": "Konum",
   "DetachTabSamePosition": "Aynı konum",
   "DetachAndDockingTabToGroup": "Başka bir sekme grubuna bağla",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
-  "OtherDesktopTabsSuffix": "Diğer masaüstlerindeki sekmeler: {0}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Masaüstü {0} üzerindeki sekme grupları",
 
   "SystemMenu": "Sistem",
