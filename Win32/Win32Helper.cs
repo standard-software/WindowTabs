@@ -335,6 +335,45 @@ namespace Bemo
             return SetWindowMaximizedNoActivate(hwnd, false, bounds);
         }
 
+        // Workspace rectangles use the caller's DPI-unaware workspace coordinates.
+        // Change styles and bounds without showing, activating or raising the window.
+        public static bool PlaceWorkspaceWindowNoActivate(IntPtr hwnd, RECT normal, bool maximized)
+        {
+            if (!WinUserApi.IsWindow(hwnd)) return false;
+            IntPtr monitor = WinUserApi.MonitorFromRect(ref normal, MonitorFlags.MONITOR_DEFAULTTONEAREST);
+            MONITORINFO info = GetMonitorInfo(monitor);
+            int extended = WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE));
+            if ((extended & WindowsExtendedStyles.WS_EX_TOOLWINDOW) == 0)
+            {
+                int dx = info.rcWork.Left - info.rcMonitor.Left;
+                int dy = info.rcWork.Top - info.rcMonitor.Top;
+                normal.Left += dx; normal.Right += dx;
+                normal.Top += dy; normal.Bottom += dy;
+            }
+            int style = WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE));
+            int restored = style & ~(WindowsStyles.WS_MINIMIZE | WindowsStyles.WS_MAXIMIZE);
+            if (restored != style)
+                WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(restored));
+            var flags = SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
+                        SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED;
+            // Establish the normal rectangle before maximizing, so a later manual
+            // restore has the saved bounds as well as the saved maximized state.
+            bool result = WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, normal.Left, normal.Top,
+                normal.Width, normal.Height, flags);
+            if (!maximized || !result) return result;
+            RECT bounds = info.rcWork;
+            if ((style & WindowsStyles.WS_THICKFRAME) != 0)
+            {
+                int x = WinUserApi.GetSystemMetrics(SystemMetrics.SM_CXFRAME) + WinUserApi.GetSystemMetrics(SystemMetrics.SM_CXPADDEDBORDER);
+                int y = WinUserApi.GetSystemMetrics(SystemMetrics.SM_CYFRAME) + WinUserApi.GetSystemMetrics(SystemMetrics.SM_CXPADDEDBORDER);
+                bounds.Left -= x; bounds.Right += x;
+                bounds.Top -= y; bounds.Bottom += y;
+            }
+            if (!SetWindowMaximizedNoActivate(hwnd, true, bounds)) return false;
+            return WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, bounds.Left, bounds.Top,
+                bounds.Width, bounds.Height, flags);
+        }
+
         public static Rectangle GetWindowRectangle(IntPtr hwnd)
         {
             RECT rect;

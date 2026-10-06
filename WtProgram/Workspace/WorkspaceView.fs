@@ -183,6 +183,10 @@ type WorkspaceView() as this =
         )
         ts.GripStyle  <- ToolStripGripStyle.Hidden
         ts.Dock <- DockStyle.Top
+        // Every button here shows its caption, so a tool tip only repeats it -
+        // and the one of the New drop-down comes up on top of the menu it has
+        // just opened, covering the second item.
+        ts.ShowItemToolTips <- false
         ts.Items.Add(this.newButton).ignore
         ts.Items.Add(this.newDropDownButton).ignore
         ts.Items.Add(this.restoreButton).ignore
@@ -202,6 +206,12 @@ type WorkspaceView() as this =
             (match VirtualDesktopHelper.TryReadDesktopIds() with
              | null -> false
              | ids -> ids.Length > 1)
+#if DEBUG
+        // Test hook: show the page as a machine with one virtual desktop does,
+        // without having to remove the desktops that are in use.
+        let showMenu =
+            showMenu && Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SINGLE_DESKTOP") <> "1"
+#endif
         let ts = this.toolbar
         let renderer, backColor, foreColor = this.plainToolbarStyle
         ts.SuspendLayout()

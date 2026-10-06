@@ -384,9 +384,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.withUpdate f =
         let run () =
             Cell.beginUpdate()
-            let result = f()
-            Cell.endUpdate()
-            result
+            try f()
+            finally Cell.endUpdate()
         // The strip keeps its own cell scope; hold its renders back as well,
         // so everything this update pushes into it is drawn once at the end.
         match !_ts with
@@ -1796,6 +1795,25 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
                              ?after=after, ?restoreOrder=restoreOrder)
 
+    // Workspace placement precedes hooks and membership, so no sibling follows
+    // an intermediate restore and no ordinary add path can activate a window.
+    member this.addWindowForWorkspace(hwnd, placement: OSWindowPlacement) =
+        followerPlacements.Synchronous(hwnd, fun () ->
+            Dpi.withUnawareContext <| fun () ->
+                if not (Win32Helper.PlaceWorkspaceWindowNoActivate(hwnd, placement.rcNormalPosition.RECT,
+                            placement.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED)) then
+                    invalidOp "Workspace placement was refused.")
+        this.addWindowPlaced(hwnd, false, false)
+
+    // Recover a partial add without placing or activating the native window.
+    member this.recoverWorkspaceWindow(hwnd) =
+        if not (this.windows.contains(hwnd) && this.ts.tabs.contains(Tab(hwnd))) then
+            if this.windows.contains(hwnd) then this.removeWindow(hwnd, activate=false)
+            this.addWindowPlaced(hwnd, false, false)
+        else
+            // A failure after tab creation may have preceded the membership notice.
+            addedEvent.Trigger(hwnd)
+
     // Explicit links place only the joining window. Reading the destination's
     // placement must never restore or activate one of its existing members.
     member this.addWindowLinked(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
@@ -1987,7 +2005,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         if this.windows.contains(hwnd) && inMoveSize.value.not then
             this.adjustChildWindows()
 
-    member this.removeWindow(hwnd) = this.withUpdate <| fun() ->
+    member this.removeWindow(hwnd, ?activate: bool) = this.withUpdate <| fun() ->
         followerPlacements.Synchronous(hwnd, ignore)
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         frameMargins.Remove(hwnd)
@@ -2018,7 +2036,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // next of its tabs forward would switch to that desktop.
             let window = this.os.windowFromHwnd(hwnd)
             let skipActivation =
-                Services.program.isShuttingDown || Services.program.isDisabled || window.isCloaked || not desktopShown
+                not (defaultArg activate true) || Services.program.isShuttingDown || Services.program.isDisabled || window.isCloaked || not desktopShown
 
             // Determine which tab to activate if this was the active window
             let tabToActivate =
@@ -2044,7 +2062,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // entry can never linger past the tab's life.
             if selectedTabsCell.value.contains(hwnd) then
                 this.applySelected(selectedTabsCell.value.remove(hwnd))
-            hookCleanup.value.find(hwnd).Dispose()
+            hookCleanup.value.tryFind(hwnd) |> Option.iter(fun hooks -> hooks.Dispose())
             hookCleanup.map(fun hooks -> hooks.remove(hwnd))
             memberIdentities.Remove(hwnd) |> ignore
             removedEvent.Trigger(hwnd)

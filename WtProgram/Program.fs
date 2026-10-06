@@ -210,33 +210,6 @@ type PendingRegroup = {
     at: DateTime
 }
 
-// Debug-only trace of the session restore: which saved entry each window
-// claimed, by which route, and where it was placed. Truncated at each start.
-module RestoreTrace =
-#if DEBUG
-    let private path =
-        IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "WindowTabs", "restore_trace.log")
-    let mutable private started = false
-#endif
-    // Takes a thunk, not a string: an argument is evaluated before the call,
-    // so taking the message itself would leave every sprintf at every call
-    // site running in Release - including two that walk the whole tab strip -
-    // with only the file write compiled out.
-    let log (f: unit -> string) =
-#if DEBUG
-        try
-            if not started then
-                started <- true
-                try IO.File.WriteAllText(path, "") with _ -> ()
-            IO.File.AppendAllText(path,
-                sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) (f()))
-        with _ -> ()
-#else
-        ignore f
-#endif
-
 type Program() as this =
     let version = "ss_2026.10.03_next8"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
@@ -267,6 +240,7 @@ type Program() as this =
     // Overlapping operations each suspend; a delayed resume must only lift the
     // suspension it belongs to, never one a later operation has since taken.
     let mutable tabMonitoringSuspendGeneration = 0
+    let mutable workspaceRestorePending = false
     let tabMonitoringSuspendMaxMs = 10000L
     let mutable updateTraceCount = 0
     let mutable shellTraceCount = 0
@@ -760,14 +734,15 @@ type Program() as this =
             if value then
                 tabMonitoringSuspendGeneration <- tabMonitoringSuspendGeneration + 1
                 tabMonitoringSuspendedMs <- monotonic.ElapsedMilliseconds
-            isTabMonitoringSuspendedCell.set(value)
+            if value || not workspaceRestorePending then
+                isTabMonitoringSuspendedCell.set(value)
 
     // Backstop for a suspension whose resume was lost. Run from the main
     // thread's window pass rather than from the property getter: a read must
     // not change state, or the moment auto-grouping comes back would depend on
     // who happened to read the flag.
     member private this.expireStaleTabMonitoringSuspension() =
-        if isTabMonitoringSuspendedCell.value &&
+        if not workspaceRestorePending && isTabMonitoringSuspendedCell.value &&
            monotonic.ElapsedMilliseconds - tabMonitoringSuspendedMs > tabMonitoringSuspendMaxMs then
             DragTrace.log (fun () -> "tabMonitoring: suspension expired, auto-resuming")
             isTabMonitoringSuspendedCell.set(false)
@@ -3254,6 +3229,18 @@ type Program() as this =
         member x.suspendTabMonitoring() = 
             DragTrace.log (fun () -> sprintf "suspendTabMonitoring (already=%b)\r\n%s" isTabMonitoringSuspendedCell.value (DragTrace.callers 6))
             this.isTabMonitoringSuspended <- true
+
+        member x.beginWorkspaceRestore() =
+            if workspaceRestorePending then invalidOp "A workspace restore is already running."
+            (this :> IProgram).suspendTabMonitoring()
+            let generation = tabMonitoringSuspendGeneration
+            workspaceRestorePending <- true
+            let mutable finished = false
+            fun () ->
+                if not finished then
+                    finished <- true
+                    workspaceRestorePending <- false
+                    if generation = tabMonitoringSuspendGeneration then (this :> IProgram).resumeTabMonitoring()
 
         member x.resumeTabMonitoringAfter(delayMs) =
             // The resume must not be owned by the calling group's UI thread:

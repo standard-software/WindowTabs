@@ -56,6 +56,11 @@ type GroupInfo() as this =
     member this.hwnd = this.group.hwnd
     member private this.windows = windowsCell.value
     // Reserve membership before posting, while resolving tab state on its owner.
+    // Keep queued workspace arrivals from looking like an abandoned empty group.
+    // This is called on the main thread, like addWindowWith's reservation.
+    member this.reserveWorkspaceWindows(hwnds: IntPtr list) =
+        windowsCell.map(fun current -> List2((current.list @ hwnds) |> List.distinct))
+
     member this.addWindowWith(hwnd, add: WindowGroup -> unit) =
         windowsCell.map <| fun l -> l.append hwnd
         this.invokeGroup <| fun () -> add this.group
