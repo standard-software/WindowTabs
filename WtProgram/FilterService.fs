@@ -35,14 +35,14 @@ type FilterService() as this =
         Win32Helper.IntPtrAnd(window.styleEx, IntPtr(WindowsExtendedStyles.WS_EX_TOOLWINDOW)) = IntPtr.Zero &&
         Win32Helper.IntPtrAnd(window.style, style) = style
     
-    member this.isAppWindow (window:Window) =
+    member this.isAppWindow (window:Window, ?includeCloaked: bool) =
         // Cheapest first. This runs for every top-level window on every pass
         // (seven or eight hundred, most of them hidden), and the tests that
         // open the window's process cost far more than reading its styles:
         // a hidden or tool window is turned away before its process is asked.
         let tests = List2([
             fun() -> window.isWindow
-            fun() -> window.isVisibleOnScreen
+            fun() -> if defaultArg includeCloaked false then window.isVisible else window.isVisibleOnScreen
             fun() -> this.isAppWindowStyle(window)
             fun() -> window.pid.canQueryProcess
             fun() -> window.pid.isCurrentProcess.not
@@ -91,6 +91,9 @@ type FilterService() as this =
         member x.isAppWindow(hwnd) =
             let window = os.windowFromHwnd(hwnd)
             this.isAppWindow(window)
+
+        member x.isWorkspaceWindow(hwnd) =
+            this.isAppWindow(os.windowFromHwnd(hwnd), includeCloaked=true)
 
         member x.isAppWindowStyle(hwnd) =
             let window = os.windowFromHwnd(hwnd)

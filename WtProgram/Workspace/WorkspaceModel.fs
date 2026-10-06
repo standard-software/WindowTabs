@@ -339,7 +339,11 @@ and
 
 type WindowResolver() as this =
     let os = OS()
-    let mutable hwnds = Services.program.appWindows
+    let mutable hwnds =
+        let grouped = Services.desktop.groups.collect(fun group -> group.windows)
+        let applications = os.windowsInZorder.where(fun w -> Services.filter.isWorkspaceWindow(w.hwnd)).map(fun w -> w.hwnd)
+        List2((grouped.list @ applications.list) |> List.distinct)
+            .where(fun hwnd -> os.windowFromHwnd(hwnd).isWindow)
     let hwndToTitle = Map2(hwnds.map(fun hwnd -> (hwnd, os.windowFromHwnd(hwnd).text)))
 
     member this.title(hwnd) = hwndToTitle.find(hwnd)
@@ -364,7 +368,9 @@ type WindowResolver() as this =
                 fun(title) -> re.IsMatch(title)
             | _ -> fun(title) -> false
 
-        hwnds.tryFind(this.title >> isMatch)
+        let found = hwnds.tryFind(this.title >> isMatch)
+        found |> Option.iter this.removeHwnd
+        found
   
 
 type IWorkspaceModel =
@@ -384,6 +390,7 @@ type WorkspaceModel() as this =
     let _workspaces = System.Collections.Generic.List<Workspace>()
     let mutable _selected = null : obj
     let mutable captureDesktop : Guid option = None
+    let mutable restoring = false
 
     do
         Observable.init(this)
@@ -511,63 +518,168 @@ type WorkspaceModel() as this =
     // matching, the group construction and the tab strips all work in real
     // device pixels, which is what the rest of the process already does.
     member private this.restoreWorkspace(workspace:Workspace) =
-        let windowResolver = WindowResolver()
-      
-        Services.program.suspendTabMonitoring()
-
-        let hwndToGroup = Map2(Services.desktop.groups.collect <| fun group ->
-            group.windows.map <| fun hwnd -> (hwnd, group)
-        )
-        let removeWindow hwnd = hwndToGroup.find(hwnd).removeWindow(hwnd)
-
-        workspace.children.iter <| fun (groupInfo) ->
-            let windows : List2<Dynamic> = groupInfo?windows
-            let windows = windows.reverse
-            // Each saved window with the live one it resolved to, so the
-            // saved tab state can be put on the right window below.
-            let resolved =
-                windows.sortBy(fun w -> w?zorder).choose (fun w ->
-                    windowResolver.resolve w |> Option.map (fun hwnd -> (w, hwnd)))
-            let windows = resolved.map snd
-
-            windows.iter removeWindow
-            windows.iter <| fun hwnd -> WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_RESTORE).ignore
-            Dpi.withUnawareContext <| fun() ->
-                windows.iter <| fun hwnd -> os.windowFromHwnd(hwnd).setPlacement(groupInfo?placement)
-            os.setZorder(windows)
-
-            let group = Services.desktop.createGroup()
-            windows.iter <| fun hwnd -> group.addWindow(hwnd, false)
-
-            // Tab state saved with the windows, put back through the same
-            // calls the context menu uses. Only windows saved with it have
-            // any; a workspace from an earlier version stops here, as it
-            // always did. Every call is queued on the group's own thread
-            // behind the addWindow calls above, so the tabs exist by then.
-            let withState =
-                resolved.list |> List.choose (fun (w, hwnd) ->
-                    match w with
-                    | :? WorkspaceWindow as ww -> ww.tabState |> Option.map (fun st -> (st, hwnd))
-                    | _ -> None)
-            withState |> List.iter (fun (st, hwnd) ->
+        let main = InvokerService.invoker
+        let secrets =
+            workspace.children.collect(fun g -> (g?windows : List2<Dynamic>).map(fun w -> w?title : string)).list
+        let release = Services.program.beginWorkspaceRestore()
+        restoring <- true
+        let mutable finished = false
+        let mutable errors = 0
+        let trace index kind phase members =
+            RestoreTrace.log(fun () ->
+                sprintf "workspace group=%d step=%s phase=%s count=%d hwnds=%s"
+                    index kind phase (List.length members)
+                    (members |> List.map(fun (h: IntPtr) -> sprintf "%X" (h.ToInt64())) |> String.concat ","))
+        let logError index kind (error: exn) =
+            errors <- errors + 1
+            RestoreTrace.log(fun () ->
+                let message = secrets |> List.fold (fun (text: string) title ->
+                    if String.IsNullOrEmpty(title) then text else text.Replace(title, "<redacted>")) error.Message
+                sprintf "workspace group=%d step=%s error=%s message=%s" index kind
+                    (error.GetType().FullName) (message.Replace("\r", " ").Replace("\n", " ")))
+        let finish error =
+            if not finished then
+                finished <- true
+                error |> Option.iter (logError -1 "finish")
+                try release()
+                finally
+                    restoring <- false
+                    canRestoreChangedEvt.Trigger(this.canRestore)
+                    RestoreTrace.log(fun () -> sprintf "workspace end groups=%d errors=%d" workspace.children.length errors)
+        try
+            RestoreTrace.log(fun () -> sprintf "workspace start groups=%d" workspace.children.length)
+            canRestoreChangedEvt.Trigger(false)
+            let resolver = WindowResolver()
+            let sources = Services.desktop.groups
+            let onGroup sourceOnly index kind members (info: GroupInfo) action (complete: exn option -> unit) =
+                trace index kind "start" members
+                let report error =
+                    error |> Option.iter (logError index kind)
+                    trace index kind "end" members
+                    complete error
                 try
-                    let color (s: string option) =
-                        s |> Option.bind SavedTabState.Rgba.parse
-                          |> Option.map (fun (r, g, b, a) -> Color.FromArgb(int a, int r, int g, int b))
-                    color st.fillColor |> Option.iter (fun c -> group.setTabFillColor(hwnd, Some c))
-                    color st.underlineColor |> Option.iter (fun c -> group.setTabUnderlineColor(hwnd, Some c))
-                    color st.borderColor |> Option.iter (fun c -> group.setTabBorderColor(hwnd, Some c))
-                    st.name |> Option.iter (fun n -> group.setTabName(hwnd, Some n))
-                    st.align |> Option.iter (fun a -> group.setTabAlign(hwnd, (if a = "TopRight" then TopRight else TopLeft)))
-                    if st.pinned then group.pinTab(hwnd)
-                with _ -> ())
-            // Then the order, once every tab is on its side: the strip
-            // moves within a side, so the side has to be settled first.
-            withState
-            |> List.sortBy (fun (st, _) -> st.order)
-            |> List.iteri (fun i (_, hwnd) -> try group.moveTab(hwnd, i) with _ -> ())
-
-        Services.program.resumeTabMonitoring()
+                    if sourceOnly && info.isExited then
+                        trace index kind "source-closed" members
+                        report None
+                    else
+                        if not sourceOnly then info.reserveWorkspaceWindows(members)
+                        info.invokeGroup <| fun () ->
+                            let mutable error = None
+                            try
+                                try action info.group
+                                with e -> error <- Some e
+                            finally main.asyncInvoke(fun () -> report error)
+                with error -> report (Some error)
+            let groups = workspace.children.enumerate.map(fun (index, groupInfo) -> fun complete ->
+                trace index "group" "start" []
+                let mutable target : IGroup option = None
+                let mutable members = []
+                let doneGroup error =
+                    trace index "group" "end" members
+                    complete error
+                let recover error =
+                    try
+                        error |> Option.iter (logError index "group")
+                        match error with
+                        | Some _ ->
+                            let detached = members |> List.filter(fun hwnd ->
+                                not (sources.any(fun source -> source.windows.contains((=) hwnd))))
+                            let failed = ResizeArray<IntPtr>()
+                            let destination =
+                                match target with
+                                | Some group -> group
+                                | None ->
+                                    trace index "recovery-create" "start" detached
+                                    let group = Services.desktop.createGroup()
+                                    target <- Some group
+                                    trace index "recovery-create" "end" detached
+                                    group
+                            onGroup false index "recovery" detached (destination :?> GroupInfo) (fun group ->
+                                for hwnd in detached do
+                                    try group.recoverWorkspaceWindow(hwnd)
+                                    with e -> failed.Add(hwnd); logError index "recovery-window" e) (fun recoveryError ->
+                                        if recoveryError.IsSome then
+                                            for hwnd in detached do
+                                                if not (failed.Contains(hwnd)) then failed.Add(hwnd)
+                                        if failed.Count = 0 then doneGroup error else
+                                        // A broken destination must not strand its members.
+                                        // Retry the ordinary unplaced add in an independent group.
+                                        try
+                                            let fallback = Services.desktop.createGroup() :?> GroupInfo
+                                            onGroup false index "fallback" (List.ofSeq failed) fallback (fun group ->
+                                                for hwnd in failed do
+                                                    try group.addWindowPlaced(hwnd, false, false)
+                                                    with e -> logError index "fallback-window" e)
+                                                (fun fallbackError -> doneGroup (fallbackError |> Option.orElse error))
+                                        with e -> doneGroup (Some e))
+                        | _ -> doneGroup error
+                    with recoveryError ->
+                        logError index "recovery-dispatch" recoveryError
+                        doneGroup (Some recoveryError)
+                try
+                    let saved : List2<Dynamic> = groupInfo?windows
+                    let resolved = saved.reverse.sortBy(fun w -> w?zorder).choose(fun w ->
+                        resolver.resolve w |> Option.map(fun hwnd -> w, hwnd))
+                    members <- resolved.map(snd).list
+                    if members.IsEmpty then doneGroup None else
+                    let placement : OSWindowPlacement = groupInfo?placement
+                    let steps = ResizeArray<(exn option -> unit) -> unit>()
+                    sources.iter(fun source ->
+                        let removing = members |> List.filter(fun hwnd -> source.windows.contains((=) hwnd))
+                        if not removing.IsEmpty then
+                            steps.Add(onGroup true index "remove" removing (source :?> GroupInfo) (fun group ->
+                                removing |> List.iter(fun hwnd -> group.removeWindow(hwnd, activate=false)))))
+                    steps.Add(fun complete ->
+                        // Source removals can trigger empty-group cleanup. Create and
+                        // reserve the destination only when its add can be queued now.
+                        trace index "create" "start" members
+                        let destination = Services.desktop.createGroup()
+                        target <- Some destination
+                        trace index "create" "end" members
+                        onGroup false index "add" members (destination :?> GroupInfo) (fun group ->
+                            // OS owns thread-affine caches; never use the model's OS here.
+                            let groupOs = OS()
+                            for hwnd in members do
+                                trace index "add-window" "start" [hwnd]
+                                try group.addWindowForWorkspace(hwnd, placement)
+                                with error ->
+                                    logError index "add-window" error
+                                    group.recoverWorkspaceWindow(hwnd)
+                                trace index "add-window" "end" [hwnd]
+                            let withState = resolved.list |> List.choose(fun (w, hwnd) ->
+                                match w with
+                                | :? WorkspaceWindow as ww -> ww.tabState |> Option.map(fun st -> st, hwnd)
+                                | _ -> None)
+                            for st, hwnd in withState do
+                                trace index "tab-state" "start" [hwnd]
+                                try
+                                    let color value = value |> Option.bind SavedTabState.Rgba.parse
+                                                            |> Option.map(fun (r,g,b,a) -> Color.FromArgb(int a,int r,int g,int b))
+                                    color st.fillColor |> Option.iter(fun c -> group.setTabFillColor(hwnd, Some c))
+                                    color st.underlineColor |> Option.iter(fun c -> group.setTabUnderlineColor(hwnd, Some c))
+                                    color st.borderColor |> Option.iter(fun c -> group.setTabBorderColor(hwnd, Some c))
+                                    st.name |> Option.iter(fun n -> group.setTabName(hwnd, Some n))
+                                    st.align |> Option.iter(fun a -> group.setTabAlign(hwnd, if a = "TopRight" then TopRight else TopLeft))
+                                    if st.pinned then group.pinTab(hwnd)
+                                with error -> logError index "tab-state" error
+                                trace index "tab-state" "end" [hwnd]
+                            trace index "tab-order" "start" members
+                            withState |> List.sortBy(fun (st, _) -> st.order)
+                            |> List.iteri(fun i (_, hwnd) ->
+                                try group.ts.moveTab(Tab(hwnd), i)
+                                with error -> logError index "tab-order" error)
+                            trace index "tab-order" "end" members
+                            trace index "z-order" "start" members
+                            try
+                                let here = List2(VirtualDesktopGroups.workspaceZorder
+                                                    (fun hwnd -> groupOs.windowFromHwnd(hwnd).desktopPresence) members)
+                                if here.length > 1 then groupOs.setZorder(here)
+                            with error -> logError index "z-order" error
+                            trace index "z-order" "end" members) complete)
+                    VirtualDesktopGroups.runWorkspaceSteps main.asyncInvoke recover (List.ofSeq steps)
+                with error -> recover (Some error))
+            VirtualDesktopGroups.runWorkspaceGroups main.asyncInvoke (logError -1 "continue") finish groups.list
+        with error -> finish (Some error)
 
     member private this.attachWorkspace(ws:Workspace) =
         ws.cast<IWorkspaceNode>().removed.Add <| fun() -> this.onWorkspaceRemoved(ws)
@@ -591,7 +703,7 @@ type WorkspaceModel() as this =
             this.saveSettings()
 
     member this.canRestore =
-        this.selected <> null && this.selected.GetType() = typeof<Workspace>
+        not restoring && this.selected <> null && this.selected.GetType() = typeof<Workspace>
 
     member this.canRestoreChanged = canRestoreChangedEvt.Publish
 
@@ -601,7 +713,7 @@ type WorkspaceModel() as this =
     member this.canEditChanged = canEditChangedEvt.Publish
 
     member this.restore() =
-        if this.selected <> null then
+        if this.canRestore then
             let ws = this.selected :?> Workspace
             this.restoreWorkspace(ws)
 

@@ -71,6 +71,7 @@ type ISettings =
 
 type IFilterService =
     abstract member isAppWindow : IntPtr -> bool
+    abstract member isWorkspaceWindow : IntPtr -> bool
     abstract member isAppWindowStyle : IntPtr -> bool
     abstract member isTabbableWindow : IntPtr -> bool
     abstract member isTabbingEnabledForAllProcessesByDefault : bool with get, set
@@ -157,6 +158,7 @@ type IProgram =
     abstract member notifyNewVersion : unit -> unit
     abstract member newVersion : IEvent<unit>
     abstract member suspendTabMonitoring : unit -> unit
+    abstract member beginWorkspaceRestore : unit -> (unit -> unit)
     abstract member resumeTabMonitoring : unit -> unit
     abstract member resumeTabMonitoringAfter : int -> unit
     abstract member llMouse : IEvent<int32 * IntPtr>

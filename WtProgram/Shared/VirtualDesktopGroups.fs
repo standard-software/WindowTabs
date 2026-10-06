@@ -103,6 +103,46 @@ module VirtualDesktopGroups =
                     (now = target && r.presence <> Away) || r.desktop = Some target)
         | _ -> members
 
+    // Continuations serialize restore steps without blocking their owner threads.
+    // Dispatch is supplied by the caller; tests can drain a queue without Windows.
+    let runWorkspaceSteps post completed (steps: ((exn option -> unit) -> unit) list) =
+        let mutable finished = false
+        let finish error =
+            if not finished then
+                finished <- true
+                completed error
+        let rec next remaining =
+            if not finished then
+                match remaining with
+                | [] -> finish None
+                | step :: rest ->
+                    let mutable reported = false
+                    let report error =
+                        if not reported then
+                            reported <- true
+                            match error with
+                            | Some _ -> finish error
+                            | None ->
+                                try post (fun () -> next rest)
+                                with error -> finish (Some error)
+                    try step report with error -> report (Some error)
+        next steps
+
+    // A group's recovery completes before its callback. Its failure must not
+    // discard the independent groups that remain in the workspace.
+    let runWorkspaceGroups post report completed groups =
+        let tolerant step complete =
+            let doneGroup error =
+                error |> Option.iter report
+                complete None
+            try step doneGroup with error -> doneGroup (Some error)
+        runWorkspaceSteps post completed (groups |> List.map tolerant)
+
+    // Only windows positively here may be anchors in a workspace z-order batch.
+    // Unlike capture, uncertainty must not let an off-desktop window be raised.
+    let workspaceZorder presenceOf members =
+        members |> List.filter (fun hwnd -> presenceOf hwnd = Here)
+
     // Unreadable windows stay at the top level so a partial reading cannot
     // hide a destination. Here also includes windows shown on all desktops.
     // So does a window that names a desktop Explorer does not list: it has no
