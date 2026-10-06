@@ -2,7 +2,7 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.10.03_next9
+## version ss_2026.10.03_next10
 
 - 仮想デスクトップごとにタブグループを分けるのをやめた。
   - 今のデスクトップにないウィンドウのタブは、半透明で表示する。
