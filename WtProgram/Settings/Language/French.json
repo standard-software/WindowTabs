@@ -114,6 +114,8 @@
   "Reset": "Réinitialiser",
 
   "TargetTabHeader": "Onglet cible : {TabName}",
+  "TabGroupSizeSingularFormat": "Groupe de {0} onglet",
+  "TabGroupSizePluralFormat": "Groupe de {0} onglets",
   "NewLaunchMenu": "Nouvel onglet : exécuter {0}",
   "NewTabInGroup": "À droite de cet onglet",
   "NewWindowPositionMenu": "Position",

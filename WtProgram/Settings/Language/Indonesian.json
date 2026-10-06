@@ -114,6 +114,8 @@
   "Reset": "Reset",
 
   "TargetTabHeader": "Tab target : {TabName}",
+  "TabGroupSizeSingularFormat": "Grup dengan {0} tab",
+  "TabGroupSizePluralFormat": "Grup dengan {0} tab",
   "NewLaunchMenu": "Tab baru : jalankan {0}",
   "NewTabInGroup": "Di kanan tab ini",
   "NewWindowPositionMenu": "Posisi",

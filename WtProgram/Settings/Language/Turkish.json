@@ -114,6 +114,8 @@
   "Reset": "Sıfırla",
 
   "TargetTabHeader": "Hedef sekme : {TabName}",
+  "TabGroupSizeSingularFormat": "{0} sekmeli grup",
+  "TabGroupSizePluralFormat": "{0} sekmeli grup",
   "NewLaunchMenu": "Yeni sekme : {0} çalıştır",
   "NewTabInGroup": "Bu sekmenin sağında",
   "NewWindowPositionMenu": "Konum",

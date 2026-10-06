@@ -114,6 +114,8 @@
   "Reset": "Zurücksetzen",
 
   "TargetTabHeader": "Ziel-Tab : {TabName}",
+  "TabGroupSizeSingularFormat": "Gruppe mit {0} Tab",
+  "TabGroupSizePluralFormat": "Gruppe mit {0} Tabs",
   "NewLaunchMenu": "Neuer Tab : {0} ausführen",
   "NewTabInGroup": "Rechts von diesem Tab",
   "NewWindowPositionMenu": "Position",

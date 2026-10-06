@@ -114,6 +114,8 @@
   "Reset": "Redefinir",
 
   "TargetTabHeader": "Guia de destino : {TabName}",
+  "TabGroupSizeSingularFormat": "Grupo com {0} guia",
+  "TabGroupSizePluralFormat": "Grupo com {0} guias",
   "NewLaunchMenu": "Nova guia : executar {0}",
   "NewTabInGroup": "À direita desta guia",
   "NewWindowPositionMenu": "Posição",

@@ -114,6 +114,8 @@
   "Reset": "초기화",
 
   "TargetTabHeader": "대상 탭 : {TabName}",
+  "TabGroupSizeSingularFormat": "탭 {0}개의 그룹",
+  "TabGroupSizePluralFormat": "탭 {0}개의 그룹",
   "NewLaunchMenu": "새 탭 : {0} 실행",
   "NewTabInGroup": "이 탭의 오른쪽",
   "NewWindowPositionMenu": "위치",

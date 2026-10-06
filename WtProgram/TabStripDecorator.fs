@@ -2294,8 +2294,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Disabled header at the top of the menu showing which tab it targets
         let targetTabHeaderItem =
+            let caption = TabNameHelper.format (Localization.getString("TargetTabHeader")) currentTabName
+            let count = this.ts.visualOrder.count
+            let size = String.Format(Localization.getString(TabGroupHeader.formatKey count), count)
             CmiRegular({
-                text = TabNameHelper.format (Localization.getString("TargetTabHeader")) currentTabName
+                text = TabGroupHeader.append caption size
                 image = None
                 flags = List2([MenuFlags.MF_GRAYED])
                 click = fun() -> ()

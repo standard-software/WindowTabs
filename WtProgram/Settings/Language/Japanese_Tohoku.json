@@ -114,6 +114,8 @@
   "Reset": "リセット",
 
   "TargetTabHeader": "対象タブだべ : {TabName}",
+  "TabGroupSizeSingularFormat": "{0}タブのグループだべ",
+  "TabGroupSizePluralFormat": "{0}タブのグループだべ",
   "NewLaunchMenu": "新しいタブだべ : {0} 起動",
   "NewTabInGroup": "このタブの右だべ",
   "NewWindowPositionMenu": "位置指定だべ",

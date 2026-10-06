@@ -114,6 +114,8 @@
   "Reset": "Resetuj",
 
   "TargetTabHeader": "Karta docelowa : {TabName}",
+  "TabGroupSizeSingularFormat": "Grupa : {0} karta",
+  "TabGroupSizePluralFormat": "Grupa : {0} karty",
   "NewLaunchMenu": "Nowa karta : uruchom {0}",
   "NewTabInGroup": "Na prawo od tej karty",
   "NewWindowPositionMenu": "Pozycja",

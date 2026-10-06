@@ -114,6 +114,8 @@
   "Reset": "重設",
 
   "TargetTabHeader": "目標分頁 : {TabName}",
+  "TabGroupSizeSingularFormat": "含{0}個分頁的群組",
+  "TabGroupSizePluralFormat": "含{0}個分頁的群組",
   "NewLaunchMenu": "新增分頁 : 啟動{0}",
   "NewTabInGroup": "此分頁的右側",
   "NewWindowPositionMenu": "位置指定",

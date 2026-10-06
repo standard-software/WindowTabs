@@ -114,6 +114,8 @@
   "Reset": "Reimposta",
 
   "TargetTabHeader": "Scheda di destinazione : {TabName}",
+  "TabGroupSizeSingularFormat": "Gruppo con {0} scheda",
+  "TabGroupSizePluralFormat": "Gruppo con {0} schede",
   "NewLaunchMenu": "Nuova scheda : esegui {0}",
   "NewTabInGroup": "A destra di questa scheda",
   "NewWindowPositionMenu": "Posizione",

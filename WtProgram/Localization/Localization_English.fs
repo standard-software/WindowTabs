@@ -118,6 +118,8 @@ module Localization_English =
         ("Reset", "Reset")
 
         ("TargetTabHeader", "Target tab : {TabName}")
+        ("TabGroupSizeSingularFormat", "{0}-tab group")
+        ("TabGroupSizePluralFormat", "{0}-tab group")
 
         ("NewLaunchMenu", "New tab : execute {0}")
         ("NewTabInGroup", "Right of this tab : {0}")

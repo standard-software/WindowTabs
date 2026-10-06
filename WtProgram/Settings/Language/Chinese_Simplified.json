@@ -114,6 +114,8 @@
   "Reset": "重置",
 
   "TargetTabHeader": "目标标签页 : {TabName}",
+  "TabGroupSizeSingularFormat": "含{0}个标签页的组",
+  "TabGroupSizePluralFormat": "含{0}个标签页的组",
   "NewLaunchMenu": "新建标签页 : 启动{0}",
   "NewTabInGroup": "此标签页的右侧",
   "NewWindowPositionMenu": "位置指定",

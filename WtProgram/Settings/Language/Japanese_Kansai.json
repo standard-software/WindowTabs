@@ -114,6 +114,8 @@
   "Reset": "リセット",
 
   "TargetTabHeader": "対象タブやで : {TabName}",
+  "TabGroupSizeSingularFormat": "{0}タブのグループやで",
+  "TabGroupSizePluralFormat": "{0}タブのグループやで",
   "NewLaunchMenu": "新しいタブやで : {0} 起動",
   "NewTabInGroup": "このタブの右やで",
   "NewWindowPositionMenu": "位置指定やで",

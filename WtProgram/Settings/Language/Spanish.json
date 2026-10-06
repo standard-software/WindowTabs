@@ -114,6 +114,8 @@
   "Reset": "Restablecer",
 
   "TargetTabHeader": "Pestaña de destino : {TabName}",
+  "TabGroupSizeSingularFormat": "Grupo con {0} pestaña",
+  "TabGroupSizePluralFormat": "Grupo con {0} pestañas",
   "NewLaunchMenu": "Nueva pestaña : ejecutar {0}",
   "NewTabInGroup": "A la derecha de esta pestaña",
   "NewWindowPositionMenu": "Posición",

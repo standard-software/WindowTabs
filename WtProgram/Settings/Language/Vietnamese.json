@@ -114,6 +114,8 @@
   "Reset": "Đặt lại",
 
   "TargetTabHeader": "Thẻ đích : {TabName}",
+  "TabGroupSizeSingularFormat": "Nhóm gồm {0} thẻ",
+  "TabGroupSizePluralFormat": "Nhóm gồm {0} thẻ",
   "NewLaunchMenu": "Thẻ mới : chạy {0}",
   "NewTabInGroup": "Bên phải thẻ này",
   "NewWindowPositionMenu": "Vị trí",
