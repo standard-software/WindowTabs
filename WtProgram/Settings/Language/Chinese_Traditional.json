@@ -242,6 +242,7 @@
   "DetachTabSamePosition": "在原位置分離",
   "DetachAndDockingTabToGroup": "連結到其他分頁群組",
   "MoveTabGroupFormat": "{0}{1}: {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopTabsSuffix": "其他桌面的分頁：{0}",
   "OtherDesktopGroupsMenu": "桌面{0}的分頁群組",
 

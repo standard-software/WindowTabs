@@ -242,6 +242,7 @@
   "DetachTabSamePosition": "同じ位置",
   "DetachAndDockingTabToGroup": "他のタブグループにくっつける",
   "MoveTabGroupFormat": "{0}{1}: {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopTabsSuffix": "他のデスクトップに{0}タブあるで",
   "OtherDesktopGroupsMenu": "デスクトップ{0}のタブグループ",
 

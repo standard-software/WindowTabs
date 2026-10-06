@@ -2031,6 +2031,35 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let mutable menuReadingLogged = false
 #endif
 
+        // Read native geometry once per menu, without invoking another group thread.
+        // Use the same member regardless of activation or visual tab order, so frame
+        // margins cannot make otherwise stationary groups exchange places.
+        let linkScreens = this.getAllScreensSorted()
+        let layoutBounds (rect: System.Drawing.Rectangle) : LinkGroupLayout.Bounds =
+            { x = rect.X; y = rect.Y; width = rect.Width; height = rect.Height }
+        let linkDisplays = linkScreens |> Array.map (fun screen -> layoutBounds screen.Bounds) |> Array.toList
+        let linkBounds =
+            lock groupInfos (fun () -> groupInfos.Values |> List.ofSeq)
+            |> List.map (fun info ->
+                let bounds =
+                    info.tabHwnds |> List.sort |> List.tryFind WinUserApi.IsWindow
+                    |> Option.map (fun memberHwnd ->
+                        let memberWindow = os.windowFromHwnd(memberHwnd)
+                        let rect =
+                            if not memberWindow.isMinimized then memberWindow.bounds else
+                            let normal = memberWindow.placement.rcNormalPosition
+                            if int(memberWindow.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+                            else
+                                match Mon.fromHwnd(memberHwnd) with
+                                | Some mon -> normal.move(mon.workRect.x - mon.displayRect.x,
+                                                          mon.workRect.y - mon.displayRect.y)
+                                | None -> normal
+                        ({ x = rect.x; y = rect.y
+                           width = rect.size.width; height = rect.size.height } : LinkGroupLayout.Bounds))
+                    |> Option.defaultValue { x = 0; y = 0; width = 0; height = 0 }
+                info.hwnd, bounds)
+            |> Map.ofList
+
         // All link menus use one immutable reading and the same presentation.
         let linkGroupItems exclude click =
             this.updateGroupInfo()
@@ -2042,6 +2071,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let infos = lock groupInfos (fun () -> groupInfos.Values |> List.ofSeq)
                         |> List.filter (fun info -> info.hwnd <> group.hwnd && info.tabCount > 0 && not (exclude info))
                         |> List.distinctBy (fun info -> info.hwnd)
+                        |> List.filter (fun info -> Map.containsKey info.hwnd linkBounds)
+                        |> List.sortBy (fun info -> LinkGroupLayout.orderKey linkBounds.[info.hwnd] (info.hwnd.ToInt64()))
             let entry (info: TabGroupInfo) members otherCount =
                 try
                     let target = lock decorators (fun () ->
@@ -2057,6 +2088,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         let word = Localization.getString(if count = 1 then "TabSingular" else "TabPlural")
                         let text = String.Format(Localization.getString("MoveTabGroupFormat"), count, word, names)
                         let text = if otherCount > 0 then text + ": " + String.Format(Localization.getString("OtherDesktopTabsSuffix"), otherCount) else text
+                        let text =
+                            match LinkGroupLayout.displayIndex linkBounds.[info.hwnd] linkDisplays with
+                            | LinkGroupLayout.OnDisplay index -> String.Format(Localization.getString("LinkGroupDisplayFormat"),
+                                                                                this.getScreenName(linkScreens.[index]), text)
+                            | LinkGroupLayout.OnNoDisplay -> String.Format(Localization.getString("LinkGroupDisplayFormat"), "-", text)
+                            | LinkGroupLayout.NoPrefix -> text
                         let big, small = info.tabIcons |> Map.tryFind (fst members.Head) |> Option.defaultValue (None, None)
 #if DEBUG
                         listedGroups <- listedGroups.Add info.hwnd

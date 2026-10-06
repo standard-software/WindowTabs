@@ -242,6 +242,7 @@
   "DetachTabSamePosition": "Aynı konum",
   "DetachAndDockingTabToGroup": "Başka bir sekme grubuna bağla",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopTabsSuffix": "Diğer masaüstlerindeki sekmeler: {0}",
   "OtherDesktopGroupsMenu": "Masaüstü {0} üzerindeki sekme grupları",
 

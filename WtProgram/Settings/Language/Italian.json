@@ -242,6 +242,7 @@
   "DetachTabSamePosition": "Stessa posizione",
   "DetachAndDockingTabToGroup": "Collega a un altro gruppo di schede",
   "MoveTabGroupFormat": "{0} {1}: {2}",
+  "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopTabsSuffix": "Schede su altri desktop: {0}",
   "OtherDesktopGroupsMenu": "Gruppi di schede sul desktop {0}",
 

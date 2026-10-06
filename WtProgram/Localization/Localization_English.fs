@@ -117,6 +117,8 @@ module Localization_English =
         ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")
 
+        ("TargetTabHeader", "Target tab : {TabName}")
+
         ("NewLaunchMenu", "New tab : execute {0}")
         ("NewTabInGroup", "Right of this tab : {0}")
         ("NewWindowPositionMenu", "Position")
@@ -245,6 +247,7 @@ module Localization_English =
         ("DetachTabSamePosition", "Same position")
         ("DetachAndDockingTabToGroup", "Link to another tab group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
+        ("LinkGroupDisplayFormat", "{0} : {1}")
         ("OtherDesktopTabsSuffix", "Tabs on other desktops: {0}")
         ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 
