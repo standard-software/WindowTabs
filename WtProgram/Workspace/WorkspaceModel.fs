@@ -643,6 +643,10 @@ type WorkspaceModel() as this =
                                     logError index "add-window" error
                                     group.recoverWorkspaceWindow(hwnd)
                                 trace index "add-window" "end" [hwnd]
+                            // The first member is the window that was in front when
+                            // the workspace was saved: the saved rectangle is its own.
+                            (try members |> List.tryHead |> Option.iter group.settleWorkspacePlacement
+                             with error -> logError index "settle" error)
                             let withState = resolved.list |> List.choose(fun (w, hwnd) ->
                                 match w with
                                 | :? WorkspaceWindow as ww -> ww.tabState |> Option.map(fun st -> st, hwnd)

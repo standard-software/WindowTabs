@@ -1805,6 +1805,30 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     invalidOp "Workspace placement was refused.")
         this.addWindowPlaced(hwnd, false, false)
 
+    // The saved rectangle is the one the window in front had, and every window
+    // was just given it as it stands. With frame margins in play (LINE) that
+    // is not the group's rectangle: a window with a margin sits inside it, and
+    // one saved from such a window is that much too small for the others. The
+    // others are put where the group's rectangle puts them, as an ordinary add
+    // does - without showing or activating any of them.
+    member this.settleWorkspacePlacement(front: IntPtr) =
+        let frontWindow = this.os.windowFromHwnd(front)
+        if this.windows.contains(front) && frontWindow.isWindow &&
+           not frontWindow.isMinimized && not frontWindow.isMaximized then
+            let groupBounds =
+                if this.hasWindowMargin(front) then this.removeWindowMarginForRead(front, frontWindow.bounds)
+                else frontWindow.bounds
+            this.windows.items.list
+            |> List.filter ((<>) front)
+            |> List.iter (fun hwnd ->
+                let window = this.os.windowFromHwnd(hwnd)
+                if window.isWindow && not window.isMinimized && not window.isMaximized then
+                    let wanted = this.applyWindowMarginForWrite(hwnd, groupBounds)
+                    if window.bounds <> wanted then
+                        this.applyWindowBoundsWithDpiHandling(hwnd, wanted)
+                        if this.hasWindowMargin(hwnd) then
+                            marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (wanted.width, wanted.height))))
+
     // Recover a partial add without placing or activating the native window.
     member this.recoverWorkspaceWindow(hwnd) =
         if not (this.windows.contains(hwnd) && this.ts.tabs.contains(Tab(hwnd))) then
