@@ -20,6 +20,83 @@ namespace Bemo.Win32
         private static readonly Stopwatch clock = Stopwatch.StartNew();
         private const int KeepDumps = 3;
 
+        private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetWindowsHookEx(int hook, HookProc callback, IntPtr module, uint tid);
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CallMessage { public IntPtr lParam, wParam; public uint message; public IntPtr hwnd; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ReturnMessage { public IntPtr result, lParam, wParam; public uint message; public IntPtr hwnd; }
+        private static HookProc entering, leaving, getting;
+        private static long enterCount, leaveCount, getCount, lastEnter, lastLeave, lastGet;
+        private static int enterMessage, leaveMessage, getMessage;
+        [StructLayout(LayoutKind.Sequential)]
+        private struct QueueMessage { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; }
+        private static long Age(ref long stamp)
+        {
+            long last = Interlocked.Read(ref stamp);
+            return (Stopwatch.GetTimestamp() - last) * 1000 / Stopwatch.Frequency;
+        }
+        public static string PumpSnapshot(uint tid)
+        {
+            long cpu = -1;
+            using (Process process = Process.GetCurrentProcess())
+                foreach (ProcessThread thread in process.Threads)
+                    if (thread.Id == tid) cpu = (long)thread.TotalProcessorTime.TotalMilliseconds;
+            return String.Format("[NativePump] enter={0}/{1:X}/{2} leave={3}/{4:X}/{5} get={6}/{7:X}/{8} cpu-ms={9}",
+                Interlocked.Read(ref enterCount), enterMessage, Age(ref lastEnter),
+                Interlocked.Read(ref leaveCount), leaveMessage, Age(ref lastLeave),
+                Interlocked.Read(ref getCount), getMessage, Age(ref lastGet), cpu);
+        }
+        private static bool DisplayMessage(uint message)
+        {
+            return message == 1 || message == 0x1a || message == 0x7e || message == 0x2e0 || message == 0x2e2 || message == 0x2e3;
+        }
+        // Observe native dispatch too: a managed stack can end at Application.Run.
+        public static void InstallDisplayProbe(LogLine log)
+        {
+            entering = delegate(int code, IntPtr w, IntPtr l) {
+                if (code >= 0) {
+                    CallMessage m = (CallMessage)Marshal.PtrToStructure(l, typeof(CallMessage));
+                    enterMessage = (int)m.message;
+                    Interlocked.Increment(ref enterCount); Interlocked.Exchange(ref lastEnter, Stopwatch.GetTimestamp());
+                    if (DisplayMessage(m.message)) {
+                        StringBuilder cls = new StringBuilder(256);
+                        GetClassName(m.hwnd, cls, cls.Capacity);
+                        log(String.Format("[DisplayProbe] enter msg={0:X} class={1}", m.message, cls));
+                    }
+                }
+                return CallNextHookEx(IntPtr.Zero, code, w, l);
+            };
+            leaving = delegate(int code, IntPtr w, IntPtr l) {
+                if (code >= 0) {
+                    ReturnMessage m = (ReturnMessage)Marshal.PtrToStructure(l, typeof(ReturnMessage));
+                    leaveMessage = (int)m.message;
+                    Interlocked.Increment(ref leaveCount); Interlocked.Exchange(ref lastLeave, Stopwatch.GetTimestamp());
+                    if (DisplayMessage(m.message)) {
+                        StringBuilder cls = new StringBuilder(256);
+                        GetClassName(m.hwnd, cls, cls.Capacity);
+                        log(String.Format("[DisplayProbe] leave msg={0:X} class={1}", m.message, cls));
+                    }
+                }
+                return CallNextHookEx(IntPtr.Zero, code, w, l);
+            };
+            getting = delegate(int code, IntPtr w, IntPtr l) {
+                if (code >= 0) {
+                    QueueMessage m = (QueueMessage)Marshal.PtrToStructure(l, typeof(QueueMessage));
+                    getMessage = (int)m.message;
+                    Interlocked.Increment(ref getCount); Interlocked.Exchange(ref lastGet, Stopwatch.GetTimestamp());
+                }
+                return CallNextHookEx(IntPtr.Zero, code, w, l);
+            };
+            SetWindowsHookEx(3, getting, IntPtr.Zero, GetCurrentThreadId());
+            SetWindowsHookEx(4, entering, IntPtr.Zero, GetCurrentThreadId());
+            SetWindowsHookEx(12, leaving, IntPtr.Zero, GetCurrentThreadId());
+        }
+
+
         [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
         [DllImport("advapi32.dll", SetLastError = true)]
         private static extern IntPtr OpenThreadWaitChainSession(uint flags, IntPtr callback);

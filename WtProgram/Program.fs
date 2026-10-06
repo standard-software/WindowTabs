@@ -3708,6 +3708,7 @@ type Program() as this =
 [<EntryPoint>]
 let main argv =
     CrashLog.install()
+    let restarting = Watchdog.awaitRestartParent argv
 #if DEBUG
     SettingsTiming.startStartup()
 #endif
@@ -3732,7 +3733,8 @@ let main argv =
         with :? AbandonedMutexException -> true
     if System.Diagnostics.Debugger.IsAttached.not then
         if acquired().not then
-            MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
+            if not restarting then
+                MessageBox.Show("Another instance of WindowTabs is running, please close it before running this instance.", "WindowTabs is already running.").ignore
             exit(0)
 
     Application.EnableVisualStyles()

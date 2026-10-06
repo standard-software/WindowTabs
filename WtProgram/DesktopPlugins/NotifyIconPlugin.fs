@@ -49,6 +49,9 @@ module Watchdog =
     let mutable private uiNativeThreadId = 0u
     let mutable private uiThread: Thread option = None
     let mutable private switchesLogged = 0
+    let mutable private lastTimer = 0L
+    let mutable private lastIdle = 0L
+    let mutable private heartbeatTimer: System.Windows.Forms.Timer option = None
 #endif
     let private freezeTimeout = 10000  // 10 seconds timeout for freeze detection
 #if DEBUG
@@ -113,6 +116,27 @@ module Watchdog =
 #else
         writeLog message
 #endif
+
+    // The replacement waits before creating any windows or acquiring the mutex.
+    let awaitRestartParent (args: string[]) =
+        match RestartRequest.parse args with
+        | Some(parentId, started) ->
+            try
+                use parent = Process.GetProcessById(parentId)
+                try
+                    if not parent.HasExited && RestartRequest.matches started (parent.StartTime.ToUniversalTime().Ticks) then
+                        log (fun () -> "restart: waiting for previous process")
+                        if not (parent.WaitForExit(5000)) then
+                            log (fun () -> "restart: terminating previous process after bounded wait")
+                            parent.Kill()
+                        parent.WaitForExit()
+                    log (fun () -> "restart: previous process exited or identity changed")
+                with ex when parent.HasExited ->
+                    log (fun () -> "restart: previous process exited during hand-over")
+            with :? ArgumentException ->
+                log (fun () -> "restart: previous process already exited")
+            true
+        | None -> false
 
     let respondToPing() =
         pingResponse.Set() |> ignore
@@ -240,26 +264,29 @@ module Watchdog =
             with ex ->
                 log (fun () -> sprintf "restart: save dispatch failed: %s" (ex.GetType().Name))
 
-            // Start new process and exit
+            // Launch directly so hand-over depends on process exit, not a delay.
             let exePath = Assembly.GetExecutingAssembly().Location
-            let startInfo = ProcessStartInfo()
-            startInfo.FileName <- "cmd.exe"
-            // ping, not timeout, for the delay: timeout refuses to run when its
-            // standard input is not a console ("Input redirection is not
-            // supported"), which it is not when this process was started from
-            // a scheduler or another program with redirected handles - and then
-            // the && never reached start, so the old process quit and nothing
-            // came back.
-            startInfo.Arguments <- sprintf "/c ping -n 3 127.0.0.1 >nul && start \"\" \"%s\"" exePath
-            startInfo.WindowStyle <- ProcessWindowStyle.Hidden
-            startInfo.CreateNoWindow <- true
-            log (fun () -> sprintf "restart: launching delayed restart helper for %s" (Path.GetFileName(exePath)))
+            use current = Process.GetCurrentProcess()
+            let startInfo = ProcessStartInfo(exePath)
+            startInfo.UseShellExecute <- false
+            startInfo.WorkingDirectory <- Path.GetDirectoryName(exePath)
+            startInfo.Arguments <- sprintf "--watchdog-restart %d %d" current.Id (current.StartTime.ToUniversalTime().Ticks)
+#if DEBUG
+            startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_FREEZE_UI_AFTER_MS")
+            startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_RESTART_EXIT_DELAY_MS")
+#endif
             use restartProcess = Process.Start(startInfo)
-            log (fun () ->
-                if isNull restartProcess then "restart: process launch returned no process"
-                else sprintf "restart: helper started (pid %d); application launch is pending" restartProcess.Id)
+            if isNull restartProcess then failwith "Restart process was not created."
+            log (fun () -> sprintf "restart: replacement started (pid %d)" restartProcess.Id)
             ForceExitState.isForceExiting <- true
             log (fun () -> "restart: exiting current process with code 0")
+#if DEBUG
+            match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_RESTART_EXIT_DELAY_MS")) with
+            | true, ms when ms > 0 ->
+                log (fun () -> sprintf "debug restart exit delay active: %d ms" ms)
+                Thread.Sleep(ms)
+            | _ -> ()
+#endif
             Environment.Exit(0)
         with ex ->
             log (fun () -> sprintf "restart: failed: %s; exiting current process with code 1" (ex.GetType().Name))
@@ -301,6 +328,9 @@ module Watchdog =
                 let responded =
                     if quick then true else
                     InputStallTrace.context InputStallTrace.Kind.Watchdog IntPtr.Zero (float stallWatch.ElapsedMilliseconds)
+                    log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
+                    let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
+                    log (fun () -> sprintf "[PumpProbe] timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
                     log (fun () -> "STALL: UI thread has not answered for 1500 ms; hung windows: " + (try HungProbe.describe() with ex -> ex.GetType().Name))
                     Bemo.Win32.UiStallDiagnostics.Capture(uiNativeThreadId, Bemo.Win32.UiStallDiagnostics.LogLine(fun line -> log (fun () -> line)))
                     logUiStack()
@@ -321,6 +351,9 @@ module Watchdog =
                     log (fun () -> sprintf "ping timed out after %d ms (%d of %d before a restart)"
                                         freezeTimeout consecutiveFailures requiredConsecutiveFailures)
 #if DEBUG
+                    log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
+                    let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
+                    log (fun () -> sprintf "[PumpProbe] timeout timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
                     logUiStack()
                     // Two 500 ms capture allowances total at most one second.
                     // Reserve the final allowance inside the five-second window
@@ -357,6 +390,24 @@ module Watchdog =
             // Capture UI thread's invoker (must be called from UI thread)
             uiThreadInvoker <- Some(InvokerService.invoker)
 #if DEBUG
+            Bemo.Win32.UiStallDiagnostics.InstallDisplayProbe(Bemo.Win32.UiStallDiagnostics.LogLine(fun line -> log (fun () -> line)))
+            let beat = new System.Windows.Forms.Timer(Interval = 250)
+            lastTimer <- Stopwatch.GetTimestamp()
+            lastIdle <- lastTimer
+            beat.Tick.Add(fun _ -> Interlocked.Exchange(&lastTimer, Stopwatch.GetTimestamp()) |> ignore)
+            Application.Idle.Add(fun _ -> Interlocked.Exchange(&lastIdle, Stopwatch.GetTimestamp()) |> ignore)
+            beat.Start()
+            heartbeatTimer <- Some beat
+            match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_FREEZE_UI_AFTER_MS")) with
+            | true, ms when ms > 0 ->
+                log (fun () -> sprintf "debug freeze hook active: after %d ms" ms)
+                let freeze = new System.Windows.Forms.Timer(Interval = ms)
+                freeze.Tick.Add(fun _ ->
+                    freeze.Stop()
+                    log (fun () -> "debug freeze hook: blocking UI thread")
+                    Thread.Sleep(Timeout.Infinite))
+                freeze.Start()
+            | _ -> ()
             uiThread <- Some Thread.CurrentThread
             uiNativeThreadId <- Bemo.Win32.UiStallDiagnostics.GetCurrentThreadId()
 #endif
