@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next11**
+Latest version: **ss_2026.10.03_next12**
 
 See [version.md](version.md) for details.
 
@@ -157,7 +157,7 @@ Download from the [releases](https://github.com/standard-software/WindowTabs/rel
 ### Tab Context Menu
 
 ```
-Target tab : (tab name) — a display-only caption showing which tab the menu acts on (not selectable)
+Target tab : (tab name) : (N)-tab group — a display-only caption showing which tab the menu acts on and the size of its tab group (not selectable)
 ---
 New tab : execute (exe name)
   Right of this tab

@@ -2,40 +2,25 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next11
+## version ss_2026.10.03_next12
 
 - Tab groups are no longer kept separately for each virtual desktop.
-  - The tab of a window on another desktop is drawn at half opacity.
-  - Clicking such a tab switches to its desktop.
-  - A tab group with no window on the current desktop is not shown.
+  - The tab of a window on another desktop is drawn at half opacity;
+    clicking it switches to that desktop.
 - The "Link to another tab group" menus work across virtual desktops.
-  - Tab groups of other desktops are listed under an item per desktop.
-  - A linked window moves to that group's position; the desktop stays.
-  - An entry counts the tabs on this desktop, then those on other desktops.
+  - Tab groups are listed left to right by position, with their display's name.
   - The menus used to say "Link to another group".
-- A new workspace saves the tab groups and tabs on the current desktop.
-  - With several desktops, New offers "Tabs on the current desktop" and
-    "Tabs on all desktops".
-  - Restoring a workspace no longer switches desktops, and keeps tab groups
-    that have windows on several desktops together.
-  - A restore does not move windows between desktops: each joins its tab
-    group on the desktop it is on now.
-  - The buttons of the Workspace page show no tool tips.
+- The first item of the tab menu shows the size of the tab group.
+- A new workspace saves only the tabs on the current desktop.
+  - With several desktops, the tabs on all desktops can be chosen instead.
+  - A restore switches no desktop and moves no window between desktops.
 - The tabs of an inactive tab group are drawn at 50% opacity (was about 38%).
-  - A tab on another desktop in an inactive tab group is 75% transparent.
 - Fixed WindowTabs freezing when the scale of a display is changed.
-  - Should it freeze, the automatic restart no longer stops at
-    "WindowTabs is already running."
-- Fixed the frame of windows such as LINE not being found at times, which
-  left them outside their tab group's rectangle.
-- Fixed windows sometimes dropping out of their tab group at the moment of
-  a desktop switch.
-- Fixed a crash when a tab group held a pop-up style window, such as a
-  borderless full-screen one.
+- Fixed the frame of windows such as LINE sticking out of their tab group.
+- Fixed windows dropping out of their tab group at a desktop switch.
+- Fixed a crash when a tab group held a borderless full-screen window.
 - The top-edge lock no longer covers another group's window in front of it.
-  - It also blocks resizing from the top shadow of windows such as LINE.
 - WindowMargin.json is gone; frame windows around a window are found by themselves.
-  - The lock now also works on apps with such frames, e.g. WPF glow borders.
 
 ## version ss_2026.10.03
 
