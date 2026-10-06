@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next8
+## version ss_2026.10.03_next9
 
 - Tab groups are no longer kept separately for each virtual desktop.
   - The tab of a window on another desktop is drawn at half opacity.
@@ -16,6 +16,9 @@
 - A new workspace saves the tab groups and tabs on the current desktop.
   - With several desktops, New offers "Tabs on the current desktop" and
     "Tabs on all desktops".
+  - Restoring a workspace no longer switches desktops, and keeps tab groups
+    that have windows on several desktops together.
+  - The buttons of the Workspace page show no tool tips.
 - The tabs of an inactive tab group are drawn at 50% opacity (was about 38%).
   - A tab on another desktop in an inactive tab group is 75% transparent.
 - Fixed windows sometimes dropping out of their tab group at the moment of
