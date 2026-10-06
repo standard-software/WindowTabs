@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "다른 탭 그룹에 연결",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "다른 데스크톱의 탭: {0}",
   "OtherDesktopGroupsMenu": "데스크톱 {0}의 탭 그룹",
 
   "SystemMenu": "시스템",

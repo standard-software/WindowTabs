@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "连接到其他标签页组",
   "MoveTabGroupFormat": "{0}{1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "其他桌面的标签页：{0}",
   "OtherDesktopGroupsMenu": "桌面{0}的标签页组",
 
   "SystemMenu": "系统",

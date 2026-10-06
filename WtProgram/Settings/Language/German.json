@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "Mit anderer Tab-Gruppe verknüpfen",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "Tabs auf anderen Desktops: {0}",
   "OtherDesktopGroupsMenu": "Tab-Gruppen auf Desktop {0}",
 
   "SystemMenu": "System",

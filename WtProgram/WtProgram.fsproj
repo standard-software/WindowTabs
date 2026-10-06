@@ -152,6 +152,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared\TabStripTypes.fs" />
     <Compile Include="Shared/TabOrder.fs" />
     <Compile Include="Shared/LinkGroupLayout.fs" />
+    <Compile Include="Shared/LinkGroupTabs.fs" />
     <Compile Include="Shared/ExplicitLaunch.fs" />
     <Compile Include="Shared/SavedTabState.fs" />
     <Compile Include="Shared/SavedSession.fs" />

@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "Vincular a otro grupo de pestañas",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "Pestañas en otros escritorios: {0}",
   "OtherDesktopGroupsMenu": "Grupos de pestañas en el escritorio {0}",
 
   "SystemMenu": "Sistema",

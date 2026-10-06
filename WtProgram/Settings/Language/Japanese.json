@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "他のタブグループへ連結",
   "MoveTabGroupFormat": "{0}{1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "他デスクトップ{0}タブ",
   "OtherDesktopGroupsMenu": "デスクトップ{0}のタブグループ",
 
   "SystemMenu": "システム",

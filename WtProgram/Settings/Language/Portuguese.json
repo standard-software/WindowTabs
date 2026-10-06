@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "Vincular a outro grupo de guias",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "Guias em outras áreas de trabalho: {0}",
   "OtherDesktopGroupsMenu": "Grupos de guias na área de trabalho {0}",
 
   "SystemMenu": "Sistema",

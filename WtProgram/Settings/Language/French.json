@@ -245,7 +245,6 @@
   "DetachAndDockingTabToGroup": "Lier à un autre groupe d'onglets",
   "MoveTabGroupFormat": "{0} {1}: {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
-  "OtherDesktopTabsSuffix": "Onglets sur les autres bureaux : {0}",
   "OtherDesktopGroupsMenu": "Groupes d’onglets sur le bureau {0}",
 
   "SystemMenu": "Système",

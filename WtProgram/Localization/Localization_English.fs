@@ -250,7 +250,6 @@ module Localization_English =
         ("DetachAndDockingTabToGroup", "Link to another tab group")
         ("MoveTabGroupFormat", "{0} {1}: {2}")
         ("LinkGroupDisplayFormat", "{0} : {1}")
-        ("OtherDesktopTabsSuffix", "Tabs on other desktops: {0}")
         ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 
         ("SystemMenu", "System")
