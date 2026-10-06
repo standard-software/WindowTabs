@@ -248,7 +248,7 @@ module Localization_English =
         ("DetachAndMovePosTab", "Position")
         ("DetachTabSamePosition", "Same position")
         ("DetachAndDockingTabToGroup", "Link to another tab group")
-        ("MoveTabGroupFormat", "{0} {1}: {2}")
+        ("MoveTabGroupFormat", "{0} {1} : {2}")
         ("LinkGroupDisplayFormat", "{0} : {1}")
         ("OtherDesktopGroupsMenu", "Tab groups on desktop {0}")
 

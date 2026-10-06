@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "位置指定",
   "DetachTabSamePosition": "同じ位置",
   "DetachAndDockingTabToGroup": "他のタブグループさくっつげる",
-  "MoveTabGroupFormat": "{0}{1}: {2}",
+  "MoveTabGroupFormat": "{0}{1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "デスクトップ{0}のタブグループ",
 

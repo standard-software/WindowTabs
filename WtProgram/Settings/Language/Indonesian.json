@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Posisi",
   "DetachTabSamePosition": "Posisi sama",
   "DetachAndDockingTabToGroup": "Tautkan ke grup tab lain",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grup tab di desktop {0}",
 

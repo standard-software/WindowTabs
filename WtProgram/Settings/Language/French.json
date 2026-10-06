@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Même position",
   "DetachAndDockingTabToGroup": "Lier à un autre groupe d'onglets",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Groupes d’onglets sur le bureau {0}",
 

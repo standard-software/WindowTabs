@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Position",
   "DetachTabSamePosition": "Gleiche Position",
   "DetachAndDockingTabToGroup": "Mit anderer Tab-Gruppe verknüpfen",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Tab-Gruppen auf Desktop {0}",
 

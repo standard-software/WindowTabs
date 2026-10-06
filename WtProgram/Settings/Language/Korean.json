@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "위치",
   "DetachTabSamePosition": "같은 위치",
   "DetachAndDockingTabToGroup": "다른 탭 그룹에 연결",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "데스크톱 {0}의 탭 그룹",
 

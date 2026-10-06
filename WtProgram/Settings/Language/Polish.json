@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Pozycja",
   "DetachTabSamePosition": "Ta sama pozycja",
   "DetachAndDockingTabToGroup": "Połącz z inną grupą kart",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grupy kart na pulpicie {0}",
 

@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Posição",
   "DetachTabSamePosition": "Mesma posição",
   "DetachAndDockingTabToGroup": "Vincular a outro grupo de guias",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Grupos de guias na área de trabalho {0}",
 

@@ -243,7 +243,7 @@
   "DetachAndMovePosTab": "Vị trí",
   "DetachTabSamePosition": "Cùng vị trí",
   "DetachAndDockingTabToGroup": "Liên kết với nhóm thẻ khác",
-  "MoveTabGroupFormat": "{0} {1}: {2}",
+  "MoveTabGroupFormat": "{0} {1} : {2}",
   "LinkGroupDisplayFormat": "{0} : {1}",
   "OtherDesktopGroupsMenu": "Nhóm thẻ trên màn hình nền {0}",
 
