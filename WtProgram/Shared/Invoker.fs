@@ -149,3 +149,24 @@ module ThreadHelper =
             timer.Dispose()
         timer.Start()
         timer :> IDisposable
+// WinEvent delivery can wait inside the native message pump during a display
+// change. Its queue must not also own the UI or a tab strip's message loop.
+module WinEventPump =
+    let private dispatcher = lazy (
+        let ready = new System.Threading.Tasks.TaskCompletionSource<Invoker>()
+        let run() =
+            try
+                CrashLog.installThread()
+                let inner = new WindowsFormsSynchronizationContext()
+                SynchronizationContext.SetSynchronizationContext(NonBlockingSyncContext(inner))
+                let invoker = InvokerService.invoker
+                ready.SetResult(invoker)
+                Application.Run()
+            with ex ->
+                if not (ready.TrySetException(ex)) then reraise()
+        let thread = new Thread(ThreadStart(run), IsBackground = true, Name = "WindowTabs WinEvent pump")
+        thread.SetApartmentState(ApartmentState.STA)
+        thread.Start()
+        ready.Task.GetAwaiter().GetResult())
+
+    let post action = dispatcher.Value.asyncInvoke action

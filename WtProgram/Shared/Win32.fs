@@ -265,21 +265,20 @@ type OS() as this=
 
 
     member this.setWinEventHook(min:WinEvent, max:WinEvent, proc, pid, tid) =
-        let proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime =
-            if idObject = IntPtr.Zero then
-                proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime
-
-        let del = WINEVENTPROC(proc)
-        let delHandle = GCHandle.Alloc(del)
-        let hhook = WinUserApi.SetWinEventHook(int(min), int(max), IntPtr.Zero, del, pid, tid, 0)
-        { 
-            new IDisposable with
-            member this.Dispose() =
-                try
-                    WinUserApi.UnhookWinEvent(hhook).ignore
-                    delHandle.Free()
-                with _ -> ()
-        }
+        let receiver = InvokerService.invoker
+        new QueuedSubscription(WinEventPump.post, fun active ->
+            let callback hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime =
+                if idObject = IntPtr.Zero && active() then
+                    receiver.tryAsyncInvoke(fun () ->
+                        if active() then
+                            proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime) |> ignore
+            let del = WINEVENTPROC(callback)
+            let root = GCHandle.Alloc(del)
+            let hook = WinUserApi.SetWinEventHook(int(min), int(max), IntPtr.Zero, del, pid, tid, 0)
+            { new IDisposable with
+                member this.Dispose() =
+                    // Unhook on the registration thread before releasing the delegate.
+                    if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then root.Free() }) :> IDisposable
 
     member this.dosDevices = 
         lock dosDevicesLock <| fun() ->
