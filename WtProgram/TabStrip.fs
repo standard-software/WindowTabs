@@ -35,16 +35,18 @@ type ITabStripMonitor =
 // A failed render leaves the previous entry intact so the next update retries.
 type StripRenderCache() =
     let mutable cached : ((string * obj) list * Img) option = None
+#if DEBUG
     let mutable changedKeys : string list = []
     member this.ChangedKeys = changedKeys
+#endif
     member this.Get(key, render: unit -> Img) =
         match cached with
         | Some(previous, image) when previous = key -> image, false
         | previous ->
             let image = PerfTrace.time "stripRender" render
+#if DEBUG
             changedKeys <- key |> List.choose (fun (name, value) ->
                 if previous |> Option.forall (fun (old, _) -> List.tryFind (fst >> (=) name) old <> Some(name, value)) then Some name else None)
-#if DEBUG
             for name, value in key do
                 if previous |> Option.forall (fun (old, _) -> List.tryFind (fst >> (=) name) old <> Some(name, value)) then
                     PerfTrace.count ("stripCause." + name)
@@ -63,14 +65,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let Cell = CellScope(false, true)
     let renderCache = new StripRenderCache()
     let mutable destroyed = false
+#if DEBUG
     let mutable contentSource = "cells"
     let mutable lastContentSource = "initial"
     let mutable paintReason = "initial"
+#endif
     let mutable contentHold : (Tab option * List2<Tab> * Tab list) option = None
+#if DEBUG
     let mutable paintSequence = 0L
+#endif
     let mutable heldDesktopShared : Set<IntPtr> = Set.empty
+#if DEBUG
     let mutable paintedDimmed : Tab list = []
     let mutable paintedShared : IntPtr list = []
+#endif
     let systemAppearanceCell = Cell.create(0)
     let mutable lastPresentation : (Img * Pt * byte) option = None
     let _os = OS()
@@ -93,7 +101,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let visualOrderCell = Cell.create(List2())
     let zorderCell = Cell.create(List2())
     let visibleCell = Cell.create(false)
+#if DEBUG
     let mutable desktopNoticeTickValue : uint32 option = None
+#endif
     let transparentCell = Cell.create(true)
     let showInsideCell = Cell.create(false)
     let isInAltTabCell = Cell.create(false)
@@ -535,7 +545,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 tooltipForm.Visible <- false
 
     member private this.wndProc(msg:Win32Message) =
+#if DEBUG
         if contentHold.IsNone then paintReason <- "window-message"
+#endif
         // Monitor callbacks and mouse state changes share one strip transaction.
         DragTrace.windowMessage (fun () -> "strip") msg
 #if DEBUG
@@ -602,11 +614,15 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.location = locationCell.value 
     
     member this.withContentSource<'a>(source: string, f: unit -> 'a) =
+#if DEBUG
         let previous = contentSource
         contentSource <- source
         lastContentSource <- source
         try this.batch f
         finally contentSource <- previous
+#else
+        this.batch f
+#endif
 
     member private this.desktopShared =
         Set.union heldDesktopShared (VirtualDesktopGroups.Live.snapshot()).stripShared
@@ -619,6 +635,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.effectiveDimmedTabs = this.dimmedTabsFor this.desktopShared
 
     member private this.traceContent(kind: string) =
+#if DEBUG
         let source = if contentSource = "cells" then lastContentSource else contentSource
         paintReason <- source + "/" + kind
         VirtualDesktopTrace.handover (fun () ->
@@ -630,8 +647,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 (dimmedTabsCell.value.items.list |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ",")
                 (this.desktopShared |> Set.toList |> List.filter (fun h -> this.tabs.contains(Tab h)) |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
                 (this.effectiveDimmedTabs.items.list |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ","))
+#else
+        ()
+#endif
 
     member private this.tracePaint(kind: string) =
+#if DEBUG
         paintSequence <- paintSequence + 1L
         VirtualDesktopTrace.handover (fun () ->
             let handle (Tab h) = h.ToInt64()
@@ -641,6 +662,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 (foregroundCell.value |> Option.map handle)
                 (paintedDimmed |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ",")
                 (paintedShared |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",") (String.concat "," renderCache.ChangedKeys) desktopNoticeTickValue)
+#else
+        ()
+#endif
 
     member private this.update() =
         if destroyed then ()
@@ -651,8 +675,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 try
                     let shared = this.desktopShared
                     let ts = this.tsBaseWithShared this.direction shared
+#if DEBUG
                     paintedDimmed <- ts.dimmedTabs.items.list
                     paintedShared <- shared |> Set.toList |> List.filter (fun h -> this.tabs.contains(Tab h))
+#endif
                     let shrunk = this.isShrunk && ts.direction = TabDirection.TabDown
                     let key = ts.renderKey @ [ "sliver", box shrunk; "system", box systemAppearanceCell.value ]
                     Some(renderCache.Get(key, fun () -> this.render(ts, shrunk)))
@@ -676,19 +702,23 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 #endif
                     this.window.update(image, location, alpha)
                     this.tracePaint("pixels")
+#if DEBUG
                     VirtualDesktopTrace.handover (fun () ->
                         sprintf "strip-show strip=%X owner=%X visible=%b cloak=%A noticeTick=%A"
                             (this.hwnd.ToInt64()) (this.window.parent.hwnd.ToInt64()) this.window.isVisible this.window.cloakedValue desktopNoticeTickValue)
+#endif
                     lastPresentation <- Some(image, location, alpha)
             | None ->
                 VirtualDesktopTrace.handover (fun () -> sprintf "strip-paint-deferred strip=%X reason=render-failed" (this.hwnd.ToInt64()))
         else
             let wasVisible = this.window.isVisible
             if wasVisible then this.window.hide()
+#if DEBUG
             if wasVisible then
                 VirtualDesktopTrace.handover (fun () ->
                     sprintf "strip-hide strip=%X owner=%X cloak=%A noticeTick=%A"
                         (this.hwnd.ToInt64()) (this.window.parent.hwnd.ToInt64()) this.window.cloakedValue desktopNoticeTickValue)
+#endif
             lastPresentation <- None
 
     // No draw correction any more. The former applyDrawCorrection pre-compressed
@@ -729,7 +759,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     | None -> added
                 visualOrderCell.set(List2(ordered))
                 this.zorder <- zorderCell.value.append(tab)
+#if DEBUG
                 this.withContentSource("tab-added", fun () -> this.traceContent("front-order"))
+#endif
 
     member this.addTabSlide tab (slide:Option<_>) =
         this.batch <| fun () ->
@@ -758,7 +790,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         visualOrderCell.map(fun l -> l.where((<>) tab))
         this.zorder <- zorderCell.value.where((<>) tab)
         tabInfoCell.map(fun m -> m.remove tab)
+#if DEBUG
         this.withContentSource("tab-removed", fun () -> this.traceContent("front-order"))
+#endif
         Cell.endUpdate()
 
     member this.tabs : Set2<Tab> = Set2(visualOrderCell.value)
@@ -1319,12 +1353,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             |> List.filter this.tabs.contains |> List.map (fun (Tab h) -> h)
         let shared = this.desktopShared
         let accepted = VirtualDesktopGroups.excludeSharedDimmed shared requested
+#if DEBUG
         if accepted <> requested then
             VirtualDesktopTrace.handover (fun () ->
                 let handles xs = xs |> List.sort |> List.map (fun (h: IntPtr) -> sprintf "%X" (h.ToInt64())) |> String.concat ","
                 sprintf "strip-dimmed-filter strip=%X source=%s requested=%s excluded=%s held=%b"
                     (this.hwnd.ToInt64()) lastContentSource (handles requested)
                     (requested |> List.filter shared.Contains |> handles) contentHold.IsSome)
+#endif
         let tabs = accepted |> List.map Tab |> List.sort
         if dimmedTabsCell.value.items.list <> (Set2(List2(tabs))).items.list then
             dimmedTabsCell.set(Set2(List2(tabs)))
@@ -1344,13 +1380,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             this.setDimmedTabs(dimmed))
 
     member this.presentDesktopSwitch() =
+#if DEBUG
         paintReason <- "click-preparation"
+#endif
         this.update()
+#if DEBUG
         let clock = System.Diagnostics.Stopwatch.StartNew()
+#endif
         let result = StripComposition.DwmFlush()
+#if DEBUG
         VirtualDesktopTrace.handover (fun () ->
             sprintf "strip-flush strip=%X result=%d elapsedMs=%.3f sequence=%d"
                 (this.hwnd.ToInt64()) result clock.Elapsed.TotalMilliseconds paintSequence)
+#endif
+        ()
 
     member this.holdDesktopContent() =
         heldDesktopShared <- (VirtualDesktopGroups.Live.snapshot()).stripShared
@@ -1366,7 +1409,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         with get() = alphaCell.value
         and set(value) = alphaCell.set(value)
 
-    member this.desktopNoticeTick with set(value) = desktopNoticeTickValue <- value
+    member this.desktopNoticeTick with set(value: uint32 option) =
+#if DEBUG
+        desktopNoticeTickValue <- value
+#else
+        ()
+#endif
 
     member this.visible 
         with get() = visibleCell.value

@@ -11,7 +11,9 @@ type GroupInfo() as this =
     let mutable _isExited = false
     let stripViewGate = obj()
     let mutable pendingStripView : (bool * VirtualDesktopGroups.StripView) option = None
+#if DEBUG
     let mutable coalescedStripViews = 0
+#endif
     let desktopInvoker = InvokerService.invoker
     let (_group, invoker) = ThreadHelper.startOnThreadAndWait <| fun() ->
         let plugins = List2<_>([
@@ -57,18 +59,29 @@ type GroupInfo() as this =
         _group.markDesktopShown(shown)
         let post = lock stripViewGate (fun () ->
             let post = pendingStripView.IsNone
+#if DEBUG
             if not post then coalescedStripViews <- coalescedStripViews + 1
+#endif
             pendingStripView <- Some(shown, view)
             post)
         if post then this.invokeGroup <| fun () ->
+#if DEBUG
             let pending, merged = lock stripViewGate (fun () ->
                 let value, count = pendingStripView, coalescedStripViews
                 pendingStripView <- None
                 coalescedStripViews <- 0
                 value, count)
+#else
+            let pending = lock stripViewGate (fun () ->
+                let value = pendingStripView
+                pendingStripView <- None
+                value)
+#endif
             pending |> Option.iter (fun (shown, view) ->
+#if DEBUG
                 VirtualDesktopTrace.periodic false (fun () ->
                     sprintf "desktop-strip-delivery strip=%X coalesced=%d" (_group.hwnd.ToInt64()) merged)
+#endif
                 _group.applyStripDesktop(shown, view))
     member this.isExited = _isExited
     member this.exited = _group.exited

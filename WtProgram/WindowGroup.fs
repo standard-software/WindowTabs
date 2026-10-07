@@ -22,16 +22,20 @@ module TitleTrace =
     let mutable private started = false
     let private gate = obj()
 #endif
+#if DEBUG
     let log (f: unit -> string) =
+#else
+    let inline log (f: unit -> string) =
+#endif
 #if DEBUG
         try
-            lock gate (fun () ->
+            TraceWriter.write gate (fun () ->
+                sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff"))
+                    Thread.CurrentThread.ManagedThreadId (f())) (fun line ->
                 if not started then
                     started <- true
                     try File.WriteAllText(path, "") with _ -> ()
-                File.AppendAllText(path,
-                    sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff"))
-                        Thread.CurrentThread.ManagedThreadId (f())))
+                File.AppendAllText(path, line))
         with _ -> ()
 #else
         ignore f
@@ -143,7 +147,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let stripClock = Stopwatch.StartNew()
     let mutable stripPreview : VirtualDesktopGroups.StripPreview option = None
     let mutable stripClickedAt = DateTime.MinValue
+#if DEBUG
     let mutable stripPassSkipped = 0
+#endif
     let mutable appliedStripView : (bool * VirtualDesktopGroups.StripView) option = None
     let mutable shellStripHold = false
     let mutable shellStripHoldAttempted = false
@@ -156,7 +162,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable stripOrderHook : IDisposable option = None
     let mutable stripPredictionHook : IDisposable option = None
     let mutable lastPredictionId = 0L
+#if DEBUG
     let mutable predictedContent : (int64 * int * IntPtr option * IntPtr list * IntPtr list) option = None
+#else
+    let mutable predictedContent : unit option = None
+#endif
     let mutable predictingOtherGroup = false
     // Who each member was when it joined (VirtualDesktopGroups.Identity), so
     // that a handle Windows has given to another window since is not moved
@@ -218,6 +228,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
         TopEdgeGuardPlacement.registerStripOwner stripHwnd
             VirtualDesktopGroups.stripOwnerRequest
+#if DEBUG
             (fun reason previous requested owner actual ->
                 VirtualDesktopTrace.handover (fun () ->
                     // Only immutable publications and native HWND state here,
@@ -229,6 +240,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         (VirtualDesktopGroups.Live.read state previous).presence
                         (requested.ToInt64()) (owner.ToInt64()) (VirtualDesktopGroups.Live.read state owner).presence
                         (actual.ToInt64()) (requested <> owner) strip.isVisible strip.cloakedValue))
+#endif
         this.setTsParent(IntPtr.Zero)
         stripPredictionHook <- Some(VirtualDesktopGroups.Live.predictions.Subscribe(fun request ->
             invoker.tryAsyncInvoke(fun () -> this.withUpdate(fun () -> this.applyStripPrediction(request))) |> ignore))
@@ -930,7 +942,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     stripPreview <- Some { target=front; destination=request.destination
                                            expires=stripClock.ElapsedMilliseconds + 5000L - age; dimmed=plan.dimmed }
                     predictingOtherGroup <- true
+#if DEBUG
                     predictedContent <- Some(request.id, request.tick, plan.front, List.sort plan.dimmed, plan.order)
+#else
+                    predictedContent <- Some()
+#endif
                     this.ts.withContentSource("prediction", fun () ->
                         this.ts.prepareDesktopSwitch(Tab front, List2(plan.order |> List.map Tab), plan.dimmed |> List.map Tab, source="prediction"))
                     VirtualDesktopTrace.handover (fun () ->
@@ -963,6 +979,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             shellStripHoldAttempted <- true
             if confirmed then
                 stripView <- { stripView with current=state.current; presence=state.reads |> Map.map (fun _ r -> r.presence) }
+#if DEBUG
             predictedContent |> Option.iter (fun (id, tick, front, dimmed, order) ->
                 let presence h = (VirtualDesktopGroups.Live.read state h).presence
                 let actualDimmed = VirtualDesktopGroups.dimmed state.stripShared desktopShown presence zorderCell.value.list |> List.sort
@@ -970,6 +987,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 VirtualDesktopTrace.handover (fun () ->
                     sprintf "prediction-confirm strip=%X id=%d knownTick=%d confirmed=%b equal=%b"
                         (this.ts.hwnd.ToInt64()) id tick confirmed (front=actualFront && dimmed=actualDimmed && order=actualOrder)))
+#endif
             predictedContent <- None
             predictingOtherGroup <- false
             VirtualDesktopTrace.handover (fun () ->
@@ -985,9 +1003,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.ts.desktopNoticeTick <- view.noticeTick
         let ended = this.finishStripPreview()
         if unchanged && not ended then
+#if DEBUG
             stripPassSkipped <- stripPassSkipped + 1
             VirtualDesktopTrace.periodic false (fun () ->
                 sprintf "desktop-strip-skip strip=%X count=%d noticeTick=%A" (this.ts.hwnd.ToInt64()) stripPassSkipped view.noticeTick)
+#else
+            ()
+#endif
         else
             // Compute the final content and visibility in one strip batch. A group
             // present on both desktops never takes an intermediate hidden state.
@@ -1647,7 +1669,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // avoids issuing a monitor DPI query for it.
         this.ts.setTabBgColor(tab, if flash then Some(this.tabAppearanceRaw.tabFlashTabColor) else None)
         
-    member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() -> PerfTrace.time (sprintf "group.shell.%O" evt) <| fun () ->
+    member this.shellEvents(hwnd, evt) = this.invokeAsync <| fun() -> PerfTrace.timeNamed (fun () -> sprintf "group.shell.%O" evt) <| fun () ->
         Cell.beginUpdate()
         match evt with
         | ShellEvent.HSHELL_FLASH ->
@@ -1935,9 +1957,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART then this.captureCaptionDragFallback(hwnd) else None
         this.dispatchEvent(hwnd, evt, fallbackPress)
 
-    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.ts.withContentSource(string evt, fun () -> this.dispatchStripEvent(hwnd, evt, fallbackPress))
+    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.ts.withContentSource(PerfTrace.label (fun () -> string evt), fun () -> this.dispatchStripEvent(hwnd, evt, fallbackPress))
 
-    member private this.dispatchStripEvent(hwnd, evt, fallbackPress) = this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
+    member private this.dispatchStripEvent(hwnd, evt, fallbackPress) = this.withUpdate <| fun() -> PerfTrace.timeNamed (fun () -> sprintf "group.%O" evt) <| fun () ->
         if evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND && this.windows.contains(hwnd) then
             stripGroupMinimized <- false
         let foregroundInvolvesGroup =
@@ -1946,7 +1968,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // Membership transitions still update activity, visibility and guard placement.
         if (evt = WinEvent.EVENT_SYSTEM_FOREGROUND && foregroundInvolvesGroup) ||
            (evt <> WinEvent.EVENT_SYSTEM_FOREGROUND && this.windows.contains(hwnd)) then
-            this.refreshStripState(string evt)
+            this.refreshStripState(PerfTrace.label (fun () -> string evt))
         if this.windows.contains(hwnd) &&
            (evt = WinEvent.EVENT_OBJECT_LOCATIONCHANGE || evt = WinEvent.EVENT_OBJECT_SHOW ||
             evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND ||
@@ -2520,8 +2542,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
         
     member this.tabActivate(Tab(hwnd), force) =
+#if DEBUG
         let preparation = Stopwatch.StartNew()
         let mutable paintedAt = 0.0
+#endif
         let state = VirtualDesktopGroups.Live.snapshot()
         let reads = this.windows.items.list |> List.map (fun h ->
             let reading = VirtualDesktopGroups.Live.read state h
@@ -2530,10 +2554,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.withUpdate <| fun () ->
             match preview with
             | Some p ->
+#if DEBUG
                 let publication = Stopwatch.StartNew()
+#endif
                 let request = VirtualDesktopGroups.Live.requestPrediction p.destination "click" this.ts.hwnd
+#if DEBUG
                 VirtualDesktopTrace.handover (fun () ->
                     sprintf "prediction-dispatch strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) publication.Elapsed.TotalMilliseconds)
+#endif
                 VirtualDesktopTrace.noticeSwitch()
                 stripClickedAt <- DateTime.UtcNow
                 shellStripHold <- false
@@ -2541,32 +2569,50 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 predictingOtherGroup <- false
                 followerPlacements.Cancel(hwnd)
                 this.bringToTop(hwnd)
+#if DEBUG
                 predictedContent <- request |> Option.map (fun r -> r.id, r.tick, Some hwnd, List.sort p.dimmed, zorderCell.value.list)
+#else
+                predictedContent <- request |> Option.map (fun _ -> ())
+#endif
                 this.ts.prepareDesktopSwitch(Tab(hwnd), zorderCell.value.map(Tab), p.dimmed |> List.map Tab)
                 if selectedTabsCell.value.contains(hwnd) then this.applySelected(selectedTabsCell.value.remove(hwnd))
                 this.ts.presentDesktopSwitch()
+#if DEBUG
                 paintedAt <- preparation.Elapsed.TotalMilliseconds
+#endif
+#if DEBUG
                 VirtualDesktopTrace.handover (fun () ->
                     sprintf "switch-painted strip=%X target=%X clickToPaintedMs=%.3f"
                         (this.ts.hwnd.ToInt64()) (hwnd.ToInt64()) preparation.Elapsed.TotalMilliseconds)
+#endif
             | None -> followerPlacements.Synchronous(hwnd, ignore)
             let window = this.os.windowFromHwnd(hwnd)
             if selectedTabsCell.value.contains(hwnd) then this.applySelected(selectedTabsCell.value.remove(hwnd))
+#if DEBUG
             VirtualDesktopTrace.handover (fun () ->
                 sprintf "switch-request strip=%X target=%X elapsedMs=%.3f paintedToRequestMs=%.3f"
                     (this.ts.hwnd.ToInt64()) (hwnd.ToInt64()) preparation.Elapsed.TotalMilliseconds
                     (preparation.Elapsed.TotalMilliseconds - paintedAt))
+#endif
+#if DEBUG
             let activation = Stopwatch.StartNew()
+#endif
             window.setForegroundOrRestore(force)
+#if DEBUG
             VirtualDesktopTrace.handover (fun () ->
                 sprintf "switch-activation-return strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) activation.Elapsed.TotalMilliseconds)
+#endif
             // SetForegroundWindow already raises a successfully activated target.
             // Avoid a second cross-process activation while the shell switches.
             if preview.IsNone then
+#if DEBUG
                 let raising = Stopwatch.StartNew()
+#endif
                 window.bringToTop()
+#if DEBUG
                 VirtualDesktopTrace.handover (fun () ->
                     sprintf "switch-raise-return strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) raising.Elapsed.TotalMilliseconds)
+#endif
             this.bringToTop(hwnd)
             this.repairStripZorder("tab-activate")
 

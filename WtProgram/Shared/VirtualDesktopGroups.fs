@@ -1008,7 +1008,13 @@ module VirtualDesktopGroups =
                 | _ ->
                     predictionId <- predictionId + 1L
                     let p = { id=predictionId; destination=destination; state=latest
-                              requestedAt=DateTime.UtcNow; tick=Environment.TickCount; source=source
+                              requestedAt=DateTime.UtcNow
+#if DEBUG
+                              tick=Environment.TickCount
+#else
+                              tick=0
+#endif
+                              source=source
                               origin=origin; issued=predictionClock.ElapsedMilliseconds }
                     lastPrediction <- Some p
                     Some p)

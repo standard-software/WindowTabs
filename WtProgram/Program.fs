@@ -470,7 +470,9 @@ type Program() as this =
     let mutable lastDesktopTrace = ""
     let desktopPassTimer = new System.Windows.Forms.Timer(Interval = 1000)
     let mutable cloakHook : IDisposable option = None
+#if DEBUG
     let mutable lastStripNoticeTick : uint32 option = None
+#endif
     let mutable observedStripDesktop : Guid option = None
     let pendingDesktopWindows = System.Collections.Generic.HashSet<IntPtr>()
     let waitingDesktopWindows = VirtualDesktopReader.WaitingWindows()
@@ -718,18 +720,24 @@ type Program() as this =
                                                (hwnd.ToInt64()) evt eventTick (window.parent.hwnd.ToInt64())
                                                window.cloakedValue window.isVisible)
 #endif
+#if DEBUG
                                    if TopEdgeGuardPlacement.isRegisteredStrip hwnd then
                                        VirtualDesktopTrace.handover (fun () ->
                                            let window = os.windowFromHwnd(hwnd)
                                            sprintf "strip-native-event strip=%X event=%A eventTick=%u owner=%X cloak=%A noticeTick=%A"
                                                (hwnd.ToInt64()) evt eventTick (window.parent.hwnd.ToInt64()) window.cloakedValue lastStripNoticeTick)
+#endif
                                    let invalidate () =
                                        if this.desktop.groups.list |> List.exists (fun g -> g.windows.contains((=) hwnd)) then
                                            VirtualDesktopGroups.Live.invalidate()
                                            pendingDesktopVisits <- []
                                            // Presentation needs only native visibility and cached desktop
                                            // identities. Do not wait for the COM reader or pin evidence.
+#if DEBUG
                                            this.refreshDesktopStrips(Some(uint32 eventTick))
+#else
+                                           this.refreshDesktopStrips(None)
+#endif
                                            this.scheduleDesktopPass(15)
 #if DEBUG
                                    // Test hook: act on the shell's cloaking late, so
@@ -2509,7 +2517,9 @@ type Program() as this =
 
     member private this.refreshDesktopStrips(noticeTick: uint32 option) =
         if this.canReadDesktops then
+#if DEBUG
             noticeTick |> Option.iter (fun tick -> lastStripNoticeTick <- Some tick)
+#endif
             let groups = this.desktop.groups.list
             let state = VirtualDesktopGroups.Live.snapshot()
             let mutable desktopId = Guid.Empty
@@ -2542,7 +2552,13 @@ type Program() as this =
                 groupState)
             let decisions = VirtualDesktopGroups.decide { current=current; listed=state.listed } reads state.shared states
             let view : VirtualDesktopGroups.StripView =
-                { current=current; presence=reads |> Map.map (fun _ r -> r.presence); noticeTick=lastStripNoticeTick }
+                { current=current; presence=reads |> Map.map (fun _ r -> r.presence)
+#if DEBUG
+                  noticeTick=lastStripNoticeTick
+#else
+                  noticeTick=None
+#endif
+                }
             // One snapshot and one sweep for both directions. The group queues
             // are independent: the main thread never waits for their repaint.
             for decision in decisions do

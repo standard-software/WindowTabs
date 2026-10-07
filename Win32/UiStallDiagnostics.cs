@@ -463,13 +463,22 @@ namespace Bemo.Win32
                 catch { Interlocked.Exchange(ref probing, 0); throw; }
             }
             else log("NATIVE probe pending; tid=" + mainTid);
+            string skipped = null;
             lock (dumpGate)
             {
-                if (dumping != 0) { log("NATIVE dump pending"); return; }
                 long now = clock.ElapsedMilliseconds;
-                if (lastDump != 0 && now - lastDump < 600000) { log("NATIVE dump skipped: 10-minute limit"); return; }
-                lastDump = Math.Max(1, now);
-                dumping = 1;
+                if (dumping != 0) skipped = "NATIVE dump pending";
+                else if (lastDump != 0 && now - lastDump < 600000) skipped = "NATIVE dump skipped: 10-minute limit";
+                else
+                {
+                    lastDump = Math.Max(1, now);
+                    dumping = 1;
+                }
+            }
+            if (skipped != null)
+            {
+                try { log(skipped); } catch { }
+                return;
             }
             Thread writer = new Thread(delegate() {
                 try { Dump(mainTid, dumpDirectory, log); }

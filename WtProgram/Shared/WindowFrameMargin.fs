@@ -92,7 +92,9 @@ module WindowFrameMargin =
     type private Entry = {
         mutable value: Sticky
         mutable pending: Margin option
+#if DEBUG
         mutable detected: (int * Margin) option
+#endif
         mutable sampled: int64
         mutable users: int
     }
@@ -169,7 +171,11 @@ module WindowFrameMargin =
                         match shared.TryGetValue hwnd with
                         | true, value -> value
                         | _ ->
-                            let value = { value = emptySticky; pending = None; detected = None; sampled = 0L; users = 0 }
+                            let value = { value = emptySticky; pending = None
+#if DEBUG
+                                          detected = None
+#endif
+                                          sampled = 0L; users = 0 }
                             shared.[hwnd] <- value
                             value
                     entry.users <- entry.users + 1
@@ -253,14 +259,21 @@ module WindowFrameMargin =
                                 let top, left, right, bottom = readSticky dpi entry.value
                                 let previous : Margin = { top=top; left=left; right=right; bottom=bottom }
                                 let accepted, pending = acceptSample previous entry.pending margin
+#if DEBUG
                                 let report = if entry.detected <> Some(dpi, margin) then Some accepted else None
                                 entry.detected <- Some(dpi, margin)
+#endif
                                 entry.pending <- pending
                                 entry.sampled <- now
                                 if accepted <> previous then
                                     entry.value <- remember dpi accepted emptySticky
+#if DEBUG
                                 report
                             | _ -> None)
+#else
+                                ()
+                            | _ -> ())
+#endif
 #if DEBUG
                         sampleTrace |> Option.iter (fun accepted ->
                             trace (sprintf "sample hwnd=%X detected=%A accepted=%A dpi=%d" (int64 hwnd) margin accepted dpi))

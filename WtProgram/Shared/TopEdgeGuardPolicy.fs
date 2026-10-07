@@ -156,9 +156,12 @@ module TopEdgeGuardPolicy =
     type ChangeTrace<'Key when 'Key: equality>() =
         let mutable last = None
         member this.Write(key: 'Key, build: unit -> string, write: string -> unit) =
-            if last <> Some key then
-                last <- Some key
-                write (build())
+            try
+                if last <> Some key then
+                    last <- Some key
+                    let line = build()
+                    write line
+            with _ -> ()
 
     // Coalesce pending requests, but retain changes received during execution.
     // The production post is asynchronous, so follow-ups do not grow the stack.

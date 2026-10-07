@@ -9,25 +9,31 @@ module DragTrace =
 #if DEBUG
     let private maxBytes = 2L * 1024L * 1024L
     let mutable private writes = 0
+    let private gate = obj()
 #endif
 
     // Takes a thunk, not a string. An argument is evaluated before the call,
     // so taking the message itself left every sprintf at every call site
     // running in release builds with only the file write compiled out.
+#if DEBUG
     let log (f: unit -> string) =
+#else
+    let inline log (f: unit -> string) =
+#endif
 #if DEBUG
         try
-            let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-            let path = IO.Path.Combine(dir, "drag_trace.log")
-            writes <- writes + 1
-            if writes % 200 = 1 then
-                let info = IO.FileInfo(path)
-                if info.Exists && info.Length > maxBytes then
-                    let previous = path + ".1"
-                    try IO.File.Delete(previous) with _ -> ()
-                    try IO.File.Move(path, previous) with _ -> ()
-            let line = sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) Threading.Thread.CurrentThread.ManagedThreadId (f())
-            IO.File.AppendAllText(path, line)
+            TraceWriter.write gate (fun () ->
+                sprintf "%s [t%d] %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) Threading.Thread.CurrentThread.ManagedThreadId (f())) (fun line ->
+                let dir = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
+                let path = IO.Path.Combine(dir, "drag_trace.log")
+                writes <- writes + 1
+                if writes % 200 = 1 then
+                    let info = IO.FileInfo(path)
+                    if info.Exists && info.Length > maxBytes then
+                        let previous = path + ".1"
+                        try IO.File.Delete(previous) with _ -> ()
+                        try IO.File.Move(path, previous) with _ -> ()
+                IO.File.AppendAllText(path, line))
         with _ -> ()
 #else
         ignore f
@@ -36,7 +42,11 @@ module DragTrace =
     // Snapshots cannot see every transient change or messages delivered to a
     // foreign process. Keep watching the original thread even if foreground
     // becomes NULL; record API failure separately from an inactive window.
+#if DEBUG
     let activation (label: unit -> string) (watchedHwnd: IntPtr) =
+#else
+    let inline activation (label: unit -> string) (watchedHwnd: IntPtr) =
+#endif
 #if DEBUG
         log (fun () ->
             let gui tid =
@@ -59,7 +69,11 @@ module DragTrace =
         ignore watchedHwnd
 #endif
 
+#if DEBUG
     let windowMessage (label: unit -> string) (msg: Win32Message) =
+#else
+    let inline windowMessage (label: unit -> string) (msg: Win32Message) =
+#endif
 #if DEBUG
         match msg.msg with
         | WindowMessages.WM_ACTIVATE

@@ -33,23 +33,22 @@ module VirtualDesktopTrace =
         IO.File.AppendAllText(path, line)
         if VirtualDesktopTracePolicy.rotate (IO.FileInfo(path).Length) then rotate ()
 #endif
-    // A thunk, not a string, so the sprintf at the call site does not run in
-    // Release (see RestoreTrace, which this follows).
-    let log (f: unit -> string) =
 #if DEBUG
-        try
-            lock gate (fun () ->
-                if not started then
-                    rotate ()
-                    started <- true
-                let line = f()
-                let count = Threading.Interlocked.Exchange(&suppressed, 0L)
-                if count > 0L then
-                    append (sprintf "%s [vd-idle-summary] suppressed=%d\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) count)
-                append (sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) line))
-        with _ -> ()
+    let private writer = TraceWriter.Queued(fun line ->
+        TraceWriter.write gate (fun () -> line) (fun line ->
+            if not started then
+                rotate ()
+                started <- true
+            let count = Threading.Interlocked.Exchange(&suppressed, 0L)
+            if count > 0L then
+                append (sprintf "%s [vd-idle-summary] suppressed=%d\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) count)
+            append line))
+    let log (f: unit -> string) =
+        writer.Post(fun () ->
+            let line = f()
+            sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) line)
 #else
-        ignore f
+    let inline log (_f: unit -> string) = ()
 #endif
 
     let noticeSwitch () =
@@ -66,42 +65,23 @@ module VirtualDesktopTrace =
         false
 #endif
 
+    // Capture native state on the caller, before entering the shared queue.
 #if DEBUG
-    let private handoverGate = obj()
-    let private handoverLines = Collections.Generic.Queue<string>()
-    let mutable private handoverWriterRunning = false
-    let private drainHandover () =
-        let mutable running = true
-        while running do
-            let line = lock handoverGate (fun () ->
-                if handoverLines.Count = 0 then
-                    handoverWriterRunning <- false
-                    None
-                else Some(handoverLines.Dequeue()))
-            match line with
-            | Some value -> log (fun () -> value)
-            | None -> running <- false
-#endif
-    // Capture native state and the originating tick/thread now; file I/O must
-    // not hold up the click before its activation request reaches the shell.
     let handover (f: unit -> string) =
-#if DEBUG
-        try
-            let line = sprintf "[vd-handover tick=%d t%d] %s"
-                           Environment.TickCount Threading.Thread.CurrentThread.ManagedThreadId (f())
-            let start = lock handoverGate (fun () ->
-                handoverLines.Enqueue(line)
-                if handoverWriterRunning then false
-                else handoverWriterRunning <- true; true)
-            if start then Threading.ThreadPool.QueueUserWorkItem(fun _ -> drainHandover()) |> ignore
-        with _ -> ()
+        log (fun () ->
+            sprintf "[vd-handover tick=%d t%d] %s"
+                Environment.TickCount Threading.Thread.CurrentThread.ManagedThreadId (f()))
 #else
-        ignore f
+    let inline handover (_f: unit -> string) = ()
 #endif
 
     // Idle periodic messages allocate no strings and only increment a counter.
     // The next actual file write drains it as a single summary under the writer lock.
+#if DEBUG
     let periodic changed (f: unit -> string) =
+#else
+    let inline periodic changed (f: unit -> string) =
+#endif
 #if DEBUG
         if VirtualDesktopTracePolicy.writePeriodic changed (inSwitchWindow()) then handover f
         else Threading.Interlocked.Increment(&suppressed) |> ignore

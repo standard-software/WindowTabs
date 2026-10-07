@@ -203,16 +203,26 @@ module TopEdgeGuardPlacement =
     type private StripOwnerControl = {
         thread: int
         choose: nativeint -> nativeint
+#if DEBUG
         trace: string -> nativeint -> nativeint -> nativeint -> nativeint -> unit
+#endif
     }
     let private stripOwners = System.Collections.Concurrent.ConcurrentDictionary<nativeint, StripOwnerControl>()
 
     // Both ordinary placement and guard repair use this writer. The policy
     // belongs to the strip's group thread; never call it from another thread.
+#if DEBUG
     let registerStripOwner strip choose trace =
+#else
+    let registerStripOwner strip choose =
+#endif
         stripOwners.[strip] <- {
             thread = System.Threading.Thread.CurrentThread.ManagedThreadId
-            choose = choose; trace = trace }
+            choose = choose
+#if DEBUG
+            trace = trace
+#endif
+        }
     let unregisterStripOwner strip = stripOwners.TryRemove(strip) |> ignore
     let isRegisteredStrip strip = stripOwners.ContainsKey strip
 
@@ -227,15 +237,13 @@ module TopEdgeGuardPlacement =
             if System.IntPtr.Size = 8 then Native.SetOwner64(strip, -8, owner) |> ignore
             else Native.SetOwner32(strip, -8, owner) |> ignore
         let actual = ownerOf strip
+#if DEBUG
         if previous <> owner || requested <> owner || actual <> owner || not onOwnerThread then
             match control with
             | Some c -> c.trace (if onOwnerThread then reason else "wrong-thread:" + reason) previous requested owner actual
             | None ->
-#if DEBUG
                 traceDecision (sprintf "strip-reown(reason=%s,old=%X,new=%X,actual=%X)"
                     reason (int64 previous) (int64 owner) (int64 actual)) 0n strip owner None None None
-#else
-                ()
 #endif
         // A guard whose request was suppressed must not subsequently reorder
         // the ownerless strip or demote its temporary topmost layer.
