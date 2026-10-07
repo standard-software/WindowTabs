@@ -107,10 +107,14 @@ type ClosedTabInfo = {
     // may be matched by exe path alone: resurrecting a hand-closed tab, or
     // handing an unrelated window to one, would both be wrong.
     isRestoreSeed: bool
+    // Kept for saving but never applied while another group contests it.
+    isAmbiguous: bool
     // Saved rectangle (x, y, width, height) of a seeded window. Kept so the
     // twin disambiguation and the title-less fallback still have a position
     // to compare against.
     savedRect: (int * int * int * int) option
+    savedDesktop: Guid option
+    savedGroupIndex: int option
     // When this entry began waiting: the startup restore found the window
     // closed, or the user closed the tab. Entries outlive restarts by being
     // written back to the settings file, so without a date of their own their
@@ -132,10 +136,9 @@ type ClosedTabInfo = {
     stateIsCertain: bool
 }
 
-// Exe paths come from the same API on both sides, but the file system does
-// not distinguish case and neither should the comparison.
-let sameExePath (a: string) (b: string) =
-    String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
+// Restore compares application identities across package updates. The cache
+// and saved JSON still retain the original executable paths.
+let sameExePath (a: string) (b: string) = AppPath.sameApp a b
 
 // The same entry without the part of its state that names a particular
 // window. Used when more than one saved entry could have been the right one:
@@ -414,6 +417,8 @@ type Program() as this =
     // Carries a matched ClosedTabInfo from tryClosedTabRestore to the
     // positioning step at the end of addWindowToGroup
     let pendingClosedTabRestores = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // Keep the hidden-target decision across a late claim's queued detachment.
+    let pendingLinkedRestores = Cell.create(Set.empty<IntPtr>)
     // Seeded closed-tab entries reference their restored group by a sentinel
     // token (the group's first saved old hwnd), not by the group's strip
     // hwnd: at restore time the strip window is created asynchronously on
@@ -1068,6 +1073,9 @@ type Program() as this =
                     closedHwnd = hwnd
                     closedAt = now
                     isRestoreSeed = false
+                    isAmbiguous = false
+                    savedGroupIndex = None
+                    savedDesktop = owningGroup |> Option.bind (fun g -> g.desktopHome)
                     savedRect = None
                     seedSince = Some(now)
                     orderSnapshot = orderSnapshot
@@ -1126,15 +1134,77 @@ type Program() as this =
             (windowNameOverride.value.tryFind(hwnd).IsNone &&
              this.claimState(hwnd) = (false, None, None, None))
 
+    member private this.refreshAmbiguousEntries() =
+        let now = DateTime.Now
+        let current =
+            closedTabCache.value |> List.filter (fun e ->
+                let limit = if e.isRestoreSeed then seedMaxAgeDays else closedTabMaxAgeDays
+                (now - (e.seedSince |> Option.defaultValue e.closedAt)).TotalDays <= limit)
+        let held =
+            current |> List.map (fun e -> (e.exePath, e.windowTitle), e.groupRef, e.isAmbiguous)
+            |> ClosedTabClaim.heldIndices
+        let refreshed =
+            current |> List.mapi (fun i e ->
+                if e.isAmbiguous && not (held.Contains i) then
+                    this.traceRestoreRetention(e.closedHwnd, groupRefHandle e.groupRef, e.tabIndex, "ambiguity-released")
+                    { e with isAmbiguous = false }
+                else e)
+        if refreshed <> closedTabCache.value then closedTabCache.set(refreshed)
+
+    member private this.restorePosition(hwnd: IntPtr) : RestorePosition.Observation =
+        let missing : RestorePosition.Observation = {center=None;scale=1.0;desktop=None}
+        try
+            let window = os.windowFromHwnd(hwnd)
+            if not window.isWindow || window.isMinimized || window.isInMoveSize then missing else
+            // SavedTabState.rect is raw GetWindowRect on our PMv2 main thread:
+            // physical screen pixels, before any application-frame expansion.
+            let b = window.bounds
+            let center = RestorePosition.center (Some(b.x,b.y,b.width,b.height))
+            if center.IsNone then missing else
+            let hr,id = window.virtualDesktopIdWithHr
+            { center=center; scale=Dpi.scaleForHwnd(hwnd)
+              desktop=if hr >= 0 && id <> Guid.Empty then Some id else None }
+        with _ -> missing
+
+    member private this.traceRestorePosition(hwnd, token, rank, decision) =
+        let reason, distance, gap =
+            match decision with
+            | RestorePosition.Selected(_,d,g,_) ->
+                "ambiguity-resolved-by-position", Some d, g
+            | RestorePosition.Ordered(_,d,g) -> "ambiguity-resolved-by-order", d, g
+            | RestorePosition.Held why -> "ambiguity-held-" + why, None, None
+        RestoreTrace.retention hwnd token rank reason (fun () ->
+            sprintf " distance=%A gap=%A" distance gap)
+
     member private this.closedClaimDecision(hwnd, exePath, windowTitle) =
+        this.refreshAmbiguousEntries()
         if claimedWindows.value.Contains hwnd then ClosedTabClaim.AlreadyClaimed else
         let identity = exePath, normalizeClosedTabTitle windowTitle
         let matches =
             if exePath = "" || windowTitle = "" then [] else
-            closedTabCache.value |> List.indexed
-            |> List.choose (fun (i, e) ->
-                if ClosedTabClaim.sameIdentity identity (e.exePath, e.windowTitle) then Some i
-                else None)
+            let entries = closedTabCache.value |> List.mapi (fun index e ->
+                (e.exePath,e.windowTitle), e.isAmbiguous,
+                ({ index=index; center=RestorePosition.center e.savedRect; desktop=e.savedDesktop } : RestorePosition.Candidate))
+            // Avoid geometry/desktop reads on the unchanged ordinary path.
+            let observation =
+                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
+                    this.restorePosition hwnd
+                else { RestorePosition.center=None; scale=1.0; desktop=None }
+            let entries =
+                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
+                    entries |> List.sortBy (fun (_,_,c) ->
+                        let e = closedTabCache.value.[c.index]
+                        Option.defaultValue Int32.MaxValue e.savedGroupIndex, e.tabIndex, c.index)
+                else entries
+            let matches, decision = ClosedTabClaim.resolve identity observation entries
+            decision |> Option.iter (fun d ->
+                let traced =
+                    match d with
+                    | RestorePosition.Selected(index,_,_,_)
+                    | RestorePosition.Ordered(index,_,_) -> [closedTabCache.value.[index]]
+                    | RestorePosition.Held _ -> closedTabCache.value |> List.filter (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle))
+                for e in traced do this.traceRestorePosition(hwnd, groupRefHandle e.groupRef, e.tabIndex, d))
+            matches
         ClosedTabClaim.decide hwnd claimedWindows.value matches
 
     member private this.peekClosedTabMatch(hwnd, exePath, windowTitle) =
@@ -1173,7 +1243,7 @@ type Program() as this =
             closedTabCache.value
             |> List.mapi (fun i e -> (i, e))
             |> List.filter (fun (_, e) ->
-                e.isRestoreSeed &&
+                e.isRestoreSeed && not e.isAmbiguous &&
                 sameExePath e.exePath exePath &&
                 (match e.savedRect with
                  | Some(r) when usableRect r -> overlaps r
@@ -1220,7 +1290,14 @@ type Program() as this =
 
     // Consume one specific cache entry (the one a peek settled on).
     member private this.takeClosedTabEntry(hwnd, info: ClosedTabInfo) =
-        match ClosedTabClaim.take hwnd (fun e -> obj.ReferenceEquals(e, info))
+        let eligible =
+            if not info.isAmbiguous then true else
+            let window = os.windowFromHwnd(hwnd)
+            let decision = this.closedClaimDecision(hwnd, (try window.pid.processPath with _ -> ""), (try window.text with _ -> ""))
+            match decision with
+            | ClosedTabClaim.Claim index -> obj.ReferenceEquals(closedTabCache.value.[index], info)
+            | _ -> false
+        match ClosedTabClaim.take hwnd (fun e -> eligible && obj.ReferenceEquals(e, info))
                                   claimedWindows.value closedTabCache.value with
         | Some(entry, claimed, remaining) ->
             // Replace all current state, whether inherited or changed by the user.
@@ -1233,7 +1310,8 @@ type Program() as this =
                 windowAlignment.map(fun m -> m.remove hwnd)
             claimedWindows.set(claimed)
             closedTabCache.set(remaining)
-            Some entry
+            this.refreshAmbiguousEntries()
+            Some (if entry.isAmbiguous then {entry with isAmbiguous=false;stateIsCertain=true} else entry)
         | None -> None
 
     // Put the saved pin state back on a restored tab. Runs on the group thread.
@@ -1341,9 +1419,11 @@ type Program() as this =
             restoredFromMap.[hwnd] <- info.closedHwnd
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
-            match this.closedInfoGroupHere info with
-            | Some(g) -> Some(Some(g))
-            | None -> None  // former group is gone (or on another desktop): state is restored, grouping falls through
+            match this.closedInfoGroupForRestore(hwnd, info) with
+            | Some(g) ->
+                if not g.isDesktopShown then pendingLinkedRestores.map(Set.add hwnd)
+                Some(Some(g))
+            | None -> None  // No eligible live group: state is restored, grouping falls through.
         | None -> None
 
     // Main-thread title sync (no cross-thread notification): compares each
@@ -1362,6 +1442,7 @@ type Program() as this =
             let dead = claimedWindows.value |> Set.filter (fun h -> not (os.windowFromHwnd(h).isWindow))
             if not dead.IsEmpty then
                 claimedWindows.map(fun claimed -> Set.difference claimed dead)
+                pendingLinkedRestores.map(fun pending -> Set.difference pending dead)
                 pendingClosedTabRestores.map(fun pending ->
                     dead |> Set.fold (fun (m: Map2<IntPtr, ClosedTabInfo>) h -> m.remove h) pending)
             // While saved windows are still waiting to open, every grouped
@@ -1423,11 +1504,11 @@ type Program() as this =
                     match peeked with
                     | Some(info, ambiguous) ->
                         let currentGroup = this.groupOfWindow hwnd
-                        // A former group on another desktop is not somewhere to
-                        // detach the window to: the entry is applied in place.
-                        let savedGroup = this.closedInfoGroupHere info
+                        // A claim may rejoin a hidden group through the same safe
+                        // link insertion as an early claim, without moving its peers.
+                        let savedGroup = this.closedInfoGroupForRestore(hwnd, info)
                         match currentGroup, savedGroup with
-                        | Some(cur), Some(saved) when (try cur.hwnd <> saved.hwnd with _ -> false) ->
+                        | Some(cur), Some(saved) when not (obj.ReferenceEquals(cur, saved)) ->
                             // The tab sits in the wrong group (e.g. VSCode's "Welcome"
                             // window was auto-grouped before the workspace title
                             // appeared). Detach it and let the normal grouping
@@ -1438,7 +1519,11 @@ type Program() as this =
                             match this.takeClosedTabEntry(hwnd, info) with
                             | Some entry ->
                                 pendingClosedTabRestores.map(fun m -> m.add hwnd entry)
-                                cur.removeWindow(hwnd)
+                                if not saved.isDesktopShown then pendingLinkedRestores.map(Set.add hwnd)
+                                match cur :> obj with
+                                | :? GroupInfo as gi when not saved.isDesktopShown ->
+                                    gi.invokeGroup(fun () -> gi.group.removeWindow(hwnd, activate=false))
+                                | _ -> cur.removeWindow(hwnd)
                                 this.scheduleUpdateAppWindows()
                             | None -> ()
                         | _ ->
@@ -1934,6 +2019,7 @@ type Program() as this =
                     if window.isWindow.not then
                         if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
                         claimedWindows.map(ClosedTabClaim.forget hwnd)
+                        pendingLinkedRestores.map(Set.remove hwnd)
                         pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                         explicitWindows.map(fun m -> m.remove hwnd)
                     // Removal is asynchronous, so the next pass sees the window
@@ -1979,6 +2065,9 @@ type Program() as this =
                             closedHwnd = hwnd
                             closedAt = now
                             isRestoreSeed = false
+                            isAmbiguous = false
+                            savedGroupIndex = None
+                            savedDesktop = gi.desktopHome
                             savedRect = None
                             seedSince = Some(now)
                             orderSnapshot = order
@@ -2034,7 +2123,7 @@ type Program() as this =
     member private this.savedAlignFor(exePath: string) =
         if exePath = "" then None else
         match closedTabCache.value
-              |> List.filter (fun e -> e.isRestoreSeed && sameExePath e.exePath exePath)
+              |> List.filter (fun e -> e.isRestoreSeed && not e.isAmbiguous && sameExePath e.exePath exePath)
               |> List.map (fun e -> e.tabAlign) with
         | [] -> None
         | first :: rest when rest |> List.forall ((=) first) -> first
@@ -2119,18 +2208,36 @@ type Program() as this =
             ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
             |> Option.exists (fun request ->
                 match request.destination with JoinGroup _ -> true | _ -> false)
+        let restoreTargetHidden = not group.isDesktopShown || pendingLinkedRestores.value.Contains hwnd
+        pendingLinkedRestores.map(Set.remove hwnd)
+        let restoreInFormerGroup = returningState |> Option.exists (this.isInfoGroup group)
         match group :> obj with
         | :? GroupInfo as gi ->
             gi.addWindowWith(hwnd, fun wg ->
                 let state = VirtualDesktopGroups.Live.snapshot()
                 let away = VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
                            (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away
-                let linked = explicitLink && (away || not wg.isDesktopShownThreadSafe)
+                let restoredLink =
+                    VirtualDesktopGroups.restoreLinked (state.shared.Contains hwnd) restoreInFormerGroup
+                        (restoreTargetHidden || not wg.isDesktopShownThreadSafe) away
+                let linked = restoredLink || (explicitLink && (away || not wg.isDesktopShownThreadSafe))
+                let addLinked add =
+                    let trace reason =
+                        if restoredLink then
+                            returningState |> Option.iter (fun info ->
+                                this.traceRestoreTarget(hwnd, info, true, reason))
+                    try
+                        add()
+                        trace (if wg.windows.contains(hwnd) then "joined-linked" else "join-not-applied")
+                    with _ ->
+                        trace "join-failed"
+                        reraise()
                 let invoker = Tab(invokerHwnd)
                 if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
                     if linked then
-                        wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                           pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                        addLinked(fun () ->
+                            wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                               pinned=wg.ts.isPinned(invoker), after=invokerHwnd))
                     else
                         wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
                                      pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
@@ -2144,7 +2251,8 @@ type Program() as this =
                                 else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
                     let pinned = returningState |> Option.map (fun info -> info.isPinned)
                     if linked then
-                        wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder)
+                        addLinked(fun () ->
+                            wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
                     else
                         wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
         | _ -> group.addWindow(hwnd, withDelay)
@@ -2285,6 +2393,7 @@ type Program() as this =
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
                 claimedWindows.map(ClosedTabClaim.forget hwnd)
+                pendingLinkedRestores.map(Set.remove hwnd)
                 pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                 explicitWindows.map(fun m -> m.remove hwnd)
                 pendingNewTabInvokers.map(fun m -> m.remove hwnd)
@@ -2481,11 +2590,31 @@ type Program() as this =
             (this.desktop.groups.list |> List.map (fun g ->
                 g, (if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden)))
 
-    /// A closed tab's former group, while it is drawn here
-    /// (VirtualDesktopGroups.restoreInto). Only the group is refused, never the
-    /// record: the tab's state comes back either way.
+    /// A live window dropped by the scan retains the existing here-only rule.
     member private this.closedInfoGroupHere (info: ClosedTabInfo) : IGroup option =
-        VirtualDesktopGroups.restoreInto (this.findGroupForClosedInfo info) (fun (g: IGroup) -> g.isDesktopShown)
+        this.findGroupForClosedInfo info |> Option.filter (fun g -> g.isDesktopShown)
+
+    member private this.traceRestoreRetention(hwnd: IntPtr, token: IntPtr, rank: int, reason: string) =
+        RestoreTrace.retention hwnd token rank reason (fun () -> "")
+
+    member private this.traceRestoreTarget(hwnd: IntPtr, info: ClosedTabInfo, across: bool, reason: string) =
+        RestoreTrace.log (fun () ->
+            sprintf "restore-target hwnd=%X token=%X rank=%d across=%b result=%s"
+                (hwnd.ToInt64()) ((groupRefHandle info.groupRef).ToInt64()) info.tabIndex across reason)
+
+    /// Only a claimed seed or closed tab gets the cross-desktop exception.
+    /// Keep shared-window evidence even during a temporarily stale reading.
+    member private this.closedInfoGroupForRestore(hwnd: IntPtr, info: ClosedTabInfo) : IGroup option =
+        let found = this.findGroupForClosedInfo info
+        let shared = (VirtualDesktopGroups.Live.snapshot()).shared.Contains hwnd
+        let target = VirtualDesktopGroups.restoreInto shared found (fun (g: IGroup) -> g.isDesktopShown)
+        match found, target with
+        | None, _ -> this.traceRestoreTarget(hwnd, info, false, "group-missing")
+        | Some g, None when not g.isDesktopShown ->
+            this.traceRestoreTarget(hwnd, info, true,
+                if shared then "shared-hidden" else "cross-desktop-disabled")
+        | _ -> ()
+        target
 
     /// Which windows of which group are written to the settings file or set
     /// aside while WindowTabs is off - `keeps groupIndex hwnd` - and which of
@@ -2961,6 +3090,7 @@ type Program() as this =
         try
             let json = settingsManager.settingsJson
             let saveNow = DateTime.Now
+            this.refreshAmbiguousEntries()
             // Saved windows whose application has not started yet are held in
             // memory as restore seeds, and nothing else remembers them. The
             // periodic save fires 10 s after boot - long before applications
@@ -3030,6 +3160,10 @@ type Program() as this =
             // plainest way of saying it is finished with, so once its last tab
             // is closed the group goes rather than waiting to be resurrected
             // by whichever of its windows is opened next.
+            pendingSeeds |> List.iter (fun p ->
+                if not p.isRestoreSeed && not (claimedSeeds.Contains p.tab.hwnd) then
+                    let info = infoOf.[p.tab.hwnd]
+                    this.traceRestoreRetention(p.tab.hwnd, groupRefHandle info.groupRef, p.rank, "closed-without-live-group"))
             let waitingGroups =
                 pendingSeeds
                 |> List.filter (fun p -> claimedSeeds.Contains(p.tab.hwnd).not && p.isRestoreSeed)
@@ -3105,18 +3239,26 @@ type Program() as this =
                 let live =
                     currentWindows.list
                     |> List.map (fun w ->
-                        { SavedSession.handle = w.hwnd
-                          SavedSession.exePath = (try w.pid.processPath with _ -> "")
-                          SavedSession.title = (try normalizeClosedTabTitle w.text with _ -> "")
-                          SavedSession.center =
-                            (try
-                                let b = w.bounds
-                                Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
-                             with _ -> None) })
+                        let position = this.restorePosition w.hwnd
+                        let result : SavedSession.LiveWindow = {
+                            handle = w.hwnd
+                            exePath = (try w.pid.processPath with _ -> "")
+                            title = (try normalizeClosedTabTitle w.text with _ -> "")
+                            // Ordinary same-group twins retain their historical geometry.
+                            center = position.center |> Option.orElseWith (fun () ->
+                                try let b = w.bounds in Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
+                                with _ -> None)
+                            positionTrusted = position.center.IsSome
+                            scale = position.scale
+                            desktop = position.desktop }
+                        result)
 
+                let savedGroups = SavedSession.read groupsArray
+                let tracePosition hwnd gi rank decision =
+                    let token = savedGroups.[gi].windows |> List.tryHead |> Option.map (fun t -> t.hwnd) |> Option.defaultValue IntPtr.Zero
+                    this.traceRestorePosition(hwnd, token, rank, decision)
                 let planned =
-                    SavedSession.plan DateTime.Now seedMaxAgeDays closedTabMaxAgeDays
-                                      (SavedSession.read groupsArray) live
+                    SavedSession.planWithPositionTrace tracePosition DateTime.Now seedMaxAgeDays closedTabMaxAgeDays savedGroups live
 
                 // Tab groups per virtual desktop. Each group goes back to its
                 // desktop (a desktop Explorer no longer lists belongs to
@@ -3248,7 +3390,12 @@ type Program() as this =
                                 RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
                                                                     (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
                                                                     (DateTime.Now - t.waitingSince).TotalDays title)
+                            | SavedSession.Unusable ->
+                                this.traceRestoreRetention(e.hwnd, g.token, t.rank, "unusable-identity")
+                            | SavedSession.Ambiguous
                             | SavedSession.Waiting ->
+                                if t.outcome = SavedSession.Ambiguous then
+                                    this.traceRestoreRetention(e.hwnd, g.token, t.rank, "ambiguity-held")
                                 if closedTabCache.value |> List.exists (fun c -> c.closedHwnd = e.hwnd) |> not then
                                     // Through the same record the save writes
                                     // the entry back from, so that what is put
@@ -3282,12 +3429,15 @@ type Program() as this =
                                         closedHwnd = p.tab.hwnd
                                         closedAt = DateTime.Now
                                         isRestoreSeed = p.isRestoreSeed
+                                        isAmbiguous = t.outcome = SavedSession.Ambiguous
                                         // A seed that outlives a WindowTabs
                                         // restart has to carry its position, or
                                         // the twin disambiguation and the
                                         // title-less fallback lose their
                                         // reference point.
                                         savedRect = p.tab.rect
+                                        savedGroupIndex = Some gi
+                                        savedDesktop = RestorePosition.desktop g.desktop
                                         seedSince = p.tab.seedSince
                                         orderSnapshot = g.savedOrder
                                         stateIsCertain = t.stateIsCertain

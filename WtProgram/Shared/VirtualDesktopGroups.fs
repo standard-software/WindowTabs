@@ -865,12 +865,17 @@ module VirtualDesktopGroups =
     let joinable (groups: ('g * Display) list) : 'g list =
         groups |> List.filter (fun (_, disp) -> disp = Shown) |> List.map fst
 
-    /// A closed tab's former group, as the restore may use it: only while it is
-    /// drawn here. One drawn elsewhere is treated like one that is gone - the
-    /// tab's name, colours and pin still come back, and grouping falls through
-    /// to the ordinary rules - so a record is never refused, only its group.
-    let restoreInto (found: 'g option) (isShown: 'g -> bool) : 'g option =
-        found |> Option.filter isShown
+    /// A claimed tab may rejoin its existing group across desktops. Shared
+    /// windows still belong to the group drawn here; ordinary auto-grouping
+    /// uses joinable instead and never gains this exception.
+    let restoreInto isShared (found: 'g option) (isShown: 'g -> bool) : 'g option =
+        found |> Option.filter (fun g -> isShown g || (keepAway && not isShared))
+
+    /// Capture a hidden destination before reserving membership, since a
+    /// desktop pass can mark the group shown before its queued insertion runs.
+    /// Only a claimed member of its former group takes the safe link path.
+    let restoreLinked isShared inFormerGroup destinationHidden joinerAway =
+        keepAway && not isShared && inFormerGroup && (destinationHidden || joinerAway)
 
     /// Which of the groups holding a window it is written into when the groups
     /// are saved (or set aside while WindowTabs is switched off), and whether

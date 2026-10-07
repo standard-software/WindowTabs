@@ -154,7 +154,9 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/LinkGroupLayout.fs" />
     <Compile Include="Shared/LinkGroupTabs.fs" />
     <Compile Include="Shared/ExplicitLaunch.fs" />
+    <Compile Include="Shared/AppPath.fs" />
     <Compile Include="Shared/SavedTabState.fs" />
+    <Compile Include="Shared/RestorePosition.fs" />
     <Compile Include="Shared/SavedSession.fs" />
     <Compile Include="Shared/ClosedTabClaim.fs" />
     <Compile Include="Shared/Regroup.fs" />
@@ -162,7 +164,6 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/VirtualDesktopGroups.fs" />
     <Compile Include="Shared/TabGroupHeader.fs" />
     <Compile Include="Shared/VirtualDesktopReader.fs" />
-    <Compile Include="Shared/AppPath.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
     <Compile Include="Shared/TabBehaviorPolicy.fs" />
     <Compile Include="Shared/WindowFrameMargin.fs" />
