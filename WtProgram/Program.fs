@@ -132,10 +132,9 @@ type ClosedTabInfo = {
     stateIsCertain: bool
 }
 
-// Exe paths come from the same API on both sides, but the file system does
-// not distinguish case and neither should the comparison.
-let sameExePath (a: string) (b: string) =
-    String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
+// Restore compares application identities across package updates. The cache
+// and saved JSON still retain the original executable paths.
+let sameExePath (a: string) (b: string) = AppPath.sameApp a b
 
 // The same entry without the part of its state that names a particular
 // window. Used when more than one saved entry could have been the right one:

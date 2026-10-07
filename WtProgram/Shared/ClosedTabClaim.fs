@@ -4,7 +4,7 @@ open System
 
 module ClosedTabClaim =
     let sameIdentity (path, title) (otherPath, otherTitle) =
-        String.Equals(path, otherPath, StringComparison.OrdinalIgnoreCase) && title = otherTitle
+        AppPath.sameApp path otherPath && title = otherTitle
 
     // The caller supplies normalized titles and only live group members.
     let canRecord closing identity liveTabs =

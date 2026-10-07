@@ -240,7 +240,7 @@ module SavedSession =
     // The application path is compared without regard to case and the title
     // exactly, the two joined by a character neither can hold.
     let identityKey (exePath: string) (title: string) =
-        exePath.ToLowerInvariant() + "\u001f" + title
+        AppPath.normalize exePath + "\u001f" + title
 
     // A saved tab has an identity only if both halves are there. Without one
     // there is nothing to find the window by once its handle has died.
@@ -355,7 +355,7 @@ module SavedSession =
             match liveByHandle.TryGetValue(t.hwnd) with
             | true, w ->
                 (match t.exePath with
-                 | Some(exe) when exe <> "" -> String.Equals(exe, w.exePath, StringComparison.OrdinalIgnoreCase)
+                 | Some(exe) when exe <> "" -> AppPath.sameApp exe w.exePath
                  | _ -> true)
             | _ -> false
 
