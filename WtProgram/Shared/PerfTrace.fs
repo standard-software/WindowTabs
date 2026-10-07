@@ -54,12 +54,18 @@ module PerfTrace =
         recordTimeAt name ms (Stopwatch.GetTimestamp())
 
     let time (name: string) (f: unit -> 'a) =
+        let previous = Bemo.Win32.GroupCallTrace.Enter(name)
         let start = Stopwatch.GetTimestamp()
         try f()
         finally
             let ended = Stopwatch.GetTimestamp()
             let ms = float (ended - start) * 1000.0 / float Stopwatch.Frequency
+            Bemo.Win32.GroupCallTrace.NoteStage(ms)
+            Bemo.Win32.GroupCallTrace.Leave(previous)
             recordTimeAt name ms ended
+
+    let timeNamed name f = time (name()) f
+    let label build = build()
 
     /// A number that describes the current state rather than an event - the
     /// number of tab groups, tabs, and so on. The last value set is written.
@@ -126,6 +132,8 @@ module PerfTrace =
     // is allocated for it at the call site.
     let recordTime (_name: string) (_ms: float) = ()
     let inline time (_name: string) (f: unit -> 'a) = f()
+    let inline timeNamed (_name: unit -> string) (f: unit -> 'a) = f()
+    let inline label (_build: unit -> string) = ""
     let gauge (_name: string) (_value: int) = ()
     let flush (_version: string) = ()
 #endif

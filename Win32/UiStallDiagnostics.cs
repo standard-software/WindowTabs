@@ -10,6 +10,184 @@ using System.Threading;
 
 namespace Bemo.Win32
 {
+    // Thread-local diagnostics only: no cross-group reads and no extra worker.
+    public static class GroupCallTrace
+    {
+        public delegate void Incident(string stage, double ms, long ended, IntPtr target, IntPtr strip);
+        public static Incident Sink;
+        [ThreadStatic] private static IntPtr strip;
+        [ThreadStatic] private static string stage;
+        [ThreadStatic] private static string recent;
+        [ThreadStatic] private static string recentApi;
+        [ThreadStatic] private static long beat;
+        [ThreadStatic] private static double recentMs;
+        [ThreadStatic] private static Dictionary<IntPtr, List<IntPtr>> batches;
+        private static readonly uint processId = GetCurrentProcessId();
+        [DllImport("kernel32.dll")] private static extern uint GetCurrentProcessId();
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+        [DllImport("kernel32.dll", EntryPoint = "SetLastError", SetLastError = true)]
+        private static extern void RestoreError(uint error);
+
+        public static void Register(IntPtr hwnd)
+        {
+            strip = hwnd;
+            stage = "group.loop";
+            recent = "none";
+            recentApi = "none";
+            recentMs = 0;
+            beat = Stopwatch.GetTimestamp();
+        }
+        public static void Unregister()
+        {
+            strip = IntPtr.Zero;
+            stage = null;
+            recent = null;
+            recentApi = null;
+            batches = null;
+        }
+        public static string Enter(string name)
+        {
+            string previous = stage;
+            if (strip != IntPtr.Zero) stage = previous + "/" + name;
+            return previous;
+        }
+        public static void Leave(string previous) { stage = previous; }
+        public static void NoteStage(double ms)
+        {
+            if (strip != IntPtr.Zero && ms >= 300.0 && ms > recentMs)
+            {
+                recentMs = ms;
+                recent = stage;
+            }
+        }
+        private sealed class OperationScope : IDisposable
+        {
+            private readonly string previous;
+            private readonly long start;
+            public OperationScope(string name) { previous = Enter(name); start = Stopwatch.GetTimestamp(); }
+            public void Dispose()
+            {
+                NoteStage((Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency);
+                Leave(previous);
+            }
+        }
+        public static IDisposable Operation(string name) { return new OperationScope(name); }
+
+        public struct Call
+        {
+            internal long start;
+            internal string stage;
+            internal IntPtr target;
+            internal IntPtr strip;
+            internal List<IntPtr> batchTargets;
+        }
+        public static Call Begin(string api, IntPtr target)
+        {
+            Call call = new Call();
+            if (strip == IntPtr.Zero || target == IntPtr.Zero) return call;
+            uint error = (uint)Marshal.GetLastWin32Error();
+            try
+            {
+                uint pid;
+                GetWindowThreadProcessId(target, out pid);
+                if (pid != 0 && pid != processId)
+                {
+                    call.target = target;
+                    call.strip = strip;
+                    call.stage = stage + "/" + api;
+                    call.start = Stopwatch.GetTimestamp();
+                }
+            }
+            finally { RestoreError(error); }
+            return call;
+        }
+        public static void End(Call call)
+        {
+            if (call.start == 0) return;
+            uint error = (uint)Marshal.GetLastWin32Error();
+            long ended = Stopwatch.GetTimestamp();
+            try
+            {
+                double ms = (ended - call.start) * 1000.0 / Stopwatch.Frequency;
+                if (ms >= 300.0)
+                {
+                    string name = call.stage;
+                    if (call.batchTargets != null)
+                    {
+                        StringBuilder targets = new StringBuilder();
+                        foreach (IntPtr hwnd in call.batchTargets)
+                        {
+                            if (targets.Length != 0) targets.Append(',');
+                            targets.Append("0x").Append(hwnd.ToInt64().ToString("X"));
+                        }
+                        name += " batchTargets=" + targets.ToString();
+                    }
+                    recentApi = call.stage;
+                    Emit(name, ms, ended, call.target, call.strip);
+                }
+            }
+            catch { }
+            finally { RestoreError(error); }
+        }
+        private static void Emit(string name, double ms, long ended, IntPtr target, IntPtr groupStrip)
+        {
+            Incident sink = Sink;
+            if (sink != null) sink(name, ms, ended, target, groupStrip);
+        }
+        public static void Beat()
+        {
+            if (strip == IntPtr.Zero) return;
+            long now = Stopwatch.GetTimestamp();
+            double ms = (now - beat) * 1000.0 / Stopwatch.Frequency;
+            beat = now;
+            try
+            {
+                // A timer gap is observed on recovery, not proof of a native wait.
+                if (ms >= 1000.0) Emit("group.loop-gap/current=" + stage + "/recent=" + recent + "/recentApi=" + recentApi, ms, now, IntPtr.Zero, strip);
+            }
+            catch { }
+            recent = "none";
+            recentApi = "none";
+            recentMs = 0;
+        }
+        public static void TrackBatch(IntPtr oldBatch, IntPtr newBatch, Call call)
+        {
+            if (strip == IntPtr.Zero) return;
+            List<IntPtr> targets = null;
+            if (batches != null)
+            {
+                batches.TryGetValue(oldBatch, out targets);
+                batches.Remove(oldBatch);
+            }
+            if (newBatch == IntPtr.Zero) return;
+            if (call.target != IntPtr.Zero)
+            {
+                if (targets == null) targets = new List<IntPtr>();
+                if (!targets.Contains(call.target)) targets.Add(call.target);
+            }
+            if (targets != null)
+            {
+                if (batches == null) batches = new Dictionary<IntPtr, List<IntPtr>>();
+                batches[newBatch] = targets;
+            }
+        }
+        public static Call BeginBatch(IntPtr batch)
+        {
+            List<IntPtr> targets;
+            if (batches == null || !batches.TryGetValue(batch, out targets)) return new Call();
+            batches.Remove(batch);
+            // Keep the pre-call targets even if a member has since disappeared.
+            // hwnd is the first foreign member; batchTargets lists all of them.
+            Call call = new Call();
+            call.target = targets[0];
+            call.strip = strip;
+            call.batchTargets = targets;
+            call.stage = stage + "/EndDeferWindowPos[batch]";
+            call.start = Stopwatch.GetTimestamp();
+            return call;
+        }
+    }
+
     public static class UiStallDiagnostics
     {
         public delegate void LogLine(string line);
@@ -285,13 +463,22 @@ namespace Bemo.Win32
                 catch { Interlocked.Exchange(ref probing, 0); throw; }
             }
             else log("NATIVE probe pending; tid=" + mainTid);
+            string skipped = null;
             lock (dumpGate)
             {
-                if (dumping != 0) { log("NATIVE dump pending"); return; }
                 long now = clock.ElapsedMilliseconds;
-                if (lastDump != 0 && now - lastDump < 600000) { log("NATIVE dump skipped: 10-minute limit"); return; }
-                lastDump = Math.Max(1, now);
-                dumping = 1;
+                if (dumping != 0) skipped = "NATIVE dump pending";
+                else if (lastDump != 0 && now - lastDump < 600000) skipped = "NATIVE dump skipped: 10-minute limit";
+                else
+                {
+                    lastDump = Math.Max(1, now);
+                    dumping = 1;
+                }
+            }
+            if (skipped != null)
+            {
+                try { log(skipped); } catch { }
+                return;
             }
             Thread writer = new Thread(delegate() {
                 try { Dump(mainTid, dumpDirectory, log); }

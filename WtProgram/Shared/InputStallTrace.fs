@@ -16,7 +16,7 @@ module StallExperiment =
     let noCaptionQuery = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_NO_CAPTION_QUERY") = "1"
     let syncFollowers = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SYNC_FOLLOWERS") = "1"
 
-// Numeric evidence only. Producers never format text or touch the filesystem.
+// Numeric evidence only. Producers enqueue bounded records; only the writer touches files.
 module InputStallTrace =
     [<Literal>]
     let lagMs = 100u
@@ -178,6 +178,9 @@ module InputStallTrace =
 
     let start version =
         if Interlocked.CompareExchange(&started, 1, 0) = 0 then
+            Bemo.Win32.GroupCallTrace.Sink <- Bemo.Win32.GroupCallTrace.Incident(fun stage ms ended target strip ->
+                enqueueAt ended (sprintf "%s strip=0x%X" stage (strip.ToInt64())) Kind.Operation ms
+                    0.0 0 0 0 0u target -1 -1 -1 0 0 0 0 -1)
             PerfTrace.slowOperation <- operation
             HookThreadTiming.completed <- fun name ms ended -> completed Kind.HookThreadBusy name ms ended
             let worker = Thread(ThreadStart(fun () ->

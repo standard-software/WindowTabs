@@ -2,6 +2,42 @@ namespace Bemo
 
 open System
 
+// Build caller-owned data before taking a writer gate. The append callback is
+// the logger's own writer and receives only the finished immutable message.
+module TraceWriter =
+    let write gate build append =
+        try
+            let message = build()
+            lock gate (fun () -> append message)
+        with _ -> ()
+
+    // One queue for both ordinary and handover lines prevents a later synchronous
+    // line from overtaking an earlier handover from the same thread.
+    type Queued(append: string -> unit) =
+        let gate = obj()
+        let pending = Collections.Generic.Queue<string>()
+        let mutable running = false
+        let drain () =
+            let mutable draining = true
+            while draining do
+                let next = lock gate (fun () ->
+                    if pending.Count = 0 then
+                        running <- false
+                        None
+                    else Some(pending.Dequeue()))
+                match next with
+                | Some line -> try append line with _ -> ()
+                | None -> draining <- false
+        member _.Post(build: unit -> string) =
+            try
+                let line = build()
+                let start = lock gate (fun () ->
+                    pending.Enqueue(line)
+                    if running then false
+                    else running <- true; true)
+                if start then Threading.ThreadPool.QueueUserWorkItem(fun _ -> drain()) |> ignore
+            with _ -> ()
+
 // Debug-only trace of the session restore: which saved entry each window
 // claimed, by which route, and where it was placed. Truncated at each start.
 module RestoreTrace =
@@ -17,15 +53,19 @@ module RestoreTrace =
     // so taking the message itself would leave every sprintf at every call
     // site running in Release - including two that walk the whole tab strip -
     // with only the file write compiled out.
-    let log (f: unit -> string) =
 #if DEBUG
-        lock gate (fun () ->
+    let log (f: unit -> string) =
+#else
+    let inline log (f: unit -> string) =
+#endif
+#if DEBUG
+        TraceWriter.write gate (fun () ->
+            sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) (f())) (fun line ->
             try
                 if not started then
                     started <- true
                     try IO.File.WriteAllText(path, "") with _ -> ()
-                IO.File.AppendAllText(path,
-                    sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) (f()))
+                IO.File.AppendAllText(path, line)
             with _ -> ())
 #else
         ignore f

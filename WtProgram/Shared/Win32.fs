@@ -559,9 +559,10 @@ and
 
     member this.parent = os.windowFromHwnd(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_HWNDPARENT))
 
-    member this.setParent (parent:Window) =
-        if this.parent.hwnd <> parent.hwnd then
-            WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_HWNDPARENT, parent.hwnd).ignore
+    member this.setParent (parent:Window, ?reason: string) =
+        let previous = this.parent.hwnd
+        let owned = TopEdgeGuardPlacement.reownStrip hwnd parent.hwnd (defaultArg reason "window-parent")
+        if owned && previous <> parent.hwnd && parent.hwnd <> IntPtr.Zero then
             this.insertAfter(parent.prevZorder)
 
     member this.showNoActivate() = WinUserApi.ShowWindow(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE).ignore
@@ -586,7 +587,7 @@ and
         gfx.FillRectangle(b, new Rectangle(Point.Empty, image.size.Size))
         gfx.DrawImageUnscaled(image.bitmap, Point.Empty)
         PerfTrace.time "layered.update" (fun () -> Win32Helper.UpdateLayeredWindow(hwnd, location.Point, imageWithBg, alpha))
-        this.showNoActivate()
+        if not this.isVisible then this.showNoActivate()
     
     member this.updateLocation(location:Pt) =       
         PerfTrace.time "layered.move" (fun () -> Win32Helper.UpdateLayeredWindow(hwnd, location.Point))

@@ -78,9 +78,16 @@ module Dpi =
 
     /// Scale factor of the monitor a window is on.
     let scaleForHwnd (hwnd: IntPtr) =
-        match Mon.fromHwnd(hwnd) with
-        | Some(mon) -> scaleForMonitorHandle mon.hMonitor
-        | None -> 1.0
+#if DEBUG
+        let call = Bemo.Win32.GroupCallTrace.Begin("Dpi.scaleForHwnd", hwnd)
+        try
+#endif
+            match Mon.fromHwnd(hwnd) with
+            | Some(mon) -> scaleForMonitorHandle mon.hMonitor
+            | None -> 1.0
+#if DEBUG
+        finally Bemo.Win32.GroupCallTrace.End(call)
+#endif
 
     /// Scale factor for the tab strip that decorates `windowRect`.
     ///

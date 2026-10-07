@@ -464,14 +464,16 @@ type Program() as this =
     // trusted to be the one looked at; and the pass's scheduling.
     let mutable desktopEvidence : Map<IntPtr, VirtualDesktopGroups.Evidence> = Map.empty
     let mutable pendingDesktopVisits : VirtualDesktopGroups.Visit list = []
-    // The groups that had a dimmed tab on the last desktop pass.
-    let mutable straddlingDesktopGroups : Set<IntPtr> = Set.empty
     let mutable desktopTransferPending = false
     let mutable previousDesktop : Guid option = None
     let mutable desktopPassPending = false
     let mutable lastDesktopTrace = ""
     let desktopPassTimer = new System.Windows.Forms.Timer(Interval = 1000)
     let mutable cloakHook : IDisposable option = None
+#if DEBUG
+    let mutable lastStripNoticeTick : uint32 option = None
+#endif
+    let mutable observedStripDesktop : Guid option = None
     let pendingDesktopWindows = System.Collections.Generic.HashSet<IntPtr>()
     let waitingDesktopWindows = VirtualDesktopReader.WaitingWindows()
     let mutable lastDesktopGeneration = 0L
@@ -706,11 +708,37 @@ type Program() as this =
         desktopPassTimer.Start()
         cloakHook <- Some(
             os.setWinEventHook(WinEvent.EVENT_OBJECT_CLOAKED, WinEvent.EVENT_OBJECT_UNCLOAKED,
-                               (fun _ _ _ _ _ _ _ ->
+                               (fun _ evt hwnd _ _ _ eventTick ->
+#if DEBUG
+                                   let grouped = this.desktop.groups.list |> List.exists (fun g -> g.windows.contains((=) hwnd))
+                                   let strip = TopEdgeGuardPlacement.isRegisteredStrip hwnd
+                                   if grouped then VirtualDesktopTrace.noticeSwitch()
+                                   if VirtualDesktopTracePolicy.keepCloak grouped strip (VirtualDesktopTrace.inSwitchWindow()) then
+                                       VirtualDesktopTrace.handover (fun () ->
+                                           let window = os.windowFromHwnd(hwnd)
+                                           sprintf "cloak-event hwnd=%X event=%A eventTick=%u owner=%X cloak=%A visible=%b"
+                                               (hwnd.ToInt64()) evt eventTick (window.parent.hwnd.ToInt64())
+                                               window.cloakedValue window.isVisible)
+#endif
+#if DEBUG
+                                   if TopEdgeGuardPlacement.isRegisteredStrip hwnd then
+                                       VirtualDesktopTrace.handover (fun () ->
+                                           let window = os.windowFromHwnd(hwnd)
+                                           sprintf "strip-native-event strip=%X event=%A eventTick=%u owner=%X cloak=%A noticeTick=%A"
+                                               (hwnd.ToInt64()) evt eventTick (window.parent.hwnd.ToInt64()) window.cloakedValue lastStripNoticeTick)
+#endif
                                    let invalidate () =
-                                       VirtualDesktopGroups.Live.invalidate()
-                                       pendingDesktopVisits <- []
-                                       this.scheduleDesktopPass(15)
+                                       if this.desktop.groups.list |> List.exists (fun g -> g.windows.contains((=) hwnd)) then
+                                           VirtualDesktopGroups.Live.invalidate()
+                                           pendingDesktopVisits <- []
+                                           // Presentation needs only native visibility and cached desktop
+                                           // identities. Do not wait for the COM reader or pin evidence.
+#if DEBUG
+                                           this.refreshDesktopStrips(Some(uint32 eventTick))
+#else
+                                           this.refreshDesktopStrips(None)
+#endif
+                                           this.scheduleDesktopPass(15)
 #if DEBUG
                                    // Test hook: act on the shell's cloaking late, so
                                    // that the last desktop reading is still taken as
@@ -727,7 +755,7 @@ type Program() as this =
 #endif
                                    ), 0, 0))
 
-    member this.desktop = Services.desktop
+    member this.desktop : IDesktop = Services.desktop
     member this.isTabMonitoringSuspended
         with get() = isTabMonitoringSuspendedCell.value
         and set(value) =
@@ -1282,6 +1310,21 @@ type Program() as this =
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
+#if DEBUG
+            // Claim runs on the main thread. Sample native geometry without
+            // reading or waiting for the destination group's cells.
+            let probe = WindowFrameMargin.Cache()
+            try
+                probe.Refresh(hwnd, TopEdgeGuardPlacement.isGuard) |> ignore
+                let target = this.findGroupForClosedInfo info |> Option.map (fun group -> group.hwnd)
+                let published = target |> Option.bind WindowFrameMargin.readBase
+#if DEBUG
+                WindowFrameMargin.trace (
+                    sprintf "claim hwnd=%X margin=%A group=%A publishedBase=%A"
+                        (int64 hwnd) (probe.Get(hwnd, 96)) target published)
+#endif
+            finally probe.Clear()
+#endif
             // Restore state to the global maps before addWindow so the tab is
             // created with the saved name/colors/pin/alignment (same pattern
             // as restoreTabGroupsFromSettings)
@@ -2472,6 +2515,63 @@ type Program() as this =
         let marked = verdicts |> Map.filter (fun _ (_, onAll) -> onAll) |> Map.toList |> List.map fst |> Set.ofList
         keeps, marked
 
+    member private this.refreshDesktopStrips(noticeTick: uint32 option) =
+        if this.canReadDesktops then
+#if DEBUG
+            noticeTick |> Option.iter (fun tick -> lastStripNoticeTick <- Some tick)
+#endif
+            let groups = this.desktop.groups.list
+            let state = VirtualDesktopGroups.Live.snapshot()
+            let mutable desktopId = Guid.Empty
+            let registryRead = VirtualDesktopHelper.TryReadCurrentDesktopId(&desktopId)
+            let current = if registryRead then Some desktopId else state.current
+            if registryRead && current <> observedStripDesktop then
+                let previous = observedStripDesktop |> Option.orElse state.current
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "prediction-registry current=%A previous=%A observedTick=%d cloakTick=%A"
+                        current previous Environment.TickCount noticeTick)
+                observedStripDesktop <- current
+                match previous, current with
+                | Some old, Some destination when old <> destination ->
+                    VirtualDesktopGroups.Live.requestPrediction destination "registry" IntPtr.Zero |> ignore
+                | _ -> ()
+            let members = groups |> List.collect (fun g -> g.windows.list) |> List.distinct
+            let unsupported = desktopReader.Latest |> Option.exists (fun p -> not p.value.supported)
+            let reads = members |> List.map (fun hwnd ->
+                let old = VirtualDesktopGroups.Live.read state hwnd
+                let window = os.windowFromHwnd(hwnd)
+                let presence =
+                    if not window.isWindow then VirtualDesktopGroups.Away
+                    elif unsupported then VirtualDesktopGroups.Here
+                    else VirtualDesktopGroups.stripPresence current (state.stripShared.Contains hwnd) old window.cloakedValue
+                hwnd, { old with presence=presence }) |> Map.ofList
+            let states = groups |> List.mapi (fun i g ->
+                let groupState : VirtualDesktopGroups.GroupState = {
+                    key=i; members=g.windows.list; home=g.desktopHome
+                    display=if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden }
+                groupState)
+            let decisions = VirtualDesktopGroups.decide { current=current; listed=state.listed } reads state.shared states
+            let view : VirtualDesktopGroups.StripView =
+                { current=current; presence=reads |> Map.map (fun _ r -> r.presence)
+#if DEBUG
+                  noticeTick=lastStripNoticeTick
+#else
+                  noticeTick=None
+#endif
+                }
+            // One snapshot and one sweep for both directions. The group queues
+            // are independent: the main thread never waits for their repaint.
+            for decision in decisions do
+                let shown = decision.display = VirtualDesktopGroups.Shown
+                let target = groups.[decision.key]
+                if shown && not target.isDesktopShown then
+                    target.windows.iter (fun h ->
+                        if groups |> List.filter (fun g -> g.windows.contains((=) h)) |> List.length > 1 then
+                            this.publishTabState(target, h))
+                match target with
+                | :? GroupInfo as group -> group.applyStripDesktop(shown, view)
+                | _ -> ()
+
     member private this.scheduleDesktopPass(delayMs: int) =
         if not desktopPassPending then
             desktopPassPending <- true
@@ -2593,9 +2693,10 @@ type Program() as this =
         not (isDisabledCell.value || inShutdown.value || inSessionEnd.value ||
              isRestoringTabGroups.value || needsRestoreOnStartup.value || desktopReader.IsStopped)
 
-    /// Submit handles only. No registry or COM calls occur on this thread.
+    /// Refresh native strip visibility, then submit handles for background COM reads.
     member this.desktopPass() =
         if this.canReadDesktops then
+            this.refreshDesktopStrips(None)
             let grouped = this.desktop.groups.list |> List.collect (fun g -> g.windows.list) |> Set.ofList
             let windows = Set.unionMany [grouped; Set.ofSeq pendingDesktopWindows; waitingDesktopWindows.Windows] |> Set.toList
             if desktopReader.Request({ grouped = grouped; windows = windows }) then
@@ -2673,30 +2774,13 @@ type Program() as this =
                     states |> List.map (fun s ->
                         { s with members = s.members |> List.filter (fun h -> not (List.contains (s.key, h) surplus)) })
                 let decisions = VirtualDesktopGroups.decide d readMap shared states
-                let sharedChanged = shared <> wasShared
                 for dec in decisions do
                     let g = keyed.[dec.key]
                     if g.desktopHome <> dec.home then g.desktopHome <- dec.home
                     let shown = (dec.display = VirtualDesktopGroups.Shown)
-                    // A group holding a window shown everywhere is refreshed every
-                    // pass: its strip's owner, and whether that owner is here,
-                    // change without its display changing.
-                    let holdsShared = g.windows.any(fun h -> shared.Contains h || wasShared.Contains h || several.Contains h)
-                    // So is a group with windows on another desktop, and once
-                    // more after the last of them is back: which tabs are
-                    // dimmed changes without its display changing.
-                    let presenceOf h =
-                        match readMap.TryFind h with
-                        | Some r -> r.presence
-                        | None -> VirtualDesktopGroups.Unsure
-                    let straddles = not (VirtualDesktopGroups.dimmed shown presenceOf g.windows.list).IsEmpty
-                    let straddled = straddlingDesktopGroups.Contains g.hwnd
-                    straddlingDesktopGroups <-
-                        if straddles then straddlingDesktopGroups.Add g.hwnd else straddlingDesktopGroups.Remove g.hwnd
-                    if shown <> g.isDesktopShown || sharedChanged || holdsShared || straddles || straddled then
-                        if shown && not g.isDesktopShown then
-                            g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
-                        g.setDesktopShown(shown)
+                    if shown && not g.isDesktopShown then
+                        g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
+                this.refreshDesktopStrips(None)
                 // Groups for the windows that are here and have none here.
                 match current with
                 | Some c when not this.isTabMonitoringSuspended && not this.desktop.isDragging &&

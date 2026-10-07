@@ -87,7 +87,7 @@ module Watchdog =
     // Takes a thunk so that nothing is built outside Debug: an argument would
     // be evaluated before the call, leaving the message assembled and thrown
     // away on every run of a released build.
-    let private writeLog (message: unit -> string) =
+    let private writeLog (message: string) =
 #if DEBUG
         try
             let dir = Path.GetDirectoryName(logPath)
@@ -100,7 +100,7 @@ module Watchdog =
                 sprintf "%s [pid %d] %s%s"
                     (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
                     (Process.GetCurrentProcess().Id)
-                    (message())
+                    message
                     Environment.NewLine)
         with _ -> ()
 #else
@@ -112,9 +112,9 @@ module Watchdog =
 #endif
     let private log message =
 #if DEBUG
-        lock logGate (fun () -> writeLog message)
+        TraceWriter.write logGate message writeLog
 #else
-        writeLog message
+        ignore message
 #endif
 
     // The replacement waits before creating any windows or acquiring the mutex.
