@@ -11,14 +11,11 @@ open System
 /// settings. What a desktop's tab strip shows is its own group, and only
 /// windows that are on that desktop.
 ///
-/// The groups are real groups. A window shown on all desktops is a member of
-/// the group of every desktop it has been seen on, and nothing is taken apart
-/// or put back together when the desktop changes: switching only changes which
-/// strips are drawn. That is what lets the strip of the desktop being left go
-/// away in the same frame as its windows do - the shell cloaks a tool window
-/// together with the window that owns it (unite/vd-pin/owner-probe-CC3.log),
-/// so a strip owned by a window that lives on one desktop only is hidden and
-/// shown by the shell itself.
+/// Membership survives desktop switches. Strips are always ownerless tool
+/// windows: WindowTabs explicitly presents the groups of the current desktop
+/// and updates retained groups in place, without a shell-owned hide/show cycle.
+/// Native visibility supplies the early presentation pass; the confirmed
+/// desktop reader continues to govern membership and shared-window evidence.
 ///
 /// Nothing here calls Windows. The caller reads, this decides, the caller
 /// carries it out, and VirtualDesktopGroups.Tests.fsx drives the same
@@ -561,42 +558,133 @@ module VirtualDesktopGroups =
 
     // ----------------------------------------------------- the strip itself --
 
-    /// The window that owns a group's strip. The shell shows and hides an owned
-    /// tool window together with its owner, so a strip owned by a window that
-    /// lives on one desktop only disappears in the same frame as that desktop
-    /// does. The front window owns it as always, unless it is shown on every
-    /// desktop and the group has a window that is not: then that one does.
-    let stripOwner (zorder: IntPtr list) (shared: Set<IntPtr>) =
-        match zorder with
-        | [] -> None
-        | top :: _ when not (shared.Contains top) -> Some top
-        | top :: _ ->
-            Some(zorder |> List.tryFind (shared.Contains >> not) |> Option.defaultValue top)
+    // Strips are permanently ownerless. Desktop visibility is our decision,
+    // including groups containing a window shown on every desktop.
+    let stripOwnerRequest (_requested: IntPtr) = IntPtr.Zero
+    let hideStrip display = display = Hidden
+    let excludeSharedDimmed (shared: Set<IntPtr>) members =
+        members |> List.filter (fun h -> not (shared.Contains h))
 
-    /// With windows of the group on several desktops, the strip belongs to the
-    /// frontmost one that is here and lives on this desktop only, so that it
-    /// still comes and goes with the desktop.
-    let stripOwnerHere (zorder: IntPtr list) (shared: Set<IntPtr>) (isHere: IntPtr -> bool) =
-        let here =
-            if keepAway then
-                zorder |> List.tryFind (fun h -> isHere h && not (shared.Contains h))
-                |> Option.orElseWith (fun () -> zorder |> List.tryFind isHere)
-            else None
-        match here with
-        | Some _ -> here
-        | None -> stripOwner zorder shared
+    let dimmed shared shown presenceOf members =
+        if keepAway && shown then
+            members |> List.filter (fun h -> presenceOf h = Away) |> excludeSharedDimmed shared
+        else []
 
-    /// The members whose tabs are drawn dimmed: the windows of a group drawn
-    /// here that are on another desktop.
-    let dimmed (shown: bool) (presenceOf: IntPtr -> Presence) (members: IntPtr list) =
-        if keepAway && shown then members |> List.filter (fun h -> presenceOf h = Away) else []
+    // Presentation retains known all-desktop windows across an incomplete read.
+    // This does not grant membership or duplication permission. A definite
+    // non-shared reading still removes the presentation exemption.
+    let stripSharedEvidence reliable previous current (reads: Map<IntPtr, WindowRead>) =
+        if not reliable then Set.union previous current else
+        Set.union current (previous |> Set.filter (fun h ->
+            match reads.TryFind h with
+            | None -> true
+            | Some r -> r.presence = Unsure))
 
-    /// Whether WindowTabs has to hide a group's strip itself. Only when the
-    /// group is not drawn here AND its owner is here - otherwise the shell has
-    /// already hidden it with its owner, and leaving it alone is what lets it
-    /// come back in the same frame as its desktop.
-    let hideStrip (display: Display) (owner: Presence) =
-        display = Hidden && owner = Here
+    type StripView = {
+        current: Guid option
+        presence: Map<IntPtr, Presence>
+        noticeTick: uint32 option
+    }
+    type StripMember = {
+        hwnd: IntPtr
+        exists: bool
+        visible: bool
+        minimized: bool
+        cloak: int option
+        presence: Presence
+    }
+    // The shell may cloak both desktops during its animation. A known member
+    // of the selected desktop still needs its strip; application/inherited
+    // cloaking and explicit hiding/minimizing must not be bypassed.
+    let stripPresence (current: Guid option) shared (reading: WindowRead) cloak =
+        if shared then Here else
+        match cloak with
+        | Some 0 -> Here
+        | Some value when value &&& 2 <> 0 ->
+            if not shared && current.IsSome && reading.desktop = current then Here else Away
+        | Some _ -> Here
+        | None -> reading.presence
+
+    let stripMemberVisible memberState =
+        memberState.exists && memberState.visible && not memberState.minimized &&
+        memberState.presence = Here &&
+        (match memberState.cloak with Some c -> c &&& 5 = 0 | None -> true)
+
+    let stripVisible shown minimized members = shown && not minimized && List.exists stripMemberVisible members
+    let stripFront members = members |> List.tryFind stripMemberVisible |> Option.map (fun w -> w.hwnd)
+
+    // Keep the remaining order intact; only an eligible, opaque member can
+    // lead the strip. A prepared click supplies destination eligibility.
+    let stripFrontOrder (eligible: Set<IntPtr>) (dimmed: Set<IntPtr>) preferred order =
+        let candidates = (preferred |> Option.toList) @ order
+        let front = candidates |> List.tryFind (fun h ->
+            List.contains h order && eligible.Contains h && not (dimmed.Contains h))
+        let ordered =
+            match front with
+            | Some h -> h :: (order |> List.filter ((<>) h))
+            | None -> order
+        front, ordered
+
+    type StripPrediction = {
+        shown: bool
+        presence: Map<IntPtr, Presence>
+        dimmed: IntPtr list
+        front: IntPtr option
+        order: IntPtr list
+    }
+    let predictStrip destination (reads: Map<IntPtr, WindowRead>) (shared: Set<IntPtr>)
+                     (previous: Map<IntPtr, Presence>) available shown order =
+        let presence =
+            order |> List.map (fun h ->
+                let p =
+                    if shared.Contains h then Here else
+                    match reads.TryFind h |> Option.bind (fun r -> r.desktop) with
+                    | Some desktop -> if desktop = destination then Here else Away
+                    | None -> previous.TryFind h |> Option.defaultValue Unsure
+                h, p) |> Map.ofList
+        let eligible = available |> Set.filter (fun h -> presence.TryFind h = Some Here)
+        let away = order |> List.filter (fun h -> presence.[h] = Away) |> excludeSharedDimmed shared
+        let front, ordered = stripFrontOrder eligible (Set.ofList away) None order
+        let visible =
+            if not eligible.IsEmpty then true
+            elif presence |> Map.exists (fun _ p -> p = Unsure) then shown
+            else false
+        { shown=visible; presence=presence; dimmed=away; front=front; order=ordered }
+
+    let predictStripContent shown prediction = shown && prediction.shown && prediction.front.IsSome
+
+    let stripForegroundInvolves (members: Set<IntPtr>) previous next =
+        members.Contains previous || members.Contains next
+
+    // The guard may sit between the strip and the frame. Its position is
+    // excluded from the predecessor supplied by the caller.
+    type StripStacking = KeepStacking | AboveWindow of IntPtr | TopmostLayer | NormalLayer
+    let stripStacking adjacent sameLayer frontTopmost previous previousTopmost =
+        if not sameLayer then
+            if frontTopmost then TopmostLayer else NormalLayer
+        elif adjacent then KeepStacking
+        elif frontTopmost then
+            if previous = IntPtr.Zero then TopmostLayer else AboveWindow previous
+        elif previous = IntPtr.Zero || previousTopmost then NormalLayer
+        else AboveWindow previous
+
+    type StripPreview = { target: IntPtr; destination: Guid; expires: int64; dimmed: IntPtr list }
+    let previewStrip now shown shared target (reads: WindowRead list) =
+        match reads |> List.tryFind (fun r -> r.hwnd = target) with
+        | Some r when keepAway && shown && r.presence = Away && r.desktop.IsSome ->
+            Some { target=target; destination=r.desktop.Value; expires=now + 5000L
+                   dimmed=reads |> List.choose (fun w ->
+                       if w.desktop.IsSome && w.desktop <> r.desktop then Some w.hwnd else None)
+                       |> excludeSharedDimmed shared }
+        | _ -> None
+    let keepStripPreview now valid confirmed preview =
+        valid && now < preview.expires && not confirmed
+
+    let stripPreviewConfirmed clickedAt readAt fresh current targetHere uncloaked preview =
+        fresh && readAt >= clickedAt && current = Some preview.destination && targetHere && uncloaked
+
+    let sameStripView shown previousShown (view: StripView) (previous: StripView) =
+        shown = previousShown && view.current = previous.current && view.presence = previous.presence
 
     // -------------------------------------------------- shared rectangles --
 
@@ -831,6 +919,7 @@ module VirtualDesktopGroups =
             readAt: DateTime
             shared: Set<IntPtr>
             inSeveral: Set<IntPtr>
+            stripShared: Set<IntPtr>
             current: Guid option
             listed: Guid list option
             reads: Map<IntPtr, WindowRead>
@@ -839,7 +928,7 @@ module VirtualDesktopGroups =
         let private gate = obj()
         let mutable private latest = {
             generation = 0L; readAt = DateTime.MinValue
-            shared = Set.empty; inSeveral = Set.empty; current = None; listed = None
+            shared = Set.empty; inSeveral = Set.empty; stripShared = Set.empty; current = None; listed = None
             reads = Map.empty; desktopResults = Map.empty }
         let mutable private invalidatedAt = DateTime.MinValue
         // Cloaking/uncloaking invalidates in-flight as well as published reads.
@@ -897,4 +986,35 @@ module VirtualDesktopGroups =
                 latest <- {
                     generation = latest.generation + 1L; readAt = readAt
                     shared = s; inSeveral = several; current = current; listed = listed
+                    stripShared = stripSharedEvidence (current.IsSome && readAt >= invalidatedAt) latest.stripShared s reads
                     reads = reads; desktopResults = desktopResults })
+
+        // Subscribers only post immutable requests to their own group queues.
+        // No publication invokes a group's cells or waits for its painting.
+        type PredictionRequest = {
+            id: int64; destination: Guid; state: Snapshot; requestedAt: DateTime
+            tick: int; source: string; origin: IntPtr; issued: int64
+        }
+        let private predictionClock = Diagnostics.Stopwatch.StartNew()
+        let private predictionEvents = Event<PredictionRequest>()
+        let mutable private predictionId = 0L
+        let mutable private lastPrediction : PredictionRequest option = None
+        let predictions = predictionEvents.Publish
+        let predictionAge request = predictionClock.ElapsedMilliseconds - request.issued
+        let requestPrediction destination source origin =
+            let request = lock gate (fun () ->
+                match lastPrediction with
+                | Some p when source = "registry" && p.destination = destination && predictionAge p < 5000L -> None
+                | _ ->
+                    predictionId <- predictionId + 1L
+                    let p = { id=predictionId; destination=destination; state=latest
+                              requestedAt=DateTime.UtcNow; tick=Environment.TickCount; source=source
+                              origin=origin; issued=predictionClock.ElapsedMilliseconds }
+                    lastPrediction <- Some p
+                    Some p)
+            request |> Option.iter (fun p ->
+                VirtualDesktopTrace.noticeSwitch()
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "prediction-known id=%d destination=%A source=%s knownTick=%d" p.id destination source p.tick)
+                Threading.ThreadPool.QueueUserWorkItem(fun _ -> predictionEvents.Trigger(p)) |> ignore)
+            request

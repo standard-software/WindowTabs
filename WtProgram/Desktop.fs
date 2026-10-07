@@ -9,6 +9,9 @@ type GroupInfo() as this =
     let Cell = CellScope(true, true)
     let windowsCell = Cell.create(List2())
     let mutable _isExited = false
+    let stripViewGate = obj()
+    let mutable pendingStripView : (bool * VirtualDesktopGroups.StripView) option = None
+    let mutable coalescedStripViews = 0
     let desktopInvoker = InvokerService.invoker
     let (_group, invoker) = ThreadHelper.startOnThreadAndWait <| fun() ->
         let plugins = List2<_>([
@@ -50,6 +53,23 @@ type GroupInfo() as this =
 
     member this.invokeGroup = invoker.asyncInvoke
     member this.tryInvokeGroup = invoker.tryAsyncInvoke
+    member this.applyStripDesktop(shown, view) =
+        _group.markDesktopShown(shown)
+        let post = lock stripViewGate (fun () ->
+            let post = pendingStripView.IsNone
+            if not post then coalescedStripViews <- coalescedStripViews + 1
+            pendingStripView <- Some(shown, view)
+            post)
+        if post then this.invokeGroup <| fun () ->
+            let pending, merged = lock stripViewGate (fun () ->
+                let value, count = pendingStripView, coalescedStripViews
+                pendingStripView <- None
+                coalescedStripViews <- 0
+                value, count)
+            pending |> Option.iter (fun (shown, view) ->
+                VirtualDesktopTrace.periodic false (fun () ->
+                    sprintf "desktop-strip-delivery strip=%X coalesced=%d" (_group.hwnd.ToInt64()) merged)
+                _group.applyStripDesktop(shown, view))
     member this.isExited = _isExited
     member this.exited = _group.exited
     member this.removed = _group.removed
@@ -116,7 +136,10 @@ type GroupInfo() as this =
         member x.isDesktopShown = _group.isDesktopShownThreadSafe
         member x.setDesktopShown(shown) =
             _group.markDesktopShown(shown)
-            this.invokeGroup <| fun() -> _group.applyDesktopState(shown)
+            // Keep the decision with the publication that produced it. A
+            // queued old pass must not confirm a newer click's destination.
+            let state = VirtualDesktopGroups.Live.snapshot()
+            this.invokeGroup <| fun() -> _group.applyDesktopState(shown, state)
         member x.explicitTabAlign(hwnd) = _group.ts.explicitTabAlignThreadSafe(Tab(hwnd))
         member x.addWindowUnplaced(hwnd) =
             windowsCell.map <| fun l -> l.append hwnd

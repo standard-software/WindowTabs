@@ -752,12 +752,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         topEdgeGuard.auditDecision(if guardRepairTimer.Enabled then "repair-request-coalesced" else "repair-timer-start")
         if not guardRepairTimer.Enabled then guardRepairTimer.Start()
 
-    // Existing frame compatibility rule, shared by strip and guard placement.
-    member private this.isUwpForeground =
-        let foreground = os.foreground.hwnd
-        group.windows.contains(foreground) &&
-        os.windowFromHwnd(foreground).className = "ApplicationFrameWindow"
-
     member private this.updateTopEdgeGuard() =
         try
             let wanted =
@@ -783,7 +777,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                      with _ -> 0)
                 | _ -> 0
             topEdgeGuard.update(wanted, ownerHwnd, group.bounds.value,
-                                marginTop, this.isUwpForeground, not group.isInMoveSizeThreadSafe,
+                                marginTop, (ownerHwnd <> IntPtr.Zero && os.windowFromHwnd(ownerHwnd).isTopMost), not group.isInMoveSizeThreadSafe,
                                 this.ts.showInside, this.ts.hwnd)
         with _ -> topEdgeGuard.hide()
 
@@ -804,10 +798,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // placement updates on the same decision prevents move-state races.
             this.ts.visible <- group.shouldShowTabs
             
-            // Share the existing UWP compatibility condition with the guard.
-            let tsWindow = os.windowFromHwnd(this.ts.hwnd)
-            if this.isUwpForeground then tsWindow.makeTopMost()
-            else tsWindow.makeNotTopMost()
+            group.repairStripZorder("placement")
 
         this.updateTopEdgeGuard()
 
@@ -3422,6 +3413,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             os.windowFromHwnd(hwnd).close()
 
         member x.windowMsg(msg) =
+            if msg.msg = 0x0047 then group.repairStripZorder("strip-position")
             // Native layer changes can follow the group notification. Hide an
             // unsafe band synchronously, then repair after strip placement.
             let follows =
@@ -3450,6 +3442,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         member this.dragBegin() =
             this.invokeAsync <| fun() ->
                 isDraggingCell.value <- true
+                group.repairStripZorder("drag-begin")
                 this.ts.transparent <- false
                 // Multi-select drag-reorder: if the drag origin tab is part
                 // of the multi-select set, compute the contiguous range and
@@ -3559,6 +3552,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         member this.dragEnd() =
             this.invokeAsync <| fun() ->
                 isDraggingCell.value <- false
+                group.repairStripZorder("drag-end")
                 this.ts.transparent <- true
                 let didMove =
                     match this.ts.movedTab with

@@ -173,25 +173,53 @@ module TopEdgeGuardPlacement =
 #endif
         ok
 
-    let reownStrip strip owner reason =
+    type private StripOwnerControl = {
+        thread: int
+        choose: nativeint -> nativeint
+        trace: string -> nativeint -> nativeint -> nativeint -> nativeint -> unit
+    }
+    let private stripOwners = System.Collections.Concurrent.ConcurrentDictionary<nativeint, StripOwnerControl>()
+
+    // Both ordinary placement and guard repair use this writer. The policy
+    // belongs to the strip's group thread; never call it from another thread.
+    let registerStripOwner strip choose trace =
+        stripOwners.[strip] <- {
+            thread = System.Threading.Thread.CurrentThread.ManagedThreadId
+            choose = choose; trace = trace }
+    let unregisterStripOwner strip = stripOwners.TryRemove(strip) |> ignore
+    let isRegisteredStrip strip = stripOwners.ContainsKey strip
+
+    let reownStrip strip requested reason =
         let previous = ownerOf strip
-        if Native.IsWindow strip && (owner = 0n || Native.IsWindow owner) && previous <> owner then
+        let control = match stripOwners.TryGetValue(strip) with true, c -> Some c | _ -> None
+        let onOwnerThread = control |> Option.forall (fun c -> c.thread = System.Threading.Thread.CurrentThread.ManagedThreadId)
+        let owner =
+            if not onOwnerThread then previous
+            else control |> Option.map (fun c -> c.choose requested) |> Option.defaultValue requested
+        if onOwnerThread && Native.IsWindow strip && (owner = 0n || Native.IsWindow owner) && previous <> owner then
             if System.IntPtr.Size = 8 then Native.SetOwner64(strip, -8, owner) |> ignore
             else Native.SetOwner32(strip, -8, owner) |> ignore
+        let actual = ownerOf strip
+        if previous <> owner || requested <> owner || actual <> owner || not onOwnerThread then
+            match control with
+            | Some c -> c.trace (if onOwnerThread then reason else "wrong-thread:" + reason) previous requested owner actual
+            | None ->
 #if DEBUG
-            traceDecision (sprintf "strip-reown(reason=%s,old=%X,new=%X,actual=%X)"
-                reason (int64 previous) (int64 owner) (int64 (ownerOf strip))) 0n strip owner None None None
+                traceDecision (sprintf "strip-reown(reason=%s,old=%X,new=%X,actual=%X)"
+                    reason (int64 previous) (int64 owner) (int64 actual)) 0n strip owner None None None
+#else
+                ()
 #endif
-        ownerOf strip = owner
+        // A guard whose request was suppressed must not subsequently reorder
+        // the ownerless strip or demote its temporary topmost layer.
+        onOwnerThread && actual = requested && owner = requested
 
     let repairStripAboveGuard band strip owner =
         if Native.GetForegroundWindow() = owner && Native.IsWindow strip then
-            reownStrip strip owner "guard-placement" |> ignore
             if visible strip && visible band && not (isAbove strip band) then
-                let previous = above band
-                // Move only the strip, immediately before the guard. Keep all
-                // unrelated windows already above the guard above the strip too.
-                setPosition strip strip owner previous 0 0 0 0 0x0213u |> ignore
+                // The group positions its strip above the frame. Keep the
+                // guard below that strip without changing the strip's layer.
+                setPosition band strip owner strip 0 0 0 0 0x0213u |> ignore
 
     let hide band =
         if visible band then Native.ShowWindow(band, 0) |> ignore
@@ -441,7 +469,6 @@ module TopEdgeGuardPlacement =
     let placeForOwner band strip owner keepTopmost rect =
         // A stale UWP request must fall back to ordinary placement on focus loss.
         let keepTopmost = keepTopmost && foregroundOwner owner
-        if foregroundOwner owner then reownStrip strip owner "guard-before-placement" |> ignore
         let ok =
             if not keepTopmost then placeAtOwner band strip owner rect
             elif foregroundOwner owner && isTopMost strip then

@@ -134,12 +134,27 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable desktopShown = true
     [<VolatileField>]
     let mutable desktopHomeValue : Guid option = None
-    // Whether WindowTabs itself hides the strip because the group is not the
-    // one of the desktop being looked at. Most of the time the shell has
-    // already hidden it (its owner is on the other desktop), and this stays
-    // false; see VirtualDesktopGroups.hideStrip.
+    // Ownerless strips are explicitly hidden on desktops with no shown group.
     let desktopHiddenCell = Cell.create(false)
     let desktopChangedEvent = Event<unit>()
+    let stripClock = Stopwatch.StartNew()
+    let mutable stripPreview : VirtualDesktopGroups.StripPreview option = None
+    let mutable stripClickedAt = DateTime.MinValue
+    let mutable stripPassSkipped = 0
+    let mutable appliedStripView : (bool * VirtualDesktopGroups.StripView) option = None
+    let mutable shellStripHold = false
+    let mutable shellStripHoldAttempted = false
+    let mutable shellStripHoldUntil = 0L
+    let mutable stripView : VirtualDesktopGroups.StripView =
+        { current=None; presence=Map.empty; noticeTick=None }
+    let stripMaintenanceTimer = new System.Windows.Forms.Timer(Interval = 100)
+    let mutable stripRepairing = false
+    let mutable stripGroupMinimized = false
+    let mutable stripOrderHook : IDisposable option = None
+    let mutable stripPredictionHook : IDisposable option = None
+    let mutable lastPredictionId = 0L
+    let mutable predictedContent : (int64 * int * IntPtr option * IntPtr list * IntPtr list) option = None
+    let mutable predictingOtherGroup = false
     // Who each member was when it joined (VirtualDesktopGroups.Identity), so
     // that a handle Windows has given to another window since is not moved
     // along with a window shown on all desktops. This group's thread only.
@@ -194,6 +209,27 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
+        let stripHwnd = ts.hwnd
+        TopEdgeGuardPlacement.registerStripOwner stripHwnd
+            VirtualDesktopGroups.stripOwnerRequest
+            (fun reason previous requested owner actual ->
+                VirtualDesktopTrace.handover (fun () ->
+                    // Only immutable publications and native HWND state here,
+                    // including when a wrong-thread request was rejected.
+                    let state = VirtualDesktopGroups.Live.snapshot()
+                    let strip = _os.windowFromHwnd(stripHwnd)
+                    sprintf "owner strip=%X source=%s from=%X/%A requested=%X to=%X/%A actual=%X blocked=%b visible=%b cloak=%A"
+                        (stripHwnd.ToInt64()) reason (previous.ToInt64())
+                        (VirtualDesktopGroups.Live.read state previous).presence
+                        (requested.ToInt64()) (owner.ToInt64()) (VirtualDesktopGroups.Live.read state owner).presence
+                        (actual.ToInt64()) (requested <> owner) strip.isVisible strip.cloakedValue))
+        this.setTsParent(IntPtr.Zero)
+        stripPredictionHook <- Some(VirtualDesktopGroups.Live.predictions.Subscribe(fun request ->
+            invoker.tryAsyncInvoke(fun () -> this.withUpdate(fun () -> this.applyStripPrediction(request))) |> ignore))
+        stripMaintenanceTimer.Tick.Add(fun _ -> this.invokeAsync (fun () -> this.refreshStripState("maintenance")))
+        stripMaintenanceTimer.Start()
+        stripOrderHook <- Some(_os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ ->
+            this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))))
 
         // Apply default setting for tab position
         let defaultPosition = Services.settings.getValue("tabPositionByDefault") :?> string
@@ -295,9 +331,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.ts.foreground <- this.foregroundTab
         
         Cell.listen <| fun() ->
-            //this is important, we dont' want to leave the parent set to the previous hwnd
-            //which was removed, this can cause issues when that window gets added to another
-            //group on another thread during drag / drop
+            // Membership and ordering changes must keep the strip ownerless
+            // and immediately above the group's actual front window.
             this.updateStripOwner()
 
         Cell.listen updateTabVisibility
@@ -322,10 +357,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 foregroundEvent.Trigger()
 
     member this.foregroundTab =
-        if this.windows.contains(this.foreground) then
-            Some(Tab(this.foreground))
-        else
-            None
+        match stripPreview with
+        | Some p -> Some(Tab(p.target))
+        | None when this.windows.contains(this.foreground) ->
+            this.stripFrontDecision(zorderCell.value.list) |> fst |> Option.map Tab
+        | None -> None
 
     member this.bb = _bb
     member this.ts : TabStrip = _ts.Value.Value
@@ -381,7 +417,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // reads a few microseconds apart can straddle a boundary crossing and
     // return different scales. Callers name the scale they mean.)
 
-    member private this.withUpdate f =
+    member private this.withUpdate<'a> (f: unit -> 'a) : 'a =
         let run () =
             Cell.beginUpdate()
             try f()
@@ -398,21 +434,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.invokeAsync f =
         invoker.asyncInvoke <| fun() -> this.withUpdate f
 
-    member private this.updateIsVisible() =
-        // Check if all windows in the group are cloaked (on another virtual desktop)
-        // This is particularly important for UWP apps which use cloaking when switching virtual desktops
-        let allWindowsCloaked =
-            if this.isEmpty then
-                false
-            else
-                zorderCell.value.where(isMinimized >> not).all(fun hwnd ->
-                    let window = this.os.windowFromHwnd(hwnd)
-                    window.isCloaked)
+    member private this.stripMembers : VirtualDesktopGroups.StripMember list =
+        zorderCell.value.list |> List.map (fun hwnd ->
+            let w = this.os.windowFromHwnd(hwnd)
+            let presence = stripView.presence |> Map.tryFind hwnd |> Option.defaultWith (fun () ->
+                VirtualDesktopGroups.stripPresence stripView.current false
+                    (VirtualDesktopGroups.Live.read (VirtualDesktopGroups.Live.snapshot()) hwnd) w.cloakedValue)
+            { hwnd=hwnd; exists=w.isWindow; visible=w.isVisible
+              minimized=w.isMinimized; cloak=w.cloakedValue; presence=presence })
 
-        isVisibleCell.value <-
-            this.isEmpty.not &&
-            zorderCell.value.where(isMinimized >> not).tryHead.IsSome &&
-            not allWindowsCloaked
+    member private this.updateIsVisible() =
+        isVisibleCell.value <- VirtualDesktopGroups.stripVisible desktopShown stripGroupMinimized this.stripMembers
 
     // Let the event's group AND strip batches finish before touching followers.
     // Keep only one queued pass; no HWND, bounds or showCmd is captured here.
@@ -647,7 +679,34 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.inZorder(windows:List2<IntPtr>) = this.windows.items.sortBy(fun hwnd -> this.os.windowFromHwnd(hwnd).zorder)
 
+    member private this.stripFrontDecision(order: IntPtr list) =
+        // Other groups predict strip pixels only; their native front and
+        // fullscreen/placement decisions continue to follow the current desktop.
+        let preview = if predictingOtherGroup then None else stripPreview
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let stable = VirtualDesktopGroups.Live.isFresh state && state.current = stripView.current
+        let presence h =
+            if state.stripShared.Contains h then VirtualDesktopGroups.Here
+            elif stable then (VirtualDesktopGroups.Live.read state h).presence
+            else stripView.presence |> Map.tryFind h |> Option.defaultValue (VirtualDesktopGroups.Live.read state h).presence
+        let dimmed =
+            match preview with
+            | Some p -> p.dimmed |> VirtualDesktopGroups.excludeSharedDimmed state.stripShared
+            | None -> VirtualDesktopGroups.dimmed state.stripShared desktopShown presence order
+        let eligible = order |> List.filter (fun h ->
+            match preview with
+            | Some p when h = p.target -> this.os.windowFromHwnd(h).isWindow
+            | _ ->
+                let w = this.os.windowFromHwnd(h)
+                VirtualDesktopGroups.stripMemberVisible {
+                    hwnd=h; exists=w.isWindow; visible=w.isVisible; minimized=w.isMinimized
+                    cloak=w.cloakedValue; presence=presence h }) |> Set.ofList
+        VirtualDesktopGroups.stripFrontOrder eligible (Set.ofList dimmed)
+            (preview |> Option.map (fun p -> p.target)) order
+
     member private this.setZorder(newZorder:List2<_>) =
+        let _, order = this.stripFrontDecision(newZorder.list)
+        let newZorder = List2(order)
         if zorderCell.value.list <> newZorder.list then
             prevTop.set(zorderCell.value.tryHead)
             zorderCell.set(newZorder)
@@ -656,6 +715,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.setZorder(this.inZorder(this.windows.items))
 
     member private this.setWindows(newWindows: Set2<IntPtr>) =
+        if newWindows.items.any(fun h -> not (this.windows.contains h) && not (isMinimized h)) then
+            stripGroupMinimized <- false
         // Publish membership without cross-thread service calls in the input
         // hook. A group that is not locked registers nothing: the hook is
         // installed only while some window is registered. Nor does a group of
@@ -736,80 +797,217 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.setTabInfo hwnd
 
     member private this.setTsParent(parentHwnd) =
-        this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd))
-
-    // The window that owns the strip. The shell shows and hides an owned tool
-    // window with its owner, so the strip of a group holding a window shown
-    // on all desktops is owned by one of its windows that is not: it then
-    // disappears in the same frame as its desktop does, instead of staying on
-    // screen with the pinned window until WindowTabs notices the switch. With
-    // no such window about, it is the front window, as it always was.
-    member private this.stripOwnerHwnd =
-        if this.isEmpty then IntPtr.Zero
-        else
-            let state = VirtualDesktopGroups.Live.snapshot()
-            VirtualDesktopGroups.stripOwnerHere zorderCell.value.list (VirtualDesktopGroups.Live.shared())
-                (VirtualDesktopGroups.Live.isHere state)
-            |> Option.defaultValue zorderCell.value.head
+        this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd), reason="group")
 
     member private this.updateStripOwner() =
-        let owner = this.stripOwnerHwnd
-        this.setTsParent(owner)
-        this.keepStripAboveTop(owner)
+        this.setTsParent(IntPtr.Zero)
+        this.repairStripZorder("group-order")
 
-    // Owned by a window that is not the front one, the strip sits just above
-    // its owner - behind the front window. It is put back just above the front
-    // window, where an owned strip would have been.
-    member private this.keepStripAboveTop(owner: IntPtr) =
-        if owner <> IntPtr.Zero && not this.isEmpty then
-            let top = zorderCell.value.head
-            if top <> owner then
-                try
-                    let above = this.os.windowFromHwnd(top).prevZorder
-                    if above.hwnd <> this.ts.hwnd then
-                        this.os.windowFromHwnd(this.ts.hwnd).insertAfter(above)
-                with _ -> ()
+    member this.repairStripZorder(reason: string) =
+        if (!_ts).IsSome && not stripRepairing && not isDestroyed.value && this.ts.visible then
+            stripRepairing <- true
+            try
+                let strip = this.os.windowFromHwnd(this.ts.hwnd)
+                if strip.parent.hwnd <> IntPtr.Zero then
+                    VirtualDesktopTrace.handover (fun () ->
+                        sprintf "strip-anomaly strip=%X owned=%X"
+                            (strip.hwnd.ToInt64()) (strip.parent.hwnd.ToInt64()))
+                    this.setTsParent(IntPtr.Zero)
+                // During the animation use the last rectangle/order until a
+                // member is physically on screen. Never raise an away window.
+                let candidates =
+                    this.stripMembers |> List.filter (fun w -> w.cloak = Some 0 || w.cloak.IsNone)
+                    |> List.sortBy (fun w -> this.os.windowFromHwnd(w.hwnd).zorder)
+                match VirtualDesktopGroups.stripFront candidates with
+                | None -> ()
+                | Some front ->
+                    let frame = this.os.windowFromHwnd(front)
+                    let rec preceding hwnd depth =
+                        let p = this.os.windowFromHwnd(hwnd).prevZorder.hwnd
+                        if depth > 0 && TopEdgeGuardPlacement.isGuard p && TopEdgeGuardPlacement.ownerOf p = front then
+                            preceding p (depth - 1)
+                        else p
+                    // A layer change needs its own native call. Repair the
+                    // exact position immediately afterwards, before yielding.
+                    for _ in 1 .. 2 do
+                        let before = preceding front 16
+                        let adjacent = before = strip.hwnd
+                        let previous = if adjacent then strip.prevZorder.hwnd else before
+                        let frontTopmost = frame.isTopMost
+                        let plan = VirtualDesktopGroups.stripStacking adjacent (strip.isTopMost = frontTopmost)
+                                       frontTopmost previous (previous <> IntPtr.Zero && this.os.windowFromHwnd(previous).isTopMost)
+                        let after =
+                            match plan with
+                            | VirtualDesktopGroups.KeepStacking -> None
+                            | VirtualDesktopGroups.AboveWindow h -> Some h
+                            | VirtualDesktopGroups.TopmostLayer -> Some WindowHandleTypes.HWND_TOPMOST
+                            | VirtualDesktopGroups.NormalLayer -> Some WindowHandleTypes.HWND_NOTOPMOST
+                        after |> Option.iter (fun anchor ->
+#if DEBUG
+                            let previousPosition = strip.prevZorder.hwnd, strip.isTopMost
+#endif
+                            strip.insertAfter(anchor)
+#if DEBUG
+                            if previousPosition <> (strip.prevZorder.hwnd, strip.isTopMost) then
+                                VirtualDesktopTrace.handover (fun () ->
+                                    sprintf "zorder-repair strip=%X reason=%s front=%X wasAbove=%X insertAfter=%X actualAbove=%X topmost=%b"
+                                        (strip.hwnd.ToInt64()) reason (front.ToInt64()) (before.ToInt64())
+                                        (anchor.ToInt64()) (strip.prevZorder.hwnd.ToInt64()) strip.isTopMost)
+#endif
+                            )
+            finally stripRepairing <- false
 
-    // The tabs of the windows that are on another desktop are drawn dimmed.
-    // The front tab is never one of them: when the front window is elsewhere,
-    // the frontmost window that is here takes its place in the group's own
-    // order. No window is touched - raising one of another desktop would
-    // switch to it.
+    member private this.syncShellContentHold() =
+        if stripPreview.IsNone then
+            let state = VirtualDesktopGroups.Live.snapshot()
+            let stable = VirtualDesktopGroups.Live.isFresh state && state.current = stripView.current
+            if stable then shellStripHoldAttempted <- false
+            if not stable && not shellStripHoldAttempted then
+                this.ts.holdDesktopContent()
+                shellStripHold <- true
+                shellStripHoldAttempted <- true
+                shellStripHoldUntil <- stripClock.ElapsedMilliseconds + 5000L
+            elif shellStripHold && (stable || stripClock.ElapsedMilliseconds >= shellStripHoldUntil) then
+                this.ts.releaseDesktopSwitch()
+                shellStripHold <- false
+
     member private this.updateDimmedTabs(shown: bool) =
+        this.syncShellContentHold()
         let state = VirtualDesktopGroups.Live.snapshot()
+        let stable = VirtualDesktopGroups.Live.isFresh state && state.current = stripView.current
+        let presence h =
+            if stable then (VirtualDesktopGroups.Live.read state h).presence
+            else stripView.presence |> Map.tryFind h |> Option.defaultValue VirtualDesktopGroups.Unsure
         let away =
-            if this.isEmpty || not (VirtualDesktopGroups.Live.isFresh state) then []
-            else
-                VirtualDesktopGroups.dimmed shown
-                    (fun h -> (VirtualDesktopGroups.Live.read state h).presence) zorderCell.value.list
-        if not away.IsEmpty && List.contains zorderCell.value.head away then
-            zorderCell.value.list
-            |> List.tryFind (VirtualDesktopGroups.Live.isHere state)
-            |> Option.iter this.bringToTop
+            match stripPreview with
+            | Some p -> p.dimmed |> List.filter this.windows.contains
+            | None -> VirtualDesktopGroups.dimmed state.stripShared shown presence zorderCell.value.list
+        this.setZorder(zorderCell.value)
         this.ts.setDimmedTabs(away |> List.map Tab)
 
-    /// Called by the main thread's desktop pass (through GroupInfo): whether
-    /// this group is the one of the desktop being looked at. Re-chooses the
-    /// strip's owner (the set of windows shown everywhere may have changed),
-    /// and hides the strip only where the shell has not already done so.
-    member this.applyDesktopState(shown: bool) =
+    member private this.applyStripPrediction(request: VirtualDesktopGroups.Live.PredictionRequest) =
+        if request.id > lastPredictionId && not isDestroyed.value then
+            lastPredictionId <- request.id
+            let age = VirtualDesktopGroups.Live.predictionAge request
+            let latest = VirtualDesktopGroups.Live.snapshot()
+            let alreadyConfirmed = VirtualDesktopGroups.Live.isFresh latest &&
+                                   latest.readAt >= request.requestedAt && latest.current = Some request.destination
+            if request.origin <> this.ts.hwnd && age < 5000L && not alreadyConfirmed then
+                let members = this.stripMembers
+                let available =
+                    members |> List.filter (fun w ->
+                        VirtualDesktopGroups.stripMemberVisible {w with presence=VirtualDesktopGroups.Here})
+                    |> List.map (fun w -> w.hwnd) |> Set.ofList
+                let previous = zorderCell.value.list |> List.map (fun h ->
+                    h, (stripView.presence.TryFind h |> Option.defaultValue (VirtualDesktopGroups.Live.read request.state h).presence)) |> Map.ofList
+                let plan = VirtualDesktopGroups.predictStrip request.destination request.state.reads request.state.stripShared
+                               previous available this.ts.visible zorderCell.value.list
+                // Only strips visible on both desktops predict their content.
+                // Native visibility remains under the ordinary desktop pass.
+                match plan.front with
+                | Some front when VirtualDesktopGroups.predictStripContent this.ts.visible plan ->
+                    stripClickedAt <- request.requestedAt
+                    shellStripHold <- false
+                    stripPreview <- Some { target=front; destination=request.destination
+                                           expires=stripClock.ElapsedMilliseconds + 5000L - age; dimmed=plan.dimmed }
+                    predictingOtherGroup <- true
+                    predictedContent <- Some(request.id, request.tick, plan.front, List.sort plan.dimmed, plan.order)
+                    this.ts.withContentSource("prediction", fun () ->
+                        this.ts.prepareDesktopSwitch(Tab front, List2(plan.order |> List.map Tab), plan.dimmed |> List.map Tab, source="prediction"))
+                    VirtualDesktopTrace.handover (fun () ->
+                        sprintf "prediction-apply strip=%X id=%d knownTick=%d ageMs=%d" (this.ts.hwnd.ToInt64()) request.id request.tick age)
+                | _ ->
+                    if predictedContent.IsSome then
+                        stripPreview <- None
+                        predictedContent <- None
+                        predictingOtherGroup <- false
+                        this.ts.releaseDesktopSwitch()
+                        this.refreshStripState("prediction-cancel")
+                    VirtualDesktopTrace.handover (fun () ->
+                        sprintf "prediction-deferred strip=%X id=%d currentVisible=%b predictedVisible=%b knownTick=%d"
+                            (this.ts.hwnd.ToInt64()) request.id this.ts.visible plan.shown request.tick)
+
+    member private this.finishStripPreview() =
+        match stripPreview with
+        | None -> false
+        | Some p ->
+            let state = VirtualDesktopGroups.Live.snapshot()
+            let confirmed =
+                VirtualDesktopGroups.stripPreviewConfirmed stripClickedAt state.readAt
+                    (VirtualDesktopGroups.Live.isFresh state) state.current
+                    ((VirtualDesktopGroups.Live.read state p.target).presence = VirtualDesktopGroups.Here)
+                    (this.os.windowFromHwnd(p.target).cloakedValue = Some 0) p
+            if VirtualDesktopGroups.keepStripPreview stripClock.ElapsedMilliseconds
+                   (this.windows.contains(p.target)) confirmed p then false else
+            stripPreview <- None
+            this.ts.releaseDesktopSwitch()
+            shellStripHoldAttempted <- true
+            if confirmed then
+                stripView <- { stripView with current=state.current; presence=state.reads |> Map.map (fun _ r -> r.presence) }
+            predictedContent |> Option.iter (fun (id, tick, front, dimmed, order) ->
+                let presence h = (VirtualDesktopGroups.Live.read state h).presence
+                let actualDimmed = VirtualDesktopGroups.dimmed state.stripShared desktopShown presence zorderCell.value.list |> List.sort
+                let actualFront, actualOrder = this.stripFrontDecision(zorderCell.value.list)
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "prediction-confirm strip=%X id=%d knownTick=%d confirmed=%b equal=%b"
+                        (this.ts.hwnd.ToInt64()) id tick confirmed (front=actualFront && dimmed=actualDimmed && order=actualOrder)))
+            predictedContent <- None
+            predictingOtherGroup <- false
+            VirtualDesktopTrace.handover (fun () ->
+                sprintf "strip-preview-end strip=%X confirmed=%b" (this.ts.hwnd.ToInt64()) confirmed)
+            true
+
+    member this.applyStripDesktop(shown: bool, view: VirtualDesktopGroups.StripView) = this.ts.withContentSource("desktop-pass", fun () -> this.withUpdate <| fun () ->
+        let view = { view with presence=view.presence |> Map.filter (fun h _ -> this.windows.contains h) }
+        let unchanged = appliedStripView |> Option.exists (fun (oldShown, oldView) -> VirtualDesktopGroups.sameStripView shown oldShown view oldView)
+        appliedStripView <- Some(shown, view)
+        stripView <- view
         desktopShown <- shown
-        this.updateDimmedTabs(shown)
-        this.updateStripOwner()
-        let owner = this.stripOwnerHwnd
-        let ownerPresence =
-            if owner = IntPtr.Zero then VirtualDesktopGroups.Unsure
-            else (VirtualDesktopGroups.Live.read (VirtualDesktopGroups.Live.snapshot()) owner).presence
-        let hide =
-            VirtualDesktopGroups.hideStrip
-                (if shown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden) ownerPresence
-        if desktopHiddenCell.value <> hide then desktopHiddenCell.set(hide)
-        this.syncCaptionDragTargets()
-        if shown then
-            // What a group of another desktop did not keep up with.
+        this.ts.desktopNoticeTick <- view.noticeTick
+        let ended = this.finishStripPreview()
+        if unchanged && not ended then
+            stripPassSkipped <- stripPassSkipped + 1
+            VirtualDesktopTrace.periodic false (fun () ->
+                sprintf "desktop-strip-skip strip=%X count=%d noticeTick=%A" (this.ts.hwnd.ToInt64()) stripPassSkipped view.noticeTick)
+        else
+            // Compute the final content and visibility in one strip batch. A group
+            // present on both desktops never takes an intermediate hidden state.
+            this.updateDimmedTabs(shown)
+            desktopHiddenCell.set(not shown)
             this.updateIsVisible()
             this.foreground <- this.os.foreground.hwnd
-        desktopChangedEvent.Trigger()
+            this.ts.foreground <- this.foregroundTab
+            updateTabVisibility()
+            this.syncCaptionDragTargets()
+            VirtualDesktopTrace.periodic (not unchanged || ended) (fun () ->
+                sprintf "desktop-strip strip=%X noticeTick=%A decision=%b visible=%b dimmed=%d"
+                    (this.ts.hwnd.ToInt64()) view.noticeTick shown (shouldShowTabStrip())
+                    (VirtualDesktopGroups.dimmed (VirtualDesktopGroups.Live.snapshot()).stripShared shown (fun h -> view.presence |> Map.tryFind h |> Option.defaultValue VirtualDesktopGroups.Unsure) zorderCell.value.list).Length)
+            desktopChangedEvent.Trigger()
+            this.repairStripZorder("desktop-pass"))
+
+    member this.applyDesktopState(shown: bool, state: VirtualDesktopGroups.Live.Snapshot) =
+        let view : VirtualDesktopGroups.StripView = {
+            current=state.current; noticeTick=None
+            presence=state.reads |> Map.map (fun _ r -> r.presence) }
+        this.applyStripDesktop(shown, view)
+
+    member private this.refreshStripState(reason: string) = this.ts.withContentSource(reason, fun () ->
+        let ended = this.finishStripPreview()
+        this.saveZorder()
+        this.updateDimmedTabs(desktopShown)
+        this.updateIsVisible()
+        if ended then this.ts.foreground <- this.foregroundTab
+        updateTabVisibility()
+        this.repairStripZorder(reason)
+#if DEBUG
+        let strip = this.os.windowFromHwnd(this.ts.hwnd)
+        if strip.parent.hwnd <> IntPtr.Zero || strip.isCloaked then
+            VirtualDesktopTrace.handover (fun () ->
+                sprintf "strip-anomaly strip=%X owner=%X cloak=%A visible=%b noticeTick=%A"
+                    (strip.hwnd.ToInt64()) (strip.parent.hwnd.ToInt64()) strip.cloakedValue strip.isVisible stripView.noticeTick)
+#endif
+        )
 
     member this.isDesktopShownThreadSafe = desktopShown
     // Set at once from the main thread, ahead of applyDesktopState, so that
@@ -1612,6 +1810,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         joined.IsNone || VirtualDesktopGroups.sameWindow joined (this.identityOf hwnd)
 
     member private this.followSharedMinimize(hwnd) =
+        stripGroupMinimized <- true
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.where((<>) hwnd).reverse.iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized.not && this.isSameWindow(other) then
@@ -1620,6 +1819,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.updateIsVisible()
 
     member private this.followSharedRestore(hwnd) =
+        stripGroupMinimized <- false
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.where((<>) hwnd).iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized && this.isSameWindow(other) then
@@ -1633,7 +1833,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART then this.captureCaptionDragFallback(hwnd) else None
         this.dispatchEvent(hwnd, evt, fallbackPress)
 
-    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
+    member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.ts.withContentSource(string evt, fun () -> this.dispatchStripEvent(hwnd, evt, fallbackPress))
+
+    member private this.dispatchStripEvent(hwnd, evt, fallbackPress) = this.withUpdate <| fun() -> PerfTrace.time (sprintf "group.%O" evt) <| fun () ->
+        if evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND && this.windows.contains(hwnd) then
+            stripGroupMinimized <- false
+        let foregroundInvolvesGroup =
+            VirtualDesktopGroups.stripForegroundInvolves (Set.ofList this.windows.items.list) this.foreground hwnd
+        // An unrelated activation must not resample this group's native order.
+        // Membership transitions still update activity, visibility and guard placement.
+        if (evt = WinEvent.EVENT_SYSTEM_FOREGROUND && foregroundInvolvesGroup) ||
+           (evt <> WinEvent.EVENT_SYSTEM_FOREGROUND && this.windows.contains(hwnd)) then
+            this.refreshStripState(string evt)
         if this.windows.contains(hwnd) &&
            (evt = WinEvent.EVENT_OBJECT_LOCATIONCHANGE || evt = WinEvent.EVENT_OBJECT_SHOW ||
             evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND ||
@@ -1667,6 +1878,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         //this happens when a window is restored from minimize
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND ->
             if this.windows.contains(hwnd) then
+                stripGroupMinimized <- false
                 if this.consumeMinMaxEcho(hwnd, evt) then () else
                 let needsRestore = zorderCell.value.any <| fun hwnd ->
                     this.os.windowFromHwnd(hwnd).isMinimized
@@ -1688,16 +1900,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.reassertRestoreFront()
         | WinEvent.EVENT_OBJECT_REORDER ->
             this.saveZorder()
-            // Update TOPMOST status for UWP apps when Z-order changes
-            if (!_ts).IsSome then
-                let ts = (!_ts).Value
-                let tsWindow = this.os.windowFromHwnd(ts.hwnd)
-                let hasActiveUWP = this.windows.items.any(fun hwnd ->
-                    let window = this.os.windowFromHwnd(hwnd)
-                    window.className = "ApplicationFrameWindow" && hwnd = this.os.foreground.hwnd
-                )
-                if hasActiveUWP then
-                    tsWindow.makeTopMost()
+            this.repairStripZorder("member-reorder")
         | WinEvent.EVENT_OBJECT_NAMECHANGE ->
             TitleTrace.log (fun () -> sprintf "namechange hwnd=%X member=%b inMoveSize=%b" (hwnd.ToInt64()) (this.windows.contains(hwnd)) inMoveSize.value)
             if  this.windows.contains(hwnd) &&
@@ -1754,36 +1957,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.followSharedWindow(hwnd)
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
             this.foreground <- hwnd
-            this.saveZorder()
-            this.keepStripAboveTop(this.stripOwnerHwnd)
+            if foregroundInvolvesGroup then this.saveZorder()
+            this.repairStripZorder("foreground")
             // Update visibility for all groups when foreground changes
             // This is critical for detecting virtual desktop switches where windows become cloaked
             this.updateIsVisible()
-            // Handle UWP application tab visibility
-            if (!_ts).IsSome then
-                let ts = (!_ts).Value
-                let tsWindow = this.os.windowFromHwnd(ts.hwnd)
-
-                // Check if the foreground window belongs to this group
-                if this.windows.contains(hwnd) then
-                    let window = this.os.windowFromHwnd(hwnd)
-                    // Make topmost for UWP apps
-                    if window.className = "ApplicationFrameWindow" then
-                        tsWindow.makeTopMost()
-                    else
-                        tsWindow.makeNotTopMost()
-                else
-                    // Window outside the group is now foreground
-                    // Check if group has UWP windows that need TOPMOST removal
-                    let hasUWPWindow = this.windows.items.any(fun hwnd ->
-                        let window = this.os.windowFromHwnd(hwnd)
-                        window.className = "ApplicationFrameWindow"
-                    )
-                    if hasUWPWindow && tsWindow.isTopMost then
-                        tsWindow.makeNotTopMost()
-                        // Insert after the new foreground window to go behind it
-                        let foregroundWindow = this.os.windowFromHwnd(hwnd)
-                        tsWindow.insertAfter(foregroundWindow)
             // Update fullscreen state and visibility when foreground changes
             if this.windows.contains(hwnd) then
                 isFullscreenExport.update()
@@ -1982,6 +2160,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 List2([
                     WinEvent.EVENT_OBJECT_NAMECHANGE
                     WinEvent.EVENT_OBJECT_SHOW
+                    WinEvent.EVENT_OBJECT_HIDE
+                    WinEvent.EVENT_OBJECT_DESTROY
+                    WinEvent.EVENT_OBJECT_REORDER
                     WinEvent.EVENT_OBJECT_LOCATIONCHANGE
                     WinEvent.EVENT_SYSTEM_MOVESIZESTART
                     WinEvent.EVENT_SYSTEM_MOVESIZEEND
@@ -2134,7 +2315,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             pendingBackgroundMoves.Clear()
             isDestroyed.set(true)
             this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
+            stripMaintenanceTimer.Stop()
+            stripMaintenanceTimer.Dispose()
+            stripOrderHook |> Option.iter (fun h -> h.Dispose())
+            stripPredictionHook |> Option.iter (fun h -> h.Dispose())
+            let stripHwnd = this.ts.hwnd
             this.ts.destroy()
+            TopEdgeGuardPlacement.unregisterStripOwner stripHwnd
             shellHookWindow.value.iter <| fun d -> d.Dispose()
             winEventHandler.value.iter <| fun d -> d.Dispose()
             exitedEvent.Trigger()
@@ -2190,6 +2377,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         pendingMinMaxEchoes.Remove((hwnd, evt))
 
     member this.minimizeAll() =
+        stripGroupMinimized <- true
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.reverse.iter <| fun hwnd ->
             let window = this.os.windowFromHwnd(hwnd)
@@ -2198,6 +2386,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.showWindowAsyncNoAnimation(hwnd, ShowWindowCommands.SW_SHOWMINNOACTIVE)
 
     member this.restoreAll() =
+        stripGroupMinimized <- false
 #if DEBUG
         InputStallTrace.context InputStallTrace.Kind.Restore this.ts.hwnd 0.0
 #endif
@@ -2209,42 +2398,55 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
         
     member this.tabActivate(Tab(hwnd), force) =
-        followerPlacements.Synchronous(hwnd, ignore)
-        let window = this.os.windowFromHwnd(hwnd)
-        let tsWindow = this.os.windowFromHwnd(this.ts.hwnd)
-
-        // If the tab being activated was previously in the selection set,
-        // remove it — the active tab is always the implicit primary action
-        // target and is never simultaneously "selected".
-        if selectedTabsCell.value.contains(hwnd) then
-            this.applySelected(selectedTabsCell.value.remove(hwnd))
-
-        // Check if we need to prevent flashing when tabs are inside
-        let isTabInside = this.ts.showInside
-        let isUWP = window.className = "ApplicationFrameWindow"
-
-        // Temporarily set TOPMOST for non-UWP windows when tabs are inside to prevent flashing
-        let temporaryTopmost =
-            TopEdgeGuardPolicy.temporaryStripTopmost isTabInside isUWP (this.hasWindowMargin(hwnd)) this.lockWindowPosition
-        if temporaryTopmost then
-            tsWindow.makeTopMost()
-
-        window.setForegroundOrRestore(force)
-        window.bringToTop()
-        // Update WindowGroup's internal zorder state immediately
-        this.bringToTop(hwnd)
-
-        // Remove TOPMOST after the window switch for non-UWP windows
-        if temporaryTopmost then
-            // Use a small delay to ensure the window switch is complete
-            (ThreadHelper.cancelablePostBack 50 <| fun() ->
-                this.invokeAsync <| fun() ->
-                    if not (this.windows.items.any(fun hwnd ->
-                        let w = this.os.windowFromHwnd(hwnd)
-                        w.className = "ApplicationFrameWindow"
-                    )) then
-                        tsWindow.makeNotTopMost()
-            ).Dispose()
+        let preparation = Stopwatch.StartNew()
+        let mutable paintedAt = 0.0
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let reads = this.windows.items.list |> List.map (fun h ->
+            let reading = VirtualDesktopGroups.Live.read state h
+            { reading with presence=stripView.presence |> Map.tryFind h |> Option.defaultValue reading.presence })
+        let preview = VirtualDesktopGroups.previewStrip stripClock.ElapsedMilliseconds this.ts.visible state.stripShared hwnd reads
+        this.withUpdate <| fun () ->
+            match preview with
+            | Some p ->
+                let publication = Stopwatch.StartNew()
+                let request = VirtualDesktopGroups.Live.requestPrediction p.destination "click" this.ts.hwnd
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "prediction-dispatch strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) publication.Elapsed.TotalMilliseconds)
+                VirtualDesktopTrace.noticeSwitch()
+                stripClickedAt <- DateTime.UtcNow
+                shellStripHold <- false
+                stripPreview <- Some p
+                predictingOtherGroup <- false
+                followerPlacements.Cancel(hwnd)
+                this.bringToTop(hwnd)
+                predictedContent <- request |> Option.map (fun r -> r.id, r.tick, Some hwnd, List.sort p.dimmed, zorderCell.value.list)
+                this.ts.prepareDesktopSwitch(Tab(hwnd), zorderCell.value.map(Tab), p.dimmed |> List.map Tab)
+                if selectedTabsCell.value.contains(hwnd) then this.applySelected(selectedTabsCell.value.remove(hwnd))
+                this.ts.presentDesktopSwitch()
+                paintedAt <- preparation.Elapsed.TotalMilliseconds
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "switch-painted strip=%X target=%X clickToPaintedMs=%.3f"
+                        (this.ts.hwnd.ToInt64()) (hwnd.ToInt64()) preparation.Elapsed.TotalMilliseconds)
+            | None -> followerPlacements.Synchronous(hwnd, ignore)
+            let window = this.os.windowFromHwnd(hwnd)
+            if selectedTabsCell.value.contains(hwnd) then this.applySelected(selectedTabsCell.value.remove(hwnd))
+            VirtualDesktopTrace.handover (fun () ->
+                sprintf "switch-request strip=%X target=%X elapsedMs=%.3f paintedToRequestMs=%.3f"
+                    (this.ts.hwnd.ToInt64()) (hwnd.ToInt64()) preparation.Elapsed.TotalMilliseconds
+                    (preparation.Elapsed.TotalMilliseconds - paintedAt))
+            let activation = Stopwatch.StartNew()
+            window.setForegroundOrRestore(force)
+            VirtualDesktopTrace.handover (fun () ->
+                sprintf "switch-activation-return strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) activation.Elapsed.TotalMilliseconds)
+            // SetForegroundWindow already raises a successfully activated target.
+            // Avoid a second cross-process activation while the shell switches.
+            if preview.IsNone then
+                let raising = Stopwatch.StartNew()
+                window.bringToTop()
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "switch-raise-return strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) raising.Elapsed.TotalMilliseconds)
+            this.bringToTop(hwnd)
+            this.repairStripZorder("tab-activate")
 
     member this.onTabMoved(hwnd, index) =
         // Sync pinned state to global after drag-based auto-pin/unpin

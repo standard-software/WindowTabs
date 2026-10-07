@@ -9,6 +9,10 @@ open System.IO
 open System.Windows.Forms
 open Bemo.Win32.Forms
 
+module private StripComposition =
+    [<System.Runtime.InteropServices.DllImport("dwmapi.dll")>]
+    extern int DwmFlush()
+
 // Keep tooltip display and mouse interaction from activating the window.
 type TabTooltipForm() =
     inherit Form()
@@ -31,11 +35,15 @@ type ITabStripMonitor =
 // A failed render leaves the previous entry intact so the next update retries.
 type StripRenderCache() =
     let mutable cached : ((string * obj) list * Img) option = None
+    let mutable changedKeys : string list = []
+    member this.ChangedKeys = changedKeys
     member this.Get(key, render: unit -> Img) =
         match cached with
         | Some(previous, image) when previous = key -> image, false
         | previous ->
             let image = PerfTrace.time "stripRender" render
+            changedKeys <- key |> List.choose (fun (name, value) ->
+                if previous |> Option.forall (fun (old, _) -> List.tryFind (fst >> (=) name) old <> Some(name, value)) then Some name else None)
 #if DEBUG
             for name, value in key do
                 if previous |> Option.forall (fun (old, _) -> List.tryFind (fst >> (=) name) old <> Some(name, value)) then
@@ -55,6 +63,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let Cell = CellScope(false, true)
     let renderCache = new StripRenderCache()
     let mutable destroyed = false
+    let mutable contentSource = "cells"
+    let mutable lastContentSource = "initial"
+    let mutable paintReason = "initial"
+    let mutable contentHold : (Tab option * List2<Tab> * Tab list) option = None
+    let mutable paintSequence = 0L
+    let mutable heldDesktopShared : Set<IntPtr> = Set.empty
+    let mutable paintedDimmed : Tab list = []
+    let mutable paintedShared : IntPtr list = []
     let systemAppearanceCell = Cell.create(0)
     let mutable lastPresentation : (Img * Pt * byte) option = None
     let _os = OS()
@@ -77,6 +93,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let visualOrderCell = Cell.create(List2())
     let zorderCell = Cell.create(List2())
     let visibleCell = Cell.create(false)
+    let mutable desktopNoticeTickValue : uint32 option = None
     let transparentCell = Cell.create(true)
     let showInsideCell = Cell.create(false)
     let isInAltTabCell = Cell.create(false)
@@ -269,7 +286,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         elif this.scale > 1.0 then ti.iconBig
         else ti.iconSmall
 
-    member private this.tsBase direction =
+    member private this.tsBaseWithShared direction shared =
         // One font instance for the whole sprite tree (pixel-sized, see Dpi).
         let textFont = Dpi.scaledFont SystemFonts.MenuFont this.scale
         {
@@ -297,12 +314,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             tabAlignments = tabAlignmentCell.value
             pinnedTabs = pinnedTabsCell.value
             selectedTabs = selectedTabsCell.value
-            dimmedTabs = dimmedTabsCell.value
+            dimmedTabs = this.dimmedTabsFor shared
             transparent = this.transparent
             appearance = this.appearance
             dragGroup = dragGroupCell.value
             scale = this.scale
         }
+    member private this.tsBase direction = this.tsBaseWithShared direction this.desktopShared
     member private this.ts = this.tsBase this.direction
         
     member private this.onMouse(down, pt:Pt, btn, (tab:Tab, part)) =
@@ -471,6 +489,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             this.hit.iter <| fun(hitTab, hitPart) ->
                 match action with
                 | MouseDown ->
+                    if dimmedTabsCell.value.contains(hitTab) then
+                        VirtualDesktopTrace.noticeSwitch()
+                        VirtualDesktopTrace.handover (fun () ->
+                            let (Tab target) = hitTab
+                            sprintf "dimmed-click strip=%X target=%X button=%A part=%A"
+                                (this.hwnd.ToInt64()) (target.ToInt64()) btn hitPart)
                     capturedCell.set(Some(hitTab, hitPart))
                 | MouseUp ->
                     capturedCell.value.iter <| fun(capturedTab, capturedPart) ->
@@ -511,6 +535,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 tooltipForm.Visible <- false
 
     member private this.wndProc(msg:Win32Message) =
+        if contentHold.IsNone then paintReason <- "window-message"
         // Monitor callbacks and mouse state changes share one strip transaction.
         DragTrace.windowMessage (fun () -> "strip") msg
 #if DEBUG
@@ -576,6 +601,47 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.contentOffset = this.appearance.tabHeightOffset
     member private this.location = locationCell.value 
     
+    member this.withContentSource<'a>(source: string, f: unit -> 'a) =
+        let previous = contentSource
+        contentSource <- source
+        lastContentSource <- source
+        try this.batch f
+        finally contentSource <- previous
+
+    member private this.desktopShared =
+        Set.union heldDesktopShared (VirtualDesktopGroups.Live.snapshot()).stripShared
+
+    member private this.dimmedTabsFor shared =
+        dimmedTabsCell.value.items.list |> List.map (fun (Tab h) -> h)
+        |> VirtualDesktopGroups.excludeSharedDimmed shared
+        |> List.map Tab |> fun tabs -> Set2(List2(tabs))
+
+    member private this.effectiveDimmedTabs = this.dimmedTabsFor this.desktopShared
+
+    member private this.traceContent(kind: string) =
+        let source = if contentSource = "cells" then lastContentSource else contentSource
+        paintReason <- source + "/" + kind
+        VirtualDesktopTrace.handover (fun () ->
+            let handle (Tab h) = h.ToInt64()
+            sprintf "strip-content strip=%X source=%s kind=%s front=%A foreground=%A dimmed=%s desktopShared=%s effectiveDimmed=%s"
+                (this.hwnd.ToInt64()) source kind
+                (zorderCell.value.tryHead |> Option.map handle)
+                (foregroundCell.value |> Option.map handle)
+                (dimmedTabsCell.value.items.list |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ",")
+                (this.desktopShared |> Set.toList |> List.filter (fun h -> this.tabs.contains(Tab h)) |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",")
+                (this.effectiveDimmedTabs.items.list |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ","))
+
+    member private this.tracePaint(kind: string) =
+        paintSequence <- paintSequence + 1L
+        VirtualDesktopTrace.handover (fun () ->
+            let handle (Tab h) = h.ToInt64()
+            sprintf "strip-paint strip=%X sequence=%d kind=%s reason=%s front=%A foreground=%A dimmed=%s desktopShared=%s keys=%s noticeTick=%A"
+                (this.hwnd.ToInt64()) paintSequence kind paintReason
+                (zorderCell.value.tryHead |> Option.map handle)
+                (foregroundCell.value |> Option.map handle)
+                (paintedDimmed |> List.map handle |> List.sort |> List.map (sprintf "%X") |> String.concat ",")
+                (paintedShared |> List.map (fun h -> sprintf "%X" (h.ToInt64())) |> String.concat ",") (String.concat "," renderCache.ChangedKeys) desktopNoticeTickValue)
+
     member private this.update() =
         if destroyed then ()
         elif this.visible then
@@ -583,7 +649,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             // cache hit, so Cell retains all dependencies after move-only work.
             let rendered =
                 try
-                    let ts = this.ts
+                    let shared = this.desktopShared
+                    let ts = this.tsBaseWithShared this.direction shared
+                    paintedDimmed <- ts.dimmedTabs.items.list
+                    paintedShared <- shared |> Set.toList |> List.filter (fun h -> this.tabs.contains(Tab h))
                     let shrunk = this.isShrunk && ts.direction = TabDirection.TabDown
                     let key = ts.renderKey @ [ "sliver", box shrunk; "system", box systemAppearanceCell.value ]
                     Some(renderCache.Get(key, fun () -> this.render(ts, shrunk)))
@@ -606,13 +675,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         | None -> PerfTrace.count "stripReuseShow"
 #endif
                     this.window.update(image, location, alpha)
+                    this.tracePaint("pixels")
+                    VirtualDesktopTrace.handover (fun () ->
+                        sprintf "strip-show strip=%X owner=%X visible=%b cloak=%A noticeTick=%A"
+                            (this.hwnd.ToInt64()) (this.window.parent.hwnd.ToInt64()) this.window.isVisible this.window.cloakedValue desktopNoticeTickValue)
                     lastPresentation <- Some(image, location, alpha)
             | None ->
-                use bitmap = new Bitmap(1, 1)
-                this.window.update(Img(bitmap), location, alpha)
-                lastPresentation <- None
+                VirtualDesktopTrace.handover (fun () -> sprintf "strip-paint-deferred strip=%X reason=render-failed" (this.hwnd.ToInt64()))
         else
-            this.window.hide()
+            let wasVisible = this.window.isVisible
+            if wasVisible then this.window.hide()
+            if wasVisible then
+                VirtualDesktopTrace.handover (fun () ->
+                    sprintf "strip-hide strip=%X owner=%X cloak=%A noticeTick=%A"
+                        (this.hwnd.ToInt64()) (this.window.parent.hwnd.ToInt64()) this.window.cloakedValue desktopNoticeTickValue)
             lastPresentation <- None
 
     // No draw correction any more. The former applyDrawCorrection pre-compressed
@@ -652,7 +728,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         |> order |> List.map Tab
                     | None -> added
                 visualOrderCell.set(List2(ordered))
-                zorderCell.map(fun z -> z.append(tab))
+                this.zorder <- zorderCell.value.append(tab)
+                this.withContentSource("tab-added", fun () -> this.traceContent("front-order"))
 
     member this.addTabSlide tab (slide:Option<_>) =
         this.batch <| fun () ->
@@ -679,8 +756,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tabUnderlineColor.map(fun m -> m.remove tab)
         tabBorderColor.map(fun m -> m.remove tab)
         visualOrderCell.map(fun l -> l.where((<>) tab))
-        zorderCell.map(fun z -> z.where((<>) tab))
+        this.zorder <- zorderCell.value.where((<>) tab)
         tabInfoCell.map(fun m -> m.remove tab)
+        this.withContentSource("tab-removed", fun () -> this.traceContent("front-order"))
         Cell.endUpdate()
 
     member this.tabs : Set2<Tab> = Set2(visualOrderCell.value)
@@ -797,10 +875,26 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.tabMoved = tabMovedEvent.Publish
 
+    member private this.frontOrder(order: List2<Tab>) =
+        let handles = order.list |> List.map (fun (Tab h) -> h)
+        let dimmed =
+            (match contentHold with Some(_, _, prepared) -> prepared | None -> this.effectiveDimmedTabs.items.list)
+            |> List.map (fun (Tab h) -> h)
+            |> VirtualDesktopGroups.excludeSharedDimmed this.desktopShared |> Set.ofList
+        VirtualDesktopGroups.stripFrontOrder (Set.ofList handles) dimmed None handles
+
     member this.zorder
         with get() = zorderCell.value
         and set(zorder:List2<Tab>) =
-            zorderCell.set(zorder.where(this.tabs.contains))
+            let order =
+                match contentHold with
+                | Some(_, prepared, _) -> prepared.where(this.tabs.contains)
+                | None -> zorder.where(this.tabs.contains)
+            let _, ordered = this.frontOrder(order)
+            let order = List2(ordered |> List.map Tab)
+            if zorderCell.value.list <> order.list then
+                zorderCell.set(order)
+                this.traceContent("front-order")
 
     member this.sprite = this.ts.sprite
             
@@ -1194,11 +1288,16 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.foreground 
         with get() = foregroundCell.value
         and set(value) =
+            let value = match contentHold with Some(tab, _, _) -> tab | None -> value
+            let value = value |> Option.bind (fun tab ->
+                let preferred = zorderCell.value.moveToEnd((=) tab)
+                this.frontOrder(preferred) |> fst |> Option.map Tab)
             // Pushed on every foreground change in the system; setting the
             // same tab again would only render the strip again.
             if value <> this.foreground then
                 prevForegroundCell.set(this.foreground)
                 foregroundCell.set(value)
+                this.traceContent("foreground")
             
     member this.bounds = this.window.bounds
 
@@ -1214,13 +1313,60 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             // never disagree about which monitor the strip is on.
             if scaleCell.value <> placement.scale then scaleCell.set(placement.scale)
 
-    member this.setDimmedTabs(tabs: Tab list) =
+    member this.setDimmedTabs(tabs: Tab list) = this.batch (fun () ->
+        let requested =
+            (match contentHold with Some(_, _, prepared) -> prepared | None -> tabs)
+            |> List.filter this.tabs.contains |> List.map (fun (Tab h) -> h)
+        let shared = this.desktopShared
+        let accepted = VirtualDesktopGroups.excludeSharedDimmed shared requested
+        if accepted <> requested then
+            VirtualDesktopTrace.handover (fun () ->
+                let handles xs = xs |> List.sort |> List.map (fun (h: IntPtr) -> sprintf "%X" (h.ToInt64())) |> String.concat ","
+                sprintf "strip-dimmed-filter strip=%X source=%s requested=%s excluded=%s held=%b"
+                    (this.hwnd.ToInt64()) lastContentSource (handles requested)
+                    (requested |> List.filter shared.Contains |> handles) contentHold.IsSome)
+        let tabs = accepted |> List.map Tab |> List.sort
         if dimmedTabsCell.value.items.list <> (Set2(List2(tabs))).items.list then
             dimmedTabsCell.set(Set2(List2(tabs)))
+            this.traceContent("dimmed")
+        // The order and dimming must settle in the same transaction.
+        this.zorder <- zorderCell.value
+        this.foreground <- foregroundCell.value)
+
+    // Directly submit the prepared pixels even inside the outer mouse batch.
+    // Its eventual listener pass will see the same image and skip submission.
+    member this.prepareDesktopSwitch(tab, order, dimmed, ?source: string) =
+        heldDesktopShared <- (VirtualDesktopGroups.Live.snapshot()).stripShared
+        contentHold <- Some(Some tab, order, dimmed)
+        this.withContentSource(defaultArg source "click-preparation", fun () ->
+            this.zorder <- order
+            this.foreground <- Some tab
+            this.setDimmedTabs(dimmed))
+
+    member this.presentDesktopSwitch() =
+        paintReason <- "click-preparation"
+        this.update()
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        let result = StripComposition.DwmFlush()
+        VirtualDesktopTrace.handover (fun () ->
+            sprintf "strip-flush strip=%X result=%d elapsedMs=%.3f sequence=%d"
+                (this.hwnd.ToInt64()) result clock.Elapsed.TotalMilliseconds paintSequence)
+
+    member this.holdDesktopContent() =
+        heldDesktopShared <- (VirtualDesktopGroups.Live.snapshot()).stripShared
+        match zorderCell.value.tryHead with
+        | Some tab -> contentHold <- Some(foregroundCell.value, zorderCell.value, dimmedTabsCell.value.items.list)
+        | None -> ()
+
+    member this.releaseDesktopSwitch() =
+        contentHold <- None
+        heldDesktopShared <- Set.empty
 
     member this.alpha
         with get() = alphaCell.value
         and set(value) = alphaCell.set(value)
+
+    member this.desktopNoticeTick with set(value) = desktopNoticeTickValue <- value
 
     member this.visible 
         with get() = visibleCell.value
