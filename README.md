@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.03_next13**
+Latest version: **ss_2026.10.03_next14**
 
 See [version.md](version.md) for details.
 
@@ -180,7 +180,7 @@ Position Move
   Move
     Left Edge / Right Edge / Top Edge / Bottom Edge
     Top Left / Top Right / Bottom Left / Bottom Right
-Link this group to another tab group (submenu lists other tab groups; choose the destination)
+Link this group to another tab group (submenu lists the tab groups to link to)
 ---
 Detach this tab
   Position (same submenu as "Position Move")
@@ -252,6 +252,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Link this group to another tab group
 
 - Move all tabs of the current group into another tab group.
+- The tab groups are listed left to right by position, each with its display's name and number of tabs.
 - Tab groups on other virtual desktops can be chosen too, under an item per desktop ([Virtual Desktop Support](#virtual-desktop-support))
 
 ![Link this group to another tab group](README_Image/MoveTabGroupToGroup.png)

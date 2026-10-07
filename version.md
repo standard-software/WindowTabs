@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next13
+## version ss_2026.10.03_next14
 
 - Tab groups are no longer kept separately for each virtual desktop.
   - The tab of a window on another desktop is drawn at half opacity;
@@ -19,10 +19,15 @@
 - Fixed problems with windows that have a special resize frame, such as LINE.
   - The frame could stick out of the tab group.
   - The whole tab group could grow when such a window started and joined it.
+- Tabs no longer flicker when the desktop is switched.
 - Fixed windows dropping out of their tab group at a desktop switch.
 - Fixed a crash when a tab group held a borderless full-screen window.
 - The top-edge lock no longer covers another group's window in front of it.
 - WindowMargin.json is gone; frame windows around a window are found by themselves.
+- Restoring tab groups after a restart works in more cases.
+  - A window returns to its tab group on another desktop.
+  - A Store app's windows return after an update changed its version.
+  - Windows with the same title return to the tab group nearest to them.
 
 ## version ss_2026.10.03
 
