@@ -184,9 +184,10 @@ module SavedSession =
         // It waited longer than it is kept for. Not seeded and so not written
         // back either: it leaves the file at this save.
         | Expired
-        // Nothing to wait for: no identity was saved with it, or its identity
-        // appears in another saved group as well and picking one of them would
-        // not be an uncertain restore but a certain change to the grouping.
+        // More than one group claims this identity. Retain the original record
+        // for saving, but do not offer it to early or late claims yet.
+        | Ambiguous
+        // Nothing to wait for: no usable identity was saved with it.
         | Unusable
 
     type PlannedTab = {
@@ -343,6 +344,10 @@ module SavedSession =
     let plan (now: DateTime) (seedMaxAgeDays: float) (closedTabMaxAgeDays: float)
              (groups: SavedGroup list) (live: LiveWindow list) : PlannedGroup list =
 
+        let expired (t: SavedTab) =
+            let since = t.seedSince |> Option.defaultValue now
+            let limit = if t.closedByUser then closedTabMaxAgeDays else seedMaxAgeDays
+            (now - since).TotalDays > limit
         let liveByHandle = System.Collections.Generic.Dictionary<IntPtr, LiveWindow>()
         live |> List.iter (fun w -> liveByHandle.[w.handle] <- w)
 
@@ -376,7 +381,7 @@ module SavedSession =
         // name one window: two terminals can both be titled "Claude1". The two
         // ambiguous cases are not equally bad.
         //   - The same identity in two DIFFERENT saved groups is not restored
-        //     at all (Unusable below).
+        //     yet (Ambiguous below); its saved record is retained.
         //   - The same identity more than once inside ONE saved group is
         //     restored. Whichever live window each entry ends up matching, the
         //     resulting group membership is identical, so it is right either
@@ -390,7 +395,7 @@ module SavedSession =
         let notShared = System.Collections.Generic.HashSet<string>()
         groups |> List.iteri (fun gi g ->
             g.windows |> List.iter (fun t ->
-                if not (reserved.Contains(t.hwnd)) then
+                if not (reserved.Contains(t.hwnd)) && not (expired t) then
                     identityOf t |> Option.iter (fun key ->
                         savedCounts.[key] <-
                             (match savedCounts.TryGetValue(key) with
@@ -446,13 +451,20 @@ module SavedSession =
 
         // Then by identity, all the tabs of one identity together, because
         // which of them gets which window is one decision and not several.
+        // Expired competitors must not steal the surviving group's match.
+        // Keep the existing live-match policy for uncontested ordinary entries.
+        let expiredConflict gi key t =
+            expired t &&
+            (groups |> List.indexed |> List.exists (fun (otherIndex, other) ->
+                otherIndex <> gi && other.windows |> List.exists (fun x -> identityOf x = Some key)))
         let byIdentity =
             [ for gi in 0 .. List.length groups - 1 do
                 let g = groups.[gi]
                 for ti in 0 .. List.length g.windows - 1 do
                     let t = g.windows.[ti]
                     match identityOf t with
-                    | Some(key) when not (resolved.ContainsKey((gi, ti))) && not (crossGroup.Contains(key)) ->
+                    | Some(key) when not (resolved.ContainsKey((gi, ti))) &&
+                                     not (expiredConflict gi key t) && not (crossGroup.Contains(key)) ->
                         yield (key, (gi, ti, t))
                     | _ -> () ]
             |> List.groupBy fst
@@ -564,10 +576,9 @@ module SavedSession =
                         | None ->
                             match key with
                             | None -> Unusable
-                            | Some(k) when crossGroup.Contains(k) -> Unusable
-                            | Some(_) ->
-                                let limit = if t.closedByUser then closedTabMaxAgeDays else seedMaxAgeDays
-                                if (now - waitingSince).TotalDays > limit then Expired else Waiting
+                            | Some(_) when expired t -> Expired
+                            | Some(k) when crossGroup.Contains(k) -> Ambiguous
+                            | Some(_) -> Waiting
                     // Whether a claim arriving later may put the name and the
                     // colours on the window that makes it: either nothing
                     // could be confused with this entry, or the entries it

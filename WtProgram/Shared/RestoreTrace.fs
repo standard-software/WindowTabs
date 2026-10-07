@@ -71,3 +71,32 @@ module RestoreTrace =
         ignore f
 #endif
 
+
+#if DEBUG
+    let private retentionGate = obj()
+    let private retentionReasons = Collections.Generic.Dictionary<IntPtr * int * IntPtr, string * string>()
+#endif
+
+    // Remember each entry independently: interleaved saves must not make an
+    // unchanged reason noisy again. A changed reason or detail is a new event.
+#if DEBUG
+    let retention (hwnd: IntPtr) (token: IntPtr) rank reason (detail: unit -> string) =
+#else
+    let inline retention (hwnd: IntPtr) (token: IntPtr) rank reason (detail: unit -> string) =
+#endif
+#if DEBUG
+        let text = detail()
+        let changed = lock retentionGate (fun () ->
+            let key = token, rank, hwnd
+            match retentionReasons.TryGetValue key with
+            | true, previous when previous = (reason, text) -> false
+            | _ ->
+                retentionReasons.[key] <- reason, text
+                true)
+        if changed then
+            log (fun () ->
+                sprintf "restore-retention hwnd=%X token=%X rank=%d reason=%s%s"
+                    (hwnd.ToInt64()) (token.ToInt64()) rank reason text)
+#else
+        ()
+#endif

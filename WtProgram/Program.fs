@@ -107,6 +107,8 @@ type ClosedTabInfo = {
     // may be matched by exe path alone: resurrecting a hand-closed tab, or
     // handing an unrelated window to one, would both be wrong.
     isRestoreSeed: bool
+    // Kept for saving but never applied while another group contests it.
+    isAmbiguous: bool
     // Saved rectangle (x, y, width, height) of a seeded window. Kept so the
     // twin disambiguation and the title-less fallback still have a position
     // to compare against.
@@ -1069,6 +1071,7 @@ type Program() as this =
                     closedHwnd = hwnd
                     closedAt = now
                     isRestoreSeed = false
+                    isAmbiguous = false
                     savedRect = None
                     seedSince = Some(now)
                     orderSnapshot = orderSnapshot
@@ -1127,15 +1130,32 @@ type Program() as this =
             (windowNameOverride.value.tryFind(hwnd).IsNone &&
              this.claimState(hwnd) = (false, None, None, None))
 
+    member private this.refreshAmbiguousEntries() =
+        let now = DateTime.Now
+        let current =
+            closedTabCache.value |> List.filter (fun e ->
+                let limit = if e.isRestoreSeed then seedMaxAgeDays else closedTabMaxAgeDays
+                (now - (e.seedSince |> Option.defaultValue e.closedAt)).TotalDays <= limit)
+        let held =
+            current |> List.map (fun e -> (e.exePath, e.windowTitle), e.groupRef, e.isAmbiguous)
+            |> ClosedTabClaim.heldIndices
+        let refreshed =
+            current |> List.mapi (fun i e ->
+                if e.isAmbiguous && not (held.Contains i) then
+                    this.traceRestoreRetention(e.closedHwnd, groupRefHandle e.groupRef, e.tabIndex, "ambiguity-released")
+                    { e with isAmbiguous = false }
+                else e)
+        if refreshed <> closedTabCache.value then closedTabCache.set(refreshed)
+
     member private this.closedClaimDecision(hwnd, exePath, windowTitle) =
+        this.refreshAmbiguousEntries()
         if claimedWindows.value.Contains hwnd then ClosedTabClaim.AlreadyClaimed else
         let identity = exePath, normalizeClosedTabTitle windowTitle
         let matches =
             if exePath = "" || windowTitle = "" then [] else
-            closedTabCache.value |> List.indexed
-            |> List.choose (fun (i, e) ->
-                if ClosedTabClaim.sameIdentity identity (e.exePath, e.windowTitle) then Some i
-                else None)
+            closedTabCache.value
+            |> List.map (fun e -> (e.exePath, e.windowTitle), e.isAmbiguous)
+            |> ClosedTabClaim.matchingIndices identity
         ClosedTabClaim.decide hwnd claimedWindows.value matches
 
     member private this.peekClosedTabMatch(hwnd, exePath, windowTitle) =
@@ -1174,7 +1194,7 @@ type Program() as this =
             closedTabCache.value
             |> List.mapi (fun i e -> (i, e))
             |> List.filter (fun (_, e) ->
-                e.isRestoreSeed &&
+                e.isRestoreSeed && not e.isAmbiguous &&
                 sameExePath e.exePath exePath &&
                 (match e.savedRect with
                  | Some(r) when usableRect r -> overlaps r
@@ -1221,7 +1241,7 @@ type Program() as this =
 
     // Consume one specific cache entry (the one a peek settled on).
     member private this.takeClosedTabEntry(hwnd, info: ClosedTabInfo) =
-        match ClosedTabClaim.take hwnd (fun e -> obj.ReferenceEquals(e, info))
+        match ClosedTabClaim.take hwnd (fun e -> not e.isAmbiguous && obj.ReferenceEquals(e, info))
                                   claimedWindows.value closedTabCache.value with
         | Some(entry, claimed, remaining) ->
             // Replace all current state, whether inherited or changed by the user.
@@ -1988,6 +2008,7 @@ type Program() as this =
                             closedHwnd = hwnd
                             closedAt = now
                             isRestoreSeed = false
+                            isAmbiguous = false
                             savedRect = None
                             seedSince = Some(now)
                             orderSnapshot = order
@@ -2043,7 +2064,7 @@ type Program() as this =
     member private this.savedAlignFor(exePath: string) =
         if exePath = "" then None else
         match closedTabCache.value
-              |> List.filter (fun e -> e.isRestoreSeed && sameExePath e.exePath exePath)
+              |> List.filter (fun e -> e.isRestoreSeed && not e.isAmbiguous && sameExePath e.exePath exePath)
               |> List.map (fun e -> e.tabAlign) with
         | [] -> None
         | first :: rest when rest |> List.forall ((=) first) -> first
@@ -2513,6 +2534,9 @@ type Program() as this =
     /// A live window dropped by the scan retains the existing here-only rule.
     member private this.closedInfoGroupHere (info: ClosedTabInfo) : IGroup option =
         this.findGroupForClosedInfo info |> Option.filter (fun g -> g.isDesktopShown)
+
+    member private this.traceRestoreRetention(hwnd: IntPtr, token: IntPtr, rank: int, reason: string) =
+        RestoreTrace.retention hwnd token rank reason (fun () -> "")
 
     member private this.traceRestoreTarget(hwnd: IntPtr, info: ClosedTabInfo, across: bool, reason: string) =
         RestoreTrace.log (fun () ->
@@ -3007,6 +3031,7 @@ type Program() as this =
         try
             let json = settingsManager.settingsJson
             let saveNow = DateTime.Now
+            this.refreshAmbiguousEntries()
             // Saved windows whose application has not started yet are held in
             // memory as restore seeds, and nothing else remembers them. The
             // periodic save fires 10 s after boot - long before applications
@@ -3076,6 +3101,10 @@ type Program() as this =
             // plainest way of saying it is finished with, so once its last tab
             // is closed the group goes rather than waiting to be resurrected
             // by whichever of its windows is opened next.
+            pendingSeeds |> List.iter (fun p ->
+                if not p.isRestoreSeed && not (claimedSeeds.Contains p.tab.hwnd) then
+                    let info = infoOf.[p.tab.hwnd]
+                    this.traceRestoreRetention(p.tab.hwnd, groupRefHandle info.groupRef, p.rank, "closed-without-live-group"))
             let waitingGroups =
                 pendingSeeds
                 |> List.filter (fun p -> claimedSeeds.Contains(p.tab.hwnd).not && p.isRestoreSeed)
@@ -3294,7 +3323,12 @@ type Program() as this =
                                 RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
                                                                     (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
                                                                     (DateTime.Now - t.waitingSince).TotalDays title)
+                            | SavedSession.Unusable ->
+                                this.traceRestoreRetention(e.hwnd, g.token, t.rank, "unusable-identity")
+                            | SavedSession.Ambiguous
                             | SavedSession.Waiting ->
+                                if t.outcome = SavedSession.Ambiguous then
+                                    this.traceRestoreRetention(e.hwnd, g.token, t.rank, "ambiguity-held")
                                 if closedTabCache.value |> List.exists (fun c -> c.closedHwnd = e.hwnd) |> not then
                                     // Through the same record the save writes
                                     // the entry back from, so that what is put
@@ -3328,6 +3362,7 @@ type Program() as this =
                                         closedHwnd = p.tab.hwnd
                                         closedAt = DateTime.Now
                                         isRestoreSeed = p.isRestoreSeed
+                                        isAmbiguous = t.outcome = SavedSession.Ambiguous
                                         // A seed that outlives a WindowTabs
                                         // restart has to carry its position, or
                                         // the twin disambiguation and the

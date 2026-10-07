@@ -6,6 +6,19 @@ module ClosedTabClaim =
     let sameIdentity (path, title) (otherPath, otherTitle) =
         AppPath.sameApp path otherPath && title = otherTitle
 
+    // Re-evaluate only quarantined entries. Ordinary same-group twins and
+    // shared-window claims retain their existing policy. Callers remove expired
+    // entries first, so an expired competitor cannot hold a survivor forever.
+    let heldIndices (entries: ((string * string) * 'group * bool) list) =
+        entries |> List.indexed |> List.choose (fun (i, (identity, group, held)) ->
+            if held && entries |> List.exists (fun (other, otherGroup, _) ->
+                otherGroup <> group && sameIdentity identity other) then Some i else None)
+        |> Set.ofList
+
+    let matchingIndices identity (entries: ((string * string) * bool) list) =
+        entries |> List.indexed |> List.choose (fun (i, (other, held)) ->
+            if not held && sameIdentity identity other then Some i else None)
+
     // The caller supplies normalized titles and only live group members.
     let canRecord closing identity liveTabs =
         liveTabs |> List.exists (fun (hwnd, other) -> hwnd <> closing && sameIdentity identity other) |> not
