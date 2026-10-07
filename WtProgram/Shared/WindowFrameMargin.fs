@@ -66,8 +66,17 @@ module WindowFrameMargin =
             val mutable top: int
             val mutable right: int
             val mutable bottom: int
+#if DEBUG
+        [<DllImport("user32.dll", EntryPoint = "GetWindowRect")>]
+        extern bool TraceNative_GetWindowRect(nativeint hwnd, RECT& rect)
+        let GetWindowRect(hwnd: nativeint, rect: byref<RECT>) =
+            let call = Bemo.Win32.GroupCallTrace.Begin("GetWindowRect", hwnd)
+            try TraceNative_GetWindowRect(hwnd, &rect)
+            finally Bemo.Win32.GroupCallTrace.End(call)
+#else
         [<DllImport("user32.dll")>]
         extern bool GetWindowRect(nativeint hwnd, RECT& rect)
+#endif
         [<DllImport("user32.dll")>]
         extern nativeint GetWindow(nativeint hwnd, uint32 command)
         [<DllImport("user32.dll")>]
@@ -80,8 +89,17 @@ module WindowFrameMargin =
         extern bool IsIconic(nativeint hwnd)
         [<DllImport("user32.dll")>]
         extern bool IsZoomed(nativeint hwnd)
+#if DEBUG
+        [<DllImport("user32.dll", EntryPoint = "GetDpiForWindow")>]
+        extern uint32 TraceNative_GetDpiForWindow(nativeint hwnd)
+        let GetDpiForWindow(hwnd: nativeint) =
+            let call = Bemo.Win32.GroupCallTrace.Begin("GetDpiForWindow", hwnd)
+            try TraceNative_GetDpiForWindow(hwnd)
+            finally Bemo.Win32.GroupCallTrace.End(call)
+#else
         [<DllImport("user32.dll")>]
         extern uint32 GetDpiForWindow(nativeint hwnd)
+#endif
         [<DllImport("user32.dll")>]
         extern uint32 GetWindowThreadProcessId(nativeint hwnd, uint32& processId)
         [<DllImport("kernel32.dll")>]

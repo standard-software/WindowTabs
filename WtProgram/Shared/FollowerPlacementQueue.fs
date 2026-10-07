@@ -63,7 +63,21 @@ type FollowerPlacementQueue() =
             bump item |> ignore
             item.pending <- None
             item
+#if DEBUG
+        // The group can wait for a worker before reaching any native API.
+        // Measure acquisition separately so a quiet API trace does not hide it.
+        let call = Bemo.Win32.GroupCallTrace.Begin("FollowerPlacementQueue.wait", hwnd)
+        let mutable entered = false
+        try
+            lock item.operation (fun () ->
+                entered <- true
+                Bemo.Win32.GroupCallTrace.End(call)
+                action())
+        finally
+            if not entered then Bemo.Win32.GroupCallTrace.End(call)
+#else
         lock item.operation action
+#endif
 
     member this.Post(hwnd, source, sourceBounds: Rect, maximized, bounds: Rect, refused: int64 -> unit) =
         PerfTrace.time "group.follower.post" <| fun () ->

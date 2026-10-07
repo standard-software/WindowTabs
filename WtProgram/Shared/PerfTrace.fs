@@ -54,11 +54,14 @@ module PerfTrace =
         recordTimeAt name ms (Stopwatch.GetTimestamp())
 
     let time (name: string) (f: unit -> 'a) =
+        let previous = Bemo.Win32.GroupCallTrace.Enter(name)
         let start = Stopwatch.GetTimestamp()
         try f()
         finally
             let ended = Stopwatch.GetTimestamp()
             let ms = float (ended - start) * 1000.0 / float Stopwatch.Frequency
+            Bemo.Win32.GroupCallTrace.NoteStage(ms)
+            Bemo.Win32.GroupCallTrace.Leave(previous)
             recordTimeAt name ms ended
 
     /// A number that describes the current state rather than an event - the

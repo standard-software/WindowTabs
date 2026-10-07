@@ -66,26 +66,103 @@ namespace Bemo
 
     public sealed class DwmApi
     {
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+        private static extern int TraceNative_DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+        public static int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmGetWindowAttribute", hwnd);
+            try { return TraceNative_DwmGetWindowAttribute(hwnd, dwAttribute, out pvAttribute, cbAttribute); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+#endif
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+        private static extern int TraceNative_DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+        public static int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmGetWindowAttribute", hwnd);
+            try { return TraceNative_DwmGetWindowAttribute(hwnd, dwAttribute, out pvAttribute, cbAttribute); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+#endif
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
+        private static extern int TraceNative_DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+        public static int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmSetWindowAttribute", hwnd);
+            try { return TraceNative_DwmSetWindowAttribute(hwnd, dwAttribute, ref pvAttribute, cbAttribute); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+#endif
         [DllImport("dwmapi.dll")]
         public static extern int DwmIsCompositionEnabled(out bool enabled);
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmSetIconicThumbnail")]
+        private static extern int TraceNative_DwmSetIconicThumbnail(IntPtr hwnd, IntPtr hBmp, int dwSITFlags);
+        public static int DwmSetIconicThumbnail(IntPtr hwnd, IntPtr hBmp, int dwSITFlags)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmSetIconicThumbnail", hwnd);
+            try { return TraceNative_DwmSetIconicThumbnail(hwnd, hBmp, dwSITFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetIconicThumbnail(IntPtr hwnd, IntPtr hBmp, int dwSITFlags);
+#endif
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmSetIconicLivePreviewBitmap")]
+        private static extern int TraceNative_DwmSetIconicLivePreviewBitmap(IntPtr hwnd, IntPtr hBmp, ref POINT pptClient, int dwSITFlags);
+        public static int DwmSetIconicLivePreviewBitmap(IntPtr hwnd, IntPtr hBmp, ref POINT pptClient, int dwSITFlags)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmSetIconicLivePreviewBitmap", hwnd);
+            try { return TraceNative_DwmSetIconicLivePreviewBitmap(hwnd, hBmp, ref pptClient, dwSITFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetIconicLivePreviewBitmap(IntPtr hwnd, IntPtr hBmp, ref POINT pptClient, int dwSITFlags);
+#endif
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "DwmInvalidateIconicBitmaps")]
+        private static extern int TraceNative_DwmInvalidateIconicBitmaps(IntPtr hwnd);
+        public static int DwmInvalidateIconicBitmaps(IntPtr hwnd)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmInvalidateIconicBitmaps", hwnd);
+            try { return TraceNative_DwmInvalidateIconicBitmaps(hwnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll")]
         public static extern int DwmInvalidateIconicBitmaps(IntPtr hwnd);
+#endif
         [DllImport("dwmapi.dll")]
         public static extern int DwmRegisterThumbnail(IntPtr dest, IntPtr src, out IntPtr thumb);
         [DllImport("dwmapi.dll")]
         public static extern int DwmUpdateThumbnailProperties(IntPtr hThumbnail, ref DWM_THUMBNAIL_PROPERTIES props);
+#if DEBUG
+        [DllImport("dwmapi.dll", EntryPoint = "#113", SetLastError = true)]
+        private static extern uint TraceNative_DwmpActivateLivePreview(bool doPeek, IntPtr hWnd, IntPtr hwndTop, bool unknown);
+        public static uint DwmpActivateLivePreview(bool doPeek, IntPtr hWnd, IntPtr hwndTop, bool unknown)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("DwmpActivateLivePreview", hWnd);
+            try { return TraceNative_DwmpActivateLivePreview(doPeek, hWnd, hwndTop, unknown); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("dwmapi.dll", EntryPoint = "#113", SetLastError = true)]
         public static extern uint DwmpActivateLivePreview(bool doPeek, IntPtr hWnd, IntPtr hwndTop, bool unknown);
+#endif
 
     }
 }

@@ -16,16 +16,43 @@ module TopEdgeGuardPlacement =
             val mutable top: int
             val mutable right: int
             val mutable bottom: int
+#if DEBUG
+        [<DllImport("user32.dll", EntryPoint = "GetWindowRect")>]
+        extern bool TraceNative_GetWindowRect(nativeint hwnd, RECT& rect)
+        let GetWindowRect(hwnd: nativeint, rect: byref<RECT>) =
+            let call = Bemo.Win32.GroupCallTrace.Begin("GetWindowRect", hwnd)
+            try TraceNative_GetWindowRect(hwnd, &rect)
+            finally Bemo.Win32.GroupCallTrace.End(call)
+#else
         [<DllImport("user32.dll")>]
         extern bool GetWindowRect(nativeint hwnd, RECT& rect)
+#endif
+#if DEBUG
+        [<DllImport("user32.dll", EntryPoint = "GetDpiForWindow")>]
+        extern uint32 TraceNative_GetDpiForWindow(nativeint hwnd)
+        let GetDpiForWindow(hwnd: nativeint) =
+            let call = Bemo.Win32.GroupCallTrace.Begin("GetDpiForWindow", hwnd)
+            try TraceNative_GetDpiForWindow(hwnd)
+            finally Bemo.Win32.GroupCallTrace.End(call)
+#else
         [<DllImport("user32.dll")>]
         extern uint32 GetDpiForWindow(nativeint hwnd)
+#endif
         [<DllImport("user32.dll")>]
         extern nativeint GetWindow(nativeint hwnd, uint32 command)
         [<DllImport("user32.dll")>]
         extern nativeint GetTopWindow(nativeint hwnd)
+#if DEBUG
+        [<DllImport("user32.dll", EntryPoint = "GetWindowLongW")>]
+        extern int TraceNative_GetWindowLongW(nativeint hwnd, int index)
+        let GetWindowLongW(hwnd: nativeint, index: int) =
+            let call = Bemo.Win32.GroupCallTrace.Begin("GetWindowLongW", hwnd)
+            try TraceNative_GetWindowLongW(hwnd, index)
+            finally Bemo.Win32.GroupCallTrace.End(call)
+#else
         [<DllImport("user32.dll")>]
         extern int GetWindowLongW(nativeint hwnd, int index)
+#endif
         [<DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")>]
         extern nativeint SetOwner64(nativeint hwnd, int index, nativeint owner)
         [<DllImport("user32.dll", EntryPoint = "SetWindowLongW")>]

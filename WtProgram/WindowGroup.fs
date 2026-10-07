@@ -210,6 +210,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
         let stripHwnd = ts.hwnd
+#if DEBUG
+        Bemo.Win32.GroupCallTrace.Register(stripHwnd)
+#endif
         TopEdgeGuardPlacement.registerStripOwner stripHwnd
             VirtualDesktopGroups.stripOwnerRequest
             (fun reason previous requested owner actual ->
@@ -226,7 +229,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.setTsParent(IntPtr.Zero)
         stripPredictionHook <- Some(VirtualDesktopGroups.Live.predictions.Subscribe(fun request ->
             invoker.tryAsyncInvoke(fun () -> this.withUpdate(fun () -> this.applyStripPrediction(request))) |> ignore))
-        stripMaintenanceTimer.Tick.Add(fun _ -> this.invokeAsync (fun () -> this.refreshStripState("maintenance")))
+        stripMaintenanceTimer.Tick.Add(fun _ ->
+#if DEBUG
+            Bemo.Win32.GroupCallTrace.Beat()
+#endif
+            this.invokeAsync (fun () -> this.refreshStripState("maintenance")))
         stripMaintenanceTimer.Start()
         stripOrderHook <- Some(_os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ ->
             this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))))
@@ -418,6 +425,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // return different scales. Callers name the scale they mean.)
 
     member private this.withUpdate<'a> (f: unit -> 'a) : 'a =
+#if DEBUG
+        use trace = Bemo.Win32.GroupCallTrace.Operation("group.update")
+#endif
         let run () =
             Cell.beginUpdate()
             try f()
@@ -993,6 +1003,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.applyStripDesktop(shown, view)
 
     member private this.refreshStripState(reason: string) = this.ts.withContentSource(reason, fun () ->
+#if DEBUG
+        use trace = Bemo.Win32.GroupCallTrace.Operation("group.refreshStrip")
+#endif
         let ended = this.finishStripPreview()
         this.saveZorder()
         this.updateDimmedTabs(desktopShown)
@@ -1976,6 +1989,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Workspace placement precedes hooks and membership, so no sibling follows
     // an intermediate restore and no ordinary add path can activate a window.
     member this.addWindowForWorkspace(hwnd, placement: OSWindowPlacement) =
+#if DEBUG
+        use trace = Bemo.Win32.GroupCallTrace.Operation("group.addWorkspace")
+#endif
         followerPlacements.Synchronous(hwnd, fun () ->
             Dpi.withUnawareContext <| fun () ->
                 if not (Win32Helper.PlaceWorkspaceWindowNoActivate(hwnd, placement.rcNormalPosition.RECT,
@@ -2020,6 +2036,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // placement must never restore or activate one of its existing members.
     member this.addWindowLinked(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
                                 ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun () ->
+#if DEBUG
+        use trace = Bemo.Win32.GroupCallTrace.Operation("group.addLinked")
+#endif
         if not (this.windows.contains(hwnd)) then
             let target =
                 zorderCell.value.tryHead |> Option.bind (fun front ->
@@ -2088,6 +2107,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.addWindowPlaced(hwnd, withDelay, place, ?alignment: TabAlign, ?pinned: bool,
                                 ?after: IntPtr, ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun() ->
        if this.windows.contains(hwnd).not then
+#if DEBUG
+            use trace = Bemo.Win32.GroupCallTrace.Operation("group.addWindow")
+#endif
             if withDelay then System.Threading.Thread.Sleep(250)
             frameMargins.Attach(hwnd)
             this.refreshWindowMargin(hwnd) |> ignore
@@ -2322,6 +2344,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let stripHwnd = this.ts.hwnd
             this.ts.destroy()
             TopEdgeGuardPlacement.unregisterStripOwner stripHwnd
+#if DEBUG
+            Bemo.Win32.GroupCallTrace.Unregister()
+#endif
             shellHookWindow.value.iter <| fun d -> d.Dispose()
             winEventHandler.value.iter <| fun d -> d.Dispose()
             exitedEvent.Trigger()

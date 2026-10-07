@@ -14,15 +14,33 @@ module private CaptionButtonNative =
         val mutable top: int
         val mutable right: int
         val mutable bottom: int
+#if DEBUG
+    [<DllImport("user32.dll", EntryPoint = "GetWindowRect")>]
+    extern bool TraceNative_GetWindowRect(IntPtr hwnd, Rect& rect)
+    let GetWindowRect(hwnd: IntPtr, rect: byref<Rect>) =
+        let call = Bemo.Win32.GroupCallTrace.Begin("GetWindowRect", hwnd)
+        try TraceNative_GetWindowRect(hwnd, &rect)
+        finally Bemo.Win32.GroupCallTrace.End(call)
+#else
     [<DllImport("user32.dll")>]
     extern bool GetWindowRect(IntPtr hwnd, Rect& rect)
+#endif
     [<DllImport("user32.dll")>]
     extern bool IsHungAppWindow(IntPtr hwnd)
     [<DllImport("user32.dll")>]
     extern IntPtr SetThreadDpiAwarenessContext(IntPtr context)
 
+#if DEBUG
+    [<DllImport("user32.dll", EntryPoint = "GetDpiForWindow")>]
+    extern uint32 TraceNative_GetDpiForWindow(IntPtr hwnd)
+    let GetDpiForWindow(hwnd: IntPtr) =
+        let call = Bemo.Win32.GroupCallTrace.Begin("GetDpiForWindow", hwnd)
+        try TraceNative_GetDpiForWindow(hwnd)
+        finally Bemo.Win32.GroupCallTrace.End(call)
+#else
     [<DllImport("user32.dll")>]
     extern uint32 GetDpiForWindow(IntPtr hwnd)
+#endif
 
     let bounds hwnd =
         let mutable rect = Rect()

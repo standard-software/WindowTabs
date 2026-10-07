@@ -2576,8 +2576,19 @@ namespace Bemo
         public static extern IntPtr SetTimer(IntPtr hwnd, int nIDEvent, int uElapse, TIMERPROC lpTimerFunc);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern void KillTimer(IntPtr hwnd, int nIDEvent);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SetWindowText", CharSet = CharSet.Auto)]
+        private static extern bool TraceNative_SetWindowText(IntPtr hwnd, String text);
+        public static bool SetWindowText(IntPtr hwnd, String text)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowText", hwnd);
+            try { return TraceNative_SetWindowText(hwnd, text); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool SetWindowText(IntPtr hwnd, String text);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr CreateMenu();
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -2596,8 +2607,19 @@ namespace Bemo
         public static extern short GetAsyncKeyState(int vkCode);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool GetCursorPos(out POINT pt);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "BringWindowToTop", CharSet=CharSet.Auto)]
+        private static extern bool TraceNative_BringWindowToTop(IntPtr hWnd);
+        public static bool BringWindowToTop(IntPtr hWnd)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("BringWindowToTop", hWnd);
+            try { return TraceNative_BringWindowToTop(hWnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern bool BringWindowToTop(IntPtr hWnd);
+#endif
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern int GetUpdateRgn(IntPtr hWnd, IntPtr hRgn, bool bErase);
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
@@ -2622,8 +2644,19 @@ namespace Bemo
             }
             return msg;
         }
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "MoveWindow", CharSet=CharSet.Auto)]
+		private static extern bool TraceNative_MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+		public static bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("MoveWindow", hWnd);
+            try { return TraceNative_MoveWindow(hWnd, X, Y, nWidth, nHeight, bRepaint); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+#endif
 		public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
 		{
 			if (IntPtr.Size == 4)
@@ -2632,10 +2665,32 @@ namespace Bemo
 			}
 			return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
 		}
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="SetWindowLong", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SetWindowLongPtr32(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+		public static IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowLongPtr32", hWnd);
+            try { return TraceNative_SetWindowLongPtr32(hWnd, nIndex, dwNewLong); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="SetWindowLong", CharSet=CharSet.Auto)]
 		public static extern IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="SetWindowLongPtr", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+		public static IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowLongPtr64", hWnd);
+            try { return TraceNative_SetWindowLongPtr64(hWnd, nIndex, dwNewLong); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="SetWindowLongPtr", CharSet=CharSet.Auto)]
 		public static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+#endif
 		public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, WNDPROC wndProc)
 		{
 			if (IntPtr.Size == 4)
@@ -2644,10 +2699,32 @@ namespace Bemo
 			}
 			return SetWindowLongPtr64(hWnd, nIndex, wndProc);
 		}
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="SetWindowLong", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SetWindowLongPtr32(IntPtr hWnd, int nIndex, WNDPROC wndProc);
+		public static IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, WNDPROC wndProc)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowLongPtr32", hWnd);
+            try { return TraceNative_SetWindowLongPtr32(hWnd, nIndex, wndProc); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="SetWindowLong", CharSet=CharSet.Auto)]
 		public static extern IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, WNDPROC wndProc);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="SetWindowLongPtr", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SetWindowLongPtr64(IntPtr hWnd, int nIndex, WNDPROC wndProc);
+		public static IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, WNDPROC wndProc)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowLongPtr64", hWnd);
+            try { return TraceNative_SetWindowLongPtr64(hWnd, nIndex, wndProc); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="SetWindowLongPtr", CharSet=CharSet.Auto)]
 		public static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, WNDPROC wndProc);
+#endif
 		public static IntPtr GetWindowLong(IntPtr hWnd, int nIndex)
 		{
 			if (IntPtr.Size == 4)
@@ -2656,10 +2733,32 @@ namespace Bemo
 			}
 			return GetWindowLongPtr64(hWnd, nIndex);
 		}
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="GetWindowLong", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_GetWindowLong32(IntPtr hWnd, int nIndex);
+		public static IntPtr GetWindowLong32(IntPtr hWnd, int nIndex)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowLong32", hWnd);
+            try { return TraceNative_GetWindowLong32(hWnd, nIndex); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="GetWindowLong", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetWindowLong32(IntPtr hWnd, int nIndex);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint="GetWindowLongPtr", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+		public static IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowLongPtr64", hWnd);
+            try { return TraceNative_GetWindowLongPtr64(hWnd, nIndex); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", EntryPoint="GetWindowLongPtr", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+#endif
 		public static IntPtr SetClassLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
 		{
 			if (IntPtr.Size == 4)
@@ -2684,22 +2783,77 @@ namespace Bemo
 		public static extern IntPtr GetClassLong32(IntPtr hWnd, int nIndex);
 		[DllImport("user32.dll", EntryPoint="GetClassLongPtr", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetClassLongPtr64(IntPtr hWnd, int nIndex);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet=CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int msg, int wParam, ref POINT point);
+        public static IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, ref POINT point)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, msg, wParam, ref point); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, ref POINT point);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref MINMAXINFO minMaxInfo);
+        public static IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref MINMAXINFO minMaxInfo)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, msg, wParam, ref minMaxInfo); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref MINMAXINFO minMaxInfo);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int msg, IntPtr wParam, String text);
+        public static IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, String text)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, msg, wParam, text); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, String text);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
 		public static extern IntPtr SendMessageCallback(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, SENDASYNCPROC lpCallBack, IntPtr dwData);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr BroadcastSystemMessage(uint dwFlags, ref uint lpdwRecipients, int uiMessage, IntPtr wParam, IntPtr lParam);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr BroadcastSystemMessageEx(uint dwFlags, ref uint lpdwRecipients, int uiMessage, IntPtr wParam, IntPtr lParam, ref BSMINFO pBSMInfo);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SendMessage", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+		public static IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, msg, wParam, lParam); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SendMessage", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+		public static IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, msg, wParam, lParam); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+#endif
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr SetWindowsHookEx(int idHook, HOOKPROC lpfn, IntPtr hInstance, int threadId);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -2725,8 +2879,19 @@ namespace Bemo
 		public static extern IntPtr GetWindow(IntPtr hWnd, int uCmd);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetTopWindow(IntPtr hWnd);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "RedrawWindow", CharSet=CharSet.Auto)]
+		private static extern bool TraceNative_RedrawWindow(IntPtr hWnd, IntPtr lprcRectangle, IntPtr hrgnUpdate, int flags);
+		public static bool RedrawWindow(IntPtr hWnd, IntPtr lprcRectangle, IntPtr hrgnUpdate, int flags)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("RedrawWindow", hWnd);
+            try { return TraceNative_RedrawWindow(hWnd, lprcRectangle, hrgnUpdate, flags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcRectangle, IntPtr hrgnUpdate, int flags);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern int ClientToScreen(IntPtr hWnd, ref POINT pt);
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
@@ -2735,21 +2900,88 @@ namespace Bemo
 		public static extern bool GetClientRect(IntPtr hWnd, ref RECT rect);
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern int MapWindowPoints(IntPtr hWndFrom, IntPtr hWndTo, ref POINT points, int cPoints);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "GetWindowRect", CharSet=CharSet.Auto)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool TraceNative_GetWindowRect(IntPtr hWnd, out RECT lpRect);
+		public static bool GetWindowRect(IntPtr hWnd, out RECT lpRect)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowRect", hWnd);
+            try { return TraceNative_GetWindowRect(hWnd, out lpRect); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern int GetWindowThreadProcessId(IntPtr handle, out int lpdwProcessId);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SendMessageTimeout", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, out IntPtr result);
+		public static IntPtr SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, out IntPtr result)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessageTimeout", hWnd);
+            try { return TraceNative_SendMessageTimeout(hWnd, message, wParam, lParam, flags, timeout, out result); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, out IntPtr result);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessageTimeout", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, IntPtr result);
+        public static IntPtr SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, IntPtr result)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessageTimeout", hWnd);
+            try { return TraceNative_SendMessageTimeout(hWnd, message, wParam, lParam, flags, timeout, result); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam, int flags, int timeout, IntPtr result);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessageTimeout", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessageTimeout(IntPtr hWnd, int message, int wParam, StringBuilder buffer, int flags, int timeout, out IntPtr result);
+        public static IntPtr SendMessageTimeout(IntPtr hWnd, int message, int wParam, StringBuilder buffer, int flags, int timeout, out IntPtr result)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessageTimeout", hWnd);
+            try { return TraceNative_SendMessageTimeout(hWnd, message, wParam, buffer, flags, timeout, out result); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int message, int wParam, StringBuilder buffer, int flags, int timeout, out IntPtr result);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+		private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int message, IntPtr wParam, StringBuilder lParam);
+		public static IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, StringBuilder lParam)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, message, wParam, lParam); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
 		public static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, StringBuilder lParam);
+#endif
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_SendMessage(IntPtr hWnd, int message, int wParam, StringBuilder lParam);
+        public static IntPtr SendMessage(IntPtr hWnd, int message, int wParam, StringBuilder lParam)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", hWnd);
+            try { return TraceNative_SendMessage(hWnd, message, wParam, lParam); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, int message, int wParam, StringBuilder lParam);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool PostMessage(IntPtr handle, int Msg, IntPtr wParam, IntPtr lParam);
@@ -2758,13 +2990,47 @@ namespace Bemo
         public static extern bool PostThreadMessage(int idThread, int Msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
 		public static extern IntPtr BeginDeferWindowPos(int nNumWindows);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "DeferWindowPos", CharSet=CharSet.Auto)]
+		private static extern IntPtr TraceNative_DeferWindowPos(IntPtr hWinPosInfo, IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags);
+		public static IntPtr DeferWindowPos(IntPtr hWinPosInfo, IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("DeferWindowPos", hWnd);
+            try { var result = TraceNative_DeferWindowPos(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags); Bemo.Win32.GroupCallTrace.TrackBatch(hWinPosInfo, result, call); return result; }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr DeferWindowPos(IntPtr hWinPosInfo, IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SetWindowPos", CharSet=CharSet.Auto)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool TraceNative_SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags);
+		public static bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowPos", hWnd);
+            try { return TraceNative_SetWindowPos(hWnd, hWndInsertAfter, x, y, cx, cy, uFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, int uFlags);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "EndDeferWindowPos", CharSet=CharSet.Auto)]
+		private static extern bool TraceNative_EndDeferWindowPos(IntPtr hWinPosInfo);
+		public static bool EndDeferWindowPos(IntPtr hWinPosInfo)
+		{
+            var call = Bemo.Win32.GroupCallTrace.BeginBatch(hWinPosInfo);
+            try { return TraceNative_EndDeferWindowPos(hWinPosInfo); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool EndDeferWindowPos(IntPtr hWinPosInfo);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern int GetWindowRgn(IntPtr hWnd, IntPtr hRgn);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
@@ -2838,32 +3104,109 @@ namespace Bemo
         public static extern int DefWindowProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool ScrollWindowEx(IntPtr hWnd, int dx, int dy, IntPtr prcScroll, IntPtr prcClip, IntPtr hrgnUpdate, IntPtr prcUpdate, int flags);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "GetWindowText", CharSet=CharSet.Auto)]
+		private static extern int TraceNative_GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+		public static int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowText", hWnd);
+            try { return TraceNative_GetWindowText(hWnd, lpString, nMaxCount); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		[return : MarshalAs(UnmanagedType.Bool)]
 		public static extern bool IsHungAppWindow(IntPtr hWnd);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		[return : MarshalAs(UnmanagedType.Bool)]
 		public static extern bool DestroyWindow(IntPtr hWnd);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SetWindowPlacement", CharSet=CharSet.Auto, ExactSpelling=true)]
+		private static extern bool TraceNative_SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT placement);
+		public static bool SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT placement)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetWindowPlacement", hWnd);
+            try { return TraceNative_SetWindowPlacement(hWnd, ref placement); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern bool SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT placement);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "GetWindowPlacement", CharSet=CharSet.Auto, ExactSpelling=true)]
+		private static extern int TraceNative_GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT placement);
+		public static int GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT placement)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowPlacement", hWnd);
+            try { return TraceNative_GetWindowPlacement(hWnd, ref placement); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern int GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT placement);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetAncestor(IntPtr hWnd, int gaFlags);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr GetLastActivePopup(IntPtr hWnd);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SetForegroundWindow", CharSet=CharSet.Auto, ExactSpelling=true)]
+		private static extern bool TraceNative_SetForegroundWindow(IntPtr hWnd);
+		public static bool SetForegroundWindow(IntPtr hWnd)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetForegroundWindow", hWnd);
+            try { return TraceNative_SetForegroundWindow(hWnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern bool SetForegroundWindow(IntPtr hWnd);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "ShowWindow", CharSet=CharSet.Auto, ExactSpelling=true)]
+		private static extern bool TraceNative_ShowWindow(IntPtr hWnd, int nCmdShow);
+		public static bool ShowWindow(IntPtr hWnd, int nCmdShow)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("ShowWindow", hWnd);
+            try { return TraceNative_ShowWindow(hWnd, nCmdShow); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
         public static extern void PostQuitMessage(int nExitCode);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "UpdateWindow", CharSet = CharSet.Auto, ExactSpelling = true)]
+        private static extern bool TraceNative_UpdateWindow(IntPtr hwnd);
+        public static bool UpdateWindow(IntPtr hwnd)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("UpdateWindow", hwnd);
+            try { return TraceNative_UpdateWindow(hwnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
         public static extern bool UpdateWindow(IntPtr hwnd);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "ShowWindowAsync", CharSet = CharSet.Auto, ExactSpelling = true)]
+		private static extern bool TraceNative_ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+		public static bool ShowWindowAsync(IntPtr hWnd, int nCmdShow)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("ShowWindowAsync", hWnd);
+            try { return TraceNative_ShowWindowAsync(hWnd, nCmdShow); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
 		public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool DestroyMenu(IntPtr hMenu);
@@ -2880,10 +3223,32 @@ namespace Bemo
 		public static extern bool DestroyIcon(IntPtr hIcon);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern void DrawMenuBar(IntPtr hWnd);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "SetActiveWindow", CharSet=CharSet.Auto)]
+		private static extern void TraceNative_SetActiveWindow(IntPtr hWnd);
+		public static void SetActiveWindow(IntPtr hWnd)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetActiveWindow", hWnd);
+            try { TraceNative_SetActiveWindow(hWnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern void SetActiveWindow(IntPtr hWnd);
+#endif
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "GetWindowInfo", CharSet=CharSet.Auto)]
+		private static extern bool TraceNative_GetWindowInfo(IntPtr hWnd, out WINDOWINFO windowInfo);
+		public static bool GetWindowInfo(IntPtr hWnd, out WINDOWINFO windowInfo)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowInfo", hWnd);
+            try { return TraceNative_GetWindowInfo(hWnd, out windowInfo); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool GetWindowInfo(IntPtr hWnd, out WINDOWINFO windowInfo);
+#endif
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
         public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
@@ -2900,8 +3265,19 @@ namespace Bemo
 		public static extern bool UpdateLayeredWindow(IntPtr hWnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, int crKey, IntPtr pblend, int dwFlags);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetDCEx(IntPtr hWnd, IntPtr hrgnClip, int flags);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "PrintWindow", CharSet=CharSet.Auto)]
+		private static extern bool TraceNative_PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
+		public static bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("PrintWindow", hWnd);
+            try { return TraceNative_PrintWindow(hWnd, hdcBlt, nFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
 		public static extern IntPtr GetDC(IntPtr hWnd);
 		[DllImport("user32.dll", CharSet=CharSet.Auto)]
@@ -2954,14 +3330,36 @@ namespace Bemo
         public static extern bool SystemParametersInfo(int uiAction, uint uiParam, ref ANIMATIONINFO pvParam, SPIF fWinIni);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern int GetSysColor(int nIndex);
+#if DEBUG
+        [DllImport("User32.dll", EntryPoint = "ShowWindow", CharSet = CharSet.Auto)]
+        private static extern int TraceNative_ShowWindow(IntPtr hWnd, short cmdShow);
+        public static int ShowWindow(IntPtr hWnd, short cmdShow)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("ShowWindow", hWnd);
+            try { return TraceNative_ShowWindow(hWnd, cmdShow); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("User32.dll", CharSet = CharSet.Auto)]
         public static extern int ShowWindow(IntPtr hWnd, short cmdShow);
+#endif
         [DllImport("User32.dll", CharSet = CharSet.Auto)]
         public static extern bool DragDetect(IntPtr hWnd, POINT pt);
         [DllImport("User32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SetCursor(IntPtr hCursor);
+#if DEBUG
+        [DllImport("user32", EntryPoint = "SendMessage")]
+        private static extern IntPtr TraceNative_SendMessage(IntPtr handle, int msg, int wParam, ref RECT rect);
+        public static IntPtr SendMessage(IntPtr handle, int msg, int wParam, ref RECT rect)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SendMessage", handle);
+            try { return TraceNative_SendMessage(handle, msg, wParam, ref rect); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32")]
         public static extern IntPtr SendMessage(IntPtr handle, int msg, int wParam, ref RECT rect);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
         public static extern IntPtr SetCapture(IntPtr hwnd);
         [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
@@ -2978,8 +3376,19 @@ namespace Bemo
 		public static extern bool IsWindowEnabled(IntPtr hWnd);
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern bool IsWindow(IntPtr hWnd);
+#if DEBUG
+		[DllImport("user32.dll", EntryPoint = "EnableWindow", CharSet=CharSet.Auto, ExactSpelling=true)]
+		private static extern bool TraceNative_EnableWindow(IntPtr hWnd, bool enable);
+		public static bool EnableWindow(IntPtr hWnd, bool enable)
+		{
+            var call = Bemo.Win32.GroupCallTrace.Begin("EnableWindow", hWnd);
+            try { return TraceNative_EnableWindow(hWnd, enable); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+		}
+#else
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
 		public static extern bool EnableWindow(IntPtr hWnd, bool enable);
+#endif
 		[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
         public static extern bool EnumThreadWindows(int dwThreadId, WNDENUMPROC lpEnumFunc, IntPtr lParam);
         [DllImport("user32.dll", CharSet=CharSet.Auto)]
@@ -3057,12 +3466,34 @@ namespace Bemo
         public static extern bool GetGUIThreadInfo(int idThread, out GUITHREADINFO lpgui);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr CopyImage(IntPtr hImage, int uType, int cxDesired, int cyDesired, int fuFlags);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "SetLayeredWindowAttributes", CharSet = CharSet.Auto)]
+        private static extern bool TraceNative_SetLayeredWindowAttributes(IntPtr hwnd, int crKey, byte bAlpha, int dwFlags);
+        public static bool SetLayeredWindowAttributes(IntPtr hwnd, int crKey, byte bAlpha, int dwFlags)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("SetLayeredWindowAttributes", hwnd);
+            try { return TraceNative_SetLayeredWindowAttributes(hwnd, crKey, bAlpha, dwFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, int crKey, byte bAlpha, int dwFlags);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr CopyIcon(IntPtr hIcon);
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "MonitorFromWindow", CharSet = CharSet.Auto)]
+        private static extern IntPtr TraceNative_MonitorFromWindow(IntPtr hwnd, int dwFlags);
+        public static IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("MonitorFromWindow", hwnd);
+            try { return TraceNative_MonitorFromWindow(hwnd, dwFlags); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
+#endif
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr MonitorFromPoint(POINT pt, int dwFlags);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -3090,14 +3521,36 @@ namespace Bemo
         [DllImport("shcore.dll")]
         public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
         
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "GetDpiForWindow")]
+        private static extern uint TraceNative_GetDpiForWindow(IntPtr hwnd);
+        public static uint GetDpiForWindow(IntPtr hwnd)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetDpiForWindow", hwnd);
+            try { return TraceNative_GetDpiForWindow(hwnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll")]
         public static extern uint GetDpiForWindow(IntPtr hwnd);
+#endif
         
         [DllImport("user32.dll")]
         public static extern int GetDpiForSystem();
         
+#if DEBUG
+        [DllImport("user32.dll", EntryPoint = "GetWindowDpiAwarenessContext")]
+        private static extern IntPtr TraceNative_GetWindowDpiAwarenessContext(IntPtr hwnd);
+        public static IntPtr GetWindowDpiAwarenessContext(IntPtr hwnd)
+        {
+            var call = Bemo.Win32.GroupCallTrace.Begin("GetWindowDpiAwarenessContext", hwnd);
+            try { return TraceNative_GetWindowDpiAwarenessContext(hwnd); }
+            finally { Bemo.Win32.GroupCallTrace.End(call); }
+        }
+#else
         [DllImport("user32.dll")]
         public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hwnd);
+#endif
         
         [DllImport("user32.dll")]
         public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr dpiContext);

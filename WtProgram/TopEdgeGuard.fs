@@ -17,11 +17,29 @@ open System
 // layered at alpha 1 - invisible in practice, but still hit-tested, which a
 // fully transparent layered window would not be.
 module private TopEdgeGuardNative =
+#if DEBUG
+    [<System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")>]
+    extern nativeint TraceNative_SendMessageTimeout(nativeint hwnd, uint32 message, nativeint wparam, nativeint lparam, uint32 flags, uint32 timeout, nativeint& result)
+    let SendMessageTimeout(hwnd: nativeint, message: uint32, wparam: nativeint, lparam: nativeint, flags: uint32, timeout: uint32, result: byref<nativeint>) =
+        let call = Bemo.Win32.GroupCallTrace.Begin("SendMessageTimeout", hwnd)
+        try TraceNative_SendMessageTimeout(hwnd, message, wparam, lparam, flags, timeout, &result)
+        finally Bemo.Win32.GroupCallTrace.End(call)
+#else
     [<System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")>]
     extern nativeint SendMessageTimeout(nativeint hwnd, uint32 message, nativeint wparam, nativeint lparam, uint32 flags, uint32 timeout, nativeint& result)
+#endif
 
+#if DEBUG
+    [<System.Runtime.InteropServices.DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")>]
+    extern int TraceNative_DwmGetWindowAttribute(nativeint hwnd, uint32 attribute, RECT& value, uint32 size)
+    let DwmGetWindowAttribute(hwnd: nativeint, attribute: uint32, value: byref<RECT>, size: uint32) =
+        let call = Bemo.Win32.GroupCallTrace.Begin("DwmGetWindowAttribute", hwnd)
+        try TraceNative_DwmGetWindowAttribute(hwnd, attribute, &value, size)
+        finally Bemo.Win32.GroupCallTrace.End(call)
+#else
     [<System.Runtime.InteropServices.DllImport("dwmapi.dll")>]
     extern int DwmGetWindowAttribute(nativeint hwnd, uint32 attribute, RECT& value, uint32 size)
+#endif
 
     // GetSystemMetrics answers for the primary monitor's scale whatever the
     // window's own scale is. This one answers for the scale it is given.
