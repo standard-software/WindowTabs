@@ -413,6 +413,8 @@ type Program() as this =
     // Carries a matched ClosedTabInfo from tryClosedTabRestore to the
     // positioning step at the end of addWindowToGroup
     let pendingClosedTabRestores = Cell.create(Map2() : Map2<IntPtr, ClosedTabInfo>)
+    // Keep the hidden-target decision across a late claim's queued detachment.
+    let pendingLinkedRestores = Cell.create(Set.empty<IntPtr>)
     // Seeded closed-tab entries reference their restored group by a sentinel
     // token (the group's first saved old hwnd), not by the group's strip
     // hwnd: at restore time the strip window is created asynchronously on
@@ -1340,9 +1342,11 @@ type Program() as this =
             restoredFromMap.[hwnd] <- info.closedHwnd
             // Remember the entry so addWindowToGroup can restore the position
             pendingClosedTabRestores.map(fun m -> m.add hwnd info)
-            match this.closedInfoGroupHere info with
-            | Some(g) -> Some(Some(g))
-            | None -> None  // former group is gone (or on another desktop): state is restored, grouping falls through
+            match this.closedInfoGroupForRestore(hwnd, info) with
+            | Some(g) ->
+                if not g.isDesktopShown then pendingLinkedRestores.map(Set.add hwnd)
+                Some(Some(g))
+            | None -> None  // No eligible live group: state is restored, grouping falls through.
         | None -> None
 
     // Main-thread title sync (no cross-thread notification): compares each
@@ -1361,6 +1365,7 @@ type Program() as this =
             let dead = claimedWindows.value |> Set.filter (fun h -> not (os.windowFromHwnd(h).isWindow))
             if not dead.IsEmpty then
                 claimedWindows.map(fun claimed -> Set.difference claimed dead)
+                pendingLinkedRestores.map(fun pending -> Set.difference pending dead)
                 pendingClosedTabRestores.map(fun pending ->
                     dead |> Set.fold (fun (m: Map2<IntPtr, ClosedTabInfo>) h -> m.remove h) pending)
             // While saved windows are still waiting to open, every grouped
@@ -1422,11 +1427,11 @@ type Program() as this =
                     match peeked with
                     | Some(info, ambiguous) ->
                         let currentGroup = this.groupOfWindow hwnd
-                        // A former group on another desktop is not somewhere to
-                        // detach the window to: the entry is applied in place.
-                        let savedGroup = this.closedInfoGroupHere info
+                        // A claim may rejoin a hidden group through the same safe
+                        // link insertion as an early claim, without moving its peers.
+                        let savedGroup = this.closedInfoGroupForRestore(hwnd, info)
                         match currentGroup, savedGroup with
-                        | Some(cur), Some(saved) when (try cur.hwnd <> saved.hwnd with _ -> false) ->
+                        | Some(cur), Some(saved) when not (obj.ReferenceEquals(cur, saved)) ->
                             // The tab sits in the wrong group (e.g. VSCode's "Welcome"
                             // window was auto-grouped before the workspace title
                             // appeared). Detach it and let the normal grouping
@@ -1437,7 +1442,11 @@ type Program() as this =
                             match this.takeClosedTabEntry(hwnd, info) with
                             | Some entry ->
                                 pendingClosedTabRestores.map(fun m -> m.add hwnd entry)
-                                cur.removeWindow(hwnd)
+                                if not saved.isDesktopShown then pendingLinkedRestores.map(Set.add hwnd)
+                                match cur :> obj with
+                                | :? GroupInfo as gi when not saved.isDesktopShown ->
+                                    gi.invokeGroup(fun () -> gi.group.removeWindow(hwnd, activate=false))
+                                | _ -> cur.removeWindow(hwnd)
                                 this.scheduleUpdateAppWindows()
                             | None -> ()
                         | _ ->
@@ -1933,6 +1942,7 @@ type Program() as this =
                     if window.isWindow.not then
                         if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
                         claimedWindows.map(ClosedTabClaim.forget hwnd)
+                        pendingLinkedRestores.map(Set.remove hwnd)
                         pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                         explicitWindows.map(fun m -> m.remove hwnd)
                     // Removal is asynchronous, so the next pass sees the window
@@ -2118,18 +2128,36 @@ type Program() as this =
             ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
             |> Option.exists (fun request ->
                 match request.destination with JoinGroup _ -> true | _ -> false)
+        let restoreTargetHidden = not group.isDesktopShown || pendingLinkedRestores.value.Contains hwnd
+        pendingLinkedRestores.map(Set.remove hwnd)
+        let restoreInFormerGroup = returningState |> Option.exists (this.isInfoGroup group)
         match group :> obj with
         | :? GroupInfo as gi ->
             gi.addWindowWith(hwnd, fun wg ->
                 let state = VirtualDesktopGroups.Live.snapshot()
                 let away = VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
                            (VirtualDesktopGroups.Live.read state hwnd).presence = VirtualDesktopGroups.Away
-                let linked = explicitLink && (away || not wg.isDesktopShownThreadSafe)
+                let restoredLink =
+                    VirtualDesktopGroups.restoreLinked (state.shared.Contains hwnd) restoreInFormerGroup
+                        (restoreTargetHidden || not wg.isDesktopShownThreadSafe) away
+                let linked = restoredLink || (explicitLink && (away || not wg.isDesktopShownThreadSafe))
+                let addLinked add =
+                    let trace reason =
+                        if restoredLink then
+                            returningState |> Option.iter (fun info ->
+                                this.traceRestoreTarget(hwnd, info, true, reason))
+                    try
+                        add()
+                        trace (if wg.windows.contains(hwnd) then "joined-linked" else "join-not-applied")
+                    with _ ->
+                        trace "join-failed"
+                        reraise()
                 let invoker = Tab(invokerHwnd)
                 if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
                     if linked then
-                        wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                           pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                        addLinked(fun () ->
+                            wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
+                                               pinned=wg.ts.isPinned(invoker), after=invokerHwnd))
                     else
                         wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
                                      pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
@@ -2143,7 +2171,8 @@ type Program() as this =
                                 else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
                     let pinned = returningState |> Option.map (fun info -> info.isPinned)
                     if linked then
-                        wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder)
+                        addLinked(fun () ->
+                            wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
                     else
                         wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
         | _ -> group.addWindow(hwnd, withDelay)
@@ -2284,6 +2313,7 @@ type Program() as this =
                 windowInfoCache.map(fun m -> m.remove hwnd)
                 windowFirstSeen.map(fun m -> m.remove hwnd)
                 claimedWindows.map(ClosedTabClaim.forget hwnd)
+                pendingLinkedRestores.map(Set.remove hwnd)
                 pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                 explicitWindows.map(fun m -> m.remove hwnd)
                 pendingNewTabInvokers.map(fun m -> m.remove hwnd)
@@ -2480,11 +2510,28 @@ type Program() as this =
             (this.desktop.groups.list |> List.map (fun g ->
                 g, (if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden)))
 
-    /// A closed tab's former group, while it is drawn here
-    /// (VirtualDesktopGroups.restoreInto). Only the group is refused, never the
-    /// record: the tab's state comes back either way.
+    /// A live window dropped by the scan retains the existing here-only rule.
     member private this.closedInfoGroupHere (info: ClosedTabInfo) : IGroup option =
-        VirtualDesktopGroups.restoreInto (this.findGroupForClosedInfo info) (fun (g: IGroup) -> g.isDesktopShown)
+        this.findGroupForClosedInfo info |> Option.filter (fun g -> g.isDesktopShown)
+
+    member private this.traceRestoreTarget(hwnd: IntPtr, info: ClosedTabInfo, across: bool, reason: string) =
+        RestoreTrace.log (fun () ->
+            sprintf "restore-target hwnd=%X token=%X rank=%d across=%b result=%s"
+                (hwnd.ToInt64()) ((groupRefHandle info.groupRef).ToInt64()) info.tabIndex across reason)
+
+    /// Only a claimed seed or closed tab gets the cross-desktop exception.
+    /// Keep shared-window evidence even during a temporarily stale reading.
+    member private this.closedInfoGroupForRestore(hwnd: IntPtr, info: ClosedTabInfo) : IGroup option =
+        let found = this.findGroupForClosedInfo info
+        let shared = (VirtualDesktopGroups.Live.snapshot()).shared.Contains hwnd
+        let target = VirtualDesktopGroups.restoreInto shared found (fun (g: IGroup) -> g.isDesktopShown)
+        match found, target with
+        | None, _ -> this.traceRestoreTarget(hwnd, info, false, "group-missing")
+        | Some g, None when not g.isDesktopShown ->
+            this.traceRestoreTarget(hwnd, info, true,
+                if shared then "shared-hidden" else "cross-desktop-disabled")
+        | _ -> ()
+        target
 
     /// Which windows of which group are written to the settings file or set
     /// aside while WindowTabs is off - `keeps groupIndex hwnd` - and which of
