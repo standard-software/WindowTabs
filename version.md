@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next12
+## version ss_2026.10.03_next13
 
 - Tab groups are no longer kept separately for each virtual desktop.
   - The tab of a window on another desktop is drawn at half opacity;
@@ -16,7 +16,9 @@
   - A restore switches no desktop and moves no window between desktops.
 - The tabs of an inactive tab group are drawn at 50% opacity (was about 38%).
 - Fixed WindowTabs freezing when the scale of a display is changed.
-- Fixed the frame of windows such as LINE sticking out of their tab group.
+- Fixed problems with windows that have a special resize frame, such as LINE.
+  - The frame could stick out of the tab group.
+  - The whole tab group could grow when such a window started and joined it.
 - Fixed windows dropping out of their tab group at a desktop switch.
 - Fixed a crash when a tab group held a borderless full-screen window.
 - The top-edge lock no longer covers another group's window in front of it.
