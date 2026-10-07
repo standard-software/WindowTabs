@@ -1302,6 +1302,21 @@ type Program() as this =
         match matched with
         | Some(info) ->
             let hwnd = window.hwnd
+#if DEBUG
+            // Claim runs on the main thread. Sample native geometry without
+            // reading or waiting for the destination group's cells.
+            let probe = WindowFrameMargin.Cache()
+            try
+                probe.Refresh(hwnd, TopEdgeGuardPlacement.isGuard) |> ignore
+                let target = this.findGroupForClosedInfo info |> Option.map (fun group -> group.hwnd)
+                let published = target |> Option.bind WindowFrameMargin.readBase
+#if DEBUG
+                WindowFrameMargin.trace (
+                    sprintf "claim hwnd=%X margin=%A group=%A publishedBase=%A"
+                        (int64 hwnd) (probe.Get(hwnd, 96)) target published)
+#endif
+            finally probe.Clear()
+#endif
             // Restore state to the global maps before addWindow so the tab is
             // created with the saved name/colors/pin/alignment (same pattern
             // as restoreTabGroupsFromSettings)

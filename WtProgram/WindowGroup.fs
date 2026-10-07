@@ -44,6 +44,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let _os = OS()
     let frameMargins = WindowFrameMargin.Cache()
     let mutable marginPollIndex = 0
+    // Each group remembers what it applied even when another group sampled first.
+    let appliedMargins = Dictionary<IntPtr, WindowFrameMargin.Sticky>()
+    let mutable placementSource = IntPtr.Zero
     let addedEvent = Event<_>()
     let movedEvent = Event<IntPtr*int>()
     let removedEvent = Event<_>()
@@ -503,6 +506,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 w.isWindow && w.isMinimized.not && b.width > 0 && b.height > 0
             | None -> false
         if topIsValid then
+            this.refreshWindowMargin(zorderCell.value.head) |> ignore
             // This is the de-facto "restore follows the group" path: when the
             // user restores one window (e.g. from the taskbar), the siblings
             // are still minimized here and adjustWindowPlacement below
@@ -574,6 +578,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
                         // otherwise trigger redundant work and follow-up events on every spurious change.
                         if currentBounds.size <> correctBounds.size || atIconicPosition then
+#if DEBUG
+                            WindowFrameMargin.trace (
+                                sprintf "move reason=second-pass group=%X hwnd=%X source=%X target=%A"
+                                    (int64 this.hwnd) (int64 hwnd) (int64 topHwnd) correctBounds)
+#endif
                             // Async (SWP_ASYNCWINDOWPOS) so a busy just-restored
                             // app can't stall the strip thread here; z-order is
                             // untouched so this can't disturb the fronting done
@@ -1223,6 +1232,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.saveTopWindowPlacement() = PerfTrace.time "group.saveTopPlacement" <| fun () ->
         let window = this.os.windowFromHwnd(zorderCell.value.head)
+        this.refreshWindowMargin(window.hwnd) |> ignore
         // A dying window (e.g. LibreOffice tearing down under load) reports
         // degenerate bounds: GetWindowRect fails and yields (0,0,0,0). Never
         // save such a placement — it would later be applied to every other
@@ -1248,7 +1258,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.removeWindowMarginForRead(window.hwnd, bounds)
                 else bounds
             maximizedFrameBounds <- if window.isMaximized then Some liveBounds else None
+            placementSource <- window.hwnd
+#if DEBUG
+            WindowFrameMargin.trace (
+                sprintf "base reason=top group=%X source=%X bounds=%A margin=%A"
+                    (int64 this.hwnd) (int64 placementSource) adjustedBounds (frameMargins.Get(window.hwnd, 96)))
+#endif
             placement.set(Some(adjustedBounds, window.placement))
+            this.publishMarginBase()
            
     member private this.waitForDpiChange(hwnd: IntPtr, initialDpi: uint32, maxWaitMs: int) = PerfTrace.time "group.follower.waitDpi" <| fun () ->
         let mutable currentDpi = initialDpi
@@ -1271,6 +1288,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // otherwise trigger redundant work and cascading follow-up events.
         if window.bounds = bounds then () else
 
+#if DEBUG
+        WindowFrameMargin.trace (
+            sprintf "move reason=dpi-placement group=%X hwnd=%X source=%X target=%A"
+                (int64 this.hwnd) (int64 hwnd) (int64 placementSource) bounds)
+#endif
         // Get current DPI (before move) and target DPI (after move)
         let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
         let targetDpi =
@@ -1305,6 +1327,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // moving a detached member or overwriting a newer placement.
     member private this.applyBackgroundWindowBounds(hwnd: IntPtr, bounds: Rect) =
         let window = this.os.windowFromHwnd(hwnd)
+#if DEBUG
+        WindowFrameMargin.trace (
+            sprintf "move reason=background-async group=%X hwnd=%X source=%X target=%A"
+                (int64 this.hwnd) (int64 hwnd) (int64 placementSource) bounds)
+#endif
         backgroundMoveGeneration <- backgroundMoveGeneration + 1L
         let ticket = backgroundMoveGeneration
         pendingBackgroundMoves.[hwnd] <- ticket
@@ -1349,10 +1376,60 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
         top <> 0 || left <> 0 || right <> 0 || bottom <> 0
 
+    member private this.publishMarginBase() =
+#if DEBUG
+        placement.value |> Option.iter (fun (bounds, _) ->
+            WindowFrameMargin.publishBase this.hwnd placementSource
+                { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height })
+#else
+        ()
+#endif
+
+    member private this.traceMarginPlacement(reason, hwnd) =
+#if DEBUG
+        WindowFrameMargin.trace (
+            sprintf "%s group=%X hwnd=%X margin=%A base=%A source=%X"
+                reason (int64 this.hwnd) (int64 hwnd) (frameMargins.Get(hwnd, 96))
+                (placement.value |> Option.map fst) (int64 placementSource))
+#else
+        ()
+#endif
+
     member private this.refreshWindowMargin(hwnd) =
-        frameMargins.Refresh(hwnd, fun candidate ->
-            // Our strip and guard are owned popups too. Neither is an app frame.
-            candidate = this.ts.hwnd || TopEdgeGuardPlacement.isGuard candidate)
+        let before =
+            match appliedMargins.TryGetValue hwnd with
+            | true, margin -> margin
+            | _ -> frameMargins.Measurement(hwnd)
+        let window = this.os.windowFromHwnd(hwnd)
+        let normal = window.isWindow && not window.isMinimized && not window.isMaximized
+        let moving = inMoveSize.value || window.isInMoveSize
+        if not moving then
+            frameMargins.Refresh(hwnd, fun candidate ->
+                // Our strip and guard are owned popups too. Neither is an app frame.
+                candidate = this.ts.hwnd || TopEdgeGuardPlacement.isGuard candidate) |> ignore
+        let after = frameMargins.Measurement(hwnd)
+        if before <> after then
+            this.traceMarginPlacement("change", hwnd)
+        if WindowFrameMargin.needsReplacement
+               (this.windows.contains(hwnd) && placement.value.IsSome) normal moving before after then
+            // Frame discovery is not a move. Keep the published group rectangle
+            // and correct only this member before any live geometry is adopted.
+            let bounds, _ = placement.value.Value
+            let wanted = this.applyWindowMarginForWrite(hwnd, bounds)
+            pendingBackgroundMoves.Remove(hwnd) |> ignore
+            this.traceMarginPlacement("replace-member", hwnd)
+            followerPlacements.Synchronous(hwnd, fun () -> this.applyWindowBoundsWithDpiHandling(hwnd, wanted))
+#if DEBUG
+            WindowFrameMargin.trace (
+                sprintf "replace-result group=%X hwnd=%X wanted=%A actual=%A base=%A source=%X"
+                    (int64 this.hwnd) (int64 hwnd) wanted window.bounds bounds (int64 placementSource))
+#endif
+            marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (wanted.width, wanted.height)))
+        // Defer a change seen during a native move or a minimized/maximized state.
+        // The first normal reading will still see it as a change.
+        if normal && not moving || not (this.windows.contains(hwnd)) then
+            appliedMargins.[hwnd] <- after
+        before <> after
 
     // The front member plus one rotating follower per existing upkeep tick
     // discovers late frames without global hooks or scans in painting.
@@ -1362,10 +1439,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let hwnd = members.[marginPollIndex % members.Length]
             marginPollIndex <- (marginPollIndex + 1) % members.Length
             let targets = if hwnd = this.topWindow then [hwnd] else [this.topWindow; hwnd]
-            for target in targets do
-                if this.refreshWindowMargin(target) then
-                    if target = this.topWindow then this.saveTopWindowPlacement()
-                    else this.adjustWindowPlacement(target)
+            for target in targets do this.refreshWindowMargin(target) |> ignore
 
     // Record that margin was applied to a window (for tracking shrunk state)
     member this.recordMarginApplied(hwnd:IntPtr, width:int, height:int) =
@@ -1377,9 +1451,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.applyWindowMarginForWrite(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasWindowMargin(hwnd) then
             let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
-            let result = Rect(Pt(bounds.x + left, bounds.y + top),
-                              Sz(bounds.width - left - right, bounds.height - top - bottom))
-            result
+            let result = WindowFrameMargin.inset (top, left, right, bottom)
+                             { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
+            Rect(Pt(result.x, result.y), Sz(result.width, result.height))
         else bounds
 
     // Apply reverse margin when reading bounds from a foreground window (expand by margin)
@@ -1402,6 +1476,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let window = this.os.windowFromHwnd(hwnd)
         if placement.value.IsSome then
             let bounds,wp = placement.value.Value
+            this.traceMarginPlacement("follower-adjust", hwnd)
 #if DEBUG
             let sourceState = window.placement.showCmd
             if sourceState <> wp.showCmd then
@@ -1428,6 +1503,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let followerBounds =
                 if targetMaximized then maximizedFrameBounds |> Option.defaultValue adjustedBounds
                 else adjustedBounds
+#if DEBUG
+            WindowFrameMargin.trace (
+                sprintf "follower-target reason=group-placement group=%X hwnd=%X source=%X base=%A target=%A show=%A"
+                    (int64 this.hwnd) (int64 hwnd) (int64 placementSource) bounds followerBounds wp.showCmd)
+#endif
             let mutable nativeBounds = followerBounds.RECT
             let source = zorderCell.value.tryHead
             let canPost =
@@ -1445,6 +1525,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST) =
                     WinUserApi.MonitorFromRect(&nativeBounds, MonitorFlags.MONITOR_DEFAULTTONEAREST)
             if canPost then
+#if DEBUG
+                WindowFrameMargin.trace (
+                    sprintf "move reason=follower-post group=%X hwnd=%X source=%X target=%A"
+                        (int64 this.hwnd) (int64 hwnd) (int64 source.Value) followerBounds)
+#endif
                 queuedAsync <- true
                 followerPlacements.Post(hwnd, source.Value, this.os.windowFromHwnd(source.Value).bounds,
                     targetMaximized, followerBounds, fun revision ->
@@ -1766,6 +1851,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     /// every monitor (a group parks its other windows there while its front
     /// window is dragged).
     member private this.followSharedWindow(hwnd) =
+        this.refreshWindowMargin(hwnd) |> ignore
         let window = this.os.windowFromHwnd(hwnd)
         if window.isWindow && not window.isMinimized && not window.isInMoveSize && this.isSameWindow(hwnd) then
             let live = window.bounds
@@ -1790,7 +1876,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             (this.hwnd.ToInt64()) (hwnd.ToInt64())
                             adjusted.x adjusted.y adjusted.width adjusted.height desktopShown)
                     maximizedFrameBounds <- if window.isMaximized then Some live else None
+                    placementSource <- hwnd
                     placement.set(Some(adjusted, wp))
+                    this.publishMarginBase()
+                    this.traceMarginPlacement("shared-adopt", hwnd)
                     // Checked just before each is moved: a handle Windows has
                     // given to another window since it joined is left alone.
                     zorderCell.value
@@ -1863,12 +1952,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND ||
             evt = WinEvent.EVENT_SYSTEM_FOREGROUND) &&
            (not inMoveSize.value || evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND) then
-            if this.refreshWindowMargin(hwnd) then
-                // Foreground processing may still change the front member in
-                // this batch. Publish the new outer bounds after it settles.
-                this.invokeAsync <| fun () ->
-                    if this.windows.contains(hwnd) && hwnd = this.topWindow then
-                        this.saveTopWindowPlacement()
+            this.refreshWindowMargin(hwnd) |> ignore
         if not desktopShown then this.backgroundEvent(hwnd, evt) else
         match evt with
         | WinEvent.EVENT_SYSTEM_MINIMIZESTART ->
@@ -2075,6 +2159,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             try
                 this.refreshWindowMargin(hwnd) |> ignore
                 target |> Option.iter (fun (bounds, maximized, _) ->
+#if DEBUG
+                    WindowFrameMargin.trace (
+                        sprintf "link-place group=%X hwnd=%X margin=%A base=%A source=%X"
+                            (int64 this.hwnd) (int64 hwnd) (frameMargins.Get(hwnd, 96)) bounds (int64 zorderCell.value.head))
+#endif
                     if bounds.width > 0 && bounds.height > 0 then
                         let window = this.os.windowFromHwnd(hwnd)
                         let bounds = if maximized then bounds else this.applyWindowMarginForWrite(hwnd, bounds)
@@ -2125,8 +2214,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     WinEvent.EVENT_SYSTEM_MINIMIZEEND,    TimeSpan.FromSeconds(1.0)
                 ]
             let window = this.os.windowFromHwnd(hwnd)
+            if place && not this.isEmpty then this.saveTopWindowPlacement()
+            this.traceMarginPlacement("join-place", hwnd)
+            if place && placement.value.IsSome then
+                synchronousFollowers.Add(hwnd) |> ignore
+                try this.adjustWindowPlacement(hwnd)
+                finally synchronousFollowers.Remove(hwnd) |> ignore
             this.setWindows(this.windows.add hwnd)
-            if prevTop.value.IsNone then
+            if placement.value.IsNone then
                 prevTop.set(Some(hwnd))
                 this.saveTopWindowPlacement()
             let registerEvent evt =
@@ -2165,9 +2260,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         this.invokeAsync <| fun () ->
                             if this.windows.contains(hwnd) then
                                 frameMargins.Invalidate(hwnd)
-                                if this.refreshWindowMargin(hwnd) then
-                                    if hwnd = this.topWindow then this.saveTopWindowPlacement()
-                                    else this.adjustWindowPlacement(hwnd))
+                                this.refreshWindowMargin(hwnd) |> ignore)
                     this.os.setWinEventHook(WinEvent.EVENT_OBJECT_CREATE, WinEvent.EVENT_OBJECT_SHOW,
                         (fun _ event candidate _ _ _ _ ->
                             if event = int WinEvent.EVENT_OBJECT_CREATE || event = int WinEvent.EVENT_OBJECT_SHOW then
@@ -2221,7 +2314,6 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             | Some(c) -> this.ts.setTabBorderColor(Tab(hwnd), Some(c))
             | None -> ()
             memberIdentities.[hwnd] <- this.identityOf(hwnd)
-            if place then this.adjustWindowPlacement(hwnd)
             addedEvent.Trigger(hwnd)
 
     // Put one window of the group back where the group is. For the periodic
@@ -2236,6 +2328,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         followerPlacements.Synchronous(hwnd, ignore)
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         frameMargins.Remove(hwnd)
+        appliedMargins.Remove(hwnd) |> ignore
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
             // is in no group, nothing would. Every way out of a group passes
@@ -2333,6 +2426,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         if tabDragOwners > 0 && this.isEmpty then destroyAfterTabDrag <- true
         elif isDestroyed.value.not then
             frameMargins.Clear()
+            appliedMargins.Clear()
+#if DEBUG
+            WindowFrameMargin.forgetBase this.hwnd
+#endif
             followerPlacements.CancelAll()
             pendingBackgroundMoves.Clear()
             isDestroyed.set(true)
