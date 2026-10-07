@@ -113,6 +113,8 @@ type ClosedTabInfo = {
     // twin disambiguation and the title-less fallback still have a position
     // to compare against.
     savedRect: (int * int * int * int) option
+    savedDesktop: Guid option
+    savedGroupIndex: int option
     // When this entry began waiting: the startup restore found the window
     // closed, or the user closed the tab. Entries outlive restarts by being
     // written back to the settings file, so without a date of their own their
@@ -1072,6 +1074,8 @@ type Program() as this =
                     closedAt = now
                     isRestoreSeed = false
                     isAmbiguous = false
+                    savedGroupIndex = None
+                    savedDesktop = owningGroup |> Option.bind (fun g -> g.desktopHome)
                     savedRect = None
                     seedSince = Some(now)
                     orderSnapshot = orderSnapshot
@@ -1147,15 +1151,60 @@ type Program() as this =
                 else e)
         if refreshed <> closedTabCache.value then closedTabCache.set(refreshed)
 
+    member private this.restorePosition(hwnd: IntPtr) : RestorePosition.Observation =
+        let missing : RestorePosition.Observation = {center=None;scale=1.0;desktop=None}
+        try
+            let window = os.windowFromHwnd(hwnd)
+            if not window.isWindow || window.isMinimized || window.isInMoveSize then missing else
+            // SavedTabState.rect is raw GetWindowRect on our PMv2 main thread:
+            // physical screen pixels, before any application-frame expansion.
+            let b = window.bounds
+            let center = RestorePosition.center (Some(b.x,b.y,b.width,b.height))
+            if center.IsNone then missing else
+            let hr,id = window.virtualDesktopIdWithHr
+            { center=center; scale=Dpi.scaleForHwnd(hwnd)
+              desktop=if hr >= 0 && id <> Guid.Empty then Some id else None }
+        with _ -> missing
+
+    member private this.traceRestorePosition(hwnd, token, rank, decision) =
+        let reason, distance, gap =
+            match decision with
+            | RestorePosition.Selected(_,d,g,_) ->
+                "ambiguity-resolved-by-position", Some d, g
+            | RestorePosition.Ordered(_,d,g) -> "ambiguity-resolved-by-order", d, g
+            | RestorePosition.Held why -> "ambiguity-held-" + why, None, None
+        RestoreTrace.retention hwnd token rank reason (fun () ->
+            sprintf " distance=%A gap=%A" distance gap)
+
     member private this.closedClaimDecision(hwnd, exePath, windowTitle) =
         this.refreshAmbiguousEntries()
         if claimedWindows.value.Contains hwnd then ClosedTabClaim.AlreadyClaimed else
         let identity = exePath, normalizeClosedTabTitle windowTitle
         let matches =
             if exePath = "" || windowTitle = "" then [] else
-            closedTabCache.value
-            |> List.map (fun e -> (e.exePath, e.windowTitle), e.isAmbiguous)
-            |> ClosedTabClaim.matchingIndices identity
+            let entries = closedTabCache.value |> List.mapi (fun index e ->
+                (e.exePath,e.windowTitle), e.isAmbiguous,
+                ({ index=index; center=RestorePosition.center e.savedRect; desktop=e.savedDesktop } : RestorePosition.Candidate))
+            // Avoid geometry/desktop reads on the unchanged ordinary path.
+            let observation =
+                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
+                    this.restorePosition hwnd
+                else { RestorePosition.center=None; scale=1.0; desktop=None }
+            let entries =
+                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
+                    entries |> List.sortBy (fun (_,_,c) ->
+                        let e = closedTabCache.value.[c.index]
+                        Option.defaultValue Int32.MaxValue e.savedGroupIndex, e.tabIndex, c.index)
+                else entries
+            let matches, decision = ClosedTabClaim.resolve identity observation entries
+            decision |> Option.iter (fun d ->
+                let traced =
+                    match d with
+                    | RestorePosition.Selected(index,_,_,_)
+                    | RestorePosition.Ordered(index,_,_) -> [closedTabCache.value.[index]]
+                    | RestorePosition.Held _ -> closedTabCache.value |> List.filter (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle))
+                for e in traced do this.traceRestorePosition(hwnd, groupRefHandle e.groupRef, e.tabIndex, d))
+            matches
         ClosedTabClaim.decide hwnd claimedWindows.value matches
 
     member private this.peekClosedTabMatch(hwnd, exePath, windowTitle) =
@@ -1241,7 +1290,14 @@ type Program() as this =
 
     // Consume one specific cache entry (the one a peek settled on).
     member private this.takeClosedTabEntry(hwnd, info: ClosedTabInfo) =
-        match ClosedTabClaim.take hwnd (fun e -> not e.isAmbiguous && obj.ReferenceEquals(e, info))
+        let eligible =
+            if not info.isAmbiguous then true else
+            let window = os.windowFromHwnd(hwnd)
+            let decision = this.closedClaimDecision(hwnd, (try window.pid.processPath with _ -> ""), (try window.text with _ -> ""))
+            match decision with
+            | ClosedTabClaim.Claim index -> obj.ReferenceEquals(closedTabCache.value.[index], info)
+            | _ -> false
+        match ClosedTabClaim.take hwnd (fun e -> eligible && obj.ReferenceEquals(e, info))
                                   claimedWindows.value closedTabCache.value with
         | Some(entry, claimed, remaining) ->
             // Replace all current state, whether inherited or changed by the user.
@@ -1254,7 +1310,8 @@ type Program() as this =
                 windowAlignment.map(fun m -> m.remove hwnd)
             claimedWindows.set(claimed)
             closedTabCache.set(remaining)
-            Some entry
+            this.refreshAmbiguousEntries()
+            Some (if entry.isAmbiguous then {entry with isAmbiguous=false;stateIsCertain=true} else entry)
         | None -> None
 
     // Put the saved pin state back on a restored tab. Runs on the group thread.
@@ -2009,6 +2066,8 @@ type Program() as this =
                             closedAt = now
                             isRestoreSeed = false
                             isAmbiguous = false
+                            savedGroupIndex = None
+                            savedDesktop = gi.desktopHome
                             savedRect = None
                             seedSince = Some(now)
                             orderSnapshot = order
@@ -3180,18 +3239,26 @@ type Program() as this =
                 let live =
                     currentWindows.list
                     |> List.map (fun w ->
-                        { SavedSession.handle = w.hwnd
-                          SavedSession.exePath = (try w.pid.processPath with _ -> "")
-                          SavedSession.title = (try normalizeClosedTabTitle w.text with _ -> "")
-                          SavedSession.center =
-                            (try
-                                let b = w.bounds
-                                Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
-                             with _ -> None) })
+                        let position = this.restorePosition w.hwnd
+                        let result : SavedSession.LiveWindow = {
+                            handle = w.hwnd
+                            exePath = (try w.pid.processPath with _ -> "")
+                            title = (try normalizeClosedTabTitle w.text with _ -> "")
+                            // Ordinary same-group twins retain their historical geometry.
+                            center = position.center |> Option.orElseWith (fun () ->
+                                try let b = w.bounds in Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
+                                with _ -> None)
+                            positionTrusted = position.center.IsSome
+                            scale = position.scale
+                            desktop = position.desktop }
+                        result)
 
+                let savedGroups = SavedSession.read groupsArray
+                let tracePosition hwnd gi rank decision =
+                    let token = savedGroups.[gi].windows |> List.tryHead |> Option.map (fun t -> t.hwnd) |> Option.defaultValue IntPtr.Zero
+                    this.traceRestorePosition(hwnd, token, rank, decision)
                 let planned =
-                    SavedSession.plan DateTime.Now seedMaxAgeDays closedTabMaxAgeDays
-                                      (SavedSession.read groupsArray) live
+                    SavedSession.planWithPositionTrace tracePosition DateTime.Now seedMaxAgeDays closedTabMaxAgeDays savedGroups live
 
                 // Tab groups per virtual desktop. Each group goes back to its
                 // desktop (a desktop Explorer no longer lists belongs to
@@ -3369,6 +3436,8 @@ type Program() as this =
                                         // title-less fallback lose their
                                         // reference point.
                                         savedRect = p.tab.rect
+                                        savedGroupIndex = Some gi
+                                        savedDesktop = RestorePosition.desktop g.desktop
                                         seedSince = p.tab.seedSince
                                         orderSnapshot = g.savedOrder
                                         stateIsCertain = t.stateIsCertain

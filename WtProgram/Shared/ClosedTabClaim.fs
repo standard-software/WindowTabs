@@ -19,6 +19,18 @@ module ClosedTabClaim =
         entries |> List.indexed |> List.choose (fun (i, (other, held)) ->
             if not held && sameIdentity identity other then Some i else None)
 
+    // Ordinary identities keep their previous cache ordering. Only a held
+    // identity invokes the shared conservative position policy.
+    let resolve identity observation (entries: ((string * string) * bool * RestorePosition.Candidate) list) =
+        let matching = entries |> List.filter (fun (other,_,_) -> sameIdentity identity other)
+        if matching |> List.exists (fun (_,held,_) -> held) then
+            let decision = RestorePosition.choose observation (matching |> List.map (fun (_,_,c) -> c))
+            match decision with
+            | RestorePosition.Selected(index,_,_,_)
+            | RestorePosition.Ordered(index,_,_) -> [index], Some decision
+            | RestorePosition.Held _ -> [], Some decision
+        else matching |> List.map (fun (_,_,c) -> c.index), None
+
     // The caller supplies normalized titles and only live group members.
     let canRecord closing identity liveTabs =
         liveTabs |> List.exists (fun (hwnd, other) -> hwnd <> closing && sameIdentity identity other) |> not

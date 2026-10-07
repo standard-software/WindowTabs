@@ -169,6 +169,10 @@ module SavedSession =
         title: string
         // The centre of its rectangle, which is how twins are told apart.
         center: (float * float) option
+        // Preserve ordinary twin geometry while rejecting unreliable cross-group evidence.
+        positionTrusted: bool
+        scale: float
+        desktop: Guid option
     }
 
     let centerOfRect (rect: (int * int * int * int) option) =
@@ -341,7 +345,7 @@ module SavedSession =
     // are on screen at that moment. Nothing here changes anything: the caller
     // creates the groups, fills the global maps and seeds the closed-tab cache
     // from the answer.
-    let plan (now: DateTime) (seedMaxAgeDays: float) (closedTabMaxAgeDays: float)
+    let planWithPositionTrace trace (now: DateTime) (seedMaxAgeDays: float) (closedTabMaxAgeDays: float)
              (groups: SavedGroup list) (live: LiveWindow list) : PlannedGroup list =
 
         let expired (t: SavedTab) =
@@ -449,6 +453,47 @@ module SavedSession =
                 if reserved.Contains(t.hwnd) && (taken.Add(t.hwnd) || t.onAllDesktops) then
                     resolved.[(gi, ti)] <- t.hwnd))
 
+        // Cross-group identities use exactly the claim-time position policy.
+        // Resolve against remaining entries; after a claim, a sole remaining
+        // group resumes the existing ordinary/twin assignment below.
+        let positioned = System.Collections.Generic.HashSet<int * int>()
+        for key in List.ofSeq crossGroup do
+            let entries =
+                [ for gi,g in List.indexed groups do
+                    for ti,t in List.indexed g.windows do
+                        if not (expired t) && not (resolved.ContainsKey((gi,ti))) && identityOf t = Some key then
+                            yield gi,ti,t ]
+            let mutable remaining = entries
+            let mutable arrivals = live |> List.filter (fun w ->
+                identityKey w.exePath w.title = key && not (taken.Contains w.handle) && not (reserved.Contains w.handle))
+            while not arrivals.IsEmpty &&
+                  (remaining |> List.map (fun (gi,_,_) -> gi) |> List.distinct |> List.length) > 1 do
+                let candidates = remaining |> List.mapi (fun index (gi,_,t) ->
+                    ({ index=index; center=RestorePosition.center t.rect
+                       desktop=RestorePosition.desktop groups.[gi].desktop } : RestorePosition.Candidate))
+                let choices = arrivals |> List.mapi (fun order w ->
+                    let d = RestorePosition.choose {center=(if w.positionTrusted then w.center else None);scale=w.scale;desktop=w.desktop} candidates
+                    order,w,d)
+                // Pair clear geometry before any order fallback can consume it.
+                // Otherwise the input scan order stands in for arrival order.
+                let _,w,decision = choices |> List.minBy (fun (order,_,d) ->
+                    match d with
+                    | RestorePosition.Selected(_,distance,_,_) -> 0,distance,order
+                    | _ -> 1,0.0,order)
+                match decision with
+                | RestorePosition.Selected(index,_,_,_)
+                | RestorePosition.Ordered(index,_,_) ->
+                    let gi,ti,_ = remaining.[index]
+                    resolved.[(gi,ti)] <- w.handle
+                    positioned.Add((gi,ti)) |> ignore
+                    taken.Add w.handle |> ignore
+                    trace w.handle gi ti decision
+                    remaining <- remaining |> List.filter (fun (g,t,_) -> (g,t) <> (gi,ti))
+                | RestorePosition.Held _ -> ()
+                arrivals <- arrivals |> List.filter (fun x -> x.handle <> w.handle)
+            if (remaining |> List.map (fun (gi,_,_) -> gi) |> List.distinct |> List.length) <= 1 then
+                crossGroup.Remove key |> ignore
+
         // Then by identity, all the tabs of one identity together, because
         // which of them gets which window is one decision and not several.
         // Expired competitors must not steal the surviving group's match.
@@ -526,6 +571,7 @@ module SavedSession =
                         | _ -> None
                     let key = identityOf t
                     let certain =
+                        if positioned.Contains((gi,ti)) then true else
                         match liveHandle, key with
                         // Matched by its own handle: the same window, so
                         // everything on the entry is its own.
@@ -610,3 +656,6 @@ module SavedSession =
               savedOrder = savedOrder
               token = (match savedOrder with h :: _ -> h | [] -> IntPtr.Zero)
               desktop = g.desktop })
+
+    let plan now seedMaxAgeDays closedTabMaxAgeDays groups live =
+        planWithPositionTrace (fun _ _ _ _ -> ()) now seedMaxAgeDays closedTabMaxAgeDays groups live
