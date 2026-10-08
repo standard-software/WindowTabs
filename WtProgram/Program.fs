@@ -1975,10 +1975,11 @@ type Program() as this =
                      | Some c -> c &&& 2 <> 0
                      | None -> false)
                 let untabbable =
-                    this.isTabbableWindow(window).not &&
-                    not (isRecentlyPlaced(hwnd)) &&
-                    not cloakedByShell &&
-                    this.isOnDesktopFromReader(hwnd)
+                    VirtualDesktopGroups.pruneMember window.isWindow (fun () ->
+                        this.isTabbableWindow(window).not &&
+                        not (isRecentlyPlaced(hwnd)) &&
+                        not cloakedByShell &&
+                        this.isOnDesktopFromReader(hwnd))
                 // A live, visible, un-minimized window of a tabbed application
                 // sitting at the iconic position (-32000,-32000) has not left:
                 // a restore left it there (see the second pass of
@@ -2104,8 +2105,10 @@ type Program() as this =
     member this.tryReturnToLastGroup(window:Window) =
         match windowLastGroup.value.tryFind(window.hwnd) with
         | Some(info) ->
-            match this.closedInfoGroupHere info with
-            | Some(g) -> Some(Some(g))
+            match this.closedInfoGroupForReturn(window.hwnd, info) with
+            | Some(g) ->
+                if not g.isDesktopShown then pendingLinkedRestores.map(Set.add window.hwnd)
+                Some(Some(g))
             | None -> None
         | None -> None
 
@@ -2589,9 +2592,10 @@ type Program() as this =
             (this.desktop.groups.list |> List.map (fun g ->
                 g, (if g.isDesktopShown then VirtualDesktopGroups.Shown else VirtualDesktopGroups.Hidden)))
 
-    /// A live window dropped by the scan retains the existing here-only rule.
-    member private this.closedInfoGroupHere (info: ClosedTabInfo) : IGroup option =
-        this.findGroupForClosedInfo info |> Option.filter (fun g -> g.isDesktopShown)
+    /// A live window keeps the exact reference to its former group.
+    member private this.closedInfoGroupForReturn(hwnd: IntPtr, info: ClosedTabInfo) : IGroup option =
+        let shared = (VirtualDesktopGroups.Live.snapshot()).shared.Contains hwnd
+        VirtualDesktopGroups.returnInto shared (this.findGroupForClosedInfo info) (fun g -> g.isDesktopShown)
 
     member private this.traceRestoreRetention(hwnd: IntPtr, token: IntPtr, rank: int, reason: string) =
         RestoreTrace.retention hwnd token rank reason (fun () -> "")
@@ -2601,7 +2605,7 @@ type Program() as this =
             sprintf "restore-target hwnd=%X token=%X rank=%d across=%b result=%s"
                 (hwnd.ToInt64()) ((groupRefHandle info.groupRef).ToInt64()) info.tabIndex across reason)
 
-    /// Only a claimed seed or closed tab gets the cross-desktop exception.
+    /// Claimed seeds and closed tabs share the exact-group return policy.
     /// Keep shared-window evidence even during a temporarily stale reading.
     member private this.closedInfoGroupForRestore(hwnd: IntPtr, info: ClosedTabInfo) : IGroup option =
         let found = this.findGroupForClosedInfo info

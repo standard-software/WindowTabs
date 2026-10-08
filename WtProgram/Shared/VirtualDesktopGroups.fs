@@ -871,6 +871,15 @@ module VirtualDesktopGroups =
     let restoreInto isShared (found: 'g option) (isShown: 'g -> bool) : 'g option =
         found |> Option.filter (fun g -> isShown g || (keepAway && not isShared))
 
+    /// Returning live members carry an exact reference to their former group.
+    let returnInto isShared (found: 'g option) (isShown: 'g -> bool) : 'g option =
+        restoreInto isShared found isShown
+
+    /// A destroyed HWND has no desktop answer. Do not let an absent reading
+    /// keep a ghost member forever when the destroy notification was missed.
+    /// Live windows retain the ordinary visibility and placement safeguards.
+    let pruneMember exists (ordinary: unit -> bool) = not exists || ordinary()
+
     /// Capture a hidden destination before reserving membership, since a
     /// desktop pass can mark the group shown before its queued insertion runs.
     /// Only a claimed member of its former group takes the safe link path.
