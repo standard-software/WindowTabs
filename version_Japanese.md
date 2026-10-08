@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.09_next1
+
 ## version ss_2026.10.09
 
 - 仮想デスクトップごとにタブグループを分けるのをやめた。

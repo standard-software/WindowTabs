@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next1
+
 ## version ss_2026.10.09
 
 - Tab groups are no longer kept separately for each virtual desktop.
