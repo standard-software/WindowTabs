@@ -1533,8 +1533,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         with | _ -> 0
 
     member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle) =
+        let tabHeight = this.getTabHeightForSnap()
         let (x, y, width, height) =
-            SnapGeometry.reserveTabHeight (this.getTabHeightForSnap()) (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+            SnapGeometry.reserveTabHeight tabHeight (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-reserve-tab-height group=%X amount=%d before=%A after=%A"
+                                    (int64 group.hwnd) tabHeight workArea (x,y,width,height))
+#endif
         System.Drawing.Rectangle(x, y, width, height)
 
     member private this.calculateSnapBounds(
@@ -1545,7 +1550,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Keep-size menu geometry, also used for the drag staging position.
         // Variant B uses the percentage helper below for its final rectangle.
         let workArea = this.adjustWorkAreaForTabHeight(workArea)
-        SnapGeometry.snapBounds snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
+        let result = SnapGeometry.snapBounds snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
+#if DEBUG
+        group.traceSnapGeometry(sprintf "direction=%s mode=keep-size inputSize=(%d,%d) reservedArea=%A base=%A"
+                                    snapDirection currentWidth currentHeight workArea result)
+#endif
+        result
 
     member private this.calculateSnapBoundsWithPercent(
         snapDirection: string,
@@ -1559,8 +1569,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 this.adjustWorkAreaForTabHeight(System.Windows.Forms.SystemInformation.VirtualScreen)
             else
                 this.adjustWorkAreaForTabHeight(workArea)
-        SnapGeometry.calculateSnapBoundsWithPercent snapDirection percent
-            (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+        let result = SnapGeometry.calculateSnapBoundsWithPercent snapDirection percent
+                         (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+#if DEBUG
+        group.traceSnapGeometry(sprintf "direction=%s percent=%d reservedArea=%A base=%A" snapDirection percent workArea result)
+#endif
+        result
 
     member private this.detachTabToSnap(hwnd: IntPtr, snapDirection: string) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
@@ -1863,6 +1877,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
         let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin group=%X hwnd=%X before=%A amountTLRB=%A expandedSize=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom)
+                                    (bounds.width+mLeft+mRight, bounds.height+mTop+mBottom))
+#endif
         let snapWidth = bounds.size.width + mLeft + mRight
         let snapHeight = bounds.size.height + mTop + mBottom
 
@@ -1875,7 +1894,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         // Apply detected frame margin
         let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds)
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
         window.move(finalBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-after-write", None)
+#endif
         // Record shrunk size for tracking
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
@@ -1891,6 +1918,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Use group bounds (expanded by margin) for percentage calculation
         let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin group=%X hwnd=%X before=%A amountTLRB=%A expandedSize=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom)
+                                    (bounds.width+mLeft+mRight, bounds.height+mTop+mBottom))
+#endif
         let groupWidth = bounds.size.width + mLeft + mRight
         let groupHeight = bounds.size.height + mTop + mBottom
 
@@ -1906,6 +1938,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let targetWorkArea = targetScreen.WorkingArea
         let newWidth = int(float(targetWorkArea.Width) * widthPercent)
         let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-scale-work-area group=%X sourceArea=%A targetArea=%A sizeRatio=%A outputSize=%A"
+                                    (int64 group.hwnd) sourceWorkArea targetWorkArea (widthPercent,heightPercent) (newWidth,newHeight))
+#endif
 
         let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
             snapDirection,
@@ -1931,7 +1967,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let snapBounds = Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))
         // Apply detected frame margin
         let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds2)
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
         window.move(finalBounds2)
+#if DEBUG
+        group.traceMarginGeometry("snap-after-write", None)
+#endif
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)
@@ -1952,7 +1996,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds)
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
         window.move(finalBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-after-write", None)
+#endif
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
         this.applyGroupSnapRealign(snapDirection)
@@ -1986,7 +2038,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
+                                    (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds2)
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
         window.move(finalBounds2)
+#if DEBUG
+        group.traceMarginGeometry("snap-after-write", None)
+#endif
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)

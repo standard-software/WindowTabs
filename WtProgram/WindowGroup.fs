@@ -41,6 +41,14 @@ module TitleTrace =
         ignore f
 #endif
 
+#if DEBUG
+module private MarginGeometryNative =
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern nativeint GetThreadDpiAwarenessContext()
+    [<System.Runtime.InteropServices.DllImport("user32.dll")>]
+    extern bool IsWindowArranged(nativeint hwnd)
+#endif
+
 type WindowGroup(plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
     let _bb = Blackboard()
@@ -51,6 +59,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Each group remembers what it applied even when another group sampled first.
     let appliedMargins = Dictionary<IntPtr, WindowFrameMargin.Sticky>()
     let mutable placementSource = IntPtr.Zero
+#if DEBUG
+    let mutable lastSnapGeometry : string option = None
+#endif
     let addedEvent = Event<_>()
     let movedEvent = Event<IntPtr*int>()
     let removedEvent = Event<_>()
@@ -1475,6 +1486,55 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         ()
 #endif
 
+#if DEBUG
+    // Read only this group's cells. All native reads and formatting finish before
+    // the logger is called; no reader is passed through the logger's gate.
+    member this.traceMarginGeometry(reason: string, extra: IntPtr option) =
+        try
+            let context = try Some(MarginGeometryNative.GetThreadDpiAwarenessContext()) with _ -> None
+            let awareness = context |> Option.map WinUserApi.GetAwarenessFromDpiAwarenessContext
+            let live = VirtualDesktopGroups.Live.snapshot()
+            let header = sprintf "geometry reason=%s group=%X thread=%d context=%A awareness=%A shown=%b current=%A snapTabHeightMargin=%b stripScale=%f tabHeight=%d cachedBase=%A source=%X lastSnapRequest=%A"
+                            reason (int64 this.hwnd) Thread.CurrentThread.ManagedThreadId context awareness
+                            desktopShown stripView.current perGroupSnapTabHeightMargin this.ts.scale
+                            (this.tabAppearanceAt this.ts.scale).tabHeight (placement.value |> Option.map fst)
+                            (int64 placementSource) lastSnapGeometry
+            let members = this.windows.items.list
+            let handles = members @ (extra |> Option.toList |> List.filter (fun h -> not (List.contains h members)))
+            let lines = handles |> List.map (fun hwnd ->
+                let window = this.os.windowFromHwnd(hwnd)
+                let mutable native = RECT()
+                let nativeOk = WinUserApi.GetWindowRect(hwnd, &native)
+                let raw = if nativeOk then Some native.Rect else None
+                let mutable frame = RECT()
+                let dwmResult = DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame, 16)
+                let dwm = if dwmResult = 0 then Some frame.Rect else None
+                let wp = window.placement
+                let arranged = try Some(MarginGeometryNative.IsWindowArranged(hwnd)) with _ -> None
+                let desktop = VirtualDesktopGroups.Live.read live hwnd
+                let margin = raw |> Option.map (fun r -> this.getWindowMargin(hwnd, r))
+                let monitor = Mon.fromHwnd(hwnd) |> Option.map (fun m -> m.displayRect, m.workRect)
+                sprintf "geometry-member reason=%s group=%X hwnd=%X existing=%b rectOk=%b raw=%A dwmHr=%d dwm=%A dpi=%d windowContext=%X show=%A normal=%A minimized=%b maximized=%b arranged=%A margin=%A shrunkSize=%A monitor=%A desktop=%A presence=%A cloak=%A"
+                    reason (int64 this.hwnd) (int64 hwnd) (List.contains hwnd members) nativeOk raw dwmResult dwm
+                    (WinUserApi.GetDpiForWindow(hwnd)) (int64 (WinUserApi.GetWindowDpiAwarenessContext(hwnd)))
+                    wp.showCmd wp.rcNormalPosition window.isMinimized window.isMaximized arranged margin
+                    (marginShrunkSizes.value |> Map.tryFind hwnd) monitor desktop.desktop desktop.presence window.cloakedValue)
+            WindowFrameMargin.trace header
+            lines |> List.iter WindowFrameMargin.trace
+        with error ->
+            WindowFrameMargin.trace (sprintf "geometry-unavailable reason=%s kind=%s" reason (error.GetType().Name))
+
+    member this.traceSnapGeometry(detail: string) =
+        lastSnapGeometry <- Some detail
+        this.traceMarginGeometry("snap-calculate", None)
+
+    member private this.traceMarginCompensation(name: string, hwnd: IntPtr, before: Rect, after: Rect) =
+        WindowFrameMargin.trace (
+            sprintf "geometry-compensation name=%s group=%X hwnd=%X before=%A after=%A deltaXYWH=(%d,%d,%d,%d)"
+                name (int64 this.hwnd) (int64 hwnd) before after
+                (after.x-before.x) (after.y-before.y) (after.width-before.width) (after.height-before.height))
+#endif
+
     member private this.traceMarginPlacement(reason, hwnd) =
 #if DEBUG
         WindowFrameMargin.trace (
@@ -1552,9 +1612,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.removeWindowMarginForRead(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasWindowMargin(hwnd) then
             let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
-            let result = Rect(Pt(bounds.x - left, bounds.y - top),
-                              Sz(bounds.width + left + right, bounds.height + top + bottom))
-            result
+            let result = WindowFrameMargin.outset (top, left, right, bottom)
+                             { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
+            Rect(Pt(result.x, result.y), Sz(result.width, result.height))
         else bounds
 
     member private this.adjustWindowPlacement(hwnd) =
@@ -2214,6 +2274,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         use trace = Bemo.Win32.GroupCallTrace.Operation("group.addLinked")
 #endif
         if not (this.windows.contains(hwnd)) then
+#if DEBUG
+            this.traceMarginGeometry("link-before-read", Some hwnd)
+#endif
             let target =
                 zorderCell.value.tryHead |> Option.bind (fun front ->
                     let window = this.os.windowFromHwnd(front)
@@ -2228,7 +2291,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 | Some mon -> wp.rcNormalPosition.move(mon.workRect.x - mon.displayRect.x,
                                                                       mon.workRect.y - mon.displayRect.y)
                                 | None -> wp.rcNormalPosition
-                        Some(this.removeWindowMarginForRead(front, normal), false,
+                        let baseBounds = this.removeWindowMarginForRead(front, normal)
+#if DEBUG
+                        this.traceMarginCompensation("link-workspace-to-screen", front, wp.rcNormalPosition, normal)
+                        this.traceMarginCompensation("link-read-frame-margin", front, normal, baseBounds)
+#endif
+                        Some(baseBounds, false,
                              { wp with showCmd = ShowWindowCommands.SW_SHOWNORMAL; flags = 0 })
                     else
                         // Read without publishing placement: its listeners update the
@@ -2236,10 +2304,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         let bounds = window.bounds
                         if window.isWindow && bounds.width > 0 && bounds.height > 0 then
                             let maximized = window.isMaximized
-                            let bounds = if maximized then bounds else this.removeWindowMarginForRead(front, bounds)
-                            Some(bounds, maximized, wp)
+                            let baseBounds = if maximized then bounds else this.removeWindowMarginForRead(front, bounds)
+#if DEBUG
+                            this.traceMarginCompensation((if maximized then "link-maximized-identity" else "link-read-frame-margin"), front, bounds, baseBounds)
+#endif
+                            Some(baseBounds, maximized, wp)
                         else
                             placement.value |> Option.map (fun (bounds, cached) ->
+#if DEBUG
+                                WindowFrameMargin.trace (sprintf "geometry-base reason=link-cache-fallback group=%X source=%X base=%A maximizedFrame=%A"
+                                                            (int64 this.hwnd) (int64 placementSource) bounds maximizedFrameBounds)
+#endif
                                 let maximized = cached.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED
                                 (if maximized then maximizedFrameBounds |> Option.defaultValue bounds else bounds),
                                 maximized, cached))
@@ -2250,13 +2325,21 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.refreshWindowMargin(hwnd) |> ignore
                 target |> Option.iter (fun (bounds, maximized, _) ->
 #if DEBUG
+                    this.traceMarginGeometry("link-place", Some hwnd)
+                    this.traceMarginCompensation("link-tab-height-identity", hwnd, bounds, bounds)
                     WindowFrameMargin.trace (
                         sprintf "link-place group=%X hwnd=%X margin=%A base=%A source=%X"
                             (int64 this.hwnd) (int64 hwnd) (frameMargins.Get(hwnd, 96)) bounds (int64 zorderCell.value.head))
 #endif
                     if bounds.width > 0 && bounds.height > 0 then
                         let window = this.os.windowFromHwnd(hwnd)
+#if DEBUG
+                        let baseBounds = bounds
+#endif
                         let bounds = if maximized then bounds else this.applyWindowMarginForWrite(hwnd, bounds)
+#if DEBUG
+                        this.traceMarginCompensation((if maximized then "link-write-maximized-identity" else "link-write-frame-margin"), hwnd, baseBounds, bounds)
+#endif
                         followerPlacements.Synchronous(hwnd, fun () ->
                             this.withoutTransitions(hwnd, fun () ->
                                 // Only the joiner may need restoring, including a joiner
@@ -2274,6 +2357,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                     this.applyWindowBoundsWithDpiHandling(hwnd, bounds)))
                         if this.hasWindowMargin(hwnd) && not maximized then
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (bounds.width, bounds.height))))
+#if DEBUG
+                this.traceMarginGeometry("link-after-write", Some hwnd)
+#endif
                 this.addWindowPlaced(hwnd, withDelay, false, ?alignment=alignment, ?pinned=pinned,
                                      ?after=after, ?restoreOrder=restoreOrder)
             finally

@@ -71,6 +71,10 @@ module WindowFrameMargin =
         { x = bounds.x + left; y = bounds.y + top
           width = bounds.width - left - right; height = bounds.height - top - bottom }
 
+    let outset (top, left, right, bottom) (bounds: Bounds) =
+        { x = bounds.x - left; y = bounds.y - top
+          width = bounds.width + left + right; height = bounds.height + top + bottom }
+
     // Render before entering the logger. Its thunk closes over a string only.
     let trace (message: string) =
 #if DEBUG
