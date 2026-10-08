@@ -75,6 +75,8 @@ module WindowFrameMargin =
         { x = bounds.x - left; y = bounds.y - top
           width = bounds.width + left + right; height = bounds.height + top + bottom }
 
+    let usePreparedBase hasBase normal = not hasBase && normal
+
     // Render before entering the logger. Its thunk closes over a string only.
     let trace (message: string) =
 #if DEBUG
@@ -184,6 +186,12 @@ module WindowFrameMargin =
                             value
                     entry.users <- entry.users + 1
                     members.[hwnd] <- entry)
+        member this.Seed(hwnd, dpi, (top, left, right, bottom)) =
+            this.Attach(hwnd)
+            let detected : Margin = { top=top; left=left; right=right; bottom=bottom }
+            lock gate (fun () ->
+                let entry = members.[hwnd]
+                entry.value <- remember dpi detected entry.value)
         member this.Get(hwnd, dpi) =
             lock gate (fun () ->
                 match members.TryGetValue hwnd with

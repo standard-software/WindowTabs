@@ -570,9 +570,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     // The seed keeps the place it is in: it is on another
                     // desktop, where the person put it, so it is not moved or
                     // snapped the way a detach from the menu would be.
-                    let seed = os.windowFromHwnd(List.head ordered)
-                    this.detachTabsCommon(ordered, fun _ bounds ->
-                        seed.setPositionOnly bounds.location.x bounds.location.y))
+                    this.detachTabsCommon(ordered, fun _ bounds place -> place bounds))
 
     /// Detach without placing: the window is on another virtual desktop, where
     /// the person put it, so nothing here moves or resizes it. The other detach
@@ -1087,7 +1085,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToScreen should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
-        let bounds = window.bounds
+        let margin = group.capturePlacementMargin(hwnd)
+        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
         let sourceScreen = this.getCurrentScreenForWindow(hwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
         let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
@@ -1145,7 +1144,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if currentDpi <> initialDpi then
                 System.Threading.Thread.Sleep(20)
 
-            window.move (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetached window margin (Rect(Pt(finalX, finalY), Sz(newWidth, newHeight)))
             notifyDetached(hwnd)
 
         finally
@@ -1271,7 +1270,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToPosition should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
-        let bounds = window.bounds
+        let margin = group.capturePlacementMargin(hwnd)
+        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
         let screen = this.getCurrentScreenForWindow(hwnd)
 
         let tab = Tab(hwnd)
@@ -1286,7 +1286,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if window.isMinimized || window.isMaximized then
                 window.showWindow(ShowWindowCommands.SW_RESTORE)
 
-            window.setPositionOnly bounds.location.x bounds.location.y
+            FramePlacement.moveDetached window margin bounds
 
             let (newX, newY) = this.calculatePositionInWorkArea(
                 position,
@@ -1297,7 +1297,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 bounds.size.height)
 
             if newX <> bounds.location.x || newY <> bounds.location.y then
-                window.setPositionOnly newX newY
+                FramePlacement.moveDetached window margin (Rect(Pt(newX,newY),bounds.size))
 
             notifyDetached(hwnd)
 
@@ -1315,13 +1315,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // callers go through the original single-tab detach helpers).
     member private this.detachTabsCommon(
             tabsInOrder: List<IntPtr>,
-            applyToSeedWindow: MonitorScreen -> Rect -> unit
+            applyToSeedWindow: MonitorScreen -> Rect -> (Rect -> unit) -> unit
         ) =
         match tabsInOrder with
         | [] | [_] -> ()
         | firstHwnd :: remainingHwnds ->
             let window = os.windowFromHwnd(firstHwnd)
-            let bounds = window.bounds
+            let margins = tabsInOrder |> List.map (fun h -> h, group.capturePlacementMargin(h)) |> Map.ofList
+            let margin = margins.[firstHwnd]
+            let bounds = FramePlacement.read firstHwnd margin (FramePlacement.restoredBounds window)
             let screen = this.getCurrentScreenForWindow(firstHwnd)
 
             // Step 1: detach seed tab from this group; place / snap window.
@@ -1335,7 +1337,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if window.isMinimized || window.isMaximized then
                     window.showWindow(ShowWindowCommands.SW_RESTORE)
 
-                applyToSeedWindow screen bounds
+                applyToSeedWindow screen bounds (FramePlacement.moveDetached window margin)
 
                 notifyDetached(firstHwnd)
             finally
@@ -1373,6 +1375,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
                         targetDecorator.group.invokeSync(fun() ->
                             if not (targetDecorator.group.windows.contains tabHwnd) then
+                                FramePlacement.prepare tabHwnd margins.[tabHwnd] targetDecorator.group.placementBounds
                                 targetDecorator.group.addWindow(tabHwnd, false)
                                 tabWindow.showWindow(ShowWindowCommands.SW_SHOW)))
                 finally
@@ -1387,46 +1390,42 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         | [] -> ()
         | [singleHwnd] -> this.detachTabToPosition(singleHwnd, position)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun screen bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
-                window.setPositionOnly bounds.location.x bounds.location.y
+            this.detachTabsCommon(tabsInOrder, fun screen bounds place ->
+                place bounds
                 let (newX, newY) = this.calculatePositionInWorkArea(
                     position, screen.WorkingArea,
                     bounds.location.x, bounds.location.y,
                     bounds.size.width, bounds.size.height)
                 if newX <> bounds.location.x || newY <> bounds.location.y then
-                    window.setPositionOnly newX newY)
+                    place (Rect(Pt(newX,newY),bounds.size)))
 
     member private this.detachTabsToSnap(tabsInOrder: List<IntPtr>, snapDirection: string) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToSnap(singleHwnd, snapDirection)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun screen bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
+            this.detachTabsCommon(tabsInOrder, fun screen bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
                     snapDirection, screen.WorkingArea,
                     bounds.size.width, bounds.size.height)
-                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
 
     member private this.detachTabsToSnapWithPercent(tabsInOrder: List<IntPtr>, snapDirection: string, percent: int) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToSnapWithPercent(singleHwnd, snapDirection, percent)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun screen _bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
+            this.detachTabsCommon(tabsInOrder, fun screen _bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
                     snapDirection, percent, screen.WorkingArea)
-                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
 
     member private this.detachTabsToScreen(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, position: Option<string>) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreen(singleHwnd, targetScreen, position)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
+            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds place ->
                 // Mirror detachTabToScreen: maintain size %, move to target screen.
                 let sourceWorkArea = sourceScreen.WorkingArea
                 let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
@@ -1440,19 +1439,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let yOffsetPercent = float(bounds.location.y - sourceWorkArea.Y) / float(sourceWorkArea.Height)
                 let initialX = targetWorkArea.X + int(float(targetWorkArea.Width) * xOffsetPercent)
                 let initialY = targetWorkArea.Y + int(float(targetWorkArea.Height) * yOffsetPercent)
-                window.move (Rect(Pt(initialX, initialY), Sz(newWidth, newHeight)))
+                place (Rect(Pt(initialX, initialY), Sz(newWidth, newHeight)))
                 let (newX, newY) = this.calculatePositionInWorkArea(
                     position, targetWorkArea, initialX, initialY, newWidth, newHeight)
                 if newX <> initialX || newY <> initialY then
-                    window.setPositionOnly newX newY)
+                    place (Rect(Pt(newX,newY),Sz(newWidth,newHeight))))
 
     member private this.detachTabsToScreenSnap(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, snapDirection: string) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnap(singleHwnd, targetScreen, snapDirection)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
+            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds place ->
                 let sourceWorkArea = sourceScreen.WorkingArea
                 let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
                 let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
@@ -1461,18 +1459,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let newHeight = int(float(targetWorkArea.Height) * heightPercent)
                 let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
                     snapDirection, targetWorkArea, newWidth, newHeight)
-                window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))))
+                place (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))))
 
     member private this.detachTabsToScreenSnapWithPercent(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnapWithPercent(singleHwnd, targetScreen, snapDirection, percent)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun _src _bounds ->
-                let window = os.windowFromHwnd(List.head tabsInOrder)
+            this.detachTabsCommon(tabsInOrder, fun _src _bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
                     snapDirection, percent, targetScreen.WorkingArea)
-                window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
 
     // Resolve the action-target list for the detach menu and order it
     // by visualOrder so that the resulting tab strip matches the source
@@ -1582,7 +1579,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToSnap should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
-        let bounds = window.bounds
+        let margin = group.capturePlacementMargin(hwnd)
+        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
         let screen = this.getCurrentScreenForWindow(hwnd)
 
         let tab = Tab(hwnd)
@@ -1603,7 +1601,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 bounds.size.width,
                 bounds.size.height)
 
-            window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -1616,7 +1614,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToScreenSnap should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
-        let bounds = window.bounds
+        let margin = group.capturePlacementMargin(hwnd)
+        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
         let sourceScreen = this.getCurrentScreenForWindow(hwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
         let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
@@ -1661,7 +1660,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if currentDpi <> initialDpi then
                 System.Threading.Thread.Sleep(20)
 
-            window.move (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
+            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
 
             notifyDetached(hwnd)
 
@@ -1674,6 +1673,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToSnapWithPercent should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
+        let margin = group.capturePlacementMargin(hwnd)
         let screen = this.getCurrentScreenForWindow(hwnd)
 
         let tab = Tab(hwnd)
@@ -1693,7 +1693,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 percent,
                 screen.WorkingArea)
 
-            window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -1706,6 +1706,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             raise (System.InvalidOperationException("detachTabToScreenSnapWithPercent should not be called when there is only one tab"))
 
         let window = os.windowFromHwnd(hwnd)
+        let margin = group.capturePlacementMargin(hwnd)
 
         let tab = Tab(hwnd)
         Services.program.suspendTabMonitoring()
@@ -1738,7 +1739,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if currentDpi <> initialDpi then
                 System.Threading.Thread.Sleep(20)
 
-            window.move (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -1750,7 +1751,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Always use the active window (topWindow) as the reference point
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
-        let bounds = window.bounds
+        let margin = group.capturePlacementMargin(activeHwnd)
+        let bounds = FramePlacement.read activeHwnd margin (FramePlacement.restoredBounds window)
         let screen = this.getCurrentScreenForWindow(activeHwnd)
 
         // Restore window if minimized or maximized
@@ -1768,7 +1770,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Move the active window
         if newX <> bounds.location.x || newY <> bounds.location.y then
-            window.setPositionOnly newX newY
+            let baseBounds = Rect(Pt(newX,newY),bounds.size)
+            window.move(FramePlacement.target activeHwnd margin baseBounds)
 
     member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
@@ -1785,6 +1788,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let groupHeight = bounds.size.height + mTop + mBottom
         let groupX = bounds.location.x - mLeft
         let groupY = bounds.location.y - mTop
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin hwnd=%X before=%A amountTLRB=%A base=%A"
+                                    (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom) (groupX,groupY,groupWidth,groupHeight))
+#endif
 
         // Calculate size percentages for DPI-aware placement
         let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
@@ -1835,6 +1842,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let moveBounds = Rect(Pt(finalX, finalY), Sz(newWidth, newHeight))
         let finalBounds = group.applyWindowMarginForWrite(activeHwnd, moveBounds)
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin hwnd=%X base=%A target=%A"
+                                    (int64 activeHwnd) moveBounds finalBounds)
+#endif
         window.move(finalBounds)
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
@@ -3397,6 +3408,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             let selectedSnapshot =
                                 group.selectedTabs.items.list
                                 |> List.filter (fun h -> h <> hwnd)
+                            let frameMargins =
+                                (hwnd :: selectedSnapshot)
+                                |> List.map (fun h -> h, group.capturePlacementMargin(h)) |> Map.ofList
                             let parking = DragWindowParking()
                             let dragInfo =
                                 box({ tab = tab
@@ -3408,10 +3422,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                       retainSource = group.retainForTabDrag
                                       sourceGroupHwnd = group.hwnd
                                       selectedHwnds = selectedSnapshot
+                                      sourceFrameMargins = frameMargins
                                       sourceRestoreSize =
                                           let window = os.windowFromHwnd(hwnd)
-                                          if window.isMaximized || window.isMinimized then window.placement.rcNormalPosition.size
-                                          else window.bounds.size
+                                          let restored = FramePlacement.restoredBounds window
+                                          (FramePlacement.read hwnd frameMargins.[hwnd] restored).size
                                       sourceSnapTabHeightMargin = group.snapTabHeightMargin
                                       sourceLockWindowPosition = group.lockWindowPosition
                                       sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign })

@@ -33,7 +33,9 @@ and TabDragInfo = {
     // and a source whose tabs all left may already be gone by then.
     //   sourceSnapTabHeightMargin: the source group's per-group snap margin.
     //   sourceTabAligns: alignment of the dragged tab and each selected tab.
-    // Capture the restore dimensions before dragExit parks/restores the window.
+    // Immutable readers remain valid after the source group releases its cache.
+    // Restore dimensions include the external frame before dragExit parks the window.
+    sourceFrameMargins: Map<IntPtr, int -> int * int * int * int>
     sourceRestoreSize: Sz
     sourceSnapTabHeightMargin: bool
     //   sourceLockWindowPosition: the source group's per-group lock. A tab

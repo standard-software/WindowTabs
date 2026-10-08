@@ -210,6 +210,7 @@ type Desktop(notify:IDesktopNotification) as this =
     // only after the position-first DPI transition, without blocking the UI.
     member private this.snapDroppedWindow(window: Window, mon: Mon, pt: Pt, dragInfo: TabDragInfo, complete: unit -> unit) =
         let hwnd = window.hwnd
+        let margin = dragInfo.sourceFrameMargins.[hwnd]
         let work = mon.workRect
         let workArea = (work.x, work.y, work.width, work.height)
         let snapDirection = SnapGeometry.directionForPoint workArea (pt.x, pt.y)
@@ -228,7 +229,10 @@ type Desktop(notify:IDesktopNotification) as this =
                     // B's 50 percent does not depend on the restored window size.
                     let (x, y, width, height) =
                         SnapGeometry.calculateSnapBoundsWithPercent snapDirection 50 (snapArea())
-                    window.move (Rect(Pt(x, y), Sz(width, height)))
+                    let baseBounds = Rect(Pt(x, y), Sz(width, height))
+                    FramePlacement.moveDetached window margin baseBounds
+                    for selected in dragInfo.selectedHwnds do
+                        FramePlacement.prepare selected dragInfo.sourceFrameMargins.[selected] baseBounds
                     let realignEnabled =
                         try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
                         with _ -> false

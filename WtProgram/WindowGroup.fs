@@ -49,6 +49,65 @@ module private MarginGeometryNative =
     extern bool IsWindowArranged(nativeint hwnd)
 #endif
 
+// A detached window may have no group while it is moved. Carry its immutable
+// margin and intended base across that gap, without reading the old group's cells.
+module FramePlacement =
+    type MarginReader = int -> int * int * int * int
+    [<NoEquality; NoComparison>]
+    type Prepared = { margin: MarginReader; bounds: Rect; identity: int * int }
+    let private pending = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, Prepared>()
+    let private identity hwnd = Win32Helper.GetWindowProcessId(hwnd), Win32Helper.GetWindowThreadId(hwnd)
+    let private dpi (bounds: Rect) = max 96 (int (Math.Round(Dpi.scaleForRect bounds * 96.0)))
+    let private convert f margin (bounds: Rect) =
+        let input : WindowFrameMargin.Bounds = { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
+        let r : WindowFrameMargin.Bounds = f margin input
+        Rect(Pt(r.x,r.y),Sz(r.width,r.height))
+    let restoredBounds (window: Window) =
+        if window.isMinimized || window.isMaximized then
+            let normal = window.placement.rcNormalPosition
+            if int(window.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+            else
+                match Mon.fromHwnd(window.hwnd) with
+                | Some mon -> normal.move(mon.workRect.x-mon.displayRect.x, mon.workRect.y-mon.displayRect.y)
+                | None -> normal
+        else window.bounds
+    let read (hwnd: IntPtr) (margin: MarginReader) bounds =
+        let amount = margin (dpi bounds)
+        let result = convert WindowFrameMargin.outset amount bounds
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin hwnd=%X before=%A amountTLRB=%A base=%A"
+                                    (int64 hwnd) bounds amount result)
+#endif
+        result
+    let target (hwnd: IntPtr) (margin: MarginReader) bounds =
+        let amount = margin (dpi bounds)
+        let result = convert WindowFrameMargin.inset amount bounds
+#if DEBUG
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin hwnd=%X base=%A amountTLRB=%A target=%A"
+                                    (int64 hwnd) bounds amount result)
+#endif
+        result
+    let prepare hwnd margin bounds =
+        // Drop abandoned placements whose native window identity has changed.
+        for pair in pending.ToArray() do
+            if identity pair.Key <> pair.Value.identity then
+                (pending :> ICollection<KeyValuePair<IntPtr, Prepared>>).Remove(pair) |> ignore
+        pending.[hwnd] <- { margin=margin; bounds=bounds; identity=identity hwnd }
+    let take hwnd =
+        match pending.TryRemove(hwnd) with
+        | true, value when identity hwnd = value.identity -> Some value
+        | _ -> None
+    let moveDetached (window: Window) margin bounds =
+        let wanted = target window.hwnd margin bounds
+        prepare window.hwnd margin bounds
+        try
+            window.move(wanted)
+#if DEBUG
+            WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin-result hwnd=%X base=%A target=%A actual=%A"
+                                        (int64 window.hwnd) bounds wanted window.bounds)
+#endif
+        with _ -> take window.hwnd |> ignore; reraise()
+
 type WindowGroup(plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
     let _bb = Blackboard()
@@ -1473,6 +1532,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let dpi = try int (Math.Round(Dpi.scaleForRect bounds * 96.0)) with _ -> 96
         frameMargins.Get(hwnd, dpi)
 
+    member this.capturePlacementMargin(hwnd: IntPtr) : FramePlacement.MarginReader =
+        this.refreshWindowMargin(hwnd) |> ignore
+        let sample = if this.hasWindowMargin(hwnd) then frameMargins.Measurement(hwnd) else WindowFrameMargin.emptySticky
+        fun dpi -> WindowFrameMargin.readSticky dpi sample
+
     member this.hasWindowMargin(hwnd:IntPtr) =
         let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
         top <> 0 || left <> 0 || right <> 0 || bottom <> 0
@@ -2376,7 +2440,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             use trace = Bemo.Win32.GroupCallTrace.Operation("group.addWindow")
 #endif
             if withDelay then System.Threading.Thread.Sleep(250)
+            let prepared = FramePlacement.take hwnd
             frameMargins.Attach(hwnd)
+            prepared |> Option.iter (fun value ->
+                let dpi = max 96 (int (WinUserApi.GetDpiForWindow(hwnd)))
+                frameMargins.Seed(hwnd, dpi, value.margin dpi))
             this.refreshWindowMargin(hwnd) |> ignore
             let window = this.os.windowFromHwnd(hwnd)                
             // Per-event leading throttle intervals. LOCATIONCHANGE fires very frequently for
@@ -2399,7 +2467,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.setWindows(this.windows.add hwnd)
             if placement.value.IsNone then
                 prevTop.set(Some(hwnd))
-                this.saveTopWindowPlacement()
+                match prepared with
+                | Some value when WindowFrameMargin.usePreparedBase placement.value.IsSome
+                                      (not window.isMinimized && not window.isMaximized) ->
+                    this.applyWindowBoundsWithDpiHandling(hwnd, this.applyWindowMarginForWrite(hwnd, value.bounds))
+                    placementSource <- hwnd
+                    placement.set(Some(value.bounds, window.placement))
+                    this.publishMarginBase()
+                    this.traceMarginPlacement("detached-base", hwnd)
+                | _ -> this.saveTopWindowPlacement()
             let registerEvent evt =
                 let handler = fun() -> this.main(hwnd, evt)
                 let handler =
