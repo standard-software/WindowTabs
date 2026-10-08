@@ -2,7 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.09_next1
+## version ss_2026.10.09_next2
+
+- Fixed a tab with a special resize frame, such as LINE, ending up off by its
+  frame when it is detached and placed at a position.
 
 ## version ss_2026.10.09
 

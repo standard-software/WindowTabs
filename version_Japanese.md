@@ -2,7 +2,10 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.10.09_next1
+## version ss_2026.10.09_next2
+
+- LINE などの特殊なリサイズ枠を持つタブを分離して位置を指定したとき、
+  外枠のぶんだけずれるのを修正。
 
 ## version ss_2026.10.09
 
