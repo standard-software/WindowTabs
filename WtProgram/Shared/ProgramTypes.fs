@@ -82,7 +82,6 @@ type SettingsViewType =
     | ProgramSettings
     | LicenseSettings
     | AppearanceSettings
-    | DiagnosticsSettings
     | LayoutSettings
     // The "Behavior" tab, despite the name.
     | HotKeySettings

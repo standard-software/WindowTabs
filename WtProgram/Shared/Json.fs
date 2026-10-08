@@ -64,8 +64,6 @@ module JObjectHelper =
             this.setValue(key, value)
         member this.setInt64(key, value:int64) =
             this.setValue(key, value)
-        member this.setIntPtr(key, value:IntPtr) =
-            this.setValue(key, value.ToInt64())
         member this.setString(key, value:string) =
             this.setValue(key, value)
         member this.setPt(key, value:Pt) =

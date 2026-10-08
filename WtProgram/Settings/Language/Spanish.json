@@ -110,7 +110,6 @@
   "WindowSettings": "Configuración de la ventana",
   "WorkspaceNameSettings": "Nombre del espacio de trabajo",
 
-  "Diagnostics": "Diagnóstico",
   "Reset": "Restablecer",
 
   "TargetTabHeader": "Pestaña de destino : {TabName}",

@@ -110,7 +110,6 @@
   "WindowSettings": "창 설정",
   "WorkspaceNameSettings": "작업 공간 이름",
 
-  "Diagnostics": "진단",
   "Reset": "초기화",
 
   "TargetTabHeader": "대상 탭 : {TabName}",

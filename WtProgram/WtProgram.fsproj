@@ -219,7 +219,6 @@ if $(ConfigurationName) == Release (
     <Compile Include="ManagerViewService\Views\AppearanceView.fs" />
     <Compile Include="ManagerViewService\Views\BehaviorView.fs" />
     <Compile Include="ManagerViewService\Views\ShortcutKeysView.fs" />
-    <Compile Include="ManagerViewService\Views\DiagnosticsView.fs" />
     <Compile Include="ManagerViewService\Views\LicenseView.fs" />
     <Compile Include="ManagerViewService\Views\ProgramView.fs" />
     <Compile Include="ManagerViewService\DesktopManagerForm.fs" />

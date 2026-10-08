@@ -114,7 +114,6 @@ module Localization_English =
         ("WindowSettings", "Window Settings")
         ("WorkspaceNameSettings", "Workspace Name")
 
-        ("Diagnostics", "Diagnostics")
         ("Reset", "Reset")
 
         ("TargetTabHeader", "Target tab : {TabName}")
