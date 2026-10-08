@@ -1150,20 +1150,35 @@ type Program() as this =
                 else e)
         if refreshed <> closedTabCache.value then closedTabCache.set(refreshed)
 
-    member private this.restorePosition(hwnd: IntPtr) : RestorePosition.Observation =
-        let missing : RestorePosition.Observation = {center=None;scale=1.0;desktop=None}
+    member private this.restoreRectangle(hwnd: IntPtr) =
         try
             let window = os.windowFromHwnd(hwnd)
-            if not window.isWindow || window.isMinimized || window.isInMoveSize then missing else
-            // SavedTabState.rect is raw GetWindowRect on our PMv2 main thread:
-            // physical screen pixels, before any application-frame expansion.
-            let b = window.bounds
-            let center = RestorePosition.center (Some(b.x,b.y,b.width,b.height))
-            if center.IsNone then missing else
-            let hr,id = window.virtualDesktopIdWithHr
-            { center=center; scale=Dpi.scaleForHwnd(hwnd)
-              desktop=if hr >= 0 && id <> Guid.Empty then Some id else None }
-        with _ -> missing
+            if not window.isWindow then None else
+            let bounds =
+                if not window.isMinimized then window.bounds else
+                let normal = window.placement.rcNormalPosition
+                // Placement is in workspace coordinates except for tool windows.
+                if int(window.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+                else
+                    match Mon.fromHwnd(hwnd) with
+                    | Some mon -> normal.move(mon.workRect.x - mon.displayRect.x,
+                                              mon.workRect.y - mon.displayRect.y)
+                    | None -> normal
+            Some(bounds.x,bounds.y,bounds.width,bounds.height)
+        with _ -> None
+
+    member private this.traceRestorePair(saved: IntPtr, hwnd: IntPtr, rank, distance, candidates) =
+#if DEBUG
+        RestoreTrace.retention hwnd saved rank "position-pair" (fun () ->
+            sprintf " record=%X window=%X distance=%A candidates=%d" (saved.ToInt64()) (hwnd.ToInt64()) distance candidates)
+#endif
+        ()
+
+    member private this.restorePosition(hwnd: IntPtr) : RestorePosition.Observation =
+        // Physical distances do not depend on monitor scale or desktop identity.
+        // A failed desktop read must not discard a valid rectangle.
+        { center=RestorePosition.center (this.restoreRectangle hwnd)
+          scale=1.0; desktop=None }
 
     member private this.traceRestorePosition(hwnd, token, rank, decision) =
         let reason, distance, gap =
@@ -1184,26 +1199,31 @@ type Program() as this =
             let entries = closedTabCache.value |> List.mapi (fun index e ->
                 (e.exePath,e.windowTitle), e.isAmbiguous,
                 ({ index=index; center=RestorePosition.center e.savedRect; desktop=e.savedDesktop } : RestorePosition.Candidate))
-            // Avoid geometry/desktop reads on the unchanged ordinary path.
-            let observation =
-                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
-                    this.restorePosition hwnd
-                else { RestorePosition.center=None; scale=1.0; desktop=None }
-            let entries =
-                if closedTabCache.value |> List.exists (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle)) then
-                    entries |> List.sortBy (fun (_,_,c) ->
-                        let e = closedTabCache.value.[c.index]
-                        Option.defaultValue Int32.MaxValue e.savedGroupIndex, e.tabIndex, c.index)
-                else entries
-            let matches, decision = ClosedTabClaim.resolve identity observation entries
-            decision |> Option.iter (fun d ->
-                let traced =
-                    match d with
-                    | RestorePosition.Selected(index,_,_,_)
-                    | RestorePosition.Ordered(index,_,_) -> [closedTabCache.value.[index]]
-                    | RestorePosition.Held _ -> closedTabCache.value |> List.filter (fun e -> e.isAmbiguous && ClosedTabClaim.sameIdentity identity (e.exePath,e.windowTitle))
-                for e in traced do this.traceRestorePosition(hwnd, groupRefHandle e.groupRef, e.tabIndex, d))
-            matches
+            let matching = entries |> List.filter (fun (other,_,_) -> ClosedTabClaim.sameIdentity identity other)
+            if not matching.IsEmpty then
+                let matching = matching |> List.sortBy (fun (_,_,c) ->
+                    let e = closedTabCache.value.[c.index]
+                    Option.defaultValue Int32.MaxValue e.savedGroupIndex, e.tabIndex, c.index)
+                let arrivals =
+                    hwnd :: (os.windowsInZorder.list |> List.choose (fun w ->
+                        try
+                            if w.isWindow && not (claimedWindows.value.Contains w.hwnd) &&
+                               this.isAppWindowStyle(w) &&
+                               Services.filter.getIsTabbingEnabledForProcess(w.pid.processPath) &&
+                               ClosedTabClaim.sameIdentity identity (w.pid.processPath, normalizeClosedTabTitle w.text) then Some w.hwnd
+                            else None
+                        with _ -> None))
+                    |> List.distinct |> List.sortBy (fun h -> h.ToInt64())
+                let pairs = ClosedTabClaim.resolveMany (arrivals |> List.map this.restorePosition)
+                                                       (matching |> List.map (fun (_,_,c) -> c))
+                match pairs |> List.tryFind (fun (_,pair) -> arrivals.[pair.liveIndex] = hwnd) with
+                | Some(index,pair) ->
+                    let e = closedTabCache.value.[index]
+                    if matching.Length > 1 || arrivals.Length > 1 then
+                        this.traceRestorePair(e.closedHwnd, hwnd, e.tabIndex, pair.distance, pair.candidates)
+                    [index]
+                | None -> []
+            else matching |> List.map (fun (_,_,c) -> c.index)
         ClosedTabClaim.decide hwnd claimedWindows.value matches
 
     member private this.peekClosedTabMatch(hwnd, exePath, windowTitle) =
@@ -1474,7 +1494,7 @@ type Program() as this =
 
     member private this.tryLateClosedTabRestore(hwnd: IntPtr, exePath: string, windowTitle: string) =
         try
-                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) && this.isOnDesktopFromReader(hwnd) then
+                if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) && (this.isOnDesktopFromReader(hwnd) || this.isInGroup(hwnd)) then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
                     let bounds =
@@ -3051,11 +3071,7 @@ type Program() as this =
         // alone assigned their per-window state first-come-first-served, which
         // put one window's rename onto the other. Most windows reopen where
         // they were, so at restore the saved rectangles pick the right twins.
-        let rect =
-            try
-                let b = window.bounds
-                Some(b.x, b.y, b.width, b.height)
-            with _ -> None
+        let rect = this.restoreRectangle hwnd
         // Written through the same record a not-yet-started window is written
         // through (savedTabOfSeed), so the two cannot disagree about a key or
         // a format.
@@ -3262,10 +3278,7 @@ type Program() as this =
                             handle = w.hwnd
                             exePath = (try w.pid.processPath with _ -> "")
                             title = (try normalizeClosedTabTitle w.text with _ -> "")
-                            // Ordinary same-group twins retain their historical geometry.
-                            center = position.center |> Option.orElseWith (fun () ->
-                                try let b = w.bounds in Some(float b.x + float b.width / 2.0, float b.y + float b.height / 2.0)
-                                with _ -> None)
+                            center = position.center
                             positionTrusted = position.center.IsSome
                             scale = position.scale
                             desktop = position.desktop }
@@ -3276,7 +3289,10 @@ type Program() as this =
                     let token = savedGroups.[gi].windows |> List.tryHead |> Option.map (fun t -> t.hwnd) |> Option.defaultValue IntPtr.Zero
                     this.traceRestorePosition(hwnd, token, rank, decision)
                 let planned =
-                    SavedSession.planWithPositionTrace tracePosition DateTime.Now seedMaxAgeDays closedTabMaxAgeDays savedGroups live
+                    SavedSession.planWithPairTrace
+                        (fun hwnd gi rank distance count ->
+                            this.traceRestorePair(savedGroups.[gi].windows.[rank].hwnd, hwnd, rank, distance, count))
+                        tracePosition DateTime.Now seedMaxAgeDays closedTabMaxAgeDays savedGroups live
 
 #if DEBUG
                 let dispatched = Collections.Generic.HashSet<int * int>()
