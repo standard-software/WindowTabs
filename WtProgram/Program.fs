@@ -446,9 +446,8 @@ type Program() as this =
     // as it stands at that moment.
     let restoredFromMap = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>()
     // Temporary storage for tab group configuration (used during disable/enable)
-    // Also the virtual desktop each group belongs to, and whether it held a
-    // window that was in the groups of several desktops.
-    let savedTabGroups = Cell.create<List2<List2<IntPtr> * string * bool * bool * List2<IntPtr> * Guid option * bool>>(List2())
+    // Keep each group's own tab state as well as its home and settings.
+    let savedTabGroups = Cell.create<List2<SavedTabState.SavedTab list * string * bool * bool * Guid option>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let windowNameOverrideSnapshot = windowNameOverride.createSnapshot()
     // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
@@ -3722,16 +3721,31 @@ type Program() as this =
                 // When disabling, save current tab group configuration first (with per-group tab position)
                 // As the save writes them (savedMembers): a window moved and
                 // followed comes back in the group of the desktop it went to
-                // only, and a group "held a window of several desktops" only
-                // if that window is shown on all of them.
+                // only; a genuinely shared window keeps each of its memberships.
                 let groupsNow = this.desktop.groups.list
-                let keeps, marked = this.savedMembers (groupsNow |> List.map (fun gi -> gi, gi.visualOrder.list))
+                let members = groupsNow |> List.map (fun gi ->
+                    gi, SavedSession.mergedOrder gi.visualOrderThreadSafe.list gi.visualOrder.list)
+                let keeps, _ = this.savedMembers members
                 let groupConfigs =
-                    groupsNow |> List.mapi (fun i gi ->
-                        let order = gi.visualOrder.where(keeps i)
-                        let pinnedHwnds = order.where(fun hwnd -> gi.isPinned(hwnd))
-                        (order, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, pinnedHwnds,
-                         gi.desktopHome, order.any(marked.Contains)))
+                    members |> List.mapi (fun i (gi, order) ->
+                        let inStrip = gi.visualOrderThreadSafe.list |> Set.ofList
+                        let tabs = order |> List.filter (keeps i) |> List.map (fun hwnd ->
+                            // Freeze each group's own state before its strip is destroyed.
+                            // Global maps describe only the last group of a shared window.
+                            { SavedTabState.ofHwnd hwnd with
+                                // A reserved arrival may not have reached the strip yet.
+                                isPinned = if inStrip.Contains hwnd then gi.isPinnedThreadSafe(hwnd) else windowPinned.value.contains(hwnd)
+                                align = (if inStrip.Contains hwnd then gi.explicitTabAlign(hwnd) else windowAlignment.value.tryFind(hwnd)) |> Option.map savedAlignOfTabAlign
+                                renamedTabName = windowNameOverride.value.tryFind(hwnd) |> Option.bind id
+                                fillColor = (if inStrip.Contains hwnd then gi.getTabFillColorThreadSafe(hwnd) else windowFillColor.value.tryFind(hwnd)) |> Option.map colorToRRGGBBAA
+                                underlineColor = (if inStrip.Contains hwnd then gi.getTabUnderlineColorThreadSafe(hwnd) else windowUnderlineColor.value.tryFind(hwnd)) |> Option.map colorToRRGGBBAA
+                                borderColor = (if inStrip.Contains hwnd then gi.getTabBorderColorThreadSafe(hwnd) else windowBorderColor.value.tryFind(hwnd)) |> Option.map colorToRRGGBBAA })
+                        let token = tabs |> List.tryHead |> Option.map (fun t -> t.hwnd) |> Option.defaultValue IntPtr.Zero
+                        tabs |> List.iteri (fun rank tab ->
+                            RestoreTrace.log (fun () ->
+                                sprintf "disable-snapshot token=%X rank=%d hwnd=%X reason=saved"
+                                    (int64 token) rank (int64 tab.hwnd)))
+                        (tabs, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, gi.desktopHome))
                 savedTabGroups.set(List2(groupConfigs))
 
                 // Set disabled state before destroying groups
@@ -3763,45 +3777,53 @@ type Program() as this =
                 needsRestoreOnStartup.set(false)
 
                 // Restore saved tab groups
-                savedTabGroups.value.iter <| fun (hwnds, savedTabPos, savedSnapMargin, savedLockPosition, pinnedHwnds, home, heldSeveral) ->
-                    // Filter out windows that no longer exist or are not visible.
-                    // A group that held a window shown on all desktops keeps its
-                    // windows that are on another desktop (cloaked there): one of
-                    // its windows is here, so the group is rebuilt - and without
-                    // them the other desktop's group would come back as that
-                    // one window alone.
-                    let validHwnds = hwnds.where <| fun hwnd ->
-                        let window = os.windowFromHwnd(hwnd)
-                        VirtualDesktopGroups.keepOnReenable heldSeveral window.isWindow
-                            window.isVisibleOnScreen window.isVisible
-
-                    if validHwnds.count > 0 then
+                savedTabGroups.value.iter <| fun (tabs, savedTabPos, savedSnapMargin, savedLockPosition, home) ->
+                    let token = tabs |> List.tryHead |> Option.map (fun t -> t.hwnd) |> Option.defaultValue IntPtr.Zero
+                    let trace rank hwnd reason =
+                        RestoreTrace.log (fun () ->
+                            sprintf "reenable token=%X rank=%d hwnd=%X reason=%s"
+                                (int64 token) rank (int64 hwnd) reason)
+                    let valid = tabs |> List.indexed |> List.filter (fun (rank, tab) ->
+                        let window = os.windowFromHwnd(tab.hwnd)
+                        let keep = VirtualDesktopGroups.keepOnReenable false window.isWindow false false
+                        if not keep then trace rank tab.hwnd "destroyed"
+                        keep)
+                    if not valid.IsEmpty then
                         let group = Services.desktop.createGroup()
                         group.perGroupTabPositionValue <- savedTabPos
-                        validHwnds.iter <| fun hwnd ->
-                            match group :> obj with
-                            | :? GroupInfo as gi ->
-                                gi.addWindowWith(hwnd, fun wg ->
-                                    wg.addWindow(hwnd, false, pinned=pinnedHwnds.contains((=) hwnd)))
-                            | _ -> group.addWindow(hwnd, false)
-                        // Restore per-group snap tab height margin
                         group.snapTabHeightMargin <- savedSnapMargin
-                        // Restore whether this group's windows are locked
                         group.lockWindowPosition <- savedLockPosition
-                        // And which virtual desktop it belongs to
                         group.desktopHome <- home
-                        // Restore pinned tabs
-                        pinnedHwnds.iter <| fun hwnd ->
-                            if validHwnds.contains((=) hwnd) then
-                                group.pinTab(hwnd)
-                        // A window shown on all desktops joined with the pin of
-                        // whichever of its groups was rebuilt last; one that was
-                        // not pinned in this group is unpinned again. (Any other
-                        // window's pin was this group's already.)
-                        if heldSeveral then
-                            validHwnds.iter <| fun hwnd ->
-                                if not (pinnedHwnds.contains((=) hwnd)) then
-                                    group.unpinTab(hwnd)
+                        match group :> obj with
+                        | :? GroupInfo as gi ->
+                            // Reserve every member before any asynchronous insertion.
+                            // Restore in place: cloaked members must not switch desktops.
+                            gi.reserveWorkspaceWindows(valid |> List.map (fun (_, t) -> t.hwnd))
+                            gi.invokeGroup <| fun () ->
+                                let wg = gi.group
+                                for rank, tab in valid do
+                                    if not (os.windowFromHwnd(tab.hwnd).isWindow) then
+                                        trace rank tab.hwnd "destroyed-before-add"
+                                    else
+                                        try
+                                            wg.addWindowPlaced(tab.hwnd, false, false,
+                                                ?alignment=(tab.align |> Option.map tabAlignOfSavedAlign), pinned=tab.isPinned)
+                                            // None also has meaning: clear another desktop's state.
+                                            if tab.align.IsNone then
+                                                wg.ts.clearTabAlign(Tab(tab.hwnd))
+                                                Services.program.setWindowAlignment(tab.hwnd, None)
+                                            wg.setTabFillColor(tab.hwnd, tab.fillColor |> Option.bind parseColorRRGGBBAA)
+                                            wg.setTabUnderlineColor(tab.hwnd, tab.underlineColor |> Option.bind parseColorRRGGBBAA)
+                                            wg.setTabBorderColor(tab.hwnd, tab.borderColor |> Option.bind parseColorRRGGBBAA)
+                                            wg.setTabName(tab.hwnd, tab.renamedTabName)
+                                            trace rank tab.hwnd "restored-by-hwnd"
+                                        with _ ->
+                                            trace rank tab.hwnd "add-failed"
+                                            reraise()
+                                // Insertion and pin normalization must not replace saved order.
+                                wg.ts.setVisualOrder(valid |> List.map (fun (_, t) -> Tab(t.hwnd)))
+                        | _ ->
+                            valid |> List.iter (fun (rank, tab) -> trace rank tab.hwnd "unsupported-group")
 
                 // Clear saved configuration
                 savedTabGroups.set(List2())
