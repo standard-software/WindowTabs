@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next15
+## version ss_2026.10.09
 
 - Tab groups are no longer kept separately for each virtual desktop.
   - The tab of a window on another desktop is drawn at half opacity;
