@@ -786,11 +786,11 @@ module VirtualDesktopGroups =
         if dropped then not inShownGroup else not inAnyGroup
 
     /// Which windows a group rebuilt when WindowTabs is switched back on keeps
-    /// (Program.setDisabled). As before, the ones that exist and are on
-    /// screen; a group that held a window shown on all desktops keeps its
-    /// windows on another desktop too (visible, only cloaked there).
+    /// (Program.setDisabled). Visibility is presentation, not identity: an
+    /// ordinary cloaked or temporarily hidden member still owns its state.
+    /// Only a destroyed window has left this in-memory snapshot.
     let keepOnReenable (heldSeveral: bool) (isWindow: bool) (visibleOnScreen: bool) (visible: bool) =
-        isWindow && (visibleOnScreen || (heldSeveral && visible))
+        isWindow
 
     // ---------------------------------------------------------- the file --
 
@@ -870,6 +870,15 @@ module VirtualDesktopGroups =
     /// uses joinable instead and never gains this exception.
     let restoreInto isShared (found: 'g option) (isShown: 'g -> bool) : 'g option =
         found |> Option.filter (fun g -> isShown g || (keepAway && not isShared))
+
+    /// Returning live members carry an exact reference to their former group.
+    let returnInto isShared (found: 'g option) (isShown: 'g -> bool) : 'g option =
+        restoreInto isShared found isShown
+
+    /// A destroyed HWND has no desktop answer. Do not let an absent reading
+    /// keep a ghost member forever when the destroy notification was missed.
+    /// Live windows retain the ordinary visibility and placement safeguards.
+    let pruneMember exists (ordinary: unit -> bool) = not exists || ordinary()
 
     /// Capture a hidden destination before reserving membership, since a
     /// desktop pass can mark the group shown before its queued insertion runs.

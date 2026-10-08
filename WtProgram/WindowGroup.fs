@@ -156,8 +156,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable shellStripHoldUntil = 0L
     let mutable stripView : VirtualDesktopGroups.StripView =
         { current=None; presence=Map.empty; noticeTick=None }
-    let stripMaintenanceTimer = new System.Windows.Forms.Timer(Interval = 100)
+    // A safety net only: reorder, foreground and placement events drive the
+    // strip; the tick catches what none of them reports.
+    let stripMaintenanceTimer = new System.Windows.Forms.Timer(Interval = 250)
     let mutable stripRepairing = false
+    // What the last full refresh left behind (see stripStateSignature), and
+    // when a reorder notification last started one.
+    let mutable lastStripSignature : obj = null
+    let mutable lastReorderRefresh = -1000L
     let mutable stripGroupMinimized = false
     let mutable stripOrderHook : IDisposable option = None
     let mutable stripPredictionHook : IDisposable option = None
@@ -250,8 +256,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
             this.invokeAsync (fun () -> this.refreshStripState("maintenance")))
         stripMaintenanceTimer.Start()
-        stripOrderHook <- Some(_os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ ->
-            this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))))
+        // Every window of every application raises this, child windows
+        // included; only a top-level window can come between the strip and
+        // its group. One refresh per 50 ms is enough: what is dropped here the
+        // maintenance tick still sees.
+        stripOrderHook <- Some(_os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun hwnd ->
+            let now = stripClock.ElapsedMilliseconds
+            let topLevel =
+                try (int64 (WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE)) &&& 0x40000000L) = 0L
+                with _ -> true
+            if topLevel && now - lastReorderRefresh >= 50L then
+                lastReorderRefresh <- now
+                this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))))
 
         // Apply default setting for tab position
         let defaultPosition = Services.settings.getValue("tabPositionByDefault") :?> string
@@ -708,7 +724,42 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     if not onScreen then window.move(home)
             with _ -> ()
 
-    member private this.inZorder(windows:List2<IntPtr>) = this.windows.items.sortBy(fun hwnd -> this.os.windowFromHwnd(hwnd).zorder)
+    // The position of any window in the top-level order, from ONE enumeration.
+    // Window.zorder enumerates every top-level window for each window asked.
+    member private this.zorderIndex() : IntPtr -> int =
+        let index = Collections.Generic.Dictionary<IntPtr, int>()
+        Win32Helper.GetWindowsInZOrder() |> Array.iteri (fun i hwnd ->
+            if not (index.ContainsKey hwnd) then index.[hwnd] <- i)
+        fun hwnd ->
+            match index.TryGetValue hwnd with
+            | true, i -> i
+            | _ -> 9999
+
+    member private this.inZorder(windows:List2<IntPtr>) =
+        let position = this.zorderIndex()
+        this.windows.items.sortBy(position)
+
+    // Everything a periodic refresh could act on: where the members and the
+    // strip are in the top-level order and what sits directly above each of
+    // them, each member's own state, and the desktop reading. While this is
+    // unchanged a periodic refresh has nothing to do.
+    member private this.stripStateSignature() : obj =
+        let order = Win32Helper.GetWindowsInZOrder()
+        let members = this.windows.items.list
+        let memberSet = Collections.Generic.HashSet<IntPtr>(members)
+        let strip = this.ts.hwnd
+        let placed =
+            [ for i in 0 .. order.Length - 1 do
+                let hwnd = order.[i]
+                if hwnd = strip then
+                    yield hwnd, (if i + 1 < order.Length then order.[i + 1] else IntPtr.Zero)
+                elif memberSet.Contains hwnd then
+                    yield hwnd, (if i > 0 then order.[i - 1] else IntPtr.Zero) ]
+        let states = members |> List.map (fun hwnd ->
+            let w = this.os.windowFromHwnd(hwnd)
+            hwnd, w.isWindow, w.isVisible, w.isMinimized, w.cloakedValue, w.isTopMost)
+        let live = VirtualDesktopGroups.Live.snapshot()
+        box (placed, states, live.generation, desktopShown, stripGroupMinimized, this.ts.visible)
 
     member private this.stripFrontDecision(order: IntPtr list) =
         // Other groups predict strip pixels only; their native front and
@@ -848,7 +899,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 // member is physically on screen. Never raise an away window.
                 let candidates =
                     this.stripMembers |> List.filter (fun w -> w.cloak = Some 0 || w.cloak.IsNone)
-                    |> List.sortBy (fun w -> this.os.windowFromHwnd(w.hwnd).zorder)
+                    |> List.sortBy (let position = this.zorderIndex() in fun w -> position w.hwnd)
                 match VirtualDesktopGroups.stripFront candidates with
                 | None -> ()
                 | Some front ->
@@ -1033,7 +1084,24 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             presence=state.reads |> Map.map (fun _ r -> r.presence) }
         this.applyStripDesktop(shown, view)
 
-    member private this.refreshStripState(reason: string) = this.ts.withContentSource(reason, fun () ->
+    member private this.refreshStripState(reason: string) =
+        // The tick and the system-wide reorder notification come all the time;
+        // nearly always nothing that concerns this group has changed.
+        let periodic = (reason = "maintenance" || reason = "global-reorder")
+        let unchanged =
+            periodic && stripPreview.IsNone && not shellStripHold && (!_ts).IsSome &&
+            not isDestroyed.value && not (isNull lastStripSignature) &&
+            (try lastStripSignature.Equals(this.stripStateSignature()) with _ -> false)
+        if unchanged then PerfTrace.count "strip.refresh.skipped"
+        else
+            PerfTrace.count "strip.refresh.run"
+            this.refreshStripStateNow(reason)
+            lastStripSignature <-
+                if (!_ts).IsSome && not isDestroyed.value then
+                    (try this.stripStateSignature() with _ -> null)
+                else null
+
+    member private this.refreshStripStateNow(reason: string) = this.ts.withContentSource(reason, fun () ->
 #if DEBUG
         use trace = Bemo.Win32.GroupCallTrace.Operation("group.refreshStrip")
 #endif
