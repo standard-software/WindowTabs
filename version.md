@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.03_next14
+## version ss_2026.10.03_next15
 
 - Tab groups are no longer kept separately for each virtual desktop.
   - The tab of a window on another desktop is drawn at half opacity;
@@ -28,6 +28,8 @@
   - A window returns to its tab group on another desktop.
   - A Store app's windows return after an update changed its version.
   - Windows with the same title return to the tab group nearest to them.
+- Fixed pins and tab order being lost when WindowTabs is switched off and on.
+  - Windows on another desktop were dropped from their tab group.
 
 ## version ss_2026.10.03
 
