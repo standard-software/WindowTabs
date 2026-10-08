@@ -39,7 +39,7 @@ module TraceWriter =
             with _ -> ()
 
 // Debug-only trace of the session restore: which saved entry each window
-// claimed, by which route, and where it was placed. Truncated at each start.
+// claimed, by which route, and where it was placed. Bounded across runs.
 module RestoreTrace =
 #if DEBUG
     let private path =
@@ -47,6 +47,24 @@ module RestoreTrace =
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "WindowTabs", "restore_trace.log")
     let mutable private started = false
+    let private runId = Guid.NewGuid().ToString("N").Substring(0, 8)
+
+    // Rotate by size, not by startup: repeated short runs share the same file.
+    // Keep four previous chunks as well as the current one.
+    let private rotate () =
+        if IO.File.Exists(path) && IO.FileInfo(path).Length >= 4L * 1024L * 1024L then
+            let archive n = path + "." + string n
+            if IO.File.Exists(archive 4) then IO.File.Delete(archive 4)
+            for n in 3 .. -1 .. 1 do
+                if IO.File.Exists(archive n) then IO.File.Move(archive n, archive (n + 1))
+            IO.File.Move(path, archive 1)
+
+    let titleIdentity (title: string) =
+        let value = if isNull title then "" else title
+        use hash = Security.Cryptography.SHA256.Create()
+        let digest = hash.ComputeHash(Text.Encoding.UTF8.GetBytes(value))
+        sprintf "length=%d hash=%s" value.Length
+            (BitConverter.ToString(digest, 0, 6).Replace("-", ""))
     let private gate = obj()
 #endif
     // Takes a thunk, not a string: an argument is evaluated before the call,
@@ -60,11 +78,13 @@ module RestoreTrace =
 #endif
 #if DEBUG
         TraceWriter.write gate (fun () ->
-            sprintf "%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) (f())) (fun line ->
+            sprintf "%s run=%s %s\r\n" (DateTime.Now.ToString("HH:mm:ss.fff")) runId (f())) (fun line ->
             try
+                IO.Directory.CreateDirectory(IO.Path.GetDirectoryName(path)) |> ignore
+                rotate()
                 if not started then
+                    IO.File.AppendAllText(path, sprintf "restore-run run=%s\r\n" runId)
                     started <- true
-                    try IO.File.WriteAllText(path, "") with _ -> ()
                 IO.File.AppendAllText(path, line)
             with _ -> ())
 #else

@@ -13,7 +13,7 @@ module RestorePosition =
         | Ordered of index: int * distance: float option * gap: float option
         | Held of reason: string
 
-    let desktop value =
+    let desktop (value: string option) =
         value |> Option.bind (fun s ->
             match Guid.TryParse(s) with
             | true, id when id <> Guid.Empty -> Some id

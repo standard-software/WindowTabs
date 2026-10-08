@@ -376,9 +376,14 @@ module SavedSession =
         // application take the closed tab's name, colours and pin without its
         // title ever being looked at.
         let reserved = System.Collections.Generic.HashSet<IntPtr>()
-        groups |> List.iter (fun g ->
-            g.windows |> List.iter (fun t ->
-                if savedHwndTrusted t && not t.closedByUser then reserved.Add(t.hwnd) |> ignore))
+        // Reservations belong to records, not just handle numbers. A closed
+        // or mismatching record must not inherit another record's reservation.
+        let resolved = System.Collections.Generic.Dictionary<int * int, IntPtr>()
+        groups |> List.iteri (fun gi g ->
+            g.windows |> List.iteri (fun ti t ->
+                if savedHwndTrusted t && not t.closedByUser &&
+                   (reserved.Add(t.hwnd) || t.onAllDesktops) then
+                    resolved.[(gi, ti)] <- t.hwnd))
 
         // Identity matching after a Windows restart. Once every handle is new,
         // application path + title is all that is left, and it does not always
@@ -398,8 +403,8 @@ module SavedSession =
         let crossGroup = System.Collections.Generic.HashSet<string>()
         let notShared = System.Collections.Generic.HashSet<string>()
         groups |> List.iteri (fun gi g ->
-            g.windows |> List.iter (fun t ->
-                if not (reserved.Contains(t.hwnd)) && not (expired t) then
+            g.windows |> List.iteri (fun ti t ->
+                if not (resolved.ContainsKey((gi, ti))) && not (expired t) then
                     identityOf t |> Option.iter (fun key ->
                         savedCounts.[key] <-
                             (match savedCounts.TryGetValue(key) with
@@ -418,7 +423,7 @@ module SavedSession =
 
         let liveCounts = System.Collections.Generic.Dictionary<string, int>()
         live |> List.iter (fun w ->
-            if w.exePath <> "" && w.title <> "" then
+            if not (reserved.Contains w.handle) && w.exePath <> "" && w.title <> "" then
                 let key = identityKey w.exePath w.title
                 liveCounts.[key] <- (match liveCounts.TryGetValue(key) with
                                      | true, n -> n + 1
@@ -441,17 +446,7 @@ module SavedSession =
 
         // ---- who comes back as what ----
 
-        let taken = System.Collections.Generic.HashSet<IntPtr>()
-        // (group index, index in group) -> live handle
-        let resolved = System.Collections.Generic.Dictionary<int * int, IntPtr>()
-
-        // Same session first: a window that still carries the handle it was
-        // saved with IS the window that was saved. A window shown on all
-        // desktops takes its place in each group it was saved in.
-        groups |> List.iteri (fun gi g ->
-            g.windows |> List.iteri (fun ti t ->
-                if reserved.Contains(t.hwnd) && (taken.Add(t.hwnd) || t.onAllDesktops) then
-                    resolved.[(gi, ti)] <- t.hwnd))
+        let taken = System.Collections.Generic.HashSet<IntPtr>(reserved)
 
         // Cross-group identities use exactly the claim-time position policy.
         // Resolve against remaining entries; after a claim, a sole remaining

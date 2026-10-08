@@ -3219,6 +3219,21 @@ type Program() as this =
     // Includes windows on other virtual desktops (cloaked windows) for full
     // restoration.
     member this.restoreTabGroupsFromSettings() =
+#if DEBUG
+        let mutable reportRestore = fun () ->
+            RestoreTrace.log (fun () -> "restore-summary groups=0 handle=0 title=0 held=0 dropped=0 stage=completed")
+        let completionGate = obj()
+        // The main pass owns one completion; each queued insertion owns another.
+        let mutable pendingCompletions = 1
+        let beginPlacement () = lock completionGate (fun () -> pendingCompletions <- pendingCompletions + 1)
+        let completePlacement update =
+            let finished = lock completionGate (fun () ->
+                update()
+                pendingCompletions <- pendingCompletions - 1
+                pendingCompletions = 0)
+            // No logger thunk takes the completion gate or reads mutable groups.
+            if finished then reportRestore()
+#endif
         try
             let json = settingsManager.settingsJsonReadOnly
             match json.getValueCI("SavedTabGroupsForRestart") with
@@ -3262,6 +3277,61 @@ type Program() as this =
                     this.traceRestorePosition(hwnd, token, rank, decision)
                 let planned =
                     SavedSession.planWithPositionTrace tracePosition DateTime.Now seedMaxAgeDays closedTabMaxAgeDays savedGroups live
+
+#if DEBUG
+                let dispatched = Collections.Generic.HashSet<int * int>()
+                let rejected = Collections.Generic.Dictionary<int * int, string>()
+                reportRestore <- fun () ->
+                    let mutable byHandle, byTitle, held, dropped = 0, 0, 0, 0
+                    let handles xs = xs |> List.map (fun (h: IntPtr) -> sprintf "%X" (h.ToInt64())) |> String.concat ","
+                    for gi,g in List.indexed planned do
+                        for ti,t in List.indexed g.tabs do
+                            if dispatched.Contains((gi,ti)) then
+                                if t.live = Some t.saved.hwnd && not t.saved.closedByUser then byHandle <- byHandle + 1
+                                else byTitle <- byTitle + 1
+                            else
+                                let reason =
+                                    match rejected.TryGetValue((gi,ti)) with
+                                    | true, why -> why
+                                    | _ ->
+                                        match t.outcome with
+                                        | SavedSession.Ambiguous -> "ambiguity-held"
+                                        | SavedSession.Waiting -> "waiting-no-unclaimed-candidate"
+                                        | SavedSession.Expired -> "expired"
+                                        | SavedSession.Unusable -> "unusable-identity"
+                                        | SavedSession.Matched -> "dispatch-interrupted"
+                                if not (rejected.ContainsKey((gi,ti))) &&
+                                   (t.outcome = SavedSession.Waiting || t.outcome = SavedSession.Ambiguous) then held <- held + 1
+                                else dropped <- dropped + 1
+                                let key = SavedSession.identityOf t.saved
+                                let competitors =
+                                    planned |> List.mapi (fun gj other ->
+                                        other.tabs |> List.choose (fun x ->
+                                            if key.IsSome && SavedSession.identityOf x.saved = key &&
+                                               (gj <> gi || x.rank <> t.rank) &&
+                                               x.outcome <> SavedSession.Expired then
+                                                Some(sprintf "%d:%d:%X:%A" gj x.rank (x.saved.hwnd.ToInt64()) x.outcome)
+                                            else None)) |> List.concat |> String.concat ","
+                                let candidates =
+                                    live |> List.filter (fun w -> key = Some(SavedSession.identityKey w.exePath w.title))
+                                         |> List.map (fun w -> w.handle) |> handles
+                                let handleLive, sameExe =
+                                    try
+                                        let w = os.windowFromHwnd(t.saved.hwnd)
+                                        let exists = w.isWindow
+                                        exists, (exists && (t.saved.exePath |> Option.exists (fun exe -> exe <> "" && AppPath.sameApp exe w.pid.processPath)))
+                                    with _ -> false, false
+                                let eligible = live |> List.exists (fun w -> w.handle = t.saved.hwnd)
+                                let exe = t.saved.exePath |> Option.map IO.Path.GetFileName |> Option.defaultValue ""
+                                let title = RestoreTrace.titleIdentity (t.saved.windowTitle |> Option.defaultValue "")
+                                let peers = g.tabs |> List.filter (fun x -> x.rank <> t.rank) |> List.map (fun x -> x.saved.hwnd) |> handles
+                                RestoreTrace.log (fun () ->
+                                    sprintf "restore-miss group=%d rank=%d hwnd=%X exe=%s %s peers=%s reason=%s records=%s candidates=%s handleLive=%b sameExe=%b eligible=%b"
+                                        gi t.rank (t.saved.hwnd.ToInt64()) exe title peers reason competitors candidates handleLive sameExe eligible)
+                    RestoreTrace.log (fun () ->
+                        sprintf "restore-summary groups=%d handle=%d title=%d held=%d dropped=%d stage=completed"
+                            planned.Length byHandle byTitle held dropped)
+#endif
 
                 // Tab groups per virtual desktop. Each group goes back to its
                 // desktop (a desktop Explorer no longer lists belongs to
@@ -3310,6 +3380,11 @@ type Program() as this =
 
                 for (gi, g) in List.indexed planned do
                     let matched = g.tabs |> List.filter (fun t -> t.live.IsSome && goesInto gi t.live.Value)
+#if DEBUG
+                    for ti,t in List.indexed g.tabs do
+                        if t.live.IsSome && not (matched |> List.exists (fun x -> x.rank = t.rank)) then
+                            lock completionGate (fun () -> rejected.[(gi,ti)] <- "desktop-target-or-stale-read")
+#endif
                     matched |> List.iteri (fun i t ->
                         RestoreTrace.log (fun () -> sprintf "  matched[%d] hwnd=%X saved=%X"
                                                             i (t.live.Value.ToInt64()) (t.saved.hwnd.ToInt64())))
@@ -3349,12 +3424,42 @@ type Program() as this =
                             // (the order arithmetic resolves through this map).
                             if hwnd <> t.saved.hwnd then
                                 restoredFromMap.[hwnd] <- t.saved.hwnd
-                            match group :> obj with
-                            | :? GroupInfo as groupInfo ->
-                                groupInfo.addWindowWith(hwnd, fun wg ->
-                                    wg.addWindow(hwnd, false, ?alignment=(e.align |> Option.map tabAlignOfSavedAlign),
-                                                 pinned=e.isPinned))
-                            | _ -> group.addWindow(hwnd, false))
+#if DEBUG
+                            beginPlacement()
+                            let mutable completed = 0
+                            let finish placed reason =
+                                if Threading.Interlocked.Exchange(&completed, 1) = 0 then
+                                    completePlacement (fun () ->
+                                        if placed then dispatched.Add((gi,t.rank)) |> ignore
+                                        else rejected.[(gi,t.rank)] <- reason)
+#endif
+                            try
+                                match group :> obj with
+                                | :? GroupInfo as groupInfo ->
+                                    groupInfo.addWindowWith(hwnd, fun wg ->
+                                        try
+                                            wg.addWindow(hwnd, false, ?alignment=(e.align |> Option.map tabAlignOfSavedAlign),
+                                                         pinned=e.isPinned)
+#if DEBUG
+                                            let placed = wg.windows.contains(hwnd)
+                                            RestoreTrace.log (fun () -> sprintf "restore-placement group=%d rank=%d hwnd=%X placed=%b" gi t.rank (hwnd.ToInt64()) placed)
+                                            finish placed "group-add-rejected"
+#endif
+                                        with ex ->
+#if DEBUG
+                                            finish false ("group-add-error-" + ex.GetType().Name)
+#endif
+                                            reraise())
+                                | _ ->
+                                    group.addWindow(hwnd, false)
+#if DEBUG
+                                    finish false "group-add-unverified"
+#endif
+                            with ex ->
+#if DEBUG
+                                finish false ("group-dispatch-error-" + ex.GetType().Name)
+#endif
+                                reraise())
                         g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
                         g.lockPosition |> Option.iter (fun v -> group.lockWindowPosition <- v)
                         group.desktopHome <- homes.[gi]
@@ -3390,9 +3495,8 @@ type Program() as this =
                                 // Not seeded and so not written back either:
                                 // the entry leaves the settings file on the
                                 // next save.
-                                RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED after %.0f days title=%s"
-                                                                    (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
-                                                                    (DateTime.Now - t.waitingSince).TotalDays title)
+                                RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X DROPPED expired"
+                                                                    (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64()))
                             | SavedSession.Unusable ->
                                 this.traceRestoreRetention(e.hwnd, g.token, t.rank, "unusable-identity")
                             | SavedSession.Ambiguous
@@ -3445,18 +3549,34 @@ type Program() as this =
                                         orderSnapshot = g.savedOrder
                                         stateIsCertain = t.stateIsCertain
                                     }
-                                    RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b title=%s"
+                                    RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b"
                                                                         (if byUser then "closed" else "seed") t.rank (e.hwnd.ToInt64())
-                                                                        t.stateIsCertain e.align e.isPinned title)
+                                                                        t.stateIsCertain e.align e.isPinned)
                                     closedTabCache.map(fun l -> info :: l |> List.truncate closedTabCacheLimit)
                             | _ -> ())
 
+#if DEBUG
+                // The cache limit and handle deduplication can reject a planned
+                // seed. Report what survived the whole pass, not only the plan.
+                for gi,g in List.indexed planned do
+                    for ti,t in List.indexed g.tabs do
+                        if t.outcome = SavedSession.Waiting || t.outcome = SavedSession.Ambiguous then
+                            let retained = closedTabCache.value |> List.exists (fun e ->
+                                e.savedGroupIndex = Some gi && e.tabIndex = ti && e.closedHwnd = t.saved.hwnd)
+                            if not retained then
+                                lock completionGate (fun () -> rejected.[(gi,ti)] <- "seed-not-retained-duplicate-or-capacity")
+#endif
                 isRestoringTabGroups.set(false)
                 // Do NOT clear saved data here - keep it for watchdog restart scenarios
                 // Data will be overwritten on normal shutdown/restart
             | _ -> ()
         with
-        | _ -> isRestoringTabGroups.set(false)
+        | ex ->
+            isRestoringTabGroups.set(false)
+            RestoreTrace.log (fun () -> sprintf "restore-error type=%s" (ex.GetType().Name))
+#if DEBUG
+        completePlacement ignore
+#endif
 
     interface IProgram with
         member x.version = version
