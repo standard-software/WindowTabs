@@ -103,6 +103,27 @@ module UserOverrides =
         | Some(:? JObject as o) -> Some(o)
         | _ -> None
 
+    // Executable-name settings opt into case-insensitive keys. Other JSON
+    // files retain their existing case-sensitive overlay semantics.
+    let overlayIgnoreCase shipped mine =
+        let normalize token =
+            token |> Option.map (fun (value: JToken) ->
+                match value with
+                | :? JObject as source ->
+                    let result = JObject()
+                    for prop in source.Properties() do
+                        result.[prop.Name.ToUpperInvariant()] <- prop.Value.DeepClone()
+                    result :> JToken
+                | _ -> value)
+        overlay (normalize shipped) (normalize mine)
+
+    let loadObjectIgnoreCase (dir: string) (fileName: string) : JObject option =
+        match overlayIgnoreCase
+                  (readToken (shippedPath dir fileName))
+                  (readToken (userPath dir fileName)) with
+        | Some(:? JObject as value) -> Some value
+        | _ -> None
+
     let loadArray (dir: string) (fileName: string) : JArray option =
         match load dir fileName with
         | Some(:? JArray as a) -> Some(a)

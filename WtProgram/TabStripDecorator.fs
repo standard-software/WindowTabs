@@ -776,7 +776,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | _ -> 0
             topEdgeGuard.update(wanted, ownerHwnd, group.bounds.value,
                                 marginTop, (ownerHwnd <> IntPtr.Zero && os.windowFromHwnd(ownerHwnd).isTopMost), not group.isInMoveSizeThreadSafe,
-                                this.ts.showInside, this.ts.hwnd)
+                                this.ts.showInside, this.ts.hwnd,
+                                ?ownerBounds=(if wanted then group.visibleBodyBounds(ownerHwnd) else None))
         with _ -> topEdgeGuard.hide()
 
     member private this.updateTsPlacement() = this.ts.batch <| fun () ->
@@ -1882,12 +1883,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let bounds = window.bounds
         let screen = this.getCurrentScreenForWindow(activeHwnd)
 
+        // Read shadow state together with the native rectangle, before restore.
+        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
+
         // Restore window if minimized or maximized
         if window.isMinimized || window.isMaximized then
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
-        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin group=%X hwnd=%X before=%A amountTLRB=%A expandedSize=%A"
                                     (int64 group.hwnd) (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom)

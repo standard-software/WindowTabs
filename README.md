@@ -321,6 +321,12 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
         - The bundled file lists `LineMediaPlayer.exe` (its exe sits under a version folder, as in `...\LineMediaPlayer\1.2.0.635\LineMediaPlayer.exe`)
         - Only the applications listed are affected. A folder such as `C:\Program Files\Microsoft Visual Studio\18\...` has the same shape, and some people want two versions kept apart
         - Store applications carry the version in their folder name too, but are recognised as one application without being listed here
+    - `Settings\FramelessWindow.json` - gives tabs to the windows of applications that draw their own title bar and frame
+        - Applications such as those built with GTK 3 draw the title bar, the frame and the minimize and maximize buttons themselves. To Windows such a window has no decoration at all and cannot be told from a splash screen or a popup, so it normally gets no tab
+        - Only the applications whose exe name is written here get tabs on such windows. Write `"example.exe": true`
+        - These applications may also draw their shadow inside the window, which leaves the tab apart from the visible window. Write the size of that invisible margin as `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` and the tab and the positions within a tab group follow the visible window. The values are pixels at 100% scale
+        - Shipped with `remote-viewer.exe` and `virt-viewer.exe` of virt-viewer
+        - Depending on how the application resizes itself, it may end up out of line with its tab or with the other windows
     - `Settings\Language\FileList.json` and `Settings\Language\<language>.json` - the language files
 - Those files are replaced by every upgrade. To change a translation yourself, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
 - To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`

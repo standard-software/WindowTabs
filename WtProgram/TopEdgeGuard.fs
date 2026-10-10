@@ -397,7 +397,7 @@ type TopEdgeGuard(os: OS) =
     /// Cover the target's top border and its contiguous owned margin frames.
     /// The strip and unrelated windows always keep their input priority.
     member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, useTopmost: bool, mayScan: bool,
-                       tabsInside: bool, stripHwnd: IntPtr) =
+                       tabsInside: bool, stripHwnd: IntPtr, ?ownerBounds: Rect) =
         lastOrder <- None
         keepTopmost <- useTopmost
         strip <- stripHwnd
@@ -425,6 +425,7 @@ type TopEdgeGuard(os: OS) =
                 this.trace("hidden: StripUnavailable")
             else
                 let bounds = bounds.Value
+                let body = match ownerBounds with Some value -> value | None -> target.bounds
                 let w = this.ensureWindow()
                 if owner <> ownerHwnd then
                     this.hide()
@@ -439,7 +440,7 @@ type TopEdgeGuard(os: OS) =
                     // its rectangle and answers nothing useful inside it; the
                     // metrics decide there.
                     if marginTop > 0 then TopEdgeGuard.bandHeightForDpi dpi
-                    else this.topBorderHeight(ownerHwnd, target.bounds, dpi, mayScan)
+                    else this.topBorderHeight(ownerHwnd, body, dpi, mayScan)
                 let height = marginTop + band
                 // The minimize / maximize / close buttons reach the top edge,
                 // and they are not a resize border: the band stops short of
@@ -470,7 +471,11 @@ type TopEdgeGuard(os: OS) =
                 // own top border.
                 let rect = TopEdgeGuardPolicy.rectangle bounds.location.x bounds.location.y width marginTop band leftGap
                 let rect =
-                    match TopEdgeGuardPlacement.rectOf ownerHwnd with
+                    let ownerRect : TopEdgeGuardPolicy.Band option =
+                        match ownerBounds with
+                        | Some value -> Some { x=value.x; y=value.y; width=value.width; height=value.height }
+                        | None -> TopEdgeGuardPlacement.rectOf ownerHwnd
+                    match ownerRect with
                     | Some nativeBounds -> TopEdgeGuardPolicy.clipHorizontal nativeBounds leftGap rect
                     | None -> { rect with width = 0 }
                 let repaint () =

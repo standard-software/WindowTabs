@@ -2,6 +2,7 @@
 open System
 
 type FilterService() as this =
+    static let framelessApps = FramelessWindowSettings.load()
     let os = OS()
     let blackListedExeNames = Set2(List2(["taskmgr.exe"]))
 
@@ -26,15 +27,14 @@ type FilterService() as this =
         blackListedExeNames.contains(window.pid.exeName)
 
     member this.isAppWindowStyle (window:Window) = 
-        let style = IntPtr( 
-            WindowsStyles.WS_OVERLAPPEDWINDOW &&&
-            ~~~WindowsStyles.WS_CAPTION &&&
-            ~~~WindowsStyles.WS_THICKFRAME &&&
-            ~~~WindowsStyles.WS_SYSMENU
-        )
-        Win32Helper.IntPtrAnd(window.styleEx, IntPtr(WindowsExtendedStyles.WS_EX_TOOLWINDOW)) = IntPtr.Zero &&
-        Win32Helper.IntPtrAnd(window.style, style) = style
-    
+        FramelessWindow.acceptsWindow
+            (window.style.ToInt64()) (window.styleEx.ToInt64())
+            (framelessApps.Count > 0)
+            (fun () -> not (String.IsNullOrEmpty window.text))
+            (fun () ->
+                try framelessApps.Contains(window.pid.exeName)
+                with _ -> false)
+
     member this.isAppWindow (window:Window, ?includeCloaked: bool) =
         // Cheapest first. This runs for every top-level window on every pass
         // (seven or eight hundred, most of them hidden), and the tests that

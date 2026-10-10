@@ -62,6 +62,8 @@
 
                      <File Id="VersionFolderJson"
                            Source="$(var.WtProgram.TargetDir)Settings\VersionFolder.json" KeyPath="yes" />
+                     <File Id="FramelessWindowJson"
+                           Source="$(var.WtProgram.TargetDir)Settings\FramelessWindow.json" />
                   </Component>
 
                   <!-- Languages moved here from <install>\Language. A new
