@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next4
+
+- Less wasted work when several windows of one application are in tab groups.
+  - Events of other windows are dropped before they reach a tab group.
+
 ## version ss_2026.10.09_next3
 
 - Applications that draw their own title bar and frame (GTK 3 and the like)
