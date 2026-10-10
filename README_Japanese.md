@@ -321,6 +321,12 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
         - 同梱しているのは `LineMediaPlayer.exe` です (`...\LineMediaPlayer\1.2.0.635\LineMediaPlayer.exe` のように、バージョンのフォルダの下に exe があります)
         - 書いたアプリだけに適用します。`C:\Program Files\Microsoft Visual Studio\18\...` のように同じ形のフォルダでも、複数のバージョンを別々に扱いたいアプリがあるためです
         - Store アプリは、フォルダ名にバージョンが入りますが、ここに書かなくても自動で同じアプリとして扱います
+    - `Settings\FramelessWindow.json` — タイトルバーや枠を自分で描くアプリのウィンドウを、タブの対象にする設定
+        - GTK3 のアプリなどは、タイトルバー・枠・最小化や最大化のボタンを Windows に任せずに自分で描きます。Windows から見ると飾りのないウィンドウで、スプラッシュ画面やポップアップと見分けられないため、通常はタブを付けません
+        - ここに exe 名を書いたアプリだけ、飾りのないウィンドウにもタブを付けます。`"example.exe": true` と書きます
+        - こうしたアプリは影もウィンドウの内側に描くことがあり、そのままではタブが本体から離れて見えます。見えない余白の大きさを `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` のように書くと、タブとタブグループ内の位置を、見えている本体に合わせます。値は拡大率 100% でのピクセル数です
+        - 同梱しているのは virt-viewer の `remote-viewer.exe` と `virt-viewer.exe` です
+        - アプリ自身のリサイズの動きによっては、タブや他のウィンドウと位置がずれることがあります
     - `Settings\Language\FileList.json` と `Settings\Language\言語.json` — 言語ファイル
 - ここのファイルはバージョンアップのたびに上書きされます。ユーザー自身で翻訳内容を変更するときは `%APPDATA%\WindowTabs\Settings\` に同名のファイルを置いてください。項目単位で同梱のものに重なります
 - 言語を追加するには、`MyLanguage.json` と、それを載せた `FileList.json` を `%APPDATA%\WindowTabs\Settings\Language` に置きます
