@@ -264,14 +264,39 @@ type OS() as this=
         WinUserApi.EndDeferWindowPos(!hdswp).ignore
 
 
-    member this.setWinEventHook(min:WinEvent, max:WinEvent, proc, pid, tid) =
+    // Runs on WinEventPump before posting: use only cheap, pure comparisons
+    // of callback arguments and immutable values captured at registration.
+    member this.setWinEventHook(min:WinEvent, max:WinEvent, proc, pid, tid, ?beforePost: IntPtr -> bool) =
         let receiver = InvokerService.invoker
+#if DEBUG
+        // Resolve static counters here, never for the first time in the callback.
+        let callbackCount = PerfTrace.winEventCallback
+        let filteredCount = PerfTrace.winEventFiltered
+        let postedCount = PerfTrace.winEventPosted
+#endif
         new QueuedSubscription(WinEventPump.post, fun active ->
             let callback hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime =
+#if DEBUG
+                callbackCount.Increment()
+#endif
                 if idObject = IntPtr.Zero && active() then
-                    receiver.tryAsyncInvoke(fun () ->
-                        if active() then
-                            proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime) |> ignore
+                    let accepted =
+                        match beforePost with
+                        | None -> true
+                        | Some filter -> filter hwnd
+                    if accepted then
+                        let posted = receiver.tryAsyncInvoke(fun () ->
+                            if active() then
+                                proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime)
+#if DEBUG
+                        if posted then postedCount.Increment()
+#else
+                        posted |> ignore
+#endif
+#if DEBUG
+                    else
+                        filteredCount.Increment()
+#endif
             let del = WINEVENTPROC(callback)
             let root = GCHandle.Alloc(del)
             let hook = WinUserApi.SetWinEventHook(int(min), int(max), IntPtr.Zero, del, pid, tid, 0)
@@ -682,6 +707,8 @@ and
         WinUserApi.UnregisterHotKey(hwnd, id)
 
     member this.setWinEventHook (event:WinEvent) handler =
+        // Capture the handle value, not the Window instance, in the filter.
+        let target = hwnd
         let winEventProc hWinEventHook event _hwnd idObject idChild dwEventThread dwmsEventTime =
             if hwnd = _hwnd then 
                 handler()
@@ -689,7 +716,7 @@ and
             //console winevents come from CONHOST.exe on windows 7, a different
             //pid/tid than the window owner so can't filter on pid tid
             if this.isConsoleWindow then 0,0 else this.pid.pid, this.tid
-        os.setWinEventHook(event, event, winEventProc, pid, tid)
+        os.setWinEventHook(event, event, winEventProc, pid, tid, beforePost = (fun eventHwnd -> eventHwnd = target))
 
     member this.trackMouseLeave() =
         let mutable tme = TRACKMOUSEEVENT()
