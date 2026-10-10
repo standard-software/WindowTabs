@@ -2,6 +2,14 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next3
+
+- Applications that draw their own title bar and frame (GTK 3 and the like)
+  can now get tabs.
+  - Only applications whose exe name is in Settings\FramelessWindow.json.
+  - Writing the invisible margin there lines the tab up with the window.
+  - The shipped file lists virt-viewer (remote-viewer.exe, virt-viewer.exe).
+
 ## version ss_2026.10.09_next2
 
 - Fixed a tab with a special resize frame, such as LINE, ending up off by its

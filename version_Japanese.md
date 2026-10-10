@@ -2,6 +2,13 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.09_next3
+
+- タイトルバーや枠を自分で描くアプリ (GTK3 など) にタブを付けられるようにした。
+  - Settings\FramelessWindow.json に exe 名を書いたアプリだけが対象。
+  - 同じファイルに見えない余白を書くと、タブの位置を本体に合わせる。
+  - virt-viewer (remote-viewer.exe / virt-viewer.exe) を同梱の設定に入れた。
+
 ## version ss_2026.10.09_next2
 
 - LINE などの特殊なリサイズ枠を持つタブを分離して位置を指定したとき、
