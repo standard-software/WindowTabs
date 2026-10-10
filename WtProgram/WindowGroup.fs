@@ -74,6 +74,11 @@ module FramePlacement =
     let read (hwnd: IntPtr) (margin: MarginReader) bounds =
         let amount = margin (dpi bounds)
         let result = convert WindowFrameMargin.outset amount bounds
+        // An oversized interior setting must not create a negative snap size.
+        let top, left, right, bottom = amount
+        let result =
+            if (top < 0 || left < 0 || right < 0 || bottom < 0) &&
+               (result.width <= 0 || result.height <= 0) then bounds else result
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin hwnd=%X before=%A amountTLRB=%A base=%A"
                                     (int64 hwnd) bounds amount result)
@@ -114,6 +119,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let invoker = InvokerService.invoker
     let _os = OS()
     let frameMargins = WindowFrameMargin.Cache()
+    let configuredInsets = Dictionary<IntPtr, FramelessWindow.Insets>()
+    let hasConfiguredInsets = FramelessWindowSettings.hasInsets()
     let mutable marginPollIndex = 0
     // Each group remembers what it applied even when another group sampled first.
     let appliedMargins = Dictionary<IntPtr, WindowFrameMargin.Sticky>()
@@ -1527,19 +1534,73 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             (fun () -> count(); window.setPositionOnlyAsync bounds.x bounds.y)
             (fun () -> count(); window.moveAsync(bounds)) completed
 
-    // Cache-only reads: geometry, hotkeys and strip placement never scan windows.
-    member this.getWindowMargin(hwnd:IntPtr, bounds:Rect) =
+    // Resolve an executable only once per member, not on every placement.
+    member private this.configuredInsets(hwnd: IntPtr) =
+        if not hasConfiguredInsets then FramelessWindow.zeroInsets
+        else
+            match configuredInsets.TryGetValue hwnd with
+            | true, value -> value
+            | _ ->
+                let value =
+                    try FramelessWindowSettings.insetsForName (this.os.windowFromHwnd(hwnd).pid.exeName)
+                    with _ -> FramelessWindow.zeroInsets
+                configuredInsets.[hwnd] <- value
+                value
+
+    member private this.windowMargin(hwnd: IntPtr, bounds: Rect, normalTarget: bool) =
         let dpi = try int (Math.Round(Dpi.scaleForRect bounds * 96.0)) with _ -> 96
-        frameMargins.Get(hwnd, dpi)
+        let external = frameMargins.Get(hwnd, dpi)
+        let insets = this.configuredInsets(hwnd)
+        if insets = FramelessWindow.zeroInsets then external
+        else
+            let window = this.os.windowFromHwnd(hwnd)
+            // Reads use the window's DPI; writes describe the destination
+            // monitor, including a restore while the window is still maximized.
+            let windowDpi = int (WinUserApi.GetDpiForWindow(hwnd))
+            let insetDpi =
+                if normalTarget then
+                    let currentMonitorDpi = int (Math.Round(Dpi.scaleForRect window.bounds * 96.0))
+                    FramelessWindow.placementDpi windowDpi currentMonitorDpi dpi
+                else windowDpi
+            let hidden = FramelessWindow.scaledInsets insetDpi (not normalTarget && window.isMaximized) insets
+            let hidden = if normalTarget then hidden else FramelessWindow.usableInsets bounds.width bounds.height hidden
+            FramelessWindow.combineMargins external hidden
+
+    member this.getWindowMargin(hwnd: IntPtr, bounds: Rect) =
+        this.windowMargin(hwnd, bounds, false)
+
+    // The guard probes and clips at the visible body, not the transparent edge.
+    // None preserves the existing native geometry for all zero-margin apps.
+    member this.visibleBodyBounds(hwnd: IntPtr) =
+        let insets = this.configuredInsets(hwnd)
+        if insets = FramelessWindow.zeroInsets then None
+        else
+            let window = this.os.windowFromHwnd(hwnd)
+            let bounds = window.bounds
+            let hidden = FramelessWindow.scaledInsets (int (WinUserApi.GetDpiForWindow(hwnd))) window.isMaximized insets
+                         |> FramelessWindow.usableInsets bounds.width bounds.height
+            let result = WindowFrameMargin.inset hidden
+                             { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
+            Some(Rect(Pt(result.x, result.y), Sz(result.width, result.height)))
 
     member this.capturePlacementMargin(hwnd: IntPtr) : FramePlacement.MarginReader =
         this.refreshWindowMargin(hwnd) |> ignore
         let sample = if this.hasWindowMargin(hwnd) then frameMargins.Measurement(hwnd) else WindowFrameMargin.emptySticky
-        fun dpi -> WindowFrameMargin.readSticky dpi sample
+        let insets = this.configuredInsets(hwnd)
+        if insets = FramelessWindow.zeroInsets then fun dpi -> WindowFrameMargin.readSticky dpi sample
+        else
+            let window = this.os.windowFromHwnd(hwnd)
+            let windowDpi = int (WinUserApi.GetDpiForWindow(hwnd))
+            let monitorDpi = int (Math.Round(Dpi.scaleForRect window.bounds * 96.0))
+            // Detached placement works with restored rectangles, even if captured
+            // before restoring. Carry an immutable combined reader across groups.
+            fun dpi -> FramelessWindow.combineMargins (WindowFrameMargin.readSticky dpi sample)
+                           (FramelessWindow.scaledInsets (FramelessWindow.placementDpi windowDpi monitorDpi dpi) false insets)
 
-    member this.hasWindowMargin(hwnd:IntPtr) =
+    member this.hasWindowMargin(hwnd: IntPtr) =
         let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
-        top <> 0 || left <> 0 || right <> 0 || bottom <> 0
+        top <> 0 || left <> 0 || right <> 0 || bottom <> 0 ||
+        this.configuredInsets(hwnd) <> FramelessWindow.zeroInsets
 
     member private this.publishMarginBase() =
 #if DEBUG
@@ -1659,20 +1720,19 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.recordMarginApplied(hwnd:IntPtr, width:int, height:int) =
         marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (width, height)))
 
-    // Apply margin when writing bounds to a window (shrink by margin)
-    // Left/Top: +margin (move inward), Width/Height: -(left+right)/(top+bottom)
-    // Result: window becomes smaller by margin on each side
+    // Positive margins inset external frames; negative margins expand shadows.
+    // Left/Top: +margin, Width/Height: -(left+right)/(top+bottom).
+    // A normal destination needs its shadow even before a maximized source restores.
     member this.applyWindowMarginForWrite(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasWindowMargin(hwnd) then
-            let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
+            let (top, left, right, bottom) = this.windowMargin(hwnd, bounds, true)
             let result = WindowFrameMargin.inset (top, left, right, bottom)
                              { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
             Rect(Pt(result.x, result.y), Sz(result.width, result.height))
         else bounds
 
-    // Apply reverse margin when reading bounds from a foreground window (expand by margin)
-    // Left/Top: -margin (move outward), Width/Height: +(left+right)/(top+bottom)
-    // Result: reported bounds become larger by margin on each side
+    // Reverse the signed write margin: include external frames and exclude
+    // interior shadows when deriving the group's visible reference rectangle.
     member private this.removeWindowMarginForRead(hwnd:IntPtr, bounds:Rect) : Rect =
         if this.hasWindowMargin(hwnd) then
             let (top, left, right, bottom) = this.getWindowMargin(hwnd, bounds)
@@ -2427,7 +2487,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.addWindowPlaced(hwnd, withDelay, false, ?alignment=alignment, ?pinned=pinned,
                                      ?after=after, ?restoreOrder=restoreOrder)
             finally
-                if not (this.windows.contains(hwnd)) then frameMargins.Remove(hwnd)
+                if not (this.windows.contains(hwnd)) then
+                    frameMargins.Remove(hwnd)
+                    configuredInsets.Remove(hwnd) |> ignore
 
     // `place` false: the window joins where it is. A group made for a window
     // shown on all desktops, on another desktop, takes it as it is found - the
@@ -2444,7 +2506,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             frameMargins.Attach(hwnd)
             prepared |> Option.iter (fun value ->
                 let dpi = max 96 (int (WinUserApi.GetDpiForWindow(hwnd)))
-                frameMargins.Seed(hwnd, dpi, value.margin dpi))
+                // The prepared reader contains negative interior insets too.
+                // Seed only external frames; otherwise shadows would be applied twice.
+                let hidden = FramelessWindow.scaledInsets dpi false (this.configuredInsets(hwnd))
+                frameMargins.Seed(hwnd, dpi, FramelessWindow.externalMargins (value.margin dpi) hidden))
             this.refreshWindowMargin(hwnd) |> ignore
             let window = this.os.windowFromHwnd(hwnd)                
             // Per-event leading throttle intervals. LOCATIONCHANGE fires very frequently for
@@ -2581,6 +2646,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         frameMargins.Remove(hwnd)
         appliedMargins.Remove(hwnd) |> ignore
+        configuredInsets.Remove(hwnd) |> ignore
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
             // is in no group, nothing would. Every way out of a group passes
@@ -2679,6 +2745,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         elif isDestroyed.value.not then
             frameMargins.Clear()
             appliedMargins.Clear()
+            configuredInsets.Clear()
 #if DEBUG
             WindowFrameMargin.forgetBase this.hwnd
 #endif
