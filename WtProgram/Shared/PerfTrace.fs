@@ -19,6 +19,22 @@ module PerfTrace =
     [<System.Runtime.InteropServices.DllImport("user32.dll")>]
     extern uint32 GetGuiResources(nativeint hProcess, uint32 uiFlags)
 
+    // Allocate once on the registering thread, then capture these instances
+    // before posting hook registration. Increment never enters the trace gate.
+    [<Sealed>]
+    type AtomicCounter() =
+        let mutable value = 0
+        member _.Increment() = System.Threading.Interlocked.Increment(&value) |> ignore
+        member _.Take() = System.Threading.Interlocked.Exchange(&value, 0)
+
+    let winEventCallback = AtomicCounter()
+    let winEventFiltered = AtomicCounter()
+    let winEventPosted = AtomicCounter()
+    let private atomicCounters =
+        [| "winEvent.callback", winEventCallback
+           "winEvent.filtered", winEventFiltered
+           "winEvent.posted", winEventPosted |]
+
     let private gate = obj()
     let private counts = Dictionary<string, int>()
     let private millis = Dictionary<string, float>()
@@ -78,6 +94,10 @@ module PerfTrace =
             let now = DateTime.Now
             let snapshot =
                 lock gate (fun () ->
+                    for name, counter in atomicCounters do
+                        let value = counter.Take()
+                        if value <> 0 then
+                            counts.[name] <- (match counts.TryGetValue name with | true, v -> v + value | _ -> value)
                     let events =
                         counts
                         |> Seq.map (fun kv ->
