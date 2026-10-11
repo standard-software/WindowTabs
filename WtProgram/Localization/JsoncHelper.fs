@@ -64,3 +64,24 @@ module JsoncHelper =
     let parseJsoncArray(json: string) : JArray =
         let cleanJson = removeJsoncComments(json)
         JArray.Parse(cleanJson)
+
+// Retire only these root settings; nested objects belong to their own schemas.
+module RemovedSettings =
+    let isRemovedKey key =
+        [ "combineIconsInTaskbar"; "replaceAltTab"; "groupWindowsInSwitcher" ]
+        |> List.exists (fun removed ->
+            System.String.Equals(key, removed, System.StringComparison.OrdinalIgnoreCase))
+
+    // Clone only when needed: callers and the parsed settings cache stay intact.
+    let remove (settings: JObject) =
+        let keys =
+            settings.Properties()
+            |> Seq.map (fun property -> property.Name)
+            |> Seq.filter isRemovedKey
+            |> Seq.toList
+        match keys with
+        | [] -> settings
+        | _ ->
+            let cleaned = settings.DeepClone() :?> JObject
+            for key in keys do cleaned.Remove(key) |> ignore
+            cleaned

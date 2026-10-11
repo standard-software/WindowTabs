@@ -342,7 +342,13 @@ type Settings(isStandAlone) as this =
 
     member this.settingsJson
         with get() = this.getSettingsJson(true)
-        and set(settingsJson:JObject) = this.settingsString <- Some(settingsJson.ToString())
+        and set(settingsJson:JObject) =
+            // Cleanup belongs to a normal save, never to loading or recovery.
+            // Keep the existing refusal path unchanged for untrusted settings.
+            let toSave =
+                if settingsUntrusted then settingsJson
+                else RemovedSettings.remove settingsJson
+            this.settingsString <- Some(toSave.ToString())
 
     member this.defaultTabAppearance =
         let inactiveTab = Color.FromRGB(0x9FC4F0)
