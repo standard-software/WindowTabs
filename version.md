@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next5
+
+- Linking tabs from the menu to a minimised tab group left windows off screen.
+  - The group is restored first, and the linked window stays in front.
+
 ## version ss_2026.10.09_next4
 
 - Less wasted work when several windows of one application are in tab groups.
