@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next6
+
+- The settings of three features removed long ago are dropped from the settings file.
+  - combineIconsInTaskbar, replaceAltTab, groupWindowsInSwitcher.
+
 ## version ss_2026.10.09_next5
 
 - Linking tabs from the menu to a minimised tab group left windows off screen.

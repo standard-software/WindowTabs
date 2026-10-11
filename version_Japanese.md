@@ -2,6 +2,11 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.09_next6
+
+- 以前に削除した 3 つの機能の設定を、設定ファイルから取り除く。
+  - combineIconsInTaskbar、replaceAltTab、groupWindowsInSwitcher。
+
 ## version ss_2026.10.09_next5
 
 - 最小化したタブグループへメニューから連結すると、ウィンドウが画面外に残った。
