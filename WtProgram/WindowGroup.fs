@@ -2838,6 +2838,29 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
                 this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
         
+    // Restore without arming or clearing the manual restore front hold.
+    member private this.restoreForMenuLink(sourceFront: IntPtr) =
+        zorderCell.value.tryHead |> Option.iter (fun front ->
+            if (this.os.windowFromHwnd(front)).isMinimized then
+                // SW_SHOWNOACTIVATE raises restored windows above the foreground without focusing them.
+                // Place them directly below the source front so the incoming window stays above them.
+                this.restoreAll()
+                let order = zorderCell.value
+                this.os.setZorder(if WinUserApi.IsWindow(sourceFront) && not (order.contains ((=) sourceFront)) then List2([sourceFront]).appendList(order) else order)
+            this.updateIsVisible()
+            this.foreground <- this.os.foreground.hwnd)
+
+    // Publish success only after the cell listeners and strip batch have finished.
+    member this.restoreForMenuLinkAsync(sourceFront: IntPtr, canRestore: unit -> bool, completed: bool -> unit) =
+        invoker.asyncInvoke(fun () ->
+            let success =
+                try
+                    if Services.program.isDisabled || Services.program.isShuttingDown || not (canRestore()) then false else
+                    this.withUpdate(fun () -> this.restoreForMenuLink(sourceFront))
+                    true
+                with _ -> false
+            completed success)
+
     member this.tabActivate(Tab(hwnd), force) =
 #if DEBUG
         let preparation = Stopwatch.StartNew()

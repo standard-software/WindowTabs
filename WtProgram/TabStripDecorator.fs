@@ -208,6 +208,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let topEdgeGuard = TopEdgeGuard(os)
     let guardUpdates = TopEdgeGuardPolicy.UpdateQueue()
     let guardRepairTimer = new System.Windows.Forms.Timer(Interval = 50)
+    let mutable menuLinkGeneration = 0
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
@@ -1151,6 +1152,40 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         finally
             Services.program.resumeTabMonitoringAfter(200)
 
+    // Resume on the source thread only after the destination has finished restoring.
+    member private this.linkFromMenu(targetGroup: WindowGroup, targets: IntPtr list, action: unit -> unit) =
+        menuLinkGeneration <- menuLinkGeneration + 1
+        let generation = menuLinkGeneration
+        let enabled() = not Services.program.isDisabled && not Services.program.isShuttingDown
+        let alive() = WinUserApi.IsWindow(group.hwnd) && WinUserApi.IsWindow(targetGroup.hwnd)
+        let valid() =
+            alive() && not targets.IsEmpty &&
+            (targets |> List.forall (fun h -> WinUserApi.IsWindow(h) && group.windows.contains h)) &&
+            (targetGroup.zorder.value.tryHead |> Option.exists WinUserApi.IsWindow)
+        let linked() =
+            let state = VirtualDesktopGroups.Live.snapshot()
+            not targetGroup.isDesktopShownThreadSafe ||
+            (VirtualDesktopGroups.keepAway && VirtualDesktopGroups.Live.isFresh state &&
+             (targets |> List.forall (fun h -> (VirtualDesktopGroups.Live.read state h).presence = VirtualDesktopGroups.Away)))
+        let minimized() = targetGroup.zorder.value.tryHead |> Option.exists (fun h -> (os.windowFromHwnd(h)).isMinimized)
+        let abort reason = DragTrace.log (fun () -> "menu-link-cancel reason=" + reason)
+        if not (enabled()) then abort "disabled-or-shutting-down"
+        elif not (valid()) then abort "invalid-targets"
+        elif linked() || not (minimized()) then action()
+        else
+            try
+                targetGroup.restoreForMenuLinkAsync(group.topWindow,
+                    (fun () -> alive() && targetGroup.isDesktopShownThreadSafe),
+                    (fun success ->
+                        group.invokeAsync(fun () ->
+                            if generation <> menuLinkGeneration then abort "superseded"
+                            elif not (enabled()) then abort "disabled-or-shutting-down"
+                            elif not success then abort "restore-not-completed"
+                            elif not (valid()) then abort "invalid-targets"
+                            elif linked() || minimized() then abort "destination-changed"
+                            else action())))
+            with _ -> abort "post-exception"
+
     member private this.moveTabToGroup(hwnd: IntPtr, targetGroup: WindowGroup) =
         // Move tab to another group if it's a different group
         if targetGroup.hwnd <> group.hwnd then
@@ -1240,7 +1275,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 // Resume monitoring even on error
                 try Services.program.resumeTabMonitoring() with _ -> ()
 
-    member private this.moveTabGroupToGroup(targetGroup: WindowGroup) =
+    member private this.moveTabGroupToGroup(targetGroup: WindowGroup, tabsToMove: IntPtr list) =
         // Move all tabs from current group to target group
         if targetGroup.hwnd <> group.hwnd then
             try
@@ -1248,11 +1283,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 Services.program.suspendTabMonitoring()
 
                 try
-                    // Get all tabs in current group in VISUAL order (left-to-right).
-                    // group.windows is a Set with no insertion order, so iterating it
-                    // would scramble the source tabs in the destination group.
-                    let tabsToMove = group.visualOrder.list
-
+                    // Use the visual-order snapshot validated by the menu entry.
                     // Move each tab to target group
                     tabsToMove |> List.iter (fun hwnd ->
                         this.moveTabToGroup(hwnd, targetGroup)
@@ -3121,7 +3152,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 }) ]
 
         let moveTabGroupToGroupMenu =
-            let items = linkGroupItems (fun _ -> false) (fun decorator -> this.moveTabGroupToGroup(decorator.group))
+            let items = linkGroupItems (fun _ -> false) (fun decorator ->
+                let targets = group.visualOrder.list
+                this.linkFromMenu(decorator.group, targets,
+                    fun () -> this.moveTabGroupToGroup(decorator.group, targets)))
             CmiPopUp({
                 text = Localization.getString("DockingTabGroupToGroup")
                 image = None
@@ -3143,8 +3177,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             // Tab Detach and Split submenu containing both detach and link menus
             (
                 let items = linkGroupItems (fun info -> List.contains hwnd info.tabHwnds) (fun decorator ->
-                    this.actionTargetsInVisualOrder(hwnd)
-                    |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group)))
+                    let targets = this.actionTargetsInVisualOrder(hwnd)
+                    this.linkFromMenu(decorator.group, targets,
+                        fun () -> targets |> List.iter (fun h -> this.moveTabToGroup(h, decorator.group))))
                 let moveTabMenu =
                     if items.IsEmpty then None else
                     Some(CmiPopUp({
