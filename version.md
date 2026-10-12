@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next7
+
+- Tabs restored after a restart: windows that share a title are restored too.
+  - A saved tab is matched by its window first, then paired with the nearest window.
+
 ## version ss_2026.10.09_next6
 
 - The settings of three features removed long ago are dropped from the settings file.
