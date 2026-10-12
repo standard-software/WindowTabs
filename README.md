@@ -408,13 +408,15 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
 - Choose whether snapping leaves a tab-height margin and whether detached tabs snap at the drop position.
 
-![Settings Behavior](README_Image/SettingsBehavior.png)
+![Settings Interaction](README_Image/SettingsInteraction.png)
 
 ### General Tab
 
 - Choose whether to run at startup and enable tabs for all programs by default.
 - **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
 - Choose whether to hide tabs for full-screen windows and while a window is moving.
+
+![Settings General](README_Image/SettingsGeneral.png)
 
 ### Shortcut Keys Tab
 
