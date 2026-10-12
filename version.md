@@ -2,6 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.09_next8
+
+- Settings dialog: regrouped into Appearance, Color, Interaction, General.
+  - Appearance: shape, size, distance from edge, then tab placement.
+  - Appearance and Interaction: choices are offered as radio buttons.
+  - Number, colour and shortcut fields: frames and heights evened out.
+  - Colour codes: always shown with six digits.
+- Close and pin buttons: shown on the active tab only by default.
+  - The previous behaviour can be selected on the Interaction page.
+- The unused Diagnostics page is removed.
+
 ## version ss_2026.10.09_next7
 
 - Tabs restored after a restart: windows that share a title are restored too.

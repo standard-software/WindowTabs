@@ -214,7 +214,7 @@ type PendingRegroup = {
 }
 
 type Program() as this =
-    let version = "ss_2026.10.09_next7"
+    let version = "ss_2026.10.09_next8"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
