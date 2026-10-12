@@ -59,15 +59,35 @@ type INode =
 /// the one its font asks for, whatever it is told - putting it in a box of the
 /// wanted height only made its arrows look small in a field too tall for them -
 /// so it keeps its own height and the number inside it is centred.
-type SettingsNumericUpDown() as this =
+type SettingsNumericUpDown() =
     inherit NumericUpDown()
-    do
-        this.AutoSize <- false
-        SettingsField.apply this
+    static member Create() =
+        let control = new SettingsNumericUpDown()
+        SettingsField.apply control
+        control
+    override this.OnLayout(e) =
+        if not (SettingsField.arrangingNumeric this) then
+            base.OnLayout(e)
+            SettingsField.reassertNumericLayout this
+    override this.OnTextBoxResize(source, e) =
+        if not (SettingsField.arrangingNumeric this) then base.OnTextBoxResize(source, e)
+    override this.OnPaint(e) =
+        SettingsField.reassertNumericLayout this
+        // The native themed paint assumes the edit still touches the top.
+        // Own the exposed background as well as the single-pixel frame.
+        // Native EDIT uses the system control color when disabled in light mode.
+        let backgroundColor =
+            if not this.Enabled && this.BackColor <> DarkMode.darkPanel then SystemColors.Control
+            else this.BackColor
+        use background = new SolidBrush(backgroundColor)
+        e.Graphics.FillRectangle(background, this.ClientRectangle)
+        let color = if this.BackColor = DarkMode.darkPanel then DarkMode.darkBorder else SystemColors.ControlDark
+        use border = new Pen(color)
+        e.Graphics.DrawRectangle(border, Rectangle(0, 0, this.Width - 1, this.Height - 1))
 
 type IntEditor() =
     let control = 
-        let control = SettingsNumericUpDown()
+        let control = SettingsNumericUpDown.Create()
         control.Minimum <- decimal(1)
         control.Maximum <- decimal(1000)
         control.Margin <- Padding(0)
@@ -160,6 +180,7 @@ type ColorEditor() as this =
         tb.CharacterCasing <- CharacterCasing.Upper
         tb.Margin <- Padding(1)
         SettingsField.apply tb
+        tb.BorderStyle <- BorderStyle.FixedSingle
         tb.KeyPress.Add <| fun e ->
             try
                 if e.KeyChar = (char)Keys.Enter then
@@ -175,15 +196,13 @@ type ColorEditor() as this =
             // so the user is never bothered with a parse-error dialog.
             // Triggers when the user clears the box, types fewer/more
             // characters than 6, or pastes something like "XYZ123".
-            let isValid =
-                if tb.Text.Length = 0 || tb.Text.Length > maxLen then false
+            let value =
+                if tb.Text.Length = 0 || tb.Text.Length > maxLen then 0
                 else
-                    try
-                        Int32.Parse(tb.Text, Globalization.NumberStyles.HexNumber) |> ignore
-                        true
-                    with _ -> false
-            if not isValid then
-                tb.Text <- "000000"
+                    try Int32.Parse(tb.Text, Globalization.NumberStyles.HexNumber)
+                    with _ -> 0
+            let normalized = sprintf "%06X" value
+            if tb.Text <> normalized then tb.Text <- normalized
 
         tb.Validated.Add <| fun e -> save()
         tb
@@ -216,6 +235,20 @@ type ColorEditor() as this =
         panel.SetColumn(chooserButton, 0)
         panel.SetRow(textBox, 0)
         panel.SetColumn(textBox, 1)
+        // TextBox scaling can round its height differently from Button.
+        // The swatch is the height reference, including after DPI changes.
+        let alignField () =
+            // The dark frame is painted outside the edit's client window.
+            // Reserve its top and bottom pixels inside the swatch bounds.
+            let inset = 1
+            let margin = Padding(textBox.Margin.Left, inset, textBox.Margin.Right, inset)
+            if textBox.Margin <> margin then textBox.Margin <- margin
+            let height = chooserButton.Height - 2 * inset
+            if textBox.Height <> height then textBox.Height <- height
+        panel.Layout.Add(fun _ -> alignField ())
+        chooserButton.SizeChanged.Add(fun _ -> alignField ())
+        textBox.SizeChanged.Add(fun _ -> alignField ())
+        alignField ()
         panel
     member this.colorFromTb =
         let text = textBox.Text
@@ -232,7 +265,7 @@ type ColorEditor() as this =
             and set(newColor) = 
                 let color = unbox<Color>(newColor)
                 chooserButton.BackColor <- color
-                textBox.Text <- sprintf "%X" (color.ToRGB())
+                textBox.Text <- sprintf "%06X" (color.ToRGB())
         member x.control = panel :> Control
         member x.changed = changedEvent.Publish
 
@@ -601,6 +634,48 @@ module UIHelper =
     let settingsRowMarginPx = SettingsField.rowMarginPx
     let private rowContentHeightPx = settingsRowHeightPx - 2 * settingsRowMarginPx
 
+    // Keep the first option on the caption line and use the same trailing
+    // space regardless of the number of options.
+    let settingsRadioGroup rowCount columnCount =
+        let table = new TableLayoutPanel()
+        table.AutoSize <- true
+        table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        table.Margin <- Padding(0)
+        let radioPitch = 28
+        table.Padding <- Padding(0, 0, 0, 12)
+        table.ColumnCount <- columnCount
+        table.RowCount <- rowCount
+        for _ in 1 .. columnCount do
+            table.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+        for _ in 1 .. rowCount do
+            table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 radioPitch)) |> ignore
+        table
+
+    let settingsRadio captionKey =
+        let radio = new RadioButton()
+        radio.Text <- Localization.getString(captionKey)
+        radio.AutoSize <- true
+        radio.Margin <- Padding(0, settingsRowMarginPx, 0, 0)
+        // Match the caption height and vertical alignment.
+        radio.MinimumSize <- Size(0, rowContentHeightPx)
+        radio
+
+    let settingsRadios (refreshers: ResizeArray<unit -> unit>) save key normalize options =
+        let table = settingsRadioGroup (List.length options) 1
+        let current = unbox<string>(Services.settings.getValue key) |> normalize
+        let radios =
+            options |> List.mapi (fun row (mode, caption) ->
+                let radio = settingsRadio caption
+                radio.Checked <- (mode = current)
+                table.Controls.Add(radio, 0, row)
+                radio.CheckedChanged.Add(fun _ ->
+                    if radio.Checked then save key (box mode))
+                mode, radio)
+        refreshers.Add(fun () ->
+            let mode = unbox<string>(Services.settings.getValue key) |> normalize
+            for value, radio in radios do radio.Checked <- (value = mode))
+        table :> Control
+
     // centerRows: label and input centred on the same line. The settings tabs
     // keep the old layout (label held down by a top margin, input at the top
     // of the row), which lined up with their taller inputs; on the compact
@@ -656,8 +731,8 @@ module UIHelper =
             panel.SetColumn(control, 1)
         panel
 
-    // Default form layout: 250-px label column (matches AppearanceView /
-    // BehaviorView where labels are long).
+    // Default form layout: 250-px label column (matches the Appearance /
+    // Interaction pages where labels are long).
     let form (fields:List2<_>) =
         buildForm fields (float32 settingsLabelWidthPx) true false
 

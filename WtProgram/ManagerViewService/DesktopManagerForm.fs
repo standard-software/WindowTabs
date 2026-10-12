@@ -187,7 +187,8 @@ type DesktopManagerForm() =
         programView :> ISettingsView
         appearanceView :> ISettingsView
         appearanceView.colorView
-        HotKeyView() :> ISettingsView
+        InteractionView() :> ISettingsView
+        GeneralView() :> ISettingsView
         ShortcutKeysView() :> ISettingsView
         WorkspaceView() :> ISettingsView
         ])
@@ -366,7 +367,8 @@ type DesktopManagerForm() =
             match view with
             | :? WorkspaceView as workspaces -> workspaces.beginSettingsSession()
             | :? AppearanceView as appearance -> appearance.refresh()
-            | :? HotKeyView as behavior -> behavior.refresh()
+            | :? InteractionView as interaction -> interaction.refresh()
+            | :? GeneralView as general -> general.refresh()
             | :? ShortcutKeysView as shortcuts -> shortcuts.refresh()
             | _ -> ())
 #if DEBUG

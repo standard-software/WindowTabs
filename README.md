@@ -378,8 +378,12 @@ Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray 
 
 ### Appearance Tab
 
-- **Tab shape**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the S-curve.
-- **Tab height, width, overlap and distance from the edge (outer and inner tabs, left and right)**: Set as numbers. The button to the right of each puts back its default.
+- **Tab Shape**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the S-curve.
+- **Tab size**: Set height and maximum width side by side, each with its own reset button.
+- **Pinned Tab Width**, **Tab Overlap**, **Distance from edge for outer tabs** and **Distance from edge for inner tabs** (left and right): Set as numbers. The button to the right of each puts back its default.
+- **Tab placement**: Choose the default left or right alignment.
+- **Outer or inner tabs**: choose "Outer, or inner when it would go off the display" (default) or "Always inner".
+- **Hide inner tabs**: Configure how to hide inner tabs and the hiding delay.
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
 ![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape.png)
@@ -395,15 +399,22 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 ![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
 ![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
 
-### Behavior Tab
+### Interaction Tab
 
-- **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
-- **Outer or inner tabs**: choose "Outer, or inner when it would go off the display" (default) or "Always inner".
-- Configure hiding tabs for full-screen windows, while moving windows, and for inner tabs.
-- **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
+- **Close button on tabs**: "Shown on the active tab only" (default), "Shown on all tabs", or "Hidden". Close buttons appear only on hover.
+- **Pin button on pinned tabs**: "Button on the active tab only, icon on the others" (default), "Button on all tabs", or "Icon only". An icon indicates a pinned tab and cannot be clicked.
+- Configure activation on mouse-over.
 - **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
+- **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
+- Choose whether snapping leaves a tab-height margin and whether detached tabs snap at the drop position.
 
 ![Settings Behavior](README_Image/SettingsBehavior.png)
+
+### General Tab
+
+- Choose whether to run at startup and enable tabs for all programs by default.
+- **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
+- Choose whether to hide tabs for full-screen windows and while a window is moving.
 
 ### Shortcut Keys Tab
 

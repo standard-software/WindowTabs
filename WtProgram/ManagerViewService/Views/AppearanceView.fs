@@ -77,6 +77,125 @@ type AppearanceView() as this =
     let mutable suppressEvents = false
     let mutable initializingTheme = true
 
+    let placementRefreshers = ResizeArray<unit -> unit>()
+    let save key value =
+        if not suppressEvents then Services.settings.setValue(key, value)
+
+    let defaultTabPositionRadios =
+        UIHelper.settingsRadios placementRefreshers save "tabPositionByDefault"
+            (fun mode -> if mode = "TopLeft" then "TopLeft" else "TopRight")
+            ["TopLeft", "AlignTopLeft"; "TopRight", "AlignTopRight"]
+
+    let tabVerticalDirectionRadios =
+        UIHelper.settingsRadios placementRefreshers save "tabVerticalDirection"
+            TabBehaviorPolicy.normalizeVerticalDirection
+            [TabBehaviorPolicy.verticalAuto, "TabVerticalAuto";
+             TabBehaviorPolicy.verticalAlwaysDown, "TabVerticalAlwaysDown"]
+
+    let hideTabsDelay =
+        let textBox = new TextBox()
+        let defaultValue =
+            try
+                Services.settings.getValue("hideTabsDelayMilliseconds") :?> int
+            with
+            | _ -> 3000
+        textBox.Text <- defaultValue.ToString()
+
+        // Set initial enabled state based on current mode
+        let currentMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
+        textBox.Enabled <- (currentMode = "down")
+
+        textBox.LostFocus.Add(fun _ ->
+            match System.Int32.TryParse(textBox.Text) with
+            | true, value when value >= 0 && value <= 10000 ->
+                save "hideTabsDelayMilliseconds" value
+            | false, _ | _, _ ->
+                // Reset to previous value if invalid
+                textBox.Text <-
+                    try
+                        (Services.settings.getValue("hideTabsDelayMilliseconds") :?> int).ToString()
+                    with
+                    | _ -> "3000"
+        )
+        placementRefreshers.Add(fun () ->
+            textBox.Text <- (unbox<int>(Services.settings.getValue("hideTabsDelayMilliseconds"))).ToString())
+        textBox
+
+    let hideTabsRadio =
+        // Use TableLayoutPanel to keep all RadioButtons in same container (for proper grouping)
+        // while allowing delay label and textbox next to radioDown
+        let table = UIHelper.settingsRadioGroup 3 3
+        // The last group has no following item that needs trailing space.
+        table.Padding <- Padding(0)
+
+        let currentMode =
+            let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
+            // Use valid modes, default to "doubleclick" for invalid/unknown values
+            match mode with
+            | "never" | "down" | "doubleclick" -> mode
+            | _ ->
+                "doubleclick"
+
+        let radioNever = UIHelper.settingsRadio "HideTabsNever"
+        radioNever.Checked <- (currentMode = "never")
+        radioNever.CheckedChanged.Add(fun _ ->
+            if radioNever.Checked then
+                save "hideTabsWhenDownByDefault" "never"
+                hideTabsDelay.Enabled <- false
+        )
+
+        let radioDown = UIHelper.settingsRadio "HideTabsWhenDown"
+        radioDown.Checked <- (currentMode = "down")
+        radioDown.CheckedChanged.Add(fun _ ->
+            if radioDown.Checked then
+                save "hideTabsWhenDownByDefault" "down"
+                hideTabsDelay.Enabled <- true
+        )
+
+        let radioDoubleClick = UIHelper.settingsRadio "HideTabsOnClick"
+        radioDoubleClick.Checked <- (currentMode = "doubleclick")
+        radioDoubleClick.CheckedChanged.Add(fun _ ->
+            if radioDoubleClick.Checked then
+                save "hideTabsWhenDownByDefault" "doubleclick"
+                hideTabsDelay.Enabled <- false
+        )
+        placementRefreshers.Add(fun () ->
+            let mode = unbox<string>(Services.settings.getValue("hideTabsWhenDownByDefault"))
+            radioNever.Checked <- (mode = "never")
+            radioDown.Checked <- (mode = "down")
+            radioDoubleClick.Checked <- (mode <> "never" && mode <> "down")
+            hideTabsDelay.Enabled <- (mode = "down"))
+
+        let delayLabel = new Label()
+        delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
+        delayLabel.AutoSize <- true
+        // Centred in the radio row, like the radio itself.
+        delayLabel.Anchor <- AnchorStyles.Left
+        // The same box as the radio beside it, with the text in the middle
+        // of it, so the two captions sit on one line.
+        delayLabel.TextAlign <- ContentAlignment.MiddleLeft
+        delayLabel.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
+        // The radio beside it carries its own glyph, which puts its caption
+        // two pixels lower than a plain label of the same box.
+        delayLabel.Padding <- Padding(0, 2, 0, 0)
+        delayLabel.Margin <- Padding(10, 0, 3, 0)  // Left margin to separate from the radio
+
+        hideTabsDelay.Width <- 60
+        SettingsField.apply hideTabsDelay
+        hideTabsDelay.Anchor <- AnchorStyles.Left
+        hideTabsDelay.Margin <- Padding(0)
+
+        // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
+        table.Controls.Add(radioNever, 0, 0)
+        // Row 1: radioDown + delayLabel + hideTabsDelay
+        table.Controls.Add(radioDown, 0, 1)
+        table.Controls.Add(delayLabel, 1, 1)
+        table.Controls.Add(hideTabsDelay, 2, 1)
+        // Row 2: radioDoubleClick
+        table.Controls.Add(radioDoubleClick, 0, 2)
+
+        table
+
     // Read the unified "Dark Mode" toggle. Used by child dialogs (Save
     // Theme / Edit Theme) so they inherit the parent dialog's theme on
     // open.
@@ -97,8 +216,8 @@ type AppearanceView() as this =
 
     // Separate int and color properties for cleaner UI layout
     let intProperties = List2([
-        intConfig "tabHeight" "Tab Height"
-        intConfig "tabMaxWidth" "Tab Width (Max)"
+        intConfig "tabHeight" "Height"
+        intConfig "tabMaxWidth" "Width (max)"
         intConfig "tabOverlap" "Tab Overlap"
         intConfig "tabIndentNormal" "Indent Normal"
         intConfig "tabIndentNormalRight" "Right"
@@ -141,8 +260,8 @@ type AppearanceView() as this =
         | _ -> "TabShapeSCurve"
 
     // Both pages share one set of editors and theme state.
-    // Upper panel: tab shape, then seven integer fields on five rows, and the pinned width row.
-    let upperRowCount = intProperties.length
+    // Upper panel: shape, paired size, pinned width, overlap, and two paired distances.
+    let upperRowCount = 6
     let colorGridRowCount = 7  // theme + header + five states
 
     let createPage rowCount =
@@ -159,7 +278,28 @@ type AppearanceView() as this =
         page.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
         page
 
-    let panel = createPage 1
+    let panel = createPage 2
+    let placementPanel =
+        let fields = List2([
+            ("TabPositionByDefault", defaultTabPositionRadios)
+            ("TabVerticalDirection", tabVerticalDirectionRadios)
+            ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
+        ])
+        let grid = UIHelper.form fields
+        grid.Dock <- DockStyle.Top
+        grid.Margin <- Padding(0, UIHelper.settingsRowHeightPx / 2, 0, 0)
+        grid.AutoScroll <- false
+        // This control already contains rows on the same 35-px grid as the
+        // outer form. Do not add another outer row margin around the group.
+        for group in [defaultTabPositionRadios; tabVerticalDirectionRadios; hideTabsRadio :> Control] do
+            group.Margin <- Padding(0)
+
+        let hideTabsRowIndex = 2
+
+        // Let the radio-group row auto-size based on content.
+        grid.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
+
+        grid
     let colorPage =
         let page = createPage 2
         page.ColumnCount <- 2
@@ -189,7 +329,7 @@ type AppearanceView() as this =
         // rows are unchanged and only the wrapping ones grow.
         List2([0..upperRowCount - 1]).iter <| fun _ ->
             p.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
-        // Match BehaviorView's UIHelper.form column width (250 px) so the
+        // Match the Interaction page's UIHelper.form column width (250 px) so the
         // longest translated labels still stay on a single line.
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
@@ -202,7 +342,7 @@ type AppearanceView() as this =
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
-        // Separate the theme section by half a row, keeping the same row grid.
+        // Separate the theme section by half a settings row.
         p.Margin <- Padding(0, UIHelper.settingsRowHeightPx / 2, 0, 0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- colorGridRowCount
@@ -218,9 +358,10 @@ type AppearanceView() as this =
 
     // Add sub-panels to main panel
     do
-        panel.Controls.Add(upperPanel)
-        panel.SetRow(upperPanel, 0)
-        panel.SetColumn(upperPanel, 0)
+        panel.Controls.Add(upperPanel, 0, 0)
+        panel.Controls.Add(placementPanel, 0, 1)
+        upperPanel.TabIndex <- 0
+        placementPanel.TabIndex <- 1
         colorPage.Controls.Add(colorPanel, 0, 1)
         colorPage.SetColumnSpan(colorPanel, 2)
 
@@ -279,11 +420,14 @@ type AppearanceView() as this =
             btn.TextAlign <- ContentAlignment.MiddleLeft
             btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
             btn.Click.Add <| fun _ ->
+                let previous = suppressEvents
                 suppressEvents <- true
-                let defaultValue = getDefaultValue prop.key
-                editor.value <- defaultValue
-                this.applyAppearance()
-                suppressEvents <- false
+                try
+                    let defaultValue = getDefaultValue prop.key
+                    editor.value <- defaultValue
+                    this.applyAppearance()
+                finally
+                    suppressEvents <- previous
             btn
         target.Controls.Add(resetBtn)
         target.SetRow(resetBtn, row)
@@ -300,17 +444,15 @@ type AppearanceView() as this =
     let colorHeaderRow = 1
     let colorStateStartRow = 2
 
-    // Size editors follow the two appearance rows, skipping the pinned width row.
+    // Size and distance fields share the same paired layout.
     let intEditors =
-        let regular =
-            intProperties.list
-            |> List.take 3
-            |> List.mapi (fun i prop ->
-                let row = if i >= 2 then i + 2 else i + 1
-                createIntEditorAt upperPanel 0 prop row)
-        let edges =
-            ["tabIndentNormal", "Indent Normal", 5; "tabIndentFlipped", "Indent Flipped", 6]
-            |> List.collect (fun (key, caption, row) ->
+        let regular = [createIntEditorAt upperPanel 0 (intProperties.list.[2]) 3]
+        let pairs = ResizeArray<TableLayoutPanel>()
+        let paired =
+            ["Tab size", "tabHeight", "Height", "tabMaxWidth", "Width (max)", 1
+             "Indent Normal", "tabIndentNormal", "Left", "tabIndentNormalRight", "Right", 4
+             "Indent Flipped", "tabIndentFlipped", "Left", "tabIndentFlippedRight", "Right", 5]
+            |> List.collect (fun (caption, leftKey, leftCaption, rightKey, rightCaption, row) ->
                 let label = Label(AutoSize = true, Text = Localization.getString(caption),
                                   TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Left,
                                   Margin = Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx),
@@ -325,8 +467,8 @@ type AppearanceView() as this =
                     pair.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 50.0f)).ignore
                     pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
                 pair.SuspendLayout()
-                let left = createIntEditorAt pair 0 (intConfig key "Left") 0
-                let right = createIntEditorAt pair 3 (intConfig (key + "Right") "Right") 0
+                let left = createIntEditorAt pair 0 (intConfig leftKey leftCaption) 0
+                let right = createIntEditorAt pair 3 (intConfig rightKey rightCaption) 0
                 // Auto-sized captions leave both fields equal space.
                 // A minimum field width lets the outer scroll panel handle narrow windows.
                 for column in [0; 3] do
@@ -338,38 +480,87 @@ type AppearanceView() as this =
                 // Follow the actual reset button in the outer panel, including
                 // its current DPI and translated caption width. Equal reset
                 // columns also keep the two distance rows aligned.
-                let referenceReset = upperPanel.GetControlFromPosition(2, 1)
                 for column in [2; 5] do
                     let reset = pair.GetControlFromPosition(column, 0)
                     reset.AutoSize <- false
                     reset.Dock <- DockStyle.Right
                     pair.ColumnStyles.[column].SizeType <- SizeType.Absolute
-                let mutable syncingResetWidths = false
-                let syncResetWidths () =
-                    if not syncingResetWidths then
-                        syncingResetWidths <- true
+                pair.ResumeLayout(true)
+                pairs.Add(pair)
+                [left; right])
+        // Preserve the existing width unless a paired reset caption needs more room.
+        // Measure every pair so three-digit defaults do not clip and all rows align.
+        let referenceReset = upperPanel.GetControlFromPosition(2, 3)
+        let mutable syncingResetWidths = false
+        let syncResetWidths () =
+            if not syncingResetWidths then
+                syncingResetWidths <- true
+                try
+                    let captionWidth =
+                        pairs |> Seq.collect (fun pair ->
+                            [2; 5] |> Seq.map (fun column ->
+                                pair.GetControlFromPosition(column, 0).GetPreferredSize(Size.Empty).Width))
+                        |> Seq.max
+                    // A scaled reference button can exceed the pair's remaining space.
+                    // Reserve the shared captions and minimum numeric fields before sizing resets.
+                    let sharedCaptionWidth =
+                        [0; 3] |> List.sumBy (fun column ->
+                            pairs |> Seq.map (fun pair ->
+                                let caption = pair.GetControlFromPosition(column, 0)
+                                caption.GetPreferredSize(Size.Empty).Width + caption.Margin.Horizontal)
+                            |> Seq.max)
+                    let fittingWidth =
+                        pairs |> Seq.map (fun pair ->
+                            let fieldsWidth =
+                                [1; 4] |> List.sumBy (fun column ->
+                                    let field = pair.GetControlFromPosition(column, 0)
+                                    field.MinimumSize.Width + field.Margin.Horizontal)
+                            let resetMargins =
+                                [2; 5] |> List.sumBy (fun column -> pair.GetControlFromPosition(column, 0).Margin.Horizontal)
+                            (pair.ClientSize.Width - sharedCaptionWidth - fieldsWidth - resetMargins) / 2)
+                        |> Seq.min
+                    let requiredWidth = max captionWidth (min referenceReset.Width fittingWidth)
+                    for pair in pairs do
                         pair.SuspendLayout()
                         try
                             for column in [2; 5] do
                                 let reset = pair.GetControlFromPosition(column, 0)
-                                // TableLayoutPanel can give its last column a rounding pixel.
-                                // Dock right at the measured width so that pixel cannot widen it.
-                                if reset.Width <> referenceReset.Width then reset.Width <- referenceReset.Width
-                                let width = float32 (referenceReset.Width + reset.Margin.Horizontal)
+                                // Dock right so a rounding pixel cannot widen the button.
+                                if reset.Width <> requiredWidth then reset.Width <- requiredWidth
+                                let width = float32 (requiredWidth + reset.Margin.Horizontal)
                                 if pair.ColumnStyles.[column].Width <> width then
                                     pair.ColumnStyles.[column].Width <- width
                         finally
                             pair.ResumeLayout(true)
-                            syncingResetWidths <- false
-                referenceReset.SizeChanged.Add(fun _ -> syncResetWidths ())
-                pair.Layout.Add(fun _ -> syncResetWidths ())
-                syncResetWidths ()
-                pair.ResumeLayout(true)
-                [left; right])
-        List2(regular @ edges)
+                finally
+                    syncingResetWidths <- false
+        referenceReset.SizeChanged.Add(fun _ -> syncResetWidths ())
+        for pair in pairs do pair.Layout.Add(fun _ -> syncResetWidths ())
+        syncResetWidths ()
+        // Share caption widths across all paired rows, including after DPI changes.
+        let mutable syncingCaptionWidths = false
+        let syncCaptionWidths () =
+            if not syncingCaptionWidths then
+                syncingCaptionWidths <- true
+                try
+                    for column in [0; 3] do
+                        let width =
+                            pairs |> Seq.map (fun pair ->
+                                let caption = pair.GetControlFromPosition(column, 0)
+                                caption.GetPreferredSize(Size.Empty).Width + caption.Margin.Horizontal)
+                            |> Seq.max |> float32
+                        for pair in pairs do
+                            let style = pair.ColumnStyles.[column]
+                            style.SizeType <- SizeType.Absolute
+                            if style.Width <> width then style.Width <- width
+                finally
+                    syncingCaptionWidths <- false
+        for pair in pairs do pair.Layout.Add(fun _ -> syncCaptionWidths ())
+        syncCaptionWidths ()
+        List2(regular @ paired)
 
-    // Custom pinned tab width row with radio buttons (row 3 in upperPanel).
-    let pinnedWidthRow = 3
+    // Custom pinned tab width row with radio buttons (row 2 in upperPanel).
+    let pinnedWidthRow = 2
 
     let pinnedWidthLabel =
         let label = Label()
@@ -386,7 +577,7 @@ type AppearanceView() as this =
 
     let pinnedWidthIconOnlyRadio = RadioButton()
     let pinnedWidthSpecifyRadio = RadioButton()
-    let pinnedWidthNumeric = SettingsNumericUpDown()
+    let pinnedWidthNumeric = SettingsNumericUpDown.Create()
 
     let pinnedWidthInputPanel =
         let tbl = TableLayoutPanel()
@@ -394,7 +585,7 @@ type AppearanceView() as this =
         tbl.RowCount <- 1
         tbl.Dock <- DockStyle.Fill
         tbl.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
-        // This is the ONLY cell in upperPanel whose content is a nested
+        // This cell in upperPanel contains a nested
         // container rather than a single control, and that is what makes
         // AutoSize on it mandatory. A TableLayoutPanel measuring an AutoSize
         // ROW asks a child that is itself AutoSize for its preferred size, but
@@ -457,10 +648,13 @@ type AppearanceView() as this =
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         btn.Click.Add <| fun _ ->
+            let previous = suppressEvents
             suppressEvents <- true
-            pinnedWidthNumeric.Value <- decimal defaultWidth
-            this.applyAppearance()
-            suppressEvents <- false
+            try
+                pinnedWidthNumeric.Value <- decimal defaultWidth
+                this.applyAppearance()
+            finally
+                suppressEvents <- previous
         upperPanel.Controls.Add(btn)
         upperPanel.SetRow(btn, pinnedWidthRow)
         upperPanel.SetColumn(btn, 2)
@@ -583,7 +777,7 @@ type AppearanceView() as this =
         // SettingsDpi scales it from that; left to the font it is re-derived
         // from the already scaled font and then scaled again. 14 is a plain
         // drop-down list's own item height at the dialog font, so the box is
-        // as tall as the Behavior tab's.
+        // as tall as the other Appearance page fields.
         combo.DrawMode <- DrawMode.OwnerDrawVariable
         combo.ItemHeight <- SettingsField.comboItemHeightPx
         // Outside Bounds, so Control.Scale never sees it (see the color
@@ -681,10 +875,13 @@ type AppearanceView() as this =
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
         btn.Click.Add <| fun _ ->
+            let previous = suppressEvents
             suppressEvents <- true
-            tabShapeEditor.value <- box defaultShape
-            this.applyAppearance()
-            suppressEvents <- false
+            try
+                tabShapeEditor.value <- box defaultShape
+                this.applyAppearance()
+            finally
+                suppressEvents <- previous
         upperPanel.Controls.Add(btn)
         upperPanel.SetRow(btn, tabShapeRow)
         upperPanel.SetColumn(btn, 2)
@@ -1149,76 +1346,82 @@ type AppearanceView() as this =
 
     // Helper function to apply color preset
     let applyColorPreset (presetAppearance: TabAppearanceInfo) =
+        let previous = suppressEvents
         suppressEvents <- true
-        let currentAppearance = Services.program.tabAppearanceInfo
-        let mergedAppearance = {
-            tabHeight = currentAppearance.tabHeight
-            tabMaxWidth = currentAppearance.tabMaxWidth
-            tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
-            tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
-            tabOverlap = currentAppearance.tabOverlap
-            tabHeightOffset = currentAppearance.tabHeightOffset
-            tabIndentFlipped = currentAppearance.tabIndentFlipped
-            tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
-            tabIndentNormal = currentAppearance.tabIndentNormal
-            tabIndentNormalRight = currentAppearance.tabIndentNormalRight
-            tabInactiveTextColor = presetAppearance.tabInactiveTextColor
-            tabSelectedTextColor = presetAppearance.tabSelectedTextColor
-            tabMouseOverTextColor = presetAppearance.tabMouseOverTextColor
-            tabActiveTextColor = presetAppearance.tabActiveTextColor
-            tabFlashTextColor = presetAppearance.tabFlashTextColor
-            tabInactiveTabColor = presetAppearance.tabInactiveTabColor
-            tabSelectedTabColor = presetAppearance.tabSelectedTabColor
-            tabMouseOverTabColor = presetAppearance.tabMouseOverTabColor
-            tabActiveTabColor = presetAppearance.tabActiveTabColor
-            tabFlashTabColor = presetAppearance.tabFlashTabColor
-            tabInactiveBorderColor = presetAppearance.tabInactiveBorderColor
-            tabSelectedBorderColor = presetAppearance.tabSelectedBorderColor
-            tabMouseOverBorderColor = presetAppearance.tabMouseOverBorderColor
-            tabActiveBorderColor = presetAppearance.tabActiveBorderColor
-            tabFlashBorderColor = presetAppearance.tabFlashBorderColor
-            tabShape = currentAppearance.tabShape
-        }
-        Services.settings.setValue("tabAppearance", box(mergedAppearance))
-        setEditorValues mergedAppearance
-        suppressEvents <- false
+        try
+            let currentAppearance = Services.program.tabAppearanceInfo
+            let mergedAppearance = {
+                tabHeight = currentAppearance.tabHeight
+                tabMaxWidth = currentAppearance.tabMaxWidth
+                tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
+                tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
+                tabOverlap = currentAppearance.tabOverlap
+                tabHeightOffset = currentAppearance.tabHeightOffset
+                tabIndentFlipped = currentAppearance.tabIndentFlipped
+                tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
+                tabIndentNormal = currentAppearance.tabIndentNormal
+                tabIndentNormalRight = currentAppearance.tabIndentNormalRight
+                tabInactiveTextColor = presetAppearance.tabInactiveTextColor
+                tabSelectedTextColor = presetAppearance.tabSelectedTextColor
+                tabMouseOverTextColor = presetAppearance.tabMouseOverTextColor
+                tabActiveTextColor = presetAppearance.tabActiveTextColor
+                tabFlashTextColor = presetAppearance.tabFlashTextColor
+                tabInactiveTabColor = presetAppearance.tabInactiveTabColor
+                tabSelectedTabColor = presetAppearance.tabSelectedTabColor
+                tabMouseOverTabColor = presetAppearance.tabMouseOverTabColor
+                tabActiveTabColor = presetAppearance.tabActiveTabColor
+                tabFlashTabColor = presetAppearance.tabFlashTabColor
+                tabInactiveBorderColor = presetAppearance.tabInactiveBorderColor
+                tabSelectedBorderColor = presetAppearance.tabSelectedBorderColor
+                tabMouseOverBorderColor = presetAppearance.tabMouseOverBorderColor
+                tabActiveBorderColor = presetAppearance.tabActiveBorderColor
+                tabFlashBorderColor = presetAppearance.tabFlashBorderColor
+                tabShape = currentAppearance.tabShape
+            }
+            Services.settings.setValue("tabAppearance", box(mergedAppearance))
+            setEditorValues mergedAppearance
+        finally
+            suppressEvents <- previous
 
     // Apply custom theme colors
     let applyCustomTheme (theme: ColorThemeData) =
+        let previous = suppressEvents
         suppressEvents <- true
-        let currentAppearance = Services.program.tabAppearanceInfo
-        let toColor value = Color.FromArgb(255, Color.FromArgb(value))
-        let mergedAppearance = {
-            tabHeight = currentAppearance.tabHeight
-            tabMaxWidth = currentAppearance.tabMaxWidth
-            tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
-            tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
-            tabOverlap = currentAppearance.tabOverlap
-            tabHeightOffset = currentAppearance.tabHeightOffset
-            tabIndentFlipped = currentAppearance.tabIndentFlipped
-            tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
-            tabIndentNormal = currentAppearance.tabIndentNormal
-            tabIndentNormalRight = currentAppearance.tabIndentNormalRight
-            tabInactiveTextColor = toColor theme.inactiveTextColor
-            tabSelectedTextColor = toColor theme.selectedTextColor
-            tabMouseOverTextColor = toColor theme.mouseOverTextColor
-            tabActiveTextColor = toColor theme.activeTextColor
-            tabFlashTextColor = toColor theme.flashTextColor
-            tabInactiveTabColor = toColor theme.inactiveTabColor
-            tabSelectedTabColor = toColor theme.selectedTabColor
-            tabMouseOverTabColor = toColor theme.mouseOverTabColor
-            tabActiveTabColor = toColor theme.activeTabColor
-            tabFlashTabColor = toColor theme.flashTabColor
-            tabInactiveBorderColor = toColor theme.inactiveBorderColor
-            tabSelectedBorderColor = toColor theme.selectedBorderColor
-            tabMouseOverBorderColor = toColor theme.mouseOverBorderColor
-            tabActiveBorderColor = toColor theme.activeBorderColor
-            tabFlashBorderColor = toColor theme.flashBorderColor
-            tabShape = currentAppearance.tabShape
-        }
-        Services.settings.setValue("tabAppearance", box(mergedAppearance))
-        setEditorValues mergedAppearance
-        suppressEvents <- false
+        try
+            let currentAppearance = Services.program.tabAppearanceInfo
+            let toColor value = Color.FromArgb(255, Color.FromArgb(value))
+            let mergedAppearance = {
+                tabHeight = currentAppearance.tabHeight
+                tabMaxWidth = currentAppearance.tabMaxWidth
+                tabPinnedTabWidth = currentAppearance.tabPinnedTabWidth
+                tabPinnedTabWidthIcon = currentAppearance.tabPinnedTabWidthIcon
+                tabOverlap = currentAppearance.tabOverlap
+                tabHeightOffset = currentAppearance.tabHeightOffset
+                tabIndentFlipped = currentAppearance.tabIndentFlipped
+                tabIndentFlippedRight = currentAppearance.tabIndentFlippedRight
+                tabIndentNormal = currentAppearance.tabIndentNormal
+                tabIndentNormalRight = currentAppearance.tabIndentNormalRight
+                tabInactiveTextColor = toColor theme.inactiveTextColor
+                tabSelectedTextColor = toColor theme.selectedTextColor
+                tabMouseOverTextColor = toColor theme.mouseOverTextColor
+                tabActiveTextColor = toColor theme.activeTextColor
+                tabFlashTextColor = toColor theme.flashTextColor
+                tabInactiveTabColor = toColor theme.inactiveTabColor
+                tabSelectedTabColor = toColor theme.selectedTabColor
+                tabMouseOverTabColor = toColor theme.mouseOverTabColor
+                tabActiveTabColor = toColor theme.activeTabColor
+                tabFlashTabColor = toColor theme.flashTabColor
+                tabInactiveBorderColor = toColor theme.inactiveBorderColor
+                tabSelectedBorderColor = toColor theme.selectedBorderColor
+                tabMouseOverBorderColor = toColor theme.mouseOverBorderColor
+                tabActiveBorderColor = toColor theme.activeBorderColor
+                tabFlashBorderColor = toColor theme.flashBorderColor
+                tabShape = currentAppearance.tabShape
+            }
+            Services.settings.setValue("tabAppearance", box(mergedAppearance))
+            setEditorValues mergedAppearance
+        finally
+            suppressEvents <- previous
 
     // Set up ComboBox measure event - all items have same height
     do
@@ -1322,9 +1525,12 @@ type AppearanceView() as this =
             // First check if current colors match any theme
             let matchIndex = findMatchingTheme()
             if matchIndex >= 0 then
+                let previous = suppressEvents
                 suppressEvents <- true
-                colorThemeComboBox.SelectedIndex <- matchIndex
-                suppressEvents <- false
+                try
+                    colorThemeComboBox.SelectedIndex <- matchIndex
+                finally
+                    suppressEvents <- previous
             else
                 // Save current colors as Custom theme
                 savedCustomColors <- Some(getCurrentColors())
@@ -1335,9 +1541,12 @@ type AppearanceView() as this =
                 // Switch to Custom (last item)
                 let customIndex = themeItems.Length - 1
                 if colorThemeComboBox.SelectedIndex <> customIndex then
+                    let previous = suppressEvents
                     suppressEvents <- true
-                    colorThemeComboBox.SelectedIndex <- customIndex
-                    suppressEvents <- false
+                    try
+                        colorThemeComboBox.SelectedIndex <- customIndex
+                    finally
+                        suppressEvents <- previous
             updateButtonState()
 
     // Helper function to convert theme to JSON object string
@@ -1416,101 +1625,104 @@ type AppearanceView() as this =
                     let clipboardText = Clipboard.GetText()
                     // Try to parse as JSON array
                     let jsonArray = JArray.Parse(clipboardText)
+                    let previous = suppressEvents
                     suppressEvents <- true
-                    let mutable lastAppliedTheme : ColorThemeData option = None
-                    for item in jsonArray do
-                        let jObj = item :?> JObject
-                        // If ThemeName is missing or empty, treat as "Custom"
-                        let themeName =
-                            match jObj.getString("ThemeName") with
-                            | Some name when not (String.IsNullOrWhiteSpace(name)) -> name
-                            | _ -> "Custom"
-                        // Parse colors (optional - only apply if present)
-                        let parseColor (key: string) (existing: int) =
-                            match jObj.getString(key) with
-                            | Some hex when hex.StartsWith("#") && hex.Length = 7 ->
-                                try
-                                    Int32.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber)
-                                with | _ -> existing
-                            | _ -> existing
+                    try
+                        let mutable lastAppliedTheme : ColorThemeData option = None
+                        for item in jsonArray do
+                            let jObj = item :?> JObject
+                            // If ThemeName is missing or empty, treat as "Custom"
+                            let themeName =
+                                match jObj.getString("ThemeName") with
+                                | Some name when not (String.IsNullOrWhiteSpace(name)) -> name
+                                | _ -> "Custom"
+                            // Parse colors (optional - only apply if present)
+                            let parseColor (key: string) (existing: int) =
+                                match jObj.getString(key) with
+                                | Some hex when hex.StartsWith("#") && hex.Length = 7 ->
+                                    try
+                                        Int32.Parse(hex.Substring(1), System.Globalization.NumberStyles.HexNumber)
+                                    with | _ -> existing
+                                | _ -> existing
 
-                        // Get base colors (current Custom colors or zeros)
-                        let baseColors = savedCustomColors |> Option.defaultValue {
-                            name = ""
-                            inactiveTextColor = 0
-                            selectedTextColor = 0
-                            mouseOverTextColor = 0
-                            activeTextColor = 0
-                            flashTextColor = 0
-                            inactiveTabColor = 0
-                            selectedTabColor = 0
-                            mouseOverTabColor = 0
-                            activeTabColor = 0
-                            flashTabColor = 0
-                            inactiveBorderColor = 0
-                            selectedBorderColor = 0
-                            mouseOverBorderColor = 0
-                            activeBorderColor = 0
-                            flashBorderColor = 0
-                        }
+                            // Get base colors (current Custom colors or zeros)
+                            let baseColors = savedCustomColors |> Option.defaultValue {
+                                name = ""
+                                inactiveTextColor = 0
+                                selectedTextColor = 0
+                                mouseOverTextColor = 0
+                                activeTextColor = 0
+                                flashTextColor = 0
+                                inactiveTabColor = 0
+                                selectedTabColor = 0
+                                mouseOverTabColor = 0
+                                activeTabColor = 0
+                                flashTabColor = 0
+                                inactiveBorderColor = 0
+                                selectedBorderColor = 0
+                                mouseOverBorderColor = 0
+                                activeBorderColor = 0
+                                flashBorderColor = 0
+                            }
 
-                        let newTheme = {
-                            name = themeName
-                            inactiveTextColor = parseColor "InactiveTextColor" baseColors.inactiveTextColor
-                            selectedTextColor = parseColor "SelectedTextColor" baseColors.selectedTextColor
-                            mouseOverTextColor = parseColor "MouseOverTextColor" baseColors.mouseOverTextColor
-                            activeTextColor = parseColor "ActiveTextColor" baseColors.activeTextColor
-                            flashTextColor = parseColor "FlashTextColor" baseColors.flashTextColor
-                            inactiveTabColor = parseColor "InactiveTabColor" baseColors.inactiveTabColor
-                            selectedTabColor = parseColor "SelectedTabColor" baseColors.selectedTabColor
-                            mouseOverTabColor = parseColor "MouseOverTabColor" baseColors.mouseOverTabColor
-                            activeTabColor = parseColor "ActiveTabColor" baseColors.activeTabColor
-                            flashTabColor = parseColor "FlashTabColor" baseColors.flashTabColor
-                            inactiveBorderColor = parseColor "InactiveBorderColor" baseColors.inactiveBorderColor
-                            selectedBorderColor = parseColor "SelectedBorderColor" baseColors.selectedBorderColor
-                            mouseOverBorderColor = parseColor "MouseOverBorderColor" baseColors.mouseOverBorderColor
-                            activeBorderColor = parseColor "ActiveBorderColor" baseColors.activeBorderColor
-                            flashBorderColor = parseColor "FlashBorderColor" baseColors.flashBorderColor
-                        }
+                            let newTheme = {
+                                name = themeName
+                                inactiveTextColor = parseColor "InactiveTextColor" baseColors.inactiveTextColor
+                                selectedTextColor = parseColor "SelectedTextColor" baseColors.selectedTextColor
+                                mouseOverTextColor = parseColor "MouseOverTextColor" baseColors.mouseOverTextColor
+                                activeTextColor = parseColor "ActiveTextColor" baseColors.activeTextColor
+                                flashTextColor = parseColor "FlashTextColor" baseColors.flashTextColor
+                                inactiveTabColor = parseColor "InactiveTabColor" baseColors.inactiveTabColor
+                                selectedTabColor = parseColor "SelectedTabColor" baseColors.selectedTabColor
+                                mouseOverTabColor = parseColor "MouseOverTabColor" baseColors.mouseOverTabColor
+                                activeTabColor = parseColor "ActiveTabColor" baseColors.activeTabColor
+                                flashTabColor = parseColor "FlashTabColor" baseColors.flashTabColor
+                                inactiveBorderColor = parseColor "InactiveBorderColor" baseColors.inactiveBorderColor
+                                selectedBorderColor = parseColor "SelectedBorderColor" baseColors.selectedBorderColor
+                                mouseOverBorderColor = parseColor "MouseOverBorderColor" baseColors.mouseOverBorderColor
+                                activeBorderColor = parseColor "ActiveBorderColor" baseColors.activeBorderColor
+                                flashBorderColor = parseColor "FlashBorderColor" baseColors.flashBorderColor
+                            }
 
-                        if themeName = "Custom" then
-                            // Apply to Custom (unsaved)
-                            savedCustomColors <- Some newTheme
-                            saveSavedCustomColors savedCustomColors
-                            lastAppliedTheme <- Some newTheme
-                        else
-                            // Check if theme with this name exists
-                            let existingIndex = customThemes |> List.tryFindIndex (fun t -> t.name = themeName)
-                            match existingIndex with
-                            | Some idx ->
-                                // Overwrite existing theme
-                                customThemes <- customThemes |> List.mapi (fun i t ->
-                                    if i = idx then newTheme else t
-                                )
-                            | None ->
-                                // Add new theme
-                                customThemes <- customThemes @ [newTheme]
-                            saveCustomThemes customThemes
-                            updateCopyAllSavedMenuState()
-                            lastAppliedTheme <- Some newTheme
+                            if themeName = "Custom" then
+                                // Apply to Custom (unsaved)
+                                savedCustomColors <- Some newTheme
+                                saveSavedCustomColors savedCustomColors
+                                lastAppliedTheme <- Some newTheme
+                            else
+                                // Check if theme with this name exists
+                                let existingIndex = customThemes |> List.tryFindIndex (fun t -> t.name = themeName)
+                                match existingIndex with
+                                | Some idx ->
+                                    // Overwrite existing theme
+                                    customThemes <- customThemes |> List.mapi (fun i t ->
+                                        if i = idx then newTheme else t
+                                    )
+                                | None ->
+                                    // Add new theme
+                                    customThemes <- customThemes @ [newTheme]
+                                saveCustomThemes customThemes
+                                updateCopyAllSavedMenuState()
+                                lastAppliedTheme <- Some newTheme
 
-                    // Refresh UI and apply last theme
-                    refreshComboBoxItems()
-                    match lastAppliedTheme with
-                    | Some theme ->
-                        applyCustomTheme theme
-                        // Select the theme in ComboBox
-                        let themeIndex = themeItems |> List.tryFindIndex (fun item ->
-                            match item with
-                            | CustomTheme n -> n = theme.name
-                            | UnsavedCustom -> theme.name = "Custom"
-                            | _ -> false
-                        )
-                        match themeIndex with
-                        | Some idx -> colorThemeComboBox.SelectedIndex <- idx
+                        // Refresh UI and apply last theme
+                        refreshComboBoxItems()
+                        match lastAppliedTheme with
+                        | Some theme ->
+                            applyCustomTheme theme
+                            // Select the theme in ComboBox
+                            let themeIndex = themeItems |> List.tryFindIndex (fun item ->
+                                match item with
+                                | CustomTheme n -> n = theme.name
+                                | UnsavedCustom -> theme.name = "Custom"
+                                | _ -> false
+                            )
+                            match themeIndex with
+                            | Some idx -> colorThemeComboBox.SelectedIndex <- idx
+                            | None -> ()
                         | None -> ()
-                    | None -> ()
-                    suppressEvents <- false
+                    finally
+                        suppressEvents <- previous
                     updateButtonState()
             with | _ -> ()
         ) |> ignore
@@ -1919,6 +2131,8 @@ type AppearanceView() as this =
         initializingTheme <- false
 
         // Finish all design layout before the containing form captures DPI data.
+        for control in upperPanel.Controls do
+            control.TabIndex <- upperPanel.GetRow(control) * upperPanel.ColumnCount + upperPanel.GetColumn(control)
         upperPanel.ResumeLayout(true)
         colorPanel.ResumeLayout(true)
         colorPage.ResumeLayout(true)
@@ -1930,6 +2144,7 @@ type AppearanceView() as this =
         panel.SuspendLayout()
         colorPage.SuspendLayout()
         try
+            for refresh in placementRefreshers do refresh()
             customThemes <- loadCustomThemes()
             savedCustomColors <- loadSavedCustomColors()
             setEditorValues Services.program.tabAppearanceInfo

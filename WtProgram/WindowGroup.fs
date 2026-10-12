@@ -399,6 +399,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let seedScale = this.dpiScale
         this.ts.setTabAppearance(this.tabAppearanceAt seedScale, seedScale)
 
+        let refreshButtonModes () =
+            this.ts.setButtonModes(
+                unbox<string>(Services.settings.getValue "tabCloseButton"),
+                unbox<string>(Services.settings.getValue "tabPinButton"))
+        refreshButtonModes()
+        for key in ["tabCloseButton"; "tabPinButton"] do
+            Services.settings.notifyValue key (fun _ -> this.invokeAsync refreshButtonModes)
+
         // Listen for tabPositionByDefault changes (apply to all groups)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
             this.invokeAsync <| fun() ->

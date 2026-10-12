@@ -200,6 +200,7 @@ type TabSprite<'id> = {
     id: 'id
     isTop: bool
     isSelected: bool
+    buttonModes: string * string
     appearance: TabAppearanceInfo
     displayInfo: TabDisplayInfo
     size: Sz
@@ -263,10 +264,11 @@ type TabSprite<'id> = {
         } :> ISprite
 
     member private this.pinButtonSprite =
+        let clickable = this.buttonDecision(this.hover.IsSome || this.captured.IsSome).pinClickable
         {
             PinButtonSprite.size = this.closeButtonSize
-            hover = this.hover = Some(TabPin)
-            captured = this.captured = Some(TabPin)
+            hover = clickable && this.hover = Some(TabPin)
+            captured = clickable && this.captured = Some(TabPin)
             scale = this.scale
         } :> ISprite
 
@@ -346,6 +348,12 @@ type TabSprite<'id> = {
         let y = (this.size.height - this.closeButtonSize.height) / 2
         Pt(x, y)
 
+    member private this.buttonDecision hover : TabButtonPolicy.Decision =
+        let closeMode, pinMode = this.buttonModes
+        let closeRoom = this.closeButtonLocation.x >= this.iconLocation.x + this.iconSize.width
+        let pinRoom = this.pinButtonLocation.x + this.closeButtonSize.width <= this.size.width
+        TabButtonPolicy.decide closeMode pinMode this.isTop hover this.isPinned this.onlyIcon closeRoom pinRoom
+
     member this.textLocation =
         let x = this.iconLocation.x + this.iconSize.width + this.px 5
         Pt(x, 0)
@@ -355,8 +363,8 @@ type TabSprite<'id> = {
             if this.isPinned then
                 // Pin button always visible: text area ends where pin button starts
                 this.pinButtonLocation.x - this.textLocation.x
-            elif this.hover.IsSome || this.captured.IsSome then
-                // Hovered: text area ends where close button starts
+            elif this.buttonDecision(this.hover.IsSome || this.captured.IsSome).showClose then
+                // Reserve room only while the close button is visible
                 this.closeButtonLocation.x - this.textLocation.x
             else
                 // Not hovered: extend text closer to right edge (fade handles visual boundary)
@@ -496,18 +504,11 @@ type TabSprite<'id> = {
             img
 
     member private this.parts =
-            let isHoverOrCaptured = this.hover.IsSome || this.captured.IsSome
-            let iconRight = this.iconLocation.x + this.iconSize.width
-            // Hide close button if it would overlap with program icon
-            let canShowCloseButton = this.closeButtonLocation.x >= iconRight
-            // Hide pin button if it would extend beyond tab right edge
-            let canShowPinButton = this.pinButtonLocation.x + this.closeButtonSize.width <= this.size.width
-            let showCloseButton = not this.onlyIcon && not this.isPinned && isHoverOrCaptured && canShowCloseButton
-            let showPinButton = not this.onlyIcon && this.isPinned && canShowPinButton
+            let buttons = this.buttonDecision(this.hover.IsSome || this.captured.IsSome)
             List2([
                 Some(this.iconLocation, this.iconSprite)
-                (if showCloseButton then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
-                (if showPinButton then Some(this.pinButtonLocation, this.pinButtonSprite) else None)
+                (if buttons.showClose then Some(this.closeButtonLocation, this.closeButtonSprite) else None)
+                (if buttons.showPin then Some(this.pinButtonLocation, this.pinButtonSprite) else None)
                 ]).choose(id)
 
     // A dimmed tab is one flat image: its parts are drawn into it first and
@@ -572,23 +573,17 @@ type TabSprite<'id> = {
         let inRect (loc: Pt) (sz: Sz) =
             local.x >= loc.x && local.x < loc.x + sz.width &&
             local.y >= loc.y && local.y < loc.y + sz.height
-        let iconRight = this.iconLocation.x + this.iconSize.width
-        let canShowCloseButton = this.closeButtonLocation.x >= iconRight
-        let canShowPinButton = this.pinButtonLocation.x + this.closeButtonSize.width <= this.size.width
-        // For hit-testing the close button we deliberately drop the hover/capture
-        // gate that `children` uses for drawing: partAt is only ever called for
-        // the tab the cursor is over, which is hovered this frame, so the close
-        // button is (or is about to be) shown. Gating on the PREVIOUS frame's
-        // hover made the close rect flicker close<->bg.
-        let showCloseButton = not this.onlyIcon && not this.isPinned && canShowCloseButton
-        let showPinButton = not this.onlyIcon && this.isPinned && canShowPinButton
-        if showCloseButton && inRect this.closeButtonLocation this.closeButtonSize then TabClose
-        elif showPinButton && inRect this.pinButtonLocation this.closeButtonSize then TabPin
+        // Use the current pointer's hover state, not the previous frame's,
+        // so entering a button rectangle cannot alternate with the background.
+        let buttons = this.buttonDecision true
+        if buttons.showClose && inRect this.closeButtonLocation this.closeButtonSize then TabClose
+        elif buttons.pinClickable && inRect this.pinButtonLocation this.closeButtonSize then TabPin
         elif inRect this.iconLocation this.iconSize then TabIcon
         else TabBackground
 
 type TabStripSprite<'id> when 'id : equality = {
     tabs: Map2<'id, TabDisplayInfo>
+    buttonModes: string * string
     appearance: TabAppearanceInfo
     hover: ('id * TabPart) option
     captured : ('id * TabPart) option
@@ -623,6 +618,7 @@ type TabStripSprite<'id> when 'id : equality = {
               id, info.text, icon, (font.Name, font.Size, font.Style, font.Unit, font.GdiCharSet, font.GdiVerticalFont),
               brush, info.bgColor, info.fillColor, info.underlineColor, info.borderColor))
           "appearance", box this.appearance
+          "buttons", box this.buttonModes
           "hover", box (this.hover, this.captured)
           "order", box (this.visualOrder.list, this.zorder.list)
           "geometry", box (this.size.record, this.scale, this.direction, this.tabAlignments.items.list)
@@ -786,6 +782,7 @@ type TabStripSprite<'id> when 'id : equality = {
                 | None -> false
             isSelected = this.selectedTabs.contains(tab)
             displayInfo = this.tabs.find(tab)
+            buttonModes = this.buttonModes
             appearance =
                 if isPinned then
                     { this.appearance with tabMaxWidth = int(this.pinnedTabLength) }

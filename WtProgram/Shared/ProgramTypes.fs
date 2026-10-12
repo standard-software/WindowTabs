@@ -37,6 +37,8 @@ type SettingsRec = {
     // the dialog; HotKeyPolicy.numberKeyMode settles a file that has both.
     enableAltNumberHotKey: bool
     enableHoverActivate: bool
+    tabCloseButton: string
+    tabPinButton: string
     tabPositionByDefault: string
     // "auto": above unless that would leave the screen; "down": always
     // inside the window at its top edge.
@@ -83,8 +85,9 @@ type SettingsViewType =
     | LicenseSettings
     | AppearanceSettings
     | LayoutSettings
-    // The "Behavior" tab, despite the name.
-    | HotKeySettings
+    // Mouse interaction and general settings pages.
+    | InteractionSettings
+    | GeneralSettings
     // The "Shortcut Keys" tab.
     | ShortcutKeySettings
     | ColorSettings

@@ -584,7 +584,7 @@ module DarkMode =
             with _ -> ()
         // Apply now if the handle is already created. Otherwise defer to
         // HandleCreated — TabPages and their nested controls (e.g.
-        // BehaviorView's AutoScroll TableLayoutPanel) are realized lazily
+        // Interaction page's AutoScroll TableLayoutPanel) are realized lazily
         // when the user first selects the tab, so applying the theme only
         // during the initial form-load pass would leave their NC scrollbars
         // unthemed.
@@ -1177,20 +1177,34 @@ module DarkMode =
             spinControl.HandleDestroyed.Add(fun _ -> try this.ReleaseHandle() with _ -> ())
         override this.WndProc(m: byref<Message>) =
             base.WndProc(&m)
-            if m.Msg = WM_PAINT then
+            if m.Msg = WM_PAINT || m.Msg = 0x0318 (* WM_PRINTCLIENT *) then
                 try
-                    use g = Graphics.FromHwnd(spinControl.Handle)
+                    use g =
+                        if m.Msg = WM_PAINT then Graphics.FromHwnd(spinControl.Handle)
+                        else Graphics.FromHdc(m.WParam)
                     let r = spinControl.ClientRectangle
                     use bg = new SolidBrush(darkPanel)
                     g.FillRectangle(bg, r)
                     let half = r.Height / 2
                     let upRect = Rectangle(r.X, r.Y, r.Width, half)
-                    let downRect = Rectangle(r.X, r.Y + half, r.Width, r.Height - half)
+                    let downRect = Rectangle(r.X, r.Y + half, r.Width, half)
                     use sep = new Pen(darkBorder)
                     g.DrawLine(sep, r.Left, r.Y + half, r.Right, r.Y + half)
                     g.DrawLine(sep, r.Left, r.Top, r.Left, r.Bottom)
-                    drawDarkArrow g upRect false
-                    drawDarkArrow g downRect true
+                    // Pixel-aligned rows make the ink bounds symmetric about
+                    // each button center at fractional scale factors too.
+                    let arrow (rect: Rectangle) down =
+                        let height = max 2 (SettingsDpi.px 5)
+                        let width = min (SettingsDpi.px 4) ((rect.Width - 3) / 2)
+                        let top = rect.Top + (rect.Height - height) / 2
+                        let center = rect.Left + (rect.Width - 1) / 2
+                        use brush = new SolidBrush(darkText)
+                        for row in 0 .. height - 1 do
+                            let step = if down then height - 1 - row else row
+                            let halfWidth = width * step / (height - 1)
+                            g.FillRectangle(brush, center - halfWidth, top + row, 2 * halfWidth + 1, 1)
+                    arrow upRect false
+                    arrow downRect true
                 with _ -> ()
 
     // Walk a control tree and attach the ComboBox / NumericUpDown subclasses.

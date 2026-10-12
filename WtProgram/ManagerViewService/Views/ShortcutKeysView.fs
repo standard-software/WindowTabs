@@ -11,8 +11,8 @@ open Bemo.Win32.Forms
 // column, input column). Rows, top to bottom: "Activate Tab" with the 3 x 3
 // grid of number fields and the two mode check boxes under it; Next Tab;
 // Previous Tab; "Add a new tab to the right of the active tab". Every field
-// is a HotKeyEditor. Next / Previous moved here from the Behavior tab and
-// keep their settings keys, so nobody's setting is lost.
+// is a HotKeyEditor. Next / Previous retain their settings keys
+// on the Shortcut Keys page, so nobody's setting is lost.
 //
 // The number fields are what HotKeyPolicy.numberKeyMode says they are. In
 // the Ctrl or Alt mode they are locked (disabled and read-only) and show
@@ -51,7 +51,7 @@ type ShortcutKeysView() =
     let numberEditors = HotKeyPolicy.numbers |> List.map (fun n -> n, hotKeyEditor())
 
     // The check boxes carry their own caption, "[x] Enable Ctrl+1, ...",
-    // inside the item's input column, rather than the Behavior tab's
+    // inside the item's input column, rather than the Interaction page's
     // "caption in the label column, bare check box in the input column".
     // They are sub-options of the "Activate Tab" item - the user asked for
     // them as rows under its 3 x 3 grid - and a caption in the label column
@@ -137,7 +137,7 @@ type ShortcutKeysView() =
             table.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore          // number
             table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 33.33f)) |> ignore   // field
         // Five 35-px rows, the same grid as every other settings tab, so the
-        // shortcut rows below line up with the Behavior tab's rows 6, 7 and 8.
+        // shortcut rows below follow the shared settings-row grid.
         for _ in 1 .. 5 do
             table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 UIHelper.settingsRowHeightPx)) |> ignore
         for (n, editor) in numberEditors do
@@ -195,9 +195,49 @@ type ShortcutKeysView() =
         // Half a settings row of space before Next Tab.
         activateTabPanel.Margin <- Padding(0, 0, 0, UIHelper.settingsRowHeightPx / 2)
         form.Dock <- DockStyle.Fill
-        // Same padding as the Appearance and Behavior tabs.
+        // Same padding as the Appearance and Interaction pages.
         form.Padding <- UIHelper.settingsPagePadding
         form
+
+    // Match the color swatch's painted height without changing row spacing.
+    // A dark edit has one frame pixel outside each vertical edge; the light
+    // swatch's themed background is inset one pixel inside its bounds.
+    do
+        let fields = [for _, editor in numberEditors -> editor.control] @
+                     [nextTabEditor.control; prevTabEditor.control; newTabRightEditor.control]
+        let mutable fitting = false
+        let mutable measuredScale = -1.0
+        let mutable originalHeight = SettingsField.heightPx
+        let mutable swatchHeight = SettingsField.heightPx
+        let fit () =
+            if not fitting then
+                fitting <- true
+                try
+                    let scale = SettingsDpi.current()
+                    if measuredScale <> scale then
+                        use probe = new TextBox(Multiline = true, AutoSize = false, Height = SettingsField.heightPx)
+                        probe.Scale(SizeF(float32 scale, float32 scale))
+                        use swatch = new Button(Height = SettingsField.heightPx)
+                        swatch.Scale(SizeF(float32 scale, float32 scale))
+                        swatchHeight <- swatch.Height
+                        // The native hotkey window has no non-client border;
+                        // its full height scales like the swatch. The managed
+                        // edit excludes its non-client border while scaling.
+                        originalHeight <- if HotKeyControl.UseManaged then probe.Height else swatch.Height
+                        measuredScale <- scale
+                    let height = swatchHeight - 2
+                    for field in fields do
+                        if obj.ReferenceEquals(field.Parent, panel) then
+                            let spacing = originalHeight + 2 * SettingsDpi.px UIHelper.settingsRowMarginPx - height
+                            let margin = Padding(field.Margin.Left, spacing / 2, field.Margin.Right, spacing - spacing / 2)
+                            if field.Margin <> margin then field.Margin <- margin
+                        if field.Height <> height then field.Height <- height
+                finally fitting <- false
+        for field in fields do
+            field.SizeChanged.Add(fun _ -> fit ())
+            field.FontChanged.Add(fun _ -> fit ())
+        panel.Layout.Add(fun _ -> fit ())
+        fit ()
 
     member this.refresh() =
         let previous = suppress

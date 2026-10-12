@@ -7,7 +7,7 @@ open Bemo.Win32
 open Bemo.Win32.Forms
 
 
-type HotKeyView() =
+type InteractionView() =
     let mutable refreshing = false
     let refreshers = ResizeArray<unit -> unit>()
     let save key value =
@@ -25,7 +25,7 @@ type HotKeyView() =
     // Next Tab / Previous Tab and the Ctrl+1 .. Ctrl+9 check box used to be
     // rows of this tab; they are on the Shortcut Keys tab now
     // (ShortcutKeysView), under the same settings keys.
-    let switchTabs =
+    let table =
         
         let checkBox (prop:IProperty<bool>) = 
             let checkbox = BoolEditor() :> IPropEditor
@@ -37,255 +37,47 @@ type HotKeyView() =
 
         let settingsCheckbox key = checkBox(settingsProperty(key))
         
-        let defaultTabPositionCombo =
-            let combo = new ComboBox()
-            combo.DropDownStyle <- ComboBoxStyle.DropDownList
-            combo.Width <- 100
-            SettingsField.apply combo
-            combo.Items.Add(Localization.getString("AlignTopLeft")) |> ignore
-            combo.Items.Add(Localization.getString("AlignTopRight")) |> ignore
+        let settingsRadios key normalize options =
+            UIHelper.settingsRadios refreshers save key normalize options
 
-            let currentPosition = Services.settings.getValue("tabPositionByDefault") :?> string
-            combo.SelectedIndex <-
-                match currentPosition with
-                | "TopLeft" -> 0
-                | _ -> 1
+        let buttonModeRadios key captions =
+            List.zip [TabButtonPolicy.activeOnly; TabButtonPolicy.all; TabButtonPolicy.none] captions
+            |> settingsRadios key TabButtonPolicy.normalize
 
-            combo.SelectedIndexChanged.Add(fun _ ->
-                let value = match combo.SelectedIndex with | 0 -> "TopLeft" | _ -> "TopRight"
-                save "tabPositionByDefault" value
-            )
-            refreshers.Add(fun () ->
-                combo.SelectedIndex <- if unbox<string>(Services.settings.getValue("tabPositionByDefault")) = "TopLeft" then 0 else 1)
-
-            combo
-
-        let hideTabsDelay =
-            let textBox = new TextBox()
-            let defaultValue =
-                try
-                    Services.settings.getValue("hideTabsDelayMilliseconds") :?> int
-                with
-                | _ -> 3000
-            textBox.Text <- defaultValue.ToString()
-
-            // Set initial enabled state based on current mode
-            let currentMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
-            textBox.Enabled <- (currentMode = "down")
-
-            textBox.LostFocus.Add(fun _ ->
-                match System.Int32.TryParse(textBox.Text) with
-                | true, value when value >= 0 && value <= 10000 ->
-                    save "hideTabsDelayMilliseconds" value
-                | false, _ | _, _ ->
-                    // Reset to previous value if invalid
-                    textBox.Text <-
-                        try
-                            (Services.settings.getValue("hideTabsDelayMilliseconds") :?> int).ToString()
-                        with
-                        | _ -> "3000"
-            )
-            refreshers.Add(fun () ->
-                textBox.Text <- (unbox<int>(Services.settings.getValue("hideTabsDelayMilliseconds"))).ToString())
-            textBox
-
-        let hideTabsRadio =
-            // Use TableLayoutPanel to keep all RadioButtons in same container (for proper grouping)
-            // while allowing delay label and textbox next to radioDown
-            let table = new TableLayoutPanel()
-            table.AutoSize <- true
-            table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            table.Margin <- Padding(0)
-            // The group still takes three settings rows, so the next setting
-            // stays on the grid. The first radio is on the caption's line; the
-            // radios are radioPitch apart (between the 24-px pack and the 32-px
-            // row), and the space this saves is left under the last one.
-            let radioPitch = 28
-            table.Padding <- Padding(0, 0, 0, 3 * UIHelper.settingsRowHeightPx - 3 * radioPitch)
-            table.ColumnCount <- 3
-            table.RowCount <- 3
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // RadioButton column
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // Label column
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore  // TextBox column
-            for _ in 1 .. 3 do
-                table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 radioPitch)) |> ignore
-
-            let currentMode =
-                let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
-                // Use valid modes, default to "doubleclick" for invalid/unknown values
-                match mode with
-                | "never" | "down" | "doubleclick" -> mode
-                | _ ->
-                    "doubleclick"
-
-            let radioNever = new RadioButton()
-            radioNever.Text <- Localization.getString("HideTabsNever")
-            radioNever.AutoSize <- true
-            radioNever.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
-            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
-            radioNever.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
-            radioNever.Checked <- (currentMode = "never")
-            radioNever.CheckedChanged.Add(fun _ ->
-                if radioNever.Checked then
-                    save "hideTabsWhenDownByDefault" "never"
-                    hideTabsDelay.Enabled <- false
-            )
-
-            let radioDown = new RadioButton()
-            radioDown.Text <- Localization.getString("HideTabsWhenDown")
-            radioDown.AutoSize <- true
-            radioDown.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
-            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
-            radioDown.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
-            radioDown.Checked <- (currentMode = "down")
-            radioDown.CheckedChanged.Add(fun _ ->
-                if radioDown.Checked then
-                    save "hideTabsWhenDownByDefault" "down"
-                    hideTabsDelay.Enabled <- true
-            )
-
-            let radioDoubleClick = new RadioButton()
-            radioDoubleClick.Text <- Localization.getString("HideTabsOnClick")
-            radioDoubleClick.AutoSize <- true
-            radioDoubleClick.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, 0)
-            // Same height as a caption, so the radio text is centred on the row like the checkboxes.
-            radioDoubleClick.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
-            radioDoubleClick.Checked <- (currentMode = "doubleclick")
-            radioDoubleClick.CheckedChanged.Add(fun _ ->
-                if radioDoubleClick.Checked then
-                    save "hideTabsWhenDownByDefault" "doubleclick"
-                    hideTabsDelay.Enabled <- false
-            )
-            refreshers.Add(fun () ->
-                let mode = unbox<string>(Services.settings.getValue("hideTabsWhenDownByDefault"))
-                radioNever.Checked <- (mode = "never")
-                radioDown.Checked <- (mode = "down")
-                radioDoubleClick.Checked <- (mode <> "never" && mode <> "down")
-                hideTabsDelay.Enabled <- (mode = "down"))
-
-            let delayLabel = new Label()
-            delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
-            delayLabel.AutoSize <- true
-            // Centred in the radio row, like the radio itself.
-            delayLabel.Anchor <- AnchorStyles.Left
-            // The same box as the radio beside it, with the text in the middle
-            // of it, so the two captions sit on one line.
-            delayLabel.TextAlign <- ContentAlignment.MiddleLeft
-            delayLabel.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
-            // The radio beside it carries its own glyph, which puts its caption
-            // two pixels lower than a plain label of the same box.
-            delayLabel.Padding <- Padding(0, 2, 0, 0)
-            delayLabel.Margin <- Padding(10, 0, 3, 0)  // Left margin to separate from the radio
-
-            hideTabsDelay.Width <- 60
-            SettingsField.apply hideTabsDelay
-            hideTabsDelay.Anchor <- AnchorStyles.Left
-            hideTabsDelay.Margin <- Padding(0)
-
-            // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
-            table.Controls.Add(radioNever, 0, 0)
-            // Row 1: radioDown + delayLabel + hideTabsDelay
-            table.Controls.Add(radioDown, 0, 1)
-            table.Controls.Add(delayLabel, 1, 1)
-            table.Controls.Add(hideTabsDelay, 2, 1)
-            // Row 2: radioDoubleClick
-            table.Controls.Add(radioDoubleClick, 0, 2)
-
-            table
-
-        let snapChangeTabPositionCombo =
-            let combo = ComboBox()
-            combo.DropDownStyle <- ComboBoxStyle.DropDownList
-            combo.Width <- 300
-            SettingsField.apply combo
-            combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapWhenUniform")) |> ignore
-            combo.Items.Add(Localization.getString("ChangeTabPositionOnSnapNever")) |> ignore
-            let currentMode =
-                let mode = Services.settings.getValue("changeTabPositionOnSnap") :?> string
-                match mode with
-                | "change" | "nochange" -> mode
-                | _ ->
-                    "change"
-            combo.SelectedIndex <- if currentMode = "nochange" then 1 else 0
-            combo.SelectedIndexChanged.Add(fun _ ->
-                let value = if combo.SelectedIndex = 1 then "nochange" else "change"
-                save "changeTabPositionOnSnap" value)
-            refreshers.Add(fun () ->
-                combo.SelectedIndex <- if unbox<string>(Services.settings.getValue("changeTabPositionOnSnap")) = "nochange" then 1 else 0)
-            combo
-
-        let tabVerticalDirectionCombo =
-            let combo = ComboBox()
-            combo.DropDownStyle <- ComboBoxStyle.DropDownList
-            combo.Width <- 300
-            SettingsField.apply combo
-            combo.Items.Add(Localization.getString("TabVerticalAuto")) |> ignore
-            combo.Items.Add(Localization.getString("TabVerticalAlwaysDown")) |> ignore
-            let current =
-                Services.settings.getValue("tabVerticalDirection") :?> string
-                |> TabBehaviorPolicy.normalizeVerticalDirection
-            combo.SelectedIndex <- if current = TabBehaviorPolicy.verticalAlwaysDown then 1 else 0
-            combo.SelectedIndexChanged.Add(fun _ ->
-                let value =
-                    if combo.SelectedIndex = 1 then TabBehaviorPolicy.verticalAlwaysDown
-                    else TabBehaviorPolicy.verticalAuto
-                save "tabVerticalDirection" (box(value)))
-            refreshers.Add(fun () ->
-                let direction = unbox<string>(Services.settings.getValue("tabVerticalDirection")) |> TabBehaviorPolicy.normalizeVerticalDirection
-                combo.SelectedIndex <- if direction = TabBehaviorPolicy.verticalAlwaysDown then 1 else 0)
-            combo
+        let snapChangeTabPositionRadios =
+            settingsRadios "changeTabPositionOnSnap"
+                (fun mode -> if mode = "nochange" then "nochange" else "change")
+                ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
+        let gap = new Panel()
         let fields = List2([
-            ("RunAtStartup", settingsCheckbox "runAtStartup")
-            ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
-            ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
+            ("TabCloseButton", buttonModeRadios "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
+            ("TabPinButton", buttonModeRadios "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
-            // Where the tabs sit, then what snapping does to them, then what
-            // hides them, and last what the window itself may do.
-            ("TabPositionByDefault", defaultTabPositionCombo :> Control)
-            ("ChangeTabPositionOnSnap", snapChangeTabPositionCombo :> Control)
+            ("LockWindowPosition", lockPositionCheckbox)
+            ("", gap :> Control)
+            ("ChangeTabPositionOnSnap", snapChangeTabPositionRadios)
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
-            ("TabVerticalDirection", tabVerticalDirectionCombo :> Control)
-            ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
-            // hideTabsDelayMilliseconds is now integrated into hideTabsRadio panel
-            ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
-            ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
-            ("LockWindowPosition", lockPositionCheckbox)
         ])
 
         let formPanel = UIHelper.form fields
+        // Radio groups already include their row spacing.
+        for row in [0; 1; 5] do
+            formPanel.GetControlFromPosition(1, row).Margin <- Padding(0)
+        // An empty row avoids the caption's full-row minimum height.
+        let gapRow = 4
+        for column in 0 .. 1 do
+            let control = formPanel.GetControlFromPosition(column, gapRow)
+            formPanel.Controls.Remove(control)
+            control.Dispose()
+        formPanel.RowStyles.[gapRow].SizeType <- SizeType.Absolute
+        formPanel.RowStyles.[gapRow].Height <- float32 (UIHelper.settingsRowHeightPx / 2)
 
-        // This control already contains rows on the same 35-px grid as the
-        // outer form. Do not add another outer row margin around the group.
-        hideTabsRadio.Margin <- Padding(0)
-
-        // Adjust the row height for the remaining radio button group.
-        // Row index: 0=runAtStartup, 1=hideInactiveTabs, 2=isTabbingEnabled,
-        //            3=enableHover, 4=tabPosition, 5=changeTabPositionOnSnap,
-        //            6=snapTabHeightMargin, 7=snapOnDragDetach,
-        //            8=tabVerticalDirection, 9=hideTabsWhenDown,
-        //            10=hideTabsOnFullscreen, 11=hideTabsWhileMoving,
-        //            12=lockWindowPosition
-        let hideTabsRowIndex = 9
-
-        // Let the radio-group row auto-size based on content.
-        formPanel.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
-
-        "Switch Tabs", formPanel
-
-    let sections = List2([
-        switchTabs
-        ])
-
-    let table =
-        // Remove GroupBox border for Switch Tabs section
-        let (_,control) = sections.head
-        control.Dock <- DockStyle.Fill
-        // Add padding to match Appearance tab
-        control.Padding <- UIHelper.settingsPagePadding
-        control
+        formPanel.Dock <- DockStyle.Fill
+        formPanel.Padding <- UIHelper.settingsPagePadding
+        formPanel
 
     member this.refresh() =
         let previous = refreshing
@@ -296,6 +88,45 @@ type HotKeyView() =
             refreshing <- previous
 
     interface ISettingsView with
-        member x.key = SettingsViewType.HotKeySettings
-        member x.title = Localization.getString("Behavior")
+        member x.key = SettingsViewType.InteractionSettings
+        member x.title = Localization.getString("Interaction")
         member x.control = table :> Control
+
+
+type GeneralView() =
+    let mutable refreshing = false
+    let refreshers = ResizeArray<unit -> unit>()
+    let checkBox (prop: IProperty<bool>) =
+        let editor = BoolEditor() :> IPropEditor
+        editor.value <- box prop.value
+        editor.changed.Add(fun () -> if not refreshing then prop.value <- unbox<bool> editor.value)
+        refreshers.Add(fun () -> editor.value <- box prop.value)
+        editor.control
+    let settingsCheckbox key =
+        checkBox {
+            new IProperty<bool> with
+                member _.value
+                    with get() = unbox<bool>(Services.settings.getValue key)
+                    and set value = Services.settings.setValue(key, box value) }
+    let table =
+        let fields = List2([
+            ("RunAtStartup", settingsCheckbox "runAtStartup")
+            ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
+            ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
+            ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
+            ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
+        ])
+        let panel = UIHelper.form fields
+        panel.Padding <- UIHelper.settingsPagePadding
+        panel
+    member _.refresh() =
+        let previous = refreshing
+        refreshing <- true
+        try
+            for refresh in refreshers do refresh()
+        finally
+            refreshing <- previous
+    interface ISettingsView with
+        member _.key = SettingsViewType.GeneralSettings
+        member _.title = Localization.getString("General")
+        member _.control = table :> Control

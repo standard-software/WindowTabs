@@ -127,6 +127,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let mutable tabAlignmentSnapshot = Map2<Tab, TabAlign>()
     let defaultAlignmentCell = Cell.create(TopRight)
     let alignment = Cell.create(TopRight)
+    let buttonModesCell = Cell.create(TabButtonPolicy.activeOnly, TabButtonPolicy.activeOnly)
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
     let hoverCell = Cell.create(None : Option<Tab*TabPart>)
     let slideCell = Cell.create(None)
@@ -327,6 +328,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             dimmedTabs = this.dimmedTabsFor shared
             transparent = this.transparent
             appearance = this.appearance
+            buttonModes = buttonModesCell.value
             dragGroup = dragGroupCell.value
             scale = this.scale
         }
@@ -1291,6 +1293,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.getTabBorderColor(tab) = tabBorderColor.value.tryFind(tab)
 
     member this.getTabBorderColorThreadSafe(tab) = tabBorderColorSnapshot.tryFind(tab)
+
+    member this.setButtonModes(closeMode, pinMode) =
+        let modes = TabButtonPolicy.normalize closeMode, TabButtonPolicy.normalize pinMode
+        if buttonModesCell.value <> modes then buttonModesCell.set modes
 
     // The appearance and the monitor scale it was computed at are ONE value:
     // the appearance carries the already-scaled heights and indents, `scale`

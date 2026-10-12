@@ -594,6 +594,8 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
+                        tabCloseButton = settingsJson.getString("TabCloseButton").def(TabButtonPolicy.activeOnly) |> TabButtonPolicy.normalize
+                        tabPinButton = settingsJson.getString("TabPinButton").def(TabButtonPolicy.activeOnly) |> TabButtonPolicy.normalize
                         tabPositionByDefault =
                             // Handle backward compatibility: convert old format to new TopXxx format
                             // Note: "center"/"TopCenter" is deprecated and falls back to "TopLeft"
@@ -674,6 +676,8 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = false
                         enableAltNumberHotKey = false
                         enableHoverActivate = false
+                        tabCloseButton = TabButtonPolicy.activeOnly
+                        tabPinButton = TabButtonPolicy.activeOnly
                         tabPositionByDefault = "TopRight"
                         tabVerticalDirection = TabBehaviorPolicy.verticalAuto
                         hideTabsWhenDownByDefault = "never"
@@ -715,6 +719,8 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
             settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
+            settingsJson.setString("TabCloseButton", TabButtonPolicy.normalize settings.tabCloseButton)
+            settingsJson.setString("TabPinButton", TabButtonPolicy.normalize settings.tabPinButton)
             settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)
             settingsJson.setString("TabVerticalDirection", settings.tabVerticalDirection)
             settingsJson.setString("HideTabsWhenDownByDefault", settings.hideTabsWhenDownByDefault)
