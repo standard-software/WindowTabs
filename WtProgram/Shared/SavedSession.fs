@@ -254,84 +254,11 @@ module SavedSession =
         | Some(exe), Some(title) when exe <> "" && title <> "" -> Some(identityKey exe title)
         | _ -> None
 
-    // Distance between a saved rectangle and a live one, for choosing between
-    // windows that are otherwise identical. A pair with no rectangle to compare
-    // costs a large fixed amount rather than infinity, so that the pairs which
-    // CAN be compared still decide the assignment.
-    let private unknownCost = 1.0e12
-
-    let private cost (a: (float * float) option) (b: (float * float) option) =
-        match a, b with
-        | Some(ax, ay), Some(bx, by) -> (ax - bx) * (ax - bx) + (ay - by) * (ay - by)
-        | _ -> unknownCost
-
-    // Every way of giving each of `n` saved tabs a different one of `candidates`
-    // (as indices into it), in ascending order, so that the first assignment
-    // found at a given cost is the one that keeps saved order.
-    let rec private injections (n: int) (candidates: int list) : int list list =
-        if n = 0 then [[]]
-        else
-            candidates
-            |> List.collect (fun c ->
-                injections (n - 1) (candidates |> List.filter ((<>) c))
-                |> List.map (fun rest -> c :: rest))
-
-    // How many indistinguishable windows may be assigned by trying every
-    // arrangement. 6 saved against 6 live is 720 arrangements; beyond that the
-    // count grows too fast and the greedy answer is used instead. A group with
-    // seven windows of the same application AND the same title is not a case
-    // worth spending seconds on.
-    let private exhaustiveLimit = 6
-
-    // Which live window each of a set of saved tabs that cannot be told apart
-    // comes back as.
-    //
-    // They cannot be told apart by identity - same application, same title -
-    // so the only evidence left is where they were: windows generally reopen
-    // where they closed. Taking the nearest window for each saved tab in turn
-    // is not enough, because the first tab can take the window that was the
-    // only good answer for the second; the arrangement that is nearest OVERALL
-    // is the one that puts every window back where it was. Ties - which is
-    // what a group of windows with no saved rectangles is - fall back to saved
-    // order against the order the windows were enumerated in, so the answer is
-    // the same every time even when there is nothing to choose between them.
-    //
-    // When there are fewer live windows than saved tabs the later tabs in
-    // saved order go without and wait as seeds instead.
-    let assignTwins (saved: (float * float) option list)
-                    (candidates: (float * float) option list) : int option list =
-        let s = List.length saved
-        let c = List.length candidates
-        let m = min s c
-        if m = 0 then saved |> List.map (fun _ -> None)
-        else
-            let savedArr = List.toArray saved
-            let candArr = List.toArray candidates
-            let chosen =
-                if m <= exhaustiveLimit && c <= exhaustiveLimit then
-                    injections m [0 .. c - 1]
-                    |> List.map (fun pick ->
-                        let total =
-                            pick |> List.mapi (fun i j -> cost savedArr.[i] candArr.[j]) |> List.sum
-                        (total, pick))
-                    // The pick is part of the key, so equal costs are settled
-                    // by the earliest candidate indices - saved order against
-                    // enumeration order.
-                    |> List.minBy id
-                    |> snd
-                else
-                    // Too many to arrange: each in saved order takes the
-                    // nearest window still free.
-                    let free = System.Collections.Generic.HashSet<int>([0 .. c - 1])
-                    [ for i in 0 .. m - 1 ->
-                        let j =
-                            free
-                            |> Seq.sortBy (fun j -> (cost savedArr.[i] candArr.[j], j))
-                            |> Seq.head
-                        free.Remove(j) |> ignore
-                        j ]
-            let chosenArr = List.toArray chosen
-            [ for i in 0 .. s - 1 -> if i < m then Some(chosenArr.[i]) else None ]
+    // Greedy nearest-centre pairs, shared with early and late claims.
+    let assignTwins saved candidates =
+        let pairs = RestorePosition.assign saved candidates
+        saved |> List.mapi (fun i _ ->
+            pairs |> List.tryFind (fun p -> p.savedIndex = i) |> Option.map (fun p -> p.liveIndex))
 
     // The value all of a set of entries agree on, or None if they do not.
     let private consensus (values: 'a option list) =
@@ -345,7 +272,7 @@ module SavedSession =
     // are on screen at that moment. Nothing here changes anything: the caller
     // creates the groups, fills the global maps and seeds the closed-tab cache
     // from the answer.
-    let planWithPositionTrace trace (now: DateTime) (seedMaxAgeDays: float) (closedTabMaxAgeDays: float)
+    let planWithPairTrace tracePair trace (now: DateTime) (seedMaxAgeDays: float) (closedTabMaxAgeDays: float)
              (groups: SavedGroup list) (live: LiveWindow list) : PlannedGroup list =
 
         let expired (t: SavedTab) =
@@ -376,9 +303,14 @@ module SavedSession =
         // application take the closed tab's name, colours and pin without its
         // title ever being looked at.
         let reserved = System.Collections.Generic.HashSet<IntPtr>()
-        groups |> List.iter (fun g ->
-            g.windows |> List.iter (fun t ->
-                if savedHwndTrusted t && not t.closedByUser then reserved.Add(t.hwnd) |> ignore))
+        // Reservations belong to records, not just handle numbers. A closed
+        // or mismatching record must not inherit another record's reservation.
+        let resolved = System.Collections.Generic.Dictionary<int * int, IntPtr>()
+        groups |> List.iteri (fun gi g ->
+            g.windows |> List.iteri (fun ti t ->
+                if savedHwndTrusted t && not t.closedByUser &&
+                   (reserved.Add(t.hwnd) || t.onAllDesktops) then
+                    resolved.[(gi, ti)] <- t.hwnd))
 
         // Identity matching after a Windows restart. Once every handle is new,
         // application path + title is all that is left, and it does not always
@@ -398,8 +330,8 @@ module SavedSession =
         let crossGroup = System.Collections.Generic.HashSet<string>()
         let notShared = System.Collections.Generic.HashSet<string>()
         groups |> List.iteri (fun gi g ->
-            g.windows |> List.iter (fun t ->
-                if not (reserved.Contains(t.hwnd)) && not (expired t) then
+            g.windows |> List.iteri (fun ti t ->
+                if not (resolved.ContainsKey((gi, ti))) && not (expired t) then
                     identityOf t |> Option.iter (fun key ->
                         savedCounts.[key] <-
                             (match savedCounts.TryGetValue(key) with
@@ -418,7 +350,7 @@ module SavedSession =
 
         let liveCounts = System.Collections.Generic.Dictionary<string, int>()
         live |> List.iter (fun w ->
-            if w.exePath <> "" && w.title <> "" then
+            if not (reserved.Contains w.handle) && w.exePath <> "" && w.title <> "" then
                 let key = identityKey w.exePath w.title
                 liveCounts.[key] <- (match liveCounts.TryGetValue(key) with
                                      | true, n -> n + 1
@@ -441,58 +373,9 @@ module SavedSession =
 
         // ---- who comes back as what ----
 
-        let taken = System.Collections.Generic.HashSet<IntPtr>()
-        // (group index, index in group) -> live handle
-        let resolved = System.Collections.Generic.Dictionary<int * int, IntPtr>()
+        let taken = System.Collections.Generic.HashSet<IntPtr>(reserved)
 
-        // Same session first: a window that still carries the handle it was
-        // saved with IS the window that was saved. A window shown on all
-        // desktops takes its place in each group it was saved in.
-        groups |> List.iteri (fun gi g ->
-            g.windows |> List.iteri (fun ti t ->
-                if reserved.Contains(t.hwnd) && (taken.Add(t.hwnd) || t.onAllDesktops) then
-                    resolved.[(gi, ti)] <- t.hwnd))
-
-        // Cross-group identities use exactly the claim-time position policy.
-        // Resolve against remaining entries; after a claim, a sole remaining
-        // group resumes the existing ordinary/twin assignment below.
         let positioned = System.Collections.Generic.HashSet<int * int>()
-        for key in List.ofSeq crossGroup do
-            let entries =
-                [ for gi,g in List.indexed groups do
-                    for ti,t in List.indexed g.windows do
-                        if not (expired t) && not (resolved.ContainsKey((gi,ti))) && identityOf t = Some key then
-                            yield gi,ti,t ]
-            let mutable remaining = entries
-            let mutable arrivals = live |> List.filter (fun w ->
-                identityKey w.exePath w.title = key && not (taken.Contains w.handle) && not (reserved.Contains w.handle))
-            while not arrivals.IsEmpty &&
-                  (remaining |> List.map (fun (gi,_,_) -> gi) |> List.distinct |> List.length) > 1 do
-                let candidates = remaining |> List.mapi (fun index (gi,_,t) ->
-                    ({ index=index; center=RestorePosition.center t.rect
-                       desktop=RestorePosition.desktop groups.[gi].desktop } : RestorePosition.Candidate))
-                let choices = arrivals |> List.mapi (fun order w ->
-                    let d = RestorePosition.choose {center=(if w.positionTrusted then w.center else None);scale=w.scale;desktop=w.desktop} candidates
-                    order,w,d)
-                // Pair clear geometry before any order fallback can consume it.
-                // Otherwise the input scan order stands in for arrival order.
-                let _,w,decision = choices |> List.minBy (fun (order,_,d) ->
-                    match d with
-                    | RestorePosition.Selected(_,distance,_,_) -> 0,distance,order
-                    | _ -> 1,0.0,order)
-                match decision with
-                | RestorePosition.Selected(index,_,_,_)
-                | RestorePosition.Ordered(index,_,_) ->
-                    let gi,ti,_ = remaining.[index]
-                    resolved.[(gi,ti)] <- w.handle
-                    positioned.Add((gi,ti)) |> ignore
-                    taken.Add w.handle |> ignore
-                    trace w.handle gi ti decision
-                    remaining <- remaining |> List.filter (fun (g,t,_) -> (g,t) <> (gi,ti))
-                | RestorePosition.Held _ -> ()
-                arrivals <- arrivals |> List.filter (fun x -> x.handle <> w.handle)
-            if (remaining |> List.map (fun (gi,_,_) -> gi) |> List.distinct |> List.length) <= 1 then
-                crossGroup.Remove key |> ignore
 
         // Then by identity, all the tabs of one identity together, because
         // which of them gets which window is one decision and not several.
@@ -509,7 +392,7 @@ module SavedSession =
                     let t = g.windows.[ti]
                     match identityOf t with
                     | Some(key) when not (resolved.ContainsKey((gi, ti))) &&
-                                     not (expiredConflict gi key t) && not (crossGroup.Contains(key)) ->
+                                     not (expiredConflict gi key t) ->
                         yield (key, (gi, ti, t))
                     | _ -> () ]
             |> List.groupBy fst
@@ -523,34 +406,30 @@ module SavedSession =
                     identityKey w.exePath w.title = key &&
                     not (reserved.Contains(w.handle)) &&
                     not (taken.Contains(w.handle)))
-            let candArr = List.toArray candidates
-            if sharedOnly.Contains(key) then
-                // A saved handle identifies one window across desktop records.
-                // Different handles still need different live candidates, even
-                // when every window has the same application, title and bounds.
-                let windows = entries |> List.groupBy (fun (_, _, t) -> t.hwnd)
-                let picks =
-                    assignTwins
-                        (windows |> List.map (fun (_, copies) ->
-                            let (_, _, first) = List.head copies
-                            centerOfRect first.rect))
-                        (candidates |> List.map (fun w -> w.center))
-                List.zip windows picks
-                |> List.iter (fun ((_, copies), pick) ->
-                    pick |> Option.iter (fun j ->
-                        let w = candArr.[j]
-                        if taken.Add(w.handle) then
-                            copies |> List.iter (fun (gi, ti, _) -> resolved.[(gi, ti)] <- w.handle)))
-            else
-            let picks =
-                assignTwins
-                    (entries |> List.map (fun (_, _, t) -> centerOfRect t.rect))
-                    (candidates |> List.map (fun w -> w.center))
-            List.zip entries picks
-            |> List.iter (fun ((gi, ti, _), pick) ->
-                pick |> Option.iter (fun j ->
-                    let w = candArr.[j]
-                    if taken.Add(w.handle) then resolved.[(gi, ti)] <- w.handle)))
+                |> List.sortBy (fun w -> w.handle.ToInt64())
+            // Copies of an all-desktop window are one logical record.
+            let records =
+                if sharedOnly.Contains key then entries |> List.groupBy (fun (_,_,t) -> t.hwnd) |> List.map snd
+                else entries |> List.map List.singleton
+            let pairs = RestorePosition.assign
+                            (records |> List.map (fun copies -> let _,_,t = copies.Head in RestorePosition.center t.rect))
+                            (candidates |> List.map (fun w -> w.center))
+            for pair in pairs do
+                let w = candidates.[pair.liveIndex]
+                taken.Add(w.handle) |> ignore
+                for gi,ti,_ in records.[pair.savedIndex] do
+                    resolved.[(gi,ti)] <- w.handle
+                    if crossGroup.Contains key then positioned.Add((gi,ti)) |> ignore
+                    if records.Length > 1 || candidates.Length > 1 then
+                        tracePair w.handle gi ti pair.distance pair.candidates
+                        let decision =
+                            match pair.distance with
+                            | Some d -> RestorePosition.Selected(pair.savedIndex,d,None,false)
+                            | None -> RestorePosition.Ordered(pair.savedIndex,None,None)
+                        trace w.handle gi ti decision
+            let remainingGroups = entries |> List.filter (fun (gi,ti,_) -> not (resolved.ContainsKey((gi,ti))))
+                                          |> List.map (fun (gi,_,_) -> gi) |> List.distinct
+            if remainingGroups.Length <= 1 then crossGroup.Remove key |> ignore)
 
         // ---- what may be put on them ----
 
@@ -656,6 +535,9 @@ module SavedSession =
               savedOrder = savedOrder
               token = (match savedOrder with h :: _ -> h | [] -> IntPtr.Zero)
               desktop = g.desktop })
+
+    let planWithPositionTrace trace now seedMaxAgeDays closedTabMaxAgeDays groups live =
+        planWithPairTrace (fun _ _ _ _ _ -> ()) trace now seedMaxAgeDays closedTabMaxAgeDays groups live
 
     let plan now seedMaxAgeDays closedTabMaxAgeDays groups live =
         planWithPositionTrace (fun _ _ _ _ -> ()) now seedMaxAgeDays closedTabMaxAgeDays groups live

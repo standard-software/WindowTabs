@@ -2,10 +2,8 @@ namespace Bemo
 
 open System
 
-// Physical screen coordinates throughout. Only distance differences are scaled
-// to logical pixels, using the live monitor; never scale virtual-screen origins.
+// Physical screen coordinates throughout, including normal placement rectangles.
 module RestorePosition =
-    let minimumGap = 32.0
     type Observation = { center: (float * float) option; scale: float; desktop: Guid option }
     type Candidate = { index: int; center: (float * float) option; desktop: Guid option }
     type Decision =
@@ -13,7 +11,7 @@ module RestorePosition =
         | Ordered of index: int * distance: float option * gap: float option
         | Held of reason: string
 
-    let desktop value =
+    let desktop (value: string option) =
         value |> Option.bind (fun s ->
             match Guid.TryParse(s) with
             | true, id when id <> Guid.Empty -> Some id
@@ -28,37 +26,36 @@ module RestorePosition =
         | Some(x,y) -> not (Double.IsNaN x || Double.IsInfinity x || Double.IsNaN y || Double.IsInfinity y)
         | None -> false
 
-    // Candidate list order is saved group order, then saved tab order. The
-    // index is an opaque lookup key and need not have that order (cache reversal).
-    let choose (live: Observation) (candidates: Candidate list) =
-        let reliable = validPoint live.center && live.scale > 0.0 &&
-                       not (Double.IsNaN live.scale || Double.IsInfinity live.scale)
-        let distance c =
-            if reliable && validPoint c.center then
-                let lx,ly = live.center.Value
-                let x,y = c.center.Value
-                Some(sqrt ((x-lx)*(x-lx) + (y-ly)*(y-ly)) / live.scale)
+    type Pair = { savedIndex: int; liveIndex: int; distance: float option; candidates: int }
+
+    // Physical centre distance. Unknown geometry follows every known pair.
+    // Ties use saved list order, then live list order. Indices are list offsets.
+    let assign (saved: (float * float) option list) (live: (float * float) option list) =
+        let distance a b =
+            if validPoint a && validPoint b then
+                let ax,ay = a.Value
+                let bx,by = b.Value
+                Some(sqrt ((ax-bx)*(ax-bx) + (ay-by)*(ay-by)))
             else None
-        let ranked = candidates |> List.mapi (fun order c -> c,order,distance c)
-                     |> List.sortBy (fun (c,order,d) -> not (validPoint c.center), Option.defaultValue infinity d, order)
-        match ranked with
+        let pairs =
+            [ for si,a in List.indexed saved do
+                for wi,b in List.indexed live do
+                    yield si,wi,distance a b ]
+            |> List.sortBy (fun (si,wi,d) -> Option.defaultValue infinity d,si,wi)
+        let usedSaved = Collections.Generic.HashSet<int>()
+        let usedLive = Collections.Generic.HashSet<int>()
+        [ for si,wi,d in pairs do
+            if not (usedSaved.Contains si || usedLive.Contains wi) then
+                let candidates = saved.Length - usedSaved.Count
+                usedSaved.Add si |> ignore
+                usedLive.Add wi |> ignore
+                yield {savedIndex=si;liveIndex=wi;distance=d;candidates=candidates} ]
+
+    let choose (live: Observation) (candidates: Candidate list) =
+        match assign (candidates |> List.map (fun c -> c.center)) [live.center] with
+        | pair::_ ->
+            let index = candidates.[pair.savedIndex].index
+            match pair.distance with
+            | Some d -> Selected(index,d,None,false)
+            | None -> Ordered(index,None,None)
         | [] -> Held "no-candidates"
-        | (first,_,d)::rest ->
-            let gap =
-                match d,rest with
-                | Some near,(_,_,Some next)::_ -> Some(next-near)
-                | _ -> None
-            let allKnown = reliable && candidates |> List.forall (fun c -> validPoint c.center)
-            if allKnown && (rest.IsEmpty || gap |> Option.exists (fun g -> g >= minimumGap)) then
-                Selected(first.index,d.Value,gap,false)
-            else
-                // Near distances form a tie band. Prefer a matching desktop
-                // inside that band, then distance and original saved order.
-                // Without live geometry, use known rectangles, desktop, order.
-                let pool =
-                    match d with
-                    | Some near -> ranked |> List.filter (fun (_,_,value) -> value |> Option.exists (fun x -> x-near < minimumGap))
-                    | None -> ranked |> List.filter (fun (c,_,_) -> validPoint c.center = validPoint first.center)
-                let selected,_,value = pool |> List.minBy (fun (c,order,value) ->
-                    not (live.desktop.IsSome && c.desktop=live.desktop), Option.defaultValue infinity value, order)
-                Ordered(selected.index,value,gap)
