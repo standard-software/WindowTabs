@@ -92,6 +92,12 @@ module PerfTrace =
     let mutable private nextHook = 0
     let mutable private hooksChanged = false
     let mutable private hooksDisabled = false
+    let mutable private subscriberCount = 0
+
+    let winEventSubscribers count =
+        lock burstGate (fun () ->
+            subscriberCount <- count
+            hooksChanged <- true)
 
     let registerWinEventBurst counter =
         lock burstGate (fun () ->
@@ -113,8 +119,8 @@ module PerfTrace =
             let counter, _ = kv.Value
             let lo, hi, pidZero, tidZero = counter.Range
             sprintf "hook=%d:min=%d,max=%d,pidZero=%b,tidZero=%b" kv.Key lo hi pidZero tidZero)
-        sprintf "winEvent.hooks reason=%s disabled=%b count=%d [%s]"
-            reason hooksDisabled active.Length (String.concat ";" ranges)
+        sprintf "winEvent.hooks reason=%s disabled=%b count=%d subscribers=%d [%s]"
+            reason hooksDisabled active.Length subscriberCount (String.concat ";" ranges)
 
     // Called via the pump, after registrations already queued by the caller.
     // Later asynchronous group changes produce a fresh inventory at flush.
