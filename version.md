@@ -2,49 +2,31 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.09_next8
+## version ss_2026.10.14
 
+- Close and pin buttons: shown on the active tab only by default.
+  - The previous behaviour can be selected on the Interaction page.
 - Settings dialog: regrouped into Appearance, Color, Interaction, General.
   - Appearance: shape, size, distance from edge, then tab placement.
   - Appearance and Interaction: choices are offered as radio buttons.
   - Number, colour and shortcut fields: frames and heights evened out.
   - Colour codes: always shown with six digits.
-- Close and pin buttons: shown on the active tab only by default.
-  - The previous behaviour can be selected on the Interaction page.
-- The unused Diagnostics page is removed.
-
-## version ss_2026.10.09_next7
-
-- Tabs restored after a restart: windows that share a title are restored too.
-  - A saved tab is matched by its window first, then paired with the nearest window.
-
-## version ss_2026.10.09_next6
-
-- The settings of three features removed long ago are dropped from the settings file.
-  - combineIconsInTaskbar, replaceAltTab, groupWindowsInSwitcher.
-
-## version ss_2026.10.09_next5
-
-- Linking tabs from the menu to a minimised tab group left windows off screen.
-  - The group is restored first, and the linked window stays in front.
-
-## version ss_2026.10.09_next4
-
-- Less wasted work when several windows of one application are in tab groups.
-  - Events of other windows are dropped before they reach a tab group.
-
-## version ss_2026.10.09_next3
-
+- The code of the unused Diagnostics page is removed.
+- Fixed a tab with a special resize frame, such as LINE, ending up off by its
+  frame when it is detached and placed at a position.
 - Applications that draw their own title bar and frame (GTK 3 and the like)
   can now get tabs.
   - Only applications whose exe name is in Settings\FramelessWindow.json.
   - Writing the invisible margin there lines the tab up with the window.
   - The shipped file lists virt-viewer (remote-viewer.exe, virt-viewer.exe).
-
-## version ss_2026.10.09_next2
-
-- Fixed a tab with a special resize frame, such as LINE, ending up off by its
-  frame when it is detached and placed at a position.
+- Less wasted work when several windows of one application are in tab groups.
+  - Events of other windows are dropped before they reach a tab group.
+- Linking tabs from the menu to a minimised tab group left windows off screen.
+  - The group is restored first, and the linked window stays in front.
+- Settings of three features removed long ago are dropped from the file.
+  - combineIconsInTaskbar, replaceAltTab, groupWindowsInSwitcher.
+- Tabs restored after a restart: windows that share a title are restored too.
+  - A saved tab is matched by its window first, then by the nearest window.
 
 ## version ss_2026.10.09
 
