@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.14_next1
+
 ## version ss_2026.10.14
 
 - 閉じるボタンとピン ボタン: 既定ではアクティブなタブだけに表示する。

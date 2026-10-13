@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.14_next1
+
 ## version ss_2026.10.14
 
 - Close and pin buttons: shown on the active tab only by default.
