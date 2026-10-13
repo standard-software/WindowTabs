@@ -758,6 +758,10 @@ type Program() as this =
                                    invalidate()
 #endif
                                    ), 0, 0))
+#if DEBUG
+        let traceDisabled = isDisabledCell.value
+        WinEventPump.post(fun () -> PerfTrace.winEventHookInventory "startup" traceDisabled)
+#endif
 
     member this.desktop : IDesktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -3972,6 +3976,9 @@ type Program() as this =
                 this.isTabMonitoringSuspended <- false
 
             this.refresh()
+#if DEBUG
+            WinEventPump.post(fun () -> PerfTrace.winEventHookInventory (if value then "disabled" else "enabled") value)
+#endif
 
         member x.launchNewWindow(groupHwnd)(invokerHwnd)(processPath) =
             this.startExplicitWindow(processPath, JoinGroup(groupHwnd, invokerHwnd))

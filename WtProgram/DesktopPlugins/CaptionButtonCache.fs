@@ -87,7 +87,11 @@ type CaptionButtonCache() =
 #if DEBUG
         if StallExperiment.noCaptionQuery then () else
 #endif
+#if DEBUG
+        PerfTrace.timeCaptionQuery hwnd <| fun () ->
+#else
         PerfTrace.time "captionButtons.query" <| fun () ->
+#endif
         try
             // Invalidate before querying, including explicit refreshes.
             remove hwnd

@@ -273,11 +273,13 @@ type OS() as this=
         let callbackCount = PerfTrace.winEventCallback
         let filteredCount = PerfTrace.winEventFiltered
         let postedCount = PerfTrace.winEventPosted
+        let burstCount = PerfTrace.WinEventBurstCounter(int min, int max, pid, tid)
 #endif
         new QueuedSubscription(WinEventPump.post, fun active ->
             let callback hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime =
 #if DEBUG
                 callbackCount.Increment()
+                burstCount.Record(event, (idObject = IntPtr.Zero), dwEventThread)
 #endif
                 if idObject = IntPtr.Zero && active() then
                     let accepted =
@@ -300,10 +302,17 @@ type OS() as this=
             let del = WINEVENTPROC(callback)
             let root = GCHandle.Alloc(del)
             let hook = WinUserApi.SetWinEventHook(int(min), int(max), IntPtr.Zero, del, pid, tid, 0)
+#if DEBUG
+            let traceHook = if hook <> IntPtr.Zero then PerfTrace.registerWinEventBurst burstCount else 0
+#endif
             { new IDisposable with
                 member this.Dispose() =
                     // Unhook on the registration thread before releasing the delegate.
-                    if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then root.Free() }) :> IDisposable
+                    if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then
+#if DEBUG
+                        if traceHook <> 0 then PerfTrace.unregisterWinEventBurst traceHook
+#endif
+                        root.Free() }) :> IDisposable
 
     member this.dosDevices = 
         lock dosDevicesLock <| fun() ->
