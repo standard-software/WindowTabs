@@ -2,6 +2,14 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.14_next4
+
+- Taskbar: the buttons of a tab group can be combined into one button.
+  - Turned on with a new setting on the Interaction page (off by default).
+  - Windows shown on every desktop join the button of the desktop in view.
+  - Each window gets its own button back when it leaves the group, when the
+    setting is turned off, and on the next start after a crash.
+
 ## version ss_2026.10.14_next3
 
 - Applications named in Settings\FramelessWindow.json get tabs even when
