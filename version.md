@@ -2,8 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.14_next2
+## version ss_2026.10.14_next3
 
+- Applications named in Settings\FramelessWindow.json get tabs even when
+  their window has no title.
+- Fixed the tooltip of the previous tab staying over a tab without a title.
+- Shipped settings: smaller top inset for virt-viewer.exe.
 - Window event hooks: one per kind of event instead of one per window and
   per tab group, and none while WindowTabs is disabled.
 
