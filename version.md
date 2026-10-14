@@ -2,7 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.14_next1
+## version ss_2026.10.14_next2
+
+- Window event hooks: one per kind of event instead of one per window and
+  per tab group, and none while WindowTabs is disabled.
 
 ## version ss_2026.10.14
 
