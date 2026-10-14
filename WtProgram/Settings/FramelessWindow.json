@@ -1,4 +1,4 @@
 {
   "remote-viewer.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 },
-  "virt-viewer.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }
+  "virt-viewer.exe": { "left": 26, "top": 10, "right": 26, "bottom": 29 }
 }

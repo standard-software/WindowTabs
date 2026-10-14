@@ -30,7 +30,6 @@ type FilterService() as this =
         FramelessWindow.acceptsWindow
             (window.style.ToInt64()) (window.styleEx.ToInt64())
             (framelessApps.Count > 0)
-            (fun () -> not (String.IsNullOrEmpty window.text))
             (fun () ->
                 try framelessApps.Contains(window.pid.exeName)
                 with _ -> false)

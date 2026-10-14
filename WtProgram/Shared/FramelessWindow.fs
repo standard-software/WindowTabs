@@ -6,18 +6,17 @@ module FramelessWindow =
         styleEx &&& 0x00000080L = 0L && // WS_EX_TOOLWINDOW
         style &&& 0x00030000L = 0x00030000L // WS_MINIMIZEBOX | WS_MAXIMIZEBOX
 
-    let isCandidate style styleEx hasTitle =
+    let isCandidate style styleEx =
         styleEx &&& (0x00000080L ||| 0x08000000L) = 0L && // TOOLWINDOW | NOACTIVATE
-        style &&& 0x40000000L = 0L && // WS_CHILD
-        hasTitle
+        style &&& 0x40000000L = 0L // WS_CHILD
 
-    let accepts style styleEx hasTitle listed =
-        isOrdinary style styleEx || (listed && isCandidate style styleEx hasTitle)
+    let accepts style styleEx listed =
+        isOrdinary style styleEx || (listed && isCandidate style styleEx)
 
     // Keep expensive identity queries behind the ordinary and cheap fallback checks.
-    let acceptsWindow style styleEx hasEntries hasTitle isListed =
+    let acceptsWindow style styleEx hasEntries isListed =
         isOrdinary style styleEx ||
-        (hasEntries && isCandidate style styleEx (hasTitle ()) && isListed ())
+        (hasEntries && isCandidate style styleEx && isListed ())
 
     type Insets = { left: int; top: int; right: int; bottom: int }
     let zeroInsets = { left=0; top=0; right=0; bottom=0 }

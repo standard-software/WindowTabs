@@ -90,13 +90,24 @@ if exist "$(TargetDir)Language" (
   echo Removing the old Language folder - languages now ship under Settings\Language...
   rmdir /s /q "$(TargetDir)Language"
 )
-if exist "$(TargetDir)Settings" (
-  echo Removing existing Settings folder...
-  rmdir /s /q "$(TargetDir)Settings"
+if $(ConfigurationName) == Release (
+  if exist "$(TargetDir)Settings" (
+    echo Removing existing Settings folder...
+    rmdir /s /q "$(TargetDir)Settings"
+  )
+) else (
+  if exist "$(TargetDir)Settings\Language" rmdir /s /q "$(TargetDir)Settings\Language"
 )
 mkdir "$(TargetDir)Settings\Language"
-rem Includes VersionFolder.json and FramelessWindow.json.
-copy /y "$(ProjectDir)Settings\*.json" "$(TargetDir)Settings\"
+rem Includes VersionFolder.json and FramelessWindow.json. A Debug build keeps
+rem the ones already in its Settings folder, which may have been edited by hand.
+for %%f in ("$(ProjectDir)Settings\*.json") do (
+  if $(ConfigurationName) == Release (
+    copy /y "%%f" "$(TargetDir)Settings\"
+  ) else if not exist "$(TargetDir)Settings\%%~nxf" (
+    copy /y "%%f" "$(TargetDir)Settings\"
+  )
+)
 copy /y "$(ProjectDir)Settings\Language\*.json" "$(TargetDir)Settings\Language\"
 
 if $(ConfigurationName) == Release (

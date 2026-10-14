@@ -453,6 +453,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
             // BringToFront activates top-level forms; preserve the application's focus.
             _os.windowFromHwnd(tooltipForm.Handle).makeTopMost()
+        else
+            tooltipForm.Visible <- false
 
     member private this.processMouse(mouse) =
         match mouse with
