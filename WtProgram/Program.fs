@@ -667,6 +667,7 @@ type Program() as this =
             // soon as no group is in one.
             this.catchUpDeferredWindowPass()
         catchUpTimer.Start()
+        WinEventHooks.setEnabled (not isDisabledCell.value)
         foregroundHotKeyHook <- Some(
             os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> this.onForegroundChanged()))
         Services.settings.notifyValue HotKeyPolicy.enableCtrlNumberSetting (fun _ -> this.syncHotKeys())
@@ -758,6 +759,10 @@ type Program() as this =
                                    invalidate()
 #endif
                                    ), 0, 0))
+#if DEBUG
+        let traceDisabled = isDisabledCell.value
+        WinEventPump.post(fun () -> PerfTrace.winEventHookInventory "startup" traceDisabled)
+#endif
 
     member this.desktop : IDesktop = Services.desktop
     member this.isTabMonitoringSuspended
@@ -3890,6 +3895,7 @@ type Program() as this =
 
                 // Set disabled state before destroying groups
                 isDisabledCell.set(true)
+                WinEventHooks.setEnabled false
 
                 // Destroy all tab groups to hide them
                 this.desktop.groups.iter <| fun gi ->
@@ -3899,6 +3905,7 @@ type Program() as this =
             else
                 // When enabling, restore saved tab group configuration
                 isDisabledCell.set(false)
+                WinEventHooks.setEnabled true
 
                 // Suspend tab monitoring to prevent auto-grouping during restore
                 this.isTabMonitoringSuspended <- true
@@ -3972,6 +3979,9 @@ type Program() as this =
                 this.isTabMonitoringSuspended <- false
 
             this.refresh()
+#if DEBUG
+            WinEventPump.post(fun () -> PerfTrace.winEventHookInventory (if value then "disabled" else "enabled") value)
+#endif
 
         member x.launchNewWindow(groupHwnd)(invokerHwnd)(processPath) =
             this.startExplicitWindow(processPath, JoinGroup(groupHwnd, invokerHwnd))

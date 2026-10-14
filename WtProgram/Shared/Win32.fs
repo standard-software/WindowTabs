@@ -99,6 +99,102 @@ type ShellEvent =
 type IWindow =
     abstract member hwnd : IntPtr
 
+// Shared native hooks and routing live on WinEventPump, never a UI thread.
+module WinEventHooks =
+    [<DllImport("kernel32.dll")>]
+    extern nativeint private OpenThread(uint32 access, bool inheritHandle, uint32 threadId)
+    [<DllImport("kernel32.dll")>]
+    extern uint32 private GetProcessIdOfThread(nativeint handle)
+    [<DllImport("kernel32.dll")>]
+    extern bool private CloseHandle(nativeint handle)
+
+    let private gate = WinEventDeliveryGate()
+    let private sourcePid (evt: HubEvent) =
+        // The source is the event thread, not necessarily the window owner
+        // (notably console hosting). The common case needs only one query.
+        let mutable pid = 0
+        let tid = WinUserApi.GetWindowThreadProcessId(evt.Hwnd, &pid)
+        if tid <> 0 && tid = evt.ThreadId then pid
+        else
+            let handle = OpenThread(0x0800u, false, uint32 evt.ThreadId)
+            if handle = IntPtr.Zero then 0
+            else
+                try int (GetProcessIdOfThread handle)
+                finally CloseHandle handle |> ignore
+
+    let private register number dispatch =
+#if DEBUG
+        let burst = PerfTrace.WinEventBurstCounter(number, number, 0, 0)
+        let callbackCount = PerfTrace.winEventCallback
+#endif
+        let callback hook event hwnd idObject idChild tid tick =
+#if DEBUG
+            callbackCount.Increment()
+            burst.Record(event, (idObject = IntPtr.Zero), tid)
+#endif
+            if idObject = IntPtr.Zero && gate.IsCurrent(gate.Stamp) then
+                dispatch { Hook = hook; Number = event; Hwnd = hwnd; ObjectId = idObject
+                           ChildId = idChild; ThreadId = tid; Time = tick }
+        let del = WINEVENTPROC(callback)
+        let root = GCHandle.Alloc(del)
+        // Own-process reorder/foreground events are used by strip/guard repair.
+        let hook = WinUserApi.SetWinEventHook(number, number, IntPtr.Zero, del, 0, 0, 0)
+#if DEBUG
+        let traceHook = if hook <> IntPtr.Zero then PerfTrace.registerWinEventBurst burst else 0
+#endif
+        fun () ->
+            if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then
+#if DEBUG
+                if traceHook <> 0 then PerfTrace.unregisterWinEventBurst traceHook
+#endif
+                root.Free()
+                true
+            else false
+
+    let private hub = WinEventHub(register, sourcePid)
+    let private traceSubscribers() =
+#if DEBUG
+        PerfTrace.winEventSubscribers hub.SubscriptionCount
+#else
+        ()
+#endif
+
+    let setEnabled enabled =
+        // Cancel already-posted work immediately on the calling UI thread.
+        gate.SetEnabled enabled
+        WinEventPump.post(fun () -> hub.SetEnabled enabled; traceSubscribers())
+
+    let subscribe minEvent maxEvent pid tid target beforePost proc =
+        let receiver = InvokerService.invoker
+        new QueuedSubscription(WinEventPump.post, fun active ->
+            let deliver (evt: HubEvent) =
+                let stamp = gate.Stamp
+                if active() && gate.IsCurrent stamp then
+                    let accepted =
+                        match beforePost with
+                        | None -> true
+                        | Some filter -> filter evt.Hwnd
+                    if accepted then
+                        let posted = receiver.tryAsyncInvoke(fun () ->
+                            if active() && gate.IsCurrent stamp then
+                                proc evt.Hook evt.Number evt.Hwnd evt.ObjectId evt.ChildId evt.ThreadId evt.Time)
+#if DEBUG
+                        if posted then PerfTrace.winEventPosted.Increment()
+#else
+                        posted |> ignore
+#endif
+#if DEBUG
+                    else PerfTrace.winEventFiltered.Increment()
+#endif
+            let subscription = hub.Subscribe {
+                Min = minEvent; Max = maxEvent; Pid = pid; Tid = tid; Hwnd = target
+                Active = active; Deliver = deliver }
+            traceSubscribers()
+            { new IDisposable with
+                member _.Dispose() =
+                    subscription.Dispose()
+                    traceSubscribers() }) :> IDisposable
+
 type OS() as this= 
     static let dosDevicesLock = obj()
     static let mutable cachedDosDevices = None
@@ -264,46 +360,10 @@ type OS() as this=
         WinUserApi.EndDeferWindowPos(!hdswp).ignore
 
 
-    // Runs on WinEventPump before posting: use only cheap, pure comparisons
-    // of callback arguments and immutable values captured at registration.
-    member this.setWinEventHook(min:WinEvent, max:WinEvent, proc, pid, tid, ?beforePost: IntPtr -> bool) =
-        let receiver = InvokerService.invoker
-#if DEBUG
-        // Resolve static counters here, never for the first time in the callback.
-        let callbackCount = PerfTrace.winEventCallback
-        let filteredCount = PerfTrace.winEventFiltered
-        let postedCount = PerfTrace.winEventPosted
-#endif
-        new QueuedSubscription(WinEventPump.post, fun active ->
-            let callback hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime =
-#if DEBUG
-                callbackCount.Increment()
-#endif
-                if idObject = IntPtr.Zero && active() then
-                    let accepted =
-                        match beforePost with
-                        | None -> true
-                        | Some filter -> filter hwnd
-                    if accepted then
-                        let posted = receiver.tryAsyncInvoke(fun () ->
-                            if active() then
-                                proc hWinEventHook event hwnd idObject idChild dwEventThread dwmsEventTime)
-#if DEBUG
-                        if posted then postedCount.Increment()
-#else
-                        posted |> ignore
-#endif
-#if DEBUG
-                    else
-                        filteredCount.Increment()
-#endif
-            let del = WINEVENTPROC(callback)
-            let root = GCHandle.Alloc(del)
-            let hook = WinUserApi.SetWinEventHook(int(min), int(max), IntPtr.Zero, del, pid, tid, 0)
-            { new IDisposable with
-                member this.Dispose() =
-                    // Unhook on the registration thread before releasing the delegate.
-                    if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then root.Free() }) :> IDisposable
+    // targetHwnd exposes the existing equality filter to the hub's index.
+    member this.setWinEventHook(min:WinEvent, max:WinEvent, proc, pid, tid,
+                                ?beforePost: IntPtr -> bool, ?targetHwnd: IntPtr) =
+        WinEventHooks.subscribe (int min) (int max) pid tid targetHwnd beforePost proc
 
     member this.dosDevices = 
         lock dosDevicesLock <| fun() ->
@@ -716,7 +776,7 @@ and
             //console winevents come from CONHOST.exe on windows 7, a different
             //pid/tid than the window owner so can't filter on pid tid
             if this.isConsoleWindow then 0,0 else this.pid.pid, this.tid
-        os.setWinEventHook(event, event, winEventProc, pid, tid, beforePost = (fun eventHwnd -> eventHwnd = target))
+        os.setWinEventHook(event, event, winEventProc, pid, tid, beforePost = (fun eventHwnd -> eventHwnd = target), targetHwnd = target)
 
     member this.trackMouseLeave() =
         let mutable tme = TRACKMOUSEEVENT()
