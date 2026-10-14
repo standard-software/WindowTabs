@@ -590,6 +590,7 @@ type Settings(isStandAlone) as this =
                         ticket = settingsJson.getString("Ticket")
                         runAtStartup = settingsJson.getBool("RunAtStartup").def(hasExistingSettings.not)
                         hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
+                        groupTaskbarButtons = settingsJson.getBool("GroupTaskbarButtons").def(false)
                         enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(hasExistingSettings.not)
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
@@ -672,6 +673,7 @@ type Settings(isStandAlone) as this =
                         ticket = None
                         runAtStartup = false
                         hideInactiveTabs = false
+                        groupTaskbarButtons = false
                         enableTabbingByDefault = true
                         enableCtrlNumberHotKey = false
                         enableAltNumberHotKey = false
@@ -715,6 +717,7 @@ type Settings(isStandAlone) as this =
             settings.ticket.iter <| fun ticket -> settingsJson.setString("Ticket", ticket)
             settingsJson.setBool("RunAtStartup", settings.runAtStartup)
             settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
+            settingsJson.setBool("GroupTaskbarButtons", settings.groupTaskbarButtons)
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)

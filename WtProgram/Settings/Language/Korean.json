@@ -70,6 +70,7 @@
   "Interaction": "상호 작용",
   "General": "일반",
   "RunAtStartup": "시작 시 WindowTabs 실행",
+  "GroupTaskbarButtons": "탭 그룹의 작업 표시줄 단추 합치기",
   "HideInactiveTabs": "비활성 창의 탭을 흐리게 표시",
   "IsTabbingEnabledForAllProcessesByDefault": "기본적으로 모든 프로그램에서 탭 사용",
   "EnableCtrlNumberHotKey": "Ctrl+1, ...Ctrl+9로 탭 활성화",

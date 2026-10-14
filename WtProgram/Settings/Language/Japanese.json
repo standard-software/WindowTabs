@@ -70,6 +70,7 @@
   "Interaction": "操作",
   "General": "全般",
   "RunAtStartup": "WindowTabs をスタートアップ時に起動",
+  "GroupTaskbarButtons": "タブグループのタスクバーボタンをまとめる",
   "HideInactiveTabs": "非アクティブなグループのタブを半透明にする",
   "IsTabbingEnabledForAllProcessesByDefault": "全てのプログラムのタブを既定で有効にする",
   "EnableCtrlNumberHotKey": "Ctrl+1...Ctrl+9 でタブをアクティブにする",

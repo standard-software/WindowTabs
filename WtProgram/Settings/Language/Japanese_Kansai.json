@@ -70,6 +70,7 @@
   "Interaction": "操作やで",
   "General": "全般やで",
   "RunAtStartup": "パソコン起動したらWindowTabs立ち上げるで",
+  "GroupTaskbarButtons": "タブグループのタスクバーボタンをまとめるで",
   "HideInactiveTabs": "使ってへんウィンドウのタブ薄くするで",
   "IsTabbingEnabledForAllProcessesByDefault": "全部のプログラムでタブ使うで",
   "EnableCtrlNumberHotKey": "Ctrl+1...+9 でタブ切り替えるで",

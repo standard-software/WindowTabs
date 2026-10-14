@@ -31,6 +31,7 @@ type SettingsRec = {
     tabAppearance: TabAppearanceInfo
     runAtStartup: bool
     hideInactiveTabs: bool
+    groupTaskbarButtons: bool
     enableTabbingByDefault: bool
     enableCtrlNumberHotKey: bool
     // Alt+1 .. Alt+9 activate tabs. Exclusive with the Ctrl setting above in

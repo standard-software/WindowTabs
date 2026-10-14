@@ -112,6 +112,7 @@ type GeneralView() =
         let fields = List2([
             ("RunAtStartup", settingsCheckbox "runAtStartup")
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
+            ("GroupTaskbarButtons", settingsCheckbox "groupTaskbarButtons")
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")

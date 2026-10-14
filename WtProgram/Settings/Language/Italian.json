@@ -70,6 +70,7 @@
   "Interaction": "Interazione",
   "General": "Generale",
   "RunAtStartup": "Esegui WindowTabs all'avvio",
+  "GroupTaskbarButtons": "Combina i pulsanti della barra delle applicazioni per i gruppi di schede",
   "HideInactiveTabs": "Dissolvi le schede delle finestre inattive",
   "IsTabbingEnabledForAllProcessesByDefault": "Abilita le schede per tutti i programmi per impostazione predefinita",
   "EnableCtrlNumberHotKey": "Abilita Ctrl+1, ...Ctrl+9 per attivare la scheda",

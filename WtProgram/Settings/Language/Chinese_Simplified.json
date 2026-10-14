@@ -70,6 +70,7 @@
   "Interaction": "交互",
   "General": "常规",
   "RunAtStartup": "开机时启动 WindowTabs",
+  "GroupTaskbarButtons": "合并标签组的任务栏按钮",
   "HideInactiveTabs": "将非活动窗口的标签页变为半透明",
   "IsTabbingEnabledForAllProcessesByDefault": "为所有程序启用标签页",
   "EnableCtrlNumberHotKey": "使用 Ctrl+1...+9 切换标签页",

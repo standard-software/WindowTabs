@@ -163,6 +163,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Drawing.fs" />
     <Compile Include="Shared/Sprite.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
+    <Compile Include="Shared/TaskbarAppIdPolicy.fs" />
     <Compile Include="Shared/TabOrder.fs" />
     <Compile Include="Shared/LinkGroupLayout.fs" />
     <Compile Include="Shared/LinkGroupTabs.fs" />
@@ -175,6 +176,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Regroup.fs" />
     <Compile Include="Shared/VirtualDesktopIntegrity.fs" />
     <Compile Include="Shared/VirtualDesktopGroups.fs" />
+    <Compile Include="Shared/TaskbarAppId.fs" />
     <Compile Include="Shared/TabGroupHeader.fs" />
     <Compile Include="Shared/VirtualDesktopReader.fs" />
     <Compile Include="Shared/AppPathSettings.fs" />
@@ -293,6 +295,7 @@ if $(ConfigurationName) == Release (
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Security" />
     <Reference Include="UIAutomationClient" />
     <Reference Include="UIAutomationTypes" />
     <Reference Include="WindowsBase" />

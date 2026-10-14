@@ -291,6 +291,9 @@ type Program() as this =
             with
             | _ -> false
         isDisabledCell.set(savedDisabledState)
+        // Disabled, no startup restore and no desktop pass will hand the
+        // taskbar recovery list over: it is handled now.
+        if savedDisabledState then TaskbarAppId.recoverNow()
 
     let keepAliveCell = Cell.create(List2())
     let keepAlive (obj:obj) =
@@ -702,8 +705,10 @@ type Program() as this =
             with _ -> ()
         titleSyncTimer.Tick.Add <| fun _ ->
             try
-                if inShutdown.value.not && isDisabledCell.value.not then
-                    this.syncWindowTitles()
+                if inShutdown.value.not then
+                    if isDisabledCell.value then
+                        TaskbarAppId.observeDisabled(fun () -> os.windowsInZorder.list |> List.map (fun w -> w.hwnd))
+                    else this.syncWindowTitles()
             with _ -> ()
         titleSyncTimer.Start()
         // Virtual desktops: a look once a second, and one as soon as the shell
@@ -2859,6 +2864,45 @@ type Program() as this =
             if desktopReader.Request({ grouped = grouped; windows = windows }) then
                 pendingDesktopWindows.Clear()
 
+    /// Taskbar buttons per group and desktop, from the reading just accepted.
+    /// Off and with nothing written, this is one settings read. Nothing is
+    /// handed over while tab monitoring is suspended (startup restore, desktop
+    /// transfers), so the settled groups are handled together afterwards.
+    member private this.publishTaskbar(reading: (Guid option * Map<IntPtr, VirtualDesktopGroups.WindowRead> * Set<IntPtr> * Set<IntPtr>) option) =
+        try
+            let enabled = unbox<bool>(Services.settings.getValue "groupTaskbarButtons")
+            if TaskbarAppIdPolicy.shouldPass enabled (TaskbarAppId.isHolding()) this.isTabMonitoringSuspended then
+                // On-screen order: the mirror misses reorders by pin/unpin/align.
+                let groups =
+                    this.desktop.groups.list |> List.map (fun g ->
+                        g.hwnd,
+                        SavedSession.mergedOrder g.visualOrderThreadSafe.list g.visualOrder.list
+                        |> List.filter (fun h -> g.windows.contains((=) h)))
+                let current, placeOf, excluded, shared =
+                    match reading with
+                    | None -> Some Guid.Empty, (fun _ -> TaskbarAppIdPolicy.OnDesktop Guid.Empty), Set.empty, Set.empty
+                    | Some(current, reads, excluded, shared) ->
+                        let here (r: VirtualDesktopGroups.WindowRead) =
+                            match r.presence with
+                            | VirtualDesktopGroups.Here -> Some true
+                            | VirtualDesktopGroups.Away -> Some false
+                            | VirtualDesktopGroups.Unsure -> None
+                        current,
+                        (fun h ->
+                            reads |> Map.tryFind h
+                            |> Option.map (fun r -> here r, r.desktop)
+                            |> TaskbarAppIdPolicy.placeOf current),
+                        excluded, shared
+                TaskbarAppId.publish
+                    { enabled = enabled
+                      groups = groups
+                      excluded = excluded
+                      shared = shared
+                      shown = this.desktop.groups.list |> List.filter (fun g -> g.isDesktopShown) |> List.map (fun g -> g.hwnd) |> Set.ofList
+                      places = os.windowsInZorder.list |> List.map (fun w -> w.hwnd, placeOf w.hwnd) |> Map.ofList
+                      current = current }
+        with _ -> ()
+
     /// A completed publication is consumed once, on the main thread. Keep
     /// derived evidence and group changes here; group threads see Live only
     /// after the registry checks and trust rules have accepted the raw read.
@@ -2870,7 +2914,7 @@ type Program() as this =
                 lastDesktopGeneration <- publication.generation
                 if not this.canReadDesktops then () else
                 let sample = publication.value
-                if not sample.supported then completedReading <- Some sample else
+                if not sample.supported then (completedReading <- Some sample; this.publishTaskbar(None)) else
                 let groups = this.desktop.groups.list
                 let members = groups |> List.collect (fun g -> g.windows.list) |> List.distinct
                 if Set.ofList members <> sample.request.grouped ||
@@ -2938,6 +2982,7 @@ type Program() as this =
                     if shown && not g.isDesktopShown then
                         g.windows.iter (fun h -> if several.Contains h then this.publishTabState(g, h))
                 this.refreshDesktopStrips(None)
+                this.publishTaskbar(Some(current, readMap, Set.difference several shared, shared))
                 // Groups for the windows that are here and have none here.
                 match current with
                 | Some c when not this.isTabMonitoringSuspended && not this.desktop.isDragging &&
@@ -3659,6 +3704,8 @@ type Program() as this =
             // applications have started tearing down their windows.
             if inSessionEnd.value.not then
                 this.saveTabGroupsToSettings()
+                // Bounded: what does not finish stays listed for the next start.
+                TaskbarAppId.releaseAndWait "exit" 2000
             inShutdown.set(true)
 #if DEBUG
             DesktopManagerFormState.log "shutdown: saved settings; removing grouped windows"
@@ -3896,6 +3943,8 @@ type Program() as this =
                 // Set disabled state before destroying groups
                 isDisabledCell.set(true)
                 WinEventHooks.setEnabled false
+                // No desktop pass runs while disabled; give the buttons back now.
+                TaskbarAppId.release "disable"
 
                 // Destroy all tab groups to hide them
                 this.desktop.groups.iter <| fun gi ->
@@ -4178,6 +4227,7 @@ let main argv =
             c.DeviceDpi.ignore
         with _ -> ()
 
+    TaskbarAppId.startRecovery()
     let program = Program()
     program.run(List2<obj>([
         CaptionDragPlugin()

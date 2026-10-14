@@ -70,6 +70,7 @@
   "Interaction": "Interaksi",
   "General": "Umum",
   "RunAtStartup": "Jalankan WindowTabs saat startup",
+  "GroupTaskbarButtons": "Gabungkan tombol bilah tugas untuk grup tab",
   "HideInactiveTabs": "Pudarkan tab pada jendela yang tidak aktif",
   "IsTabbingEnabledForAllProcessesByDefault": "Aktifkan tab untuk semua program secara default",
   "EnableCtrlNumberHotKey": "Aktifkan Ctrl+1, ...Ctrl+9 untuk mengaktifkan tab",

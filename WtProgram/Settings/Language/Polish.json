@@ -70,6 +70,7 @@
   "Interaction": "Interakcja",
   "General": "Ogólne",
   "RunAtStartup": "Uruchamiaj WindowTabs przy starcie systemu",
+  "GroupTaskbarButtons": "Łącz przyciski paska zadań dla grup kart",
   "HideInactiveTabs": "Wygaszaj karty nieaktywnych okien",
   "IsTabbingEnabledForAllProcessesByDefault": "Domyślnie włącz karty dla wszystkich programów",
   "EnableCtrlNumberHotKey": "Włącz Ctrl+1, ...Ctrl+9 do aktywacji kart",

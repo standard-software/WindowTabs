@@ -70,6 +70,7 @@
   "Interaction": "Interaction",
   "General": "General",
   "RunAtStartup": "Run WindowTabs at startup",
+  "GroupTaskbarButtons": "Combine taskbar buttons for tab groups",
   "HideInactiveTabs": "Fade out tabs on inactive windows",
   "IsTabbingEnabledForAllProcessesByDefault": "Enable tabs for all programs by default",
   "EnableCtrlNumberHotKey": "Enable Ctrl+1, ...Ctrl+9 to activate tab",

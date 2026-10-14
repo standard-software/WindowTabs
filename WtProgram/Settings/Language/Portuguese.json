@@ -70,6 +70,7 @@
   "Interaction": "Interação",
   "General": "Geral",
   "RunAtStartup": "Executar o WindowTabs na inicialização",
+  "GroupTaskbarButtons": "Combinar botões da barra de tarefas por grupo de abas",
   "HideInactiveTabs": "Esmaecer guias em janelas inativas",
   "IsTabbingEnabledForAllProcessesByDefault": "Habilitar guias para todos os programas por padrão",
   "EnableCtrlNumberHotKey": "Habilitar Ctrl+1, ...Ctrl+9 para ativar guias",

@@ -70,6 +70,7 @@
   "Interaction": "Tương tác",
   "General": "Chung",
   "RunAtStartup": "Chạy WindowTabs khi khởi động",
+  "GroupTaskbarButtons": "Gộp các nút trên thanh tác vụ theo nhóm thẻ",
   "HideInactiveTabs": "Làm mờ thẻ trên cửa sổ không hoạt động",
   "IsTabbingEnabledForAllProcessesByDefault": "Bật thẻ cho tất cả chương trình theo mặc định",
   "EnableCtrlNumberHotKey": "Bật Ctrl+1, ...Ctrl+9 để kích hoạt thẻ",
