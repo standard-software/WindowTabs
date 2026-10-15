@@ -2,6 +2,14 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.14_next5
+
+- Fixed: since ss_2026.10.03, new windows could get no tab when
+  WindowTabs could not read their virtual desktop.
+  - Happened on a PC where the virtual desktop was never switched.
+  - New windows now get a tab unless they are known to be on another
+    desktop.
+
 ## version ss_2026.10.14_next4
 
 - Taskbar: the buttons of a tab group can be combined into one button.
