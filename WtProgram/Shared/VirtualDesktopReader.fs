@@ -74,8 +74,35 @@ module VirtualDesktopReader =
         registryAfter: Guid option
         reads: Map<IntPtr, VirtualDesktopGroups.WindowRead>
         desktopResults: Map<IntPtr, int * Guid>
+        cloak: Map<IntPtr, int option>
         onCurrent: Map<IntPtr, bool option>
     }
+
+    /// Only for a window with no group. None asks for a bounded first read.
+    let firstTabDecision elapsedMs supported (current: Guid option) (desktop: Guid option) onCurrent cloak hasReading =
+        if not supported then Some true
+        elif onCurrent = Some false ||
+             (cloak |> Option.exists (fun c -> c &&& 2 <> 0)) ||
+             // Shared windows may report their origin or an unlisted desktop.
+             (onCurrent.IsNone && current.IsSome && desktop.IsSome && current <> desktop) then Some false
+        elif hasReading || elapsedMs >= 1000L then Some true
+        else None
+
+    /// Monotonic deadlines are retried by the existing desktop pass timer.
+    type FirstTabWaiters() =
+        let mutable waiting: Map<IntPtr, int64> = Map.empty
+        member _.Elapsed(hwnd, now) =
+            match waiting.TryFind hwnd with
+            | Some started -> now - started
+            | None -> waiting <- waiting.Add(hwnd, now); 0L
+        member _.Remove(hwnd) = waiting <- waiting.Remove hwnd
+        member _.Windows = waiting |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+        member _.HasReading(reading: Reading) =
+            waiting |> Map.exists (fun hwnd _ ->
+                not reading.supported || reading.onCurrent.ContainsKey hwnd)
+        member _.Expired(now) =
+            waiting |> Map.toList |> List.choose (fun (h, started) ->
+                if now - started >= 1000L then Some h else None)
 
     /// Main-thread waiters are separate from periodic refresh requests. Even
     /// a failed COM answer (Some None in onCurrent) completes a wait once.

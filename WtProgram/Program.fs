@@ -483,11 +483,17 @@ type Program() as this =
     let mutable observedStripDesktop : Guid option = None
     let pendingDesktopWindows = System.Collections.Generic.HashSet<IntPtr>()
     let waitingDesktopWindows = VirtualDesktopReader.WaitingWindows()
+    let firstTabWaiters = VirtualDesktopReader.FirstTabWaiters()
     let mutable lastDesktopGeneration = 0L
     // OS caches and the thread-static COM manager belong to this reader only.
     let readerOS = lazy(OS())
     let mutable readerDesktop : Guid option = None
     let readDesktops (request: VirtualDesktopReader.Request) : VirtualDesktopReader.Reading =
+#if DEBUG
+        // Simulate a reader that never publishes, without blocking the UI thread.
+        if Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_VD_NO_READING") = "1" then
+            failwith "Injected desktop reading failure"
+#endif
         let supported = VirtualDesktopHelper.IsSupported
         let listed =
             match VirtualDesktopHelper.TryReadDesktopIds() with
@@ -495,6 +501,9 @@ type Program() as this =
             | ids -> Some(List.ofArray ids)
         let registry () =
             let mutable id = Guid.Empty
+#if DEBUG
+            if Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_VD_NO_CURRENT") = "1" then None else
+#endif
             if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
         let before = registry()
         if readerDesktop.IsSome && before <> readerDesktop then VirtualDesktopGroups.Live.invalidate()
@@ -506,20 +515,29 @@ type Program() as this =
             // used it, while deriving Presence from the same single COM call.
             let onCurrent = try window.onCurrentVirtualDesktopOrNone with _ -> None
             let cloak = try window.cloakedValue with _ -> None
+#if DEBUG
+            let unknown =
+                let exe = Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_VD_UNKNOWN_EXE")
+                not (String.IsNullOrWhiteSpace exe) &&
+                (try String.Equals(window.pid.exeName, exe, StringComparison.OrdinalIgnoreCase) with _ -> false)
+            let onCurrent = if unknown then None else onCurrent
+            let cloak = if unknown then None else cloak
+#endif
             let presence = VirtualDesktopGroups.presence onCurrent cloak
             let hr, id = try window.virtualDesktopIdWithHr with _ -> (-2, Guid.Empty)
             let reading: VirtualDesktopGroups.WindowRead =
                 { hwnd = hwnd; presence = presence
                   desktop = if hr = 0 && id <> Guid.Empty then Some id else None }
-            reading, (hr, id), onCurrent)
+            reading, (hr, id), onCurrent, cloak)
         let after = registry()
         if before <> after then VirtualDesktopGroups.Live.invalidate()
         readerDesktop <- after
         { request = request; readAt = readAt; supported = supported
           listed = listed; registryBefore = before; registryAfter = after
-          reads = samples |> List.map (fun (r, _, _) -> r.hwnd, r) |> Map.ofList
-          desktopResults = samples |> List.map (fun (r, result, _) -> r.hwnd, result) |> Map.ofList
-          onCurrent = samples |> List.map (fun (r, _, onCurrent) -> r.hwnd, onCurrent) |> Map.ofList }
+          reads = samples |> List.map (fun (r, _, _, _) -> r.hwnd, r) |> Map.ofList
+          desktopResults = samples |> List.map (fun (r, result, _, _) -> r.hwnd, result) |> Map.ofList
+          cloak = samples |> List.map (fun (r, _, _, cloak) -> r.hwnd, cloak) |> Map.ofList
+          onCurrent = samples |> List.map (fun (r, _, onCurrent, _) -> r.hwnd, onCurrent) |> Map.ofList }
     let desktopReader = new VirtualDesktopReader.Reader<_, _>(readDesktops,
         (fun () -> invoker.asyncInvoke(fun () -> this.applyDesktopReading())),
         (fun () -> VirtualDesktopHelper.ReleaseCurrentThread()))
@@ -1745,7 +1763,7 @@ type Program() as this =
         let mayJoin =
             not (this.isInGroup(window.hwnd)) ||
             VirtualDesktopGroups.Live.mayDuplicate (VirtualDesktopGroups.Live.snapshot()) window.hwnd
-        if wantsGroup && mayJoin && this.isTabbableWindow(window) && this.isOnDesktopFromReader(window.hwnd) then
+        if wantsGroup && mayJoin && this.isTabbableWindow(window) && this.canAddFirstTab(window.hwnd) then
             if groupTraceCount < 60 then
                 groupTraceCount <- groupTraceCount + 1
                 DragTrace.log (fun () -> sprintf "ensureWindowIsGrouped: hwnd=%X exe=%s" (window.hwnd.ToInt64()) (try window.pid.exeName with _ -> "?"))
@@ -2834,8 +2852,32 @@ type Program() as this =
                             if suspension = tabMonitoringSuspendGeneration then program.resumeTabMonitoring()
         | _ -> ()
 
-    /// Ungrouped candidates are read on demand by the same background reader.
-    /// An unseen window waits for a reading rather than being grouped blindly.
+    /// Ungrouped candidates wait briefly for the same background reader.
+    /// Relax uncertainty only at the new-tab entrance; existing members keep
+    /// the strict policy, including dropped tabs that might create a copy.
+    member private this.canAddFirstTab(hwnd: IntPtr) =
+        if this.isInGroup(hwnd) then this.isOnDesktopFromReader(hwnd) else
+        let elapsed = firstTabWaiters.Elapsed(hwnd, monotonic.ElapsedMilliseconds)
+        pendingDesktopWindows.Add(hwnd) |> ignore
+        let sample =
+            desktopReader.Latest |> Option.map (fun p -> p.value)
+            |> Option.filter (fun r ->
+                not r.supported ||
+                (VirtualDesktopGroups.Live.accepts r.readAt && r.registryBefore = r.registryAfter))
+        let supported = sample |> Option.map (fun r -> r.supported) |> Option.defaultValue true
+        let reading = sample |> Option.bind (fun r -> r.reads.TryFind hwnd)
+        let onCurrent = sample |> Option.bind (fun r -> r.onCurrent.TryFind hwnd) |> Option.flatten
+        let cloak = sample |> Option.bind (fun r -> r.cloak.TryFind hwnd) |> Option.flatten
+        let state = VirtualDesktopGroups.Live.snapshot()
+        let current =
+            match sample with
+            | Some r when r.readAt = state.readAt -> state.current
+            | _ -> None
+        let desktop = reading |> Option.bind (fun r -> r.desktop)
+        match VirtualDesktopReader.firstTabDecision elapsed supported current desktop onCurrent cloak reading.IsSome with
+        | Some allowed -> firstTabWaiters.Remove(hwnd); allowed
+        | None -> this.scheduleDesktopPass(15); false
+
     member private this.isOnDesktopFromReader(hwnd: IntPtr) =
         pendingDesktopWindows.Add(hwnd) |> ignore
         let waitForReading () =
@@ -2858,9 +2900,15 @@ type Program() as this =
     /// Refresh native strip visibility, then submit handles for background COM reads.
     member this.desktopPass() =
         if this.canReadDesktops then
+            // Retry even when the reader is hung or every publication is rejected.
+            // Keep deadlines through the scan, then discard ineligible/dead waiters.
+            let expired = firstTabWaiters.Expired(monotonic.ElapsedMilliseconds)
+            if not expired.IsEmpty then
+                this.updateAppWindows()
+                expired |> List.iter firstTabWaiters.Remove
             this.refreshDesktopStrips(None)
             let grouped = this.desktop.groups.list |> List.collect (fun g -> g.windows.list) |> Set.ofList
-            let windows = Set.unionMany [grouped; Set.ofSeq pendingDesktopWindows; waitingDesktopWindows.Windows] |> Set.toList
+            let windows = Set.unionMany [grouped; Set.ofSeq pendingDesktopWindows; waitingDesktopWindows.Windows; firstTabWaiters.Windows] |> Set.toList
             if desktopReader.Request({ grouped = grouped; windows = windows }) then
                 pendingDesktopWindows.Clear()
 
@@ -2908,13 +2956,18 @@ type Program() as this =
     /// after the registry checks and trust rules have accepted the raw read.
     member private this.applyDesktopReading() = PerfTrace.time "applyDesktopReading" <| fun () ->
         let mutable completedReading: VirtualDesktopReader.Reading option = None
+        let mutable firstTabsReady = false
         try
             match desktopReader.Latest with
             | Some publication when publication.generation > lastDesktopGeneration ->
                 lastDesktopGeneration <- publication.generation
                 if not this.canReadDesktops then () else
                 let sample = publication.value
-                if not sample.supported then (completedReading <- Some sample; this.publishTaskbar(None)) else
+                if not sample.supported then
+                    completedReading <- Some sample
+                    firstTabsReady <- firstTabWaiters.HasReading(sample)
+                    this.publishTaskbar(None)
+                else
                 let groups = this.desktop.groups.list
                 let members = groups |> List.collect (fun g -> g.windows.list) |> List.distinct
                 if Set.ofList members <> sample.request.grouped ||
@@ -2948,6 +3001,7 @@ type Program() as this =
                     |> List.filter (fun h -> (groups |> List.filter (fun g -> g.windows.contains((=) h))).Length > 1)
                     |> Set.ofList
                 VirtualDesktopGroups.Live.publish shared several current listed readAt readMap desktopResults
+                firstTabsReady <- firstTabWaiters.HasReading(sample)
                 let keyed = groups |> List.mapi (fun i g -> i, g) |> Map.ofList
                 let stateOf (i: int) (g: IGroup) : VirtualDesktopGroups.GroupState =
                     { key = i
@@ -3031,11 +3085,15 @@ type Program() as this =
             VirtualDesktopTrace.log (fun () -> sprintf "desktop pass failed: %s" ex.Message)
         // Reading completion, rather than another shell event or the window
         // scan timer, resumes candidates that were waiting for their first read.
-        match completedReading with
-        | Some sample when this.canReadDesktops &&
-                           waitingDesktopWindows.TakeReady(sample, fun hwnd -> this.isInGroup(hwnd)) ->
+        let strictWaitersReady =
+            match completedReading with
+            | Some sample when this.canReadDesktops ->
+                waitingDesktopWindows.TakeReady(sample, fun hwnd -> this.isInGroup(hwnd))
+            | _ -> false
+        // First-tab completion does not require a known current desktop and
+        // does not join the strict waiters' immediate re-request loop below.
+        if this.canReadDesktops && (strictWaitersReady || firstTabsReady) then
             this.updateAppWindows()
-        | _ -> ()
         // A waiter may have arrived after the in-flight request was captured.
         // Submit the remaining waiters now instead of waiting for the timer.
         if this.canReadDesktops && not waitingDesktopWindows.Windows.IsEmpty then
