@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.17_next1
+
 ## version ss_2026.10.17
 
 - タスクバー: タブグループのボタンを 1 つにまとめられるようにした。

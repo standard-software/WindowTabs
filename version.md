@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next1
+
 ## version ss_2026.10.17
 
 - Taskbar: the buttons of a tab group can be combined into one button.
