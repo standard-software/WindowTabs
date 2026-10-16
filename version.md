@@ -2,30 +2,25 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.14_next5
-
-- Fixed: since ss_2026.10.03, new windows could get no tab when
-  WindowTabs could not read their virtual desktop.
-  - Happened on a PC where the virtual desktop was never switched.
-  - New windows now get a tab unless they are known to be on another
-    desktop.
-
-## version ss_2026.10.14_next4
+## version ss_2026.10.17
 
 - Taskbar: the buttons of a tab group can be combined into one button.
-  - Turned on with a new setting on the Interaction page (off by default).
+  - Turned on with a new setting on the General page (off by default).
   - Windows shown on every desktop join the button of the desktop in view.
   - Each window gets its own button back when it leaves the group, when the
     setting is turned off, and on the next start after a crash.
-
-## version ss_2026.10.14_next3
-
-- Applications named in Settings\FramelessWindow.json get tabs even when
-  their window has no title.
-- Fixed the tooltip of the previous tab staying over a tab without a title.
+- Windows without a title
+  - Applications named in Settings\FramelessWindow.json get tabs even when
+    their window has no title.
+  - Fixed the tooltip of the previous tab staying over a tab without a title.
 - Shipped settings: smaller top inset for virt-viewer.exe.
 - Window event hooks: one per kind of event instead of one per window and
   per tab group, and none while WindowTabs is disabled.
+- Fixed: windows could get no tab when their virtual desktop could not be
+  identified.
+  - Since ss_2026.10.03.
+  - Happened on a PC where the virtual desktop was never switched.
+  - Windows now get a tab unless they are known to be on another desktop.
 
 ## version ss_2026.10.14
 

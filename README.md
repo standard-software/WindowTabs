@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.14_next5**
+Latest version: **ss_2026.10.17**
 
 See [version.md](version.md) for details.
 
@@ -413,6 +413,7 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 ### General Tab
 
 - Choose whether to run at startup and enable tabs for all programs by default.
+- **Combine taskbar buttons for tab groups**: each tab group gets one taskbar button instead of one per window (off by default). Windows shown on every desktop join the button of the desktop in view.
 - **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
 - Choose whether to hide tabs for full-screen windows and while a window is moving.
 
