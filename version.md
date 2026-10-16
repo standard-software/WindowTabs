@@ -4,6 +4,9 @@
 
 ## version ss_2026.10.17_next1
 
+- Taskbar: fixed buttons that could stay combined after "Combine taskbar
+  buttons for tab groups" was turned off.
+
 ## version ss_2026.10.17
 
 - Taskbar: the buttons of a tab group can be combined into one button.

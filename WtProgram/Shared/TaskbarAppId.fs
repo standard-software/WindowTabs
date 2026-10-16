@@ -300,7 +300,7 @@ module TaskbarAppId =
             Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(text), entropy, DataProtectionScope.CurrentUser)))
 
     /// Some original, or None when the secret cannot be opened (another user,
-    /// a lost key, a damaged line): then nothing may be written in its place.
+    /// a lost key, a damaged line). Only the explicit off path clears it.
     let private unseal (secret: string option) =
         match secret with
         | None -> Some None
@@ -330,6 +330,8 @@ module TaskbarAppId =
     // start, untouched in this run: a give-back that failed, a value that
     // could not be read or decrypted, a window that cannot be told apart.
     let mutable private stuck: Map<IntPtr, Written> = Map.empty
+    // Old rows survive cleanup until their off-return preparation is durable.
+    let mutable private offSavePending: Set<IntPtr> = Set.empty
     // Windows never written again in this run (by process): refused writes,
     // unreadable values, and applications that set their own ID again.
     let mutable private declined: Map<IntPtr, uint32> = Map.empty
@@ -365,7 +367,8 @@ module TaskbarAppId =
                        waiting || replan || not unpinning.IsEmpty || (held |> Map.exists (fun _ h -> h.entry.pin)) ||
                        (checks |> Map.exists (fun key c -> needsSettledObservation now c.at (fun () -> verificationHere lastCurrent key.desktop (fun () -> c.members |> List.forall onCurrentDesktop)))) ||
                        (given |> Map.exists (fun h g -> not g.paused && (g.confirmed || needsSettledObservation now g.at (fun () -> dueHere g.desktop && (lastCurrent.IsSome || onCurrentDesktop h))))))
-        Volatile.Write(&holding, waiting || not unpinning.IsEmpty || not held.IsEmpty || not checks.IsEmpty || (given |> Map.exists (fun _ g -> not g.paused)))
+        // Kept rows still need the next settings transition, even without active checks.
+        Volatile.Write(&holding, waiting || not stuck.IsEmpty || not unpinning.IsEmpty || not held.IsEmpty || not checks.IsEmpty || (given |> Map.exists (fun _ g -> not g.paused)))
 
     // ------------------------------------------------------- recovery file --
 
@@ -501,19 +504,20 @@ module TaskbarAppId =
 
     /// Writes the window's own value back if it still carries an ID of ours.
     /// An application that set a value of its own since keeps it.
-    let private giveBackCore unpinned reason hwnd (entry: Written) (original: string option) desktop =
+    let private giveBackCore off unpinned reason hwnd (entry: Written) (original: string option) desktop =
         try
-            match sameWindow entry with
+            let current = if off then readId hwnd else None
+            match (if offReturn (not off) current then Same else sameWindow entry) with
             | Gone -> ()
             | Undecided -> keep hwnd entry
             | Same ->
-                match readId hwnd with
+                match (if off then current else readId hwnd) with
                 | None ->
                     trace hwnd "restore-failure" reason 0 "unreadable"
                     keep hwnd entry
                 | Some current ->
-                    // A prefix alone is not evidence of the generation we wrote.
-                    let owned = ownsGeneration entry current
+                    // Only the off path trusts the prefix without generation evidence.
+                    let owned = offReturn (not off) (Some current) || ownsGeneration entry current
                     if owned then
                         let live = desktopOf hwnd
                         if entry.pin && live.IsNone && not unpinned then invalidOp "Window pin state unavailable."
@@ -548,7 +552,97 @@ module TaskbarAppId =
             keep hwnd entry
 
     let private giveBackTo reason hwnd entry original desktop =
-        giveBackCore false reason hwnd entry original desktop
+        giveBackCore false false reason hwnd entry original desktop
+
+    /// A closed window needs no ID read; a live reused handle remains protected.
+    let private cleanupClosedOff () =
+        let closed = offSavePending |> Set.filter (fun hwnd -> not (IsWindow hwnd))
+        if not closed.IsEmpty then
+            let remaining = listed () |> List.filter (fun e -> not (closed.Contains(nativeint e.hwnd)))
+            let pending, rows = finishClosedOff (trySaveFile remaining) closed offSavePending stuck
+            offSavePending <- pending
+            stuck <- rows
+
+    /// Adopt the live identity and ID so ordinary pin return and verification
+    /// follow the actual button, not the stale journal generation.
+    let private returnOff hwnd (record: Written option) =
+        if unpinning.ContainsKey hwnd then true
+        else
+            match readId hwnd with
+            | current when offReturn false current ->
+                try
+                    let existing =
+                        record |> Option.bind (fun entry ->
+                            let original =
+                                match held.TryFind hwnd with
+                                | Some h -> Some h.original
+                                | None -> unseal entry.secret
+                            if offCanUseRecord (sameWindow entry) entry (Option.flatten current) original then
+                                original |> Option.map (fun value -> entry, value)
+                            else None)
+                    match existing with
+                    | Some(entry, original) ->
+                        let desktop = returnDesktop (desktopOf hwnd)
+                        held <- held.Remove hwnd
+                        filed <- filed.Remove hwnd
+                        given <- given.Remove hwnd
+                        stuck <- stuck.Add(hwnd, entry)
+                        offSavePending <- offSavePending.Remove hwnd
+                        giveBackTo "off-ours" hwnd entry original desktop
+                        true
+                    | None ->
+                        let pid = processOf hwnd
+                        let started = startedOf pid
+                        let source = offSource (IsWindow hwnd) pid started record
+                        let opened = source |> Option.bind (fun e -> unseal e.secret)
+                        let original = offOriginal opened
+                        let cookie = GetProp(hwnd, marker).ToInt64()
+                        let entry =
+                            { hwnd = int64 hwnd; pid = pid
+                              started = defaultArg started 0L
+                              phase = Applied; secret = if opened.IsSome then source |> Option.bind (fun e -> e.secret) else None
+                              id = Option.flatten current; previous = None
+                              cookie = if cookie > 0L && cookie <= int64 Int32.MaxValue then Some(int cookie) else None
+                              pin = source |> Option.exists (fun e -> e.pin) }
+                        let desktop = returnDesktop (desktopOf hwnd)
+                        let remaining = listed () |> List.filter (fun e -> e.hwnd <> int64 hwnd)
+                        if trySaveFile (entry :: remaining) then
+                            held <- held.Remove hwnd
+                            filed <- filed.Remove hwnd
+                            given <- given.Remove hwnd
+                            stuck <- stuck.Add(hwnd, entry)
+                            offSavePending <- offSavePending.Remove hwnd
+                            giveBackCore true false "off-ours" hwnd entry original desktop
+                            true
+                        else false
+                with ex ->
+                    trace hwnd "restore-failure" "off-ours" ex.HResult "exception"
+                    false
+            | current ->
+                if discardOffStuck false current then
+                    // If a failed target changed its own ID, persist the removal first.
+                    let pending = offSavePending.Contains hwnd
+                    if not pending || trySaveFile (listed () |> List.filter (fun e -> e.hwnd <> int64 hwnd)) then
+                        stuck <- stuck.Remove hwnd
+                        offSavePending <- offSavePending.Remove hwnd
+                        true
+                    else false
+                else true
+
+    /// Failed preparation must not fall through to held/given release or Gone cleanup.
+    let private returnOffKeeping hwnd record =
+        if not (returnOff hwnd record) then
+            record |> Option.iter (fun entry ->
+                offSavePending <- offSavePending.Add hwnd
+                held <- held.Remove hwnd
+                filed <- filed.Remove hwnd
+                given <- given.Remove hwnd
+                stuck <- stuck.Add(hwnd, entry))
+
+    let private returnOffKnown () =
+        let records = listed () |> List.map (fun e -> nativeint e.hwnd, e) |> Map.ofList
+        let windows = Set.unionMany [observed; damagedWindows; records |> Map.toSeq |> Seq.map fst |> Set.ofSeq]
+        for hwnd in windows do returnOffKeeping hwnd (records.TryFind hwnd)
 
     /// A successful command is never repeated while its observation is pending.
     let private finishUnpins final =
@@ -568,7 +662,7 @@ module TaskbarAppId =
                     else
                         // On expiry attempt the original ID even if IsView is unavailable.
                         // A failed write compensates only our own removed protection.
-                        giveBackCore true "unpin-observed" hwnd u.entry u.original u.desktop
+                        giveBackCore false true "unpin-observed" hwnd u.entry u.original u.desktop
 #if DEBUG
                     trace hwnd "pin-return-state" "observed" 0
                         (sprintf "pin=%A original=%b" (readPin hwnd) (readId hwnd = Some u.original))
@@ -588,7 +682,7 @@ module TaskbarAppId =
     /// Startup, whatever the setting, once the startup restore is done:
     /// windows that an earlier run left with an ID of ours get their own value
     /// back; windows it gave back are checked. What cannot be decided is kept.
-    let private recover () =
+    let private recover off =
         let text =
             try
                 if File.Exists(recoveryPath) then Some(File.ReadAllText(recoveryPath, Encoding.ASCII)) else None
@@ -606,32 +700,43 @@ module TaskbarAppId =
             putAside false
         saved <- entries
         let mutable alive = 0
+        if off then
+            for entry in entries do stuck <- stuck.Add(nativeint entry.hwnd, entry)
         for entry in entries do
             let hwnd = nativeint entry.hwnd
-            match (if damagedWindows.Contains hwnd then Undecided else sameWindow entry) with
-            | Gone -> ()
-            | Undecided ->
+            if off && offReturn false (readId hwnd) then
                 alive <- alive + 1
-                trace hwnd "keep" "undecided" 0 ""
-                keep hwnd entry
-            | Same ->
-                alive <- alive + 1
-                let desktop = desktopOf hwnd
-                match entry.phase with
-                | Returned ->
-                    given <- given.Add(hwnd, { entry = entry; desktop = desktop; at = Environment.TickCount; rebuilt = false; retried = false; paused = false; confirmed = false })
-                | Applied ->
-                    match unseal entry.secret with
-                    | Some original -> giveBackTo "startup-leftover" hwnd entry original desktop
-                    | None ->
-                        // Its own value cannot be opened now: nothing is written
-                        // in its place, and the line stays for a later start.
-                        trace hwnd "keep" (if entry.secret = Some "unknown-original" then "legacy-unknown-original" else "unseal-failure") 0 ""
-                        keep hwnd entry
+                returnOffKeeping hwnd (Some entry)
+            else
+                match (if damagedWindows.Contains hwnd then Undecided else sameWindow entry) with
+                | Gone -> stuck <- stuck.Remove hwnd
+                | Undecided ->
+                    alive <- alive + 1
+                    trace hwnd "keep" "undecided" 0 ""
+                    keep hwnd entry
+                | Same ->
+                    alive <- alive + 1
+                    let desktop = desktopOf hwnd
+                    match entry.phase with
+                    | Returned ->
+                        stuck <- stuck.Remove hwnd
+                        given <- given.Add(hwnd, { entry = entry; desktop = desktop; at = Environment.TickCount; rebuilt = false; retried = false; paused = false; confirmed = false })
+                    | Applied ->
+                        match unseal entry.secret with
+                        | Some original -> giveBackTo "startup-leftover" hwnd entry original desktop
+                        | None ->
+                            // On retains the unknown original for a later start.
+                            trace hwnd "keep" (if entry.secret = Some "unknown-original" then "legacy-unknown-original" else "unseal-failure") 0 ""
+                            keep hwnd entry
+        if off then
+            for hwnd in damagedWindows do
+                returnOffKeeping hwnd (entries |> List.tryFind (fun e -> e.hwnd = int64 hwnd))
+            stuck <- stuck |> Map.filter (fun hwnd _ -> not (discardOffStuck (offSavePending.Contains hwnd) (readId hwnd)))
         trace IntPtr.Zero "recover" "startup" 0 (sprintf "listed=%d alive=%d damaged=%b" entries.Length alive damaged)
         saveIfChanged ()
 
     let private releaseAll reason =
+        if reason = "disable" then returnOffKnown ()
         let windows = held |> Map.toList |> List.map fst
         for hwnd in windows do
             match held.TryFind hwnd with
@@ -801,8 +906,9 @@ module TaskbarAppId =
         lastCurrent <- s.current
         observed <- Set.union (s.places |> Map.toSeq |> Seq.map fst |> Set.ofSeq) (s.groups |> List.collect snd |> Set.ofList)
         replan <- false
+        if not s.enabled then returnOffKnown ()
         // Windows that closed, or whose handle another process now uses.
-        let gone (entry: Written) = sameWindow entry = Gone
+        let gone (entry: Written) = forgetGone (offSavePending.Contains(nativeint entry.hwnd)) (sameWindow entry)
         for KeyValue(hwnd, h) in held do
             if gone h.entry then
                 held <- held.Remove hwnd
@@ -1059,7 +1165,8 @@ module TaskbarAppId =
                     | None -> go <- false
                 else
                     try
-                        if recoverNow then recover()
+                        cleanupClosedOff ()
+                        if recoverNow then recover (releaseNow = Some "disable" || (snapshot |> Option.exists (fun s -> not s.enabled)))
                         releaseNow |> Option.iter (fun reason ->
                             releaseAll reason
                             finishUnpins final
@@ -1136,6 +1243,7 @@ module TaskbarAppId =
         lock gate (fun () ->
             if recoveryPending then
                 inbox.recover <- true
+                inbox.release <- Some "disable"
                 recoveryPending <- false
                 start ())
 

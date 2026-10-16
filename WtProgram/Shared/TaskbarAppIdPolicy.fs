@@ -435,6 +435,34 @@ module TaskbarAppIdPolicy =
         | Some id -> entry.id = Some id || entry.previous = Some id
         | None -> false
 
+    /// Off trusts our exclusive prefix, independently of journal identity or generation.
+    let offReturn enabled current =
+        not enabled && (current |> Option.exists isOurs)
+
+    /// A stale cookie does not invalidate the original, but a reused handle does.
+    let offSource alive pid started (record: Written option) =
+        record |> Option.filter (fun entry -> identity entry alive pid started = Same)
+
+    /// Existing evidence needs no preparation only when its return value is known.
+    /// Some None is a known VT_EMPTY; None means the original could not be opened.
+    let offCanUseRecord state entry current (original: string option option) =
+        original.IsSome && state = Same && ownsGeneration entry current
+
+    /// Commit removal only after the journal without the closed windows is durable.
+    let finishClosedOff saved (closed: Set<IntPtr>) (pending: Set<IntPtr>) (rows: Map<IntPtr, Written>) =
+        if saved then
+            Set.difference pending closed, rows |> Map.filter (fun hwnd _ -> not (closed.Contains hwnd))
+        else pending, rows
+
+    /// A failed preparation still owns its old durable row, even for a reused handle.
+    let forgetGone offSavePending state = not offSavePending && state = Gone
+
+    let discardOffStuck offSavePending current =
+        not offSavePending && (current |> Option.exists (fun value -> not (isOurs value)))
+
+    /// Missing or unreadable originals are cleared only on the explicit off path.
+    let offOriginal original = defaultArg original None
+
     /// A promotion intent is durable before the ID changes. It never grants
     /// permission to unpin a restored app ID or an unrelated generation.
     let unpinBeforeReturn (entry: Written) current desktop =
