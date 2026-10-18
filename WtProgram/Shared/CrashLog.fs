@@ -5,6 +5,105 @@ open System.Threading
 open System.Threading.Tasks
 open System.Windows.Forms
 
+// Shutdown diagnostics contain only fixed stages, type/method names and thread IDs.
+module ShutdownTrace =
+#if DEBUG
+    let private startupClock = System.Diagnostics.Stopwatch.StartNew()
+    let remainingDelay milliseconds = max 1 (milliseconds - int (min (int64 Int32.MaxValue) startupClock.ElapsedMilliseconds))
+    let private gate = obj()
+    let private writing = new ThreadLocal<bool>(fun () -> false)
+    let mutable private stopping = 0
+    let write stage =
+        if not writing.Value then
+            writing.Value <- true
+            try
+                try
+                    lock gate (fun () ->
+                        File.AppendAllText(Path.Combine(Path.GetTempPath(), "WindowTabs_shutdown_trace.txt"),
+                            sprintf "thread=%d %s\r\n" Thread.CurrentThread.ManagedThreadId stage))
+                with _ -> ()
+            finally writing.Value <- false
+    let beginShutdown() =
+        Interlocked.Exchange(&stopping, 1) |> ignore
+        write "shutdown begin"
+    let install() =
+        write "process start"
+        AppDomain.CurrentDomain.FirstChanceException.Add(fun args ->
+            if Volatile.Read(&stopping) <> 0 && not writing.Value then
+                let target = args.Exception.TargetSite
+                let declaringType =
+                    if isNull target || isNull target.DeclaringType then "unknown"
+                    else target.DeclaringType.FullName
+                let methodName = if isNull target then "unknown" else target.Name
+                write ("first-chance " + args.Exception.GetType().FullName +
+                    "; target=" + declaringType + "." + methodName))
+        Application.ApplicationExit.Add(fun _ -> write "ApplicationExit")
+#else
+    let inline write (_stage: string) = ()
+    let inline beginShutdown() = ()
+    let inline install() = ()
+#endif
+
+// Independent of every message loop; intentionally remains armed through CLR cleanup.
+module ShutdownDeadline =
+    let private clock = System.Diagnostics.Stopwatch.StartNew()
+    let mutable private deadline = Int64.MaxValue
+    let mutable private stage = "shutdown requested"
+    let setStage value = Volatile.Write(&stage, value)
+
+    let private killImmediately() =
+        // Never fall through into CLR shutdown with live native callbacks.
+        while true do
+            try
+                use current = System.Diagnostics.Process.GetCurrentProcess()
+                current.Kill()
+            with _ -> ()
+            Thread.Sleep(50)
+
+    let kill reason =
+#if DEBUG
+        // Diagnostic allocation, startup and IO must not prevent termination.
+        try
+            let message = reason + "; stage=" + Volatile.Read(&stage)
+            let writer = Thread(ThreadStart(fun () -> ShutdownTrace.write message), IsBackground = true)
+            writer.Start()
+            writer.Join(100) |> ignore
+        with _ -> ()
+#endif
+        killImmediately()
+
+    let start() =
+        try
+            // Arm once before publishing to the UI; repeated requests cannot extend it.
+            if Interlocked.CompareExchange(&deadline, clock.ElapsedMilliseconds + 15000L, Int64.MaxValue) = Int64.MaxValue then
+                let monitor = Thread(ThreadStart(fun () ->
+                    while clock.ElapsedMilliseconds < Interlocked.Read(&deadline) do
+                        Thread.Sleep(25)
+                    kill "shutdown deadline exceeded"), IsBackground = true, Name = "Shutdown deadline")
+                monitor.Start()
+        with _ ->
+            // No diagnostic thread is needed when independent monitoring is unavailable.
+            killImmediately()
+
+    let saved() =
+        let limit = min (Interlocked.Read(&deadline)) (clock.ElapsedMilliseconds + 10000L)
+        Interlocked.Exchange(&deadline, limit) |> ignore
+
+    let attempt name work =
+        setStage name
+        try work()
+        with ex -> ShutdownTrace.write (name + ": " + ex.GetType().FullName)
+
+#if DEBUG
+    let stall() =
+        match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SHUTDOWN_STALL_MS")) with
+        | true, ms when ms > 0 ->
+            setStage "debug group shutdown stall"
+            ShutdownTrace.write "debug group shutdown stall"
+            Thread.Sleep(ms)
+        | _ -> ()
+#endif
+
 // Defined before CrashLog so its exception-path IO/dialog can also be timed.
 // Only the registered input thread is observed; never log ordinary message-loop
 // waits. The sink is installed by InputStallTrace, and never writes on this thread.
@@ -56,6 +155,8 @@ module CrashLog =
                 use dialog = HookThreadTiming.time "exception.dialog.create" (fun () -> new ThreadExceptionDialog(args.Exception))
                 if HookThreadTiming.time "exception.dialog.show" (fun () -> dialog.ShowDialog()) = DialogResult.Abort then
                     HookThreadTiming.time "exception.exit" Application.Exit
+                    ShutdownTrace.beginShutdown()
+                    ShutdownTrace.write "exception dialog Environment.Exit"
                     Environment.Exit(0))
             threadInstalled.Value <- true
 

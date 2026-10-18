@@ -118,6 +118,12 @@ type NonBlockingSyncContext private (inner: SynchronizationContext, ownerThreadI
         NonBlockingSyncContext(inner, ownerThreadId) :> SynchronizationContext
 
 module ThreadHelper =
+    let private threadGate = obj()
+    let private groupThreads = ResizeArray<Thread>()
+    let groupsStopped() = lock threadGate (fun () ->
+        groupThreads.RemoveAll(fun thread -> not thread.IsAlive) |> ignore
+        groupThreads.Count = 0)
+
     let queueBackground f =
         System.Threading.ThreadPool.QueueUserWorkItem(Threading.WaitCallback(fun _ -> f())).ignore
 
@@ -134,10 +140,17 @@ module ThreadHelper =
             results := Some(fStart())
             evt.Set().ignore
             Application.EnableVisualStyles()
-            Application.Run()
+            try Application.Run()
+            finally
+                (InvokerService.invoker :> IDisposable).Dispose()
+                inner.Dispose()
+                ShutdownTrace.write "group message loop ended"
         let thread = Thread(ThreadStart(start))
         thread.SetApartmentState(ApartmentState.STA)
-        thread.Start()
+        lock threadGate (fun () ->
+            groupThreads.RemoveAll(fun thread -> not thread.IsAlive) |> ignore
+            thread.Start()
+            groupThreads.Add(thread))
         evt.WaitOne().ignore
         results.Value.Value
 
@@ -152,6 +165,10 @@ module ThreadHelper =
 // WinEvent delivery can wait inside the native message pump during a display
 // change. Its queue must not also own the UI or a tab strip's message loop.
 module WinEventPump =
+    let private gate = obj()
+    let mutable private stopping = false
+    let mutable private worker : Thread option = None
+    let isStopped() = worker |> Option.forall (fun thread -> not thread.IsAlive)
     let private dispatcher = lazy (
         let ready = new System.Threading.Tasks.TaskCompletionSource<Invoker>()
         let run() =
@@ -161,12 +178,27 @@ module WinEventPump =
                 SynchronizationContext.SetSynchronizationContext(NonBlockingSyncContext(inner))
                 let invoker = InvokerService.invoker
                 ready.SetResult(invoker)
-                Application.Run()
+                try Application.Run()
+                finally
+                    (invoker :> IDisposable).Dispose()
+                    inner.Dispose()
+                    ShutdownTrace.write "WinEvent message loop ended"
             with ex ->
                 if not (ready.TrySetException(ex)) then reraise()
         let thread = new Thread(ThreadStart(run), IsBackground = true, Name = "WindowTabs WinEvent pump")
         thread.SetApartmentState(ApartmentState.STA)
+        worker <- Some thread
         thread.Start()
         ready.Task.GetAwaiter().GetResult())
 
-    let post action = dispatcher.Value.asyncInvoke action
+    let post action = lock gate (fun () ->
+        if not stopping then dispatcher.Value.asyncInvoke action)
+
+    let stop cleanup = lock gate (fun () ->
+        if not stopping then
+            stopping <- true
+            if dispatcher.IsValueCreated then
+                dispatcher.Value.asyncInvoke(fun () ->
+                    cleanup()
+                    ShutdownTrace.write "WinEvent ExitThread"
+                    Application.ExitThread()))

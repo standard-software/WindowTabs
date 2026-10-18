@@ -495,6 +495,7 @@ type CaptionDragPlugin() =
                     result, Marshal.GetLastWin32Error())
                 if not removed then
                     (HookThreadTiming.time "Trace.WriteLine" (fun () -> Trace.WriteLine(sprintf "Caption drag hook removal failed: %d" error)))
+                ShutdownTrace.write (sprintf "caption hook removed=%b" removed)
                 hook <- IntPtr.Zero
 
         let uninstall () =
@@ -534,6 +535,7 @@ type CaptionDragPlugin() =
             | CaptionDragPolicy.Exit ->
                 uninstall()
                 HookThreadTiming.time "timer.stop" (fun () -> timer.Stop())
+                ShutdownTrace.write "caption ExitThread"
                 HookThreadTiming.time "context.exit" (fun () -> context.ExitThread())
             | CaptionDragPolicy.Install ->
                 if not warmedUp then
@@ -589,4 +591,10 @@ type CaptionDragPlugin() =
         member this.Dispose() =
             Volatile.Write(&stopping, 1)
             wake()
-            worker |> Option.iter (fun thread -> thread.Join(1500) |> ignore)
+            // This worker never synchronously invokes the UI. Do not allow CLR
+            // shutdown while it still owns a native callback or a window.
+            ShutdownDeadline.setStage "caption thread join"
+            worker |> Option.iter (fun thread ->
+                if not (thread.Join(5000)) then
+                    ShutdownDeadline.kill "caption thread join timeout")
+            ShutdownTrace.write "caption thread joined"

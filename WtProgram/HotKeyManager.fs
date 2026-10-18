@@ -11,6 +11,7 @@ type HotKeyManager() =
     let hotKeyIds = Cell.create(Map2())
     let handlers = Cell.create(Map2())
     let nextId = Cell.create(1)
+    let mutable nativeWindow : IDisposable option = None
     let hotKeyWindow =
         let wndProc m =
             match m.msg with
@@ -21,6 +22,7 @@ type HotKeyManager() =
             | _ -> ()
             m.def()
         let window = os.createWindow wndProc 0 0
+        nativeWindow <- Some(window :?> IDisposable)
         let window = os.windowFromHwnd(window.hwnd)
         window
 
@@ -46,3 +48,8 @@ type HotKeyManager() =
         let released = hotKeyWindow.unregisterHotKey(id)
         handlers.map(fun m -> m.remove id)
         released
+
+    interface IDisposable with
+        member _.Dispose() =
+            nativeWindow |> Option.iter (fun window -> window.Dispose())
+            nativeWindow <- None

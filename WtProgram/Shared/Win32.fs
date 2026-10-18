@@ -144,6 +144,7 @@ module WinEventHooks =
 #endif
         fun () ->
             if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then
+                ShutdownTrace.write "WinEvent hook removed"
 #if DEBUG
                 if traceHook <> 0 then PerfTrace.unregisterWinEventBurst traceHook
 #endif
@@ -163,6 +164,12 @@ module WinEventHooks =
         // Cancel already-posted work immediately on the calling UI thread.
         gate.SetEnabled enabled
         WinEventPump.post(fun () -> hub.SetEnabled enabled; traceSubscribers())
+
+    let stop() =
+        gate.SetEnabled false
+        WinEventPump.stop(fun () ->
+            hub.SetEnabled false
+            ShutdownTrace.write (sprintf "WinEvent hooks remaining=%d" hub.HookCount))
 
     let subscribe minEvent maxEvent pid tid target beforePost proc =
         let receiver = InvokerService.invoker

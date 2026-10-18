@@ -57,10 +57,9 @@ type ManagerViewService() =
     // group (Invoker) and one for the caption-drag hook. Disposing the form
     // from any of those destroys a window from a foreign thread, which throws
     // "Cross-thread operation not valid" under a debugger and is invalid even
-    // when the check is off. The form is left to the loop that owns it - the
-    // main thread's, which ends last. If that loop ever ends without raising
-    // (a forced exit), the form is never disposed: the process is going away
-    // at that point anyway, and a cross-thread destroy is the worse of the two.
+    // when the check is off. The owner handles this event when possible;
+    // Program.run also disposes explicitly, since the last loop can belong
+    // to the caption worker and ApplicationExit is not an owner-thread signal.
     let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
 
     do Application.ApplicationExit.Add(fun _ ->
@@ -115,6 +114,10 @@ type ManagerViewService() =
                     cached <- None
                     session.Dispose()
                     reraise()
+
+    member _.dispose() =
+        cached |> Option.iter(fun (_, form) -> form.dispose())
+        cached <- None
 
     member this.preload() =
 #if DEBUG

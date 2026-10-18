@@ -119,14 +119,17 @@ module Watchdog =
 
     // The replacement waits before creating any windows or acquiring the mutex.
     let awaitRestartParent (args: string[]) =
-        match RestartRequest.parse args with
+        let graceful = args.Length = 3 && args.[0] = "--shutdown-restart"
+        let request = if graceful then [| "--watchdog-restart"; args.[1]; args.[2] |] else args
+        match RestartRequest.parse request with
         | Some(parentId, started) ->
             try
                 use parent = Process.GetProcessById(parentId)
                 try
                     if not parent.HasExited && RestartRequest.matches started (parent.StartTime.ToUniversalTime().Ticks) then
                         log (fun () -> "restart: waiting for previous process")
-                        if not (parent.WaitForExit(5000)) then
+                        let waitMs = if graceful then 30000 else 5000
+                        if not (parent.WaitForExit(waitMs)) then
                             log (fun () -> "restart: terminating previous process after bounded wait")
                             parent.Kill()
                         parent.WaitForExit()
@@ -274,12 +277,14 @@ module Watchdog =
 #if DEBUG
             startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_FREEZE_UI_AFTER_MS")
             startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_RESTART_EXIT_DELAY_MS")
+            startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_SHUTDOWN_AFTER_MS")
+            startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_SHUTDOWN_STALL_MS")
 #endif
             use restartProcess = Process.Start(startInfo)
             if isNull restartProcess then failwith "Restart process was not created."
             log (fun () -> sprintf "restart: replacement started (pid %d)" restartProcess.Id)
             ForceExitState.isForceExiting <- true
-            log (fun () -> "restart: exiting current process with code 0")
+            log (fun () -> "restart: terminating current process")
 #if DEBUG
             match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_RESTART_EXIT_DELAY_MS")) with
             | true, ms when ms > 0 ->
@@ -287,10 +292,17 @@ module Watchdog =
                 Thread.Sleep(ms)
             | _ -> ()
 #endif
-            Environment.Exit(0)
+            // A frozen owner cannot safely drain native callbacks. Terminate
+            // without entering CLR shutdown with live unmanaged registrations.
+            ShutdownTrace.beginShutdown()
+            ShutdownTrace.write "watchdog forced process termination"
+            current.Kill()
         with ex ->
-            log (fun () -> sprintf "restart: failed: %s; exiting current process with code 1" (ex.GetType().Name))
-            Environment.Exit(1)
+            log (fun () -> sprintf "restart: failed: %s; terminating current process" (ex.GetType().Name))
+            ShutdownTrace.beginShutdown()
+            ShutdownTrace.write "watchdog failure forced process termination"
+            use current = Process.GetCurrentProcess()
+            current.Kill()
 
     let private watchdogLoop() =
         // Wait before starting monitoring to allow app to initialize
@@ -666,13 +678,16 @@ type NotifyIconPlugin() as this =
     // Restart application using normal shutdown
     member this.restartApplication() =
         let exePath = Assembly.GetExecutingAssembly().Location
-        // Start new process with a delay using cmd. ping rather than timeout:
-        // see trySaveAndRestart.
-        let startInfo = ProcessStartInfo()
-        startInfo.FileName <- "cmd.exe"
-        startInfo.Arguments <- sprintf "/c ping -n 4 127.0.0.1 >nul && start \"\" \"%s\"" exePath
-        startInfo.WindowStyle <- ProcessWindowStyle.Hidden
-        startInfo.CreateNoWindow <- true
+        // The replacement waits for this process to finish native cleanup.
+        use current = Process.GetCurrentProcess()
+        let startInfo = ProcessStartInfo(exePath)
+        startInfo.UseShellExecute <- false
+        startInfo.WorkingDirectory <- Path.GetDirectoryName(exePath)
+        startInfo.Arguments <- sprintf "--shutdown-restart %d %d" current.Id (current.StartTime.ToUniversalTime().Ticks)
+#if DEBUG
+        startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_SHUTDOWN_AFTER_MS")
+        startInfo.EnvironmentVariables.Remove("WINDOWTABS_DEBUG_SHUTDOWN_STALL_MS")
+#endif
         try
             Process.Start(startInfo) |> ignore
             Services.program.shutdown()
@@ -823,3 +838,4 @@ type NotifyIconPlugin() as this =
         member this.Dispose() =
             Watchdog.stop()
             this.icon.Dispose()
+            ShutdownTrace.write "tray icon disposed"

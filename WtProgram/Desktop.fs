@@ -29,6 +29,7 @@ type GroupInfo() as this =
         let _group = WindowGroup(plugins)
         _group.exited.Add <| fun _ ->
             _isExited <- true 
+            ShutdownTrace.write "group ExitThread"
             Application.ExitThread()
         (_group, InvokerService.invoker)
 

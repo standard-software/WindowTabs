@@ -361,6 +361,7 @@ module Win32Menu =
                 safely (fun () -> WinUserApi.UnhookWindowsHookEx(cbtHook).ignore)
                 // Restore any menu window that is somehow still subclassed
                 safely (fun () -> (!subclassed) |> Map.toList |> List.iter(fun (hwndMenu, _) -> removeSubclass hwndMenu))
+                ShutdownTrace.write "menu mouse and CBT hook cleanup complete"
                 safely cbtProcHandle.Free
                 safely menuWndProcHandle.Free
 

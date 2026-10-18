@@ -540,12 +540,17 @@ type Program() as this =
           onCurrent = samples |> List.map (fun (r, _, onCurrent, _) -> r.hwnd, onCurrent) |> Map.ofList }
     let desktopReader = new VirtualDesktopReader.Reader<_, _>(readDesktops,
         (fun () -> invoker.asyncInvoke(fun () -> this.applyDesktopReading())),
-        (fun () -> VirtualDesktopHelper.ReleaseCurrentThread()))
+        (fun () ->
+            VirtualDesktopHelper.ReleaseCurrentThread()
+            ShutdownTrace.write "desktop reader cleanup complete"))
     let desktopReaderOwnerThread = System.Threading.Thread.CurrentThread.ManagedThreadId
     do Application.ApplicationExit.Add(fun _ ->
         if System.Threading.Thread.CurrentThread.ManagedThreadId = desktopReaderOwnerThread then
             desktopReader.Stop())
 
+    let shutdownTimer = new System.Windows.Forms.Timer(Interval = 50)
+    let mutable shutdownCleanupStarted = false
+    let mutable shutdownRequested = false
     let notifyNewVersionEvt = Event<_>()
     let launcher = Launcher()
     // Trailing debounce for updateAppWindows: apps such as LibreOffice fire shell events
@@ -2461,8 +2466,24 @@ type Program() as this =
             this.scheduleUpdateAppWindows()
 
     member this.exitIfNeeded() =
-        if inShutdown.value then
-            if this.desktop.isEmpty then Application.ExitThread()
+        if inShutdown.value && this.desktop.isEmpty then
+            if not shutdownCleanupStarted then
+                shutdownCleanupStarted <- true
+                // Drain native registrations on their owning apartment, after
+                // every group has queued its subscription removals.
+                ShutdownDeadline.setStage "WinEvent stop request"
+                WinEventHooks.stop()
+                shutdownTimer.Tick.Add(fun _ -> this.exitIfNeeded())
+                shutdownTimer.Start()
+            // Keep pumping the UI while the other apartments finish. An exited
+            // group notification precedes its actual ExitThread completion.
+            ShutdownDeadline.setStage "group, WinEvent and desktop reader threads wait"
+            if ThreadHelper.groupsStopped() && WinEventPump.isStopped() && not desktopReader.IsAlive then
+                shutdownTimer.Stop()
+                ShutdownTrace.write "group, WinEvent and desktop reader threads stopped"
+                ShutdownDeadline.setStage "main ExitThread"
+                ShutdownTrace.write "main ExitThread"
+                Application.ExitThread()
 
     member this.saveSettingsAndUpdateAppWindows(f) =
         settingsManager.update f
@@ -2531,7 +2552,7 @@ type Program() as this =
     member private this.syncHotKeys() =
         try
             let foreground = this.classifyForeground()
-            let wanted = if HotKeyPolicy.wantsHotKeys foreground then this.wantedHotKeys() else []
+            let wanted = if not inShutdown.value && HotKeyPolicy.wantsHotKeys foreground then this.wantedHotKeys() else []
             let plan = HotKeyPolicy.plan heldHotKeys wanted
             for b in plan.release do
                 if not (hotKeyManager.unregister b.name) then
@@ -3748,34 +3769,47 @@ type Program() as this =
             this.refresh()
 
         member x.shutdown() =
+            ShutdownDeadline.start()
+            if invoker.invokeRequired then
+                invoker.asyncInvoke(fun () -> (this :> IProgram).shutdown())
+            elif not shutdownRequested then
+                shutdownRequested <- true
+                let attempt = ShutdownDeadline.attempt
+                attempt "shutdown trace begin" ShutdownTrace.beginShutdown
+                attempt "watchdog stop" Watchdog.stop
+                // Preserve the final-save and AppID-return order before teardown.
+                attempt "periodic save timer stop" periodicSaveTimer.Stop
+                attempt "desktop pass timer stop" desktopPassTimer.Stop
+                attempt "desktop reader stop" desktopReader.Stop
+                // SessionEnding has already frozen the last known-good snapshot.
+                if inSessionEnd.value.not then
+                    attempt "final settings save" this.saveTabGroupsToSettings
+                    attempt "AppID return" (fun () -> TaskbarAppId.releaseAndWait "exit" 2000)
+                ShutdownDeadline.saved()
+                attempt "shutdown state" (fun () -> inShutdown.set(true))
+                attempt "title timer stop" titleSyncTimer.Stop
+                attempt "hotkey timer stop" hotKeyRetryTimer.Stop
+                attempt "catch-up timer stop" catchUpTimer.Stop
+                attempt "pending update cancel" (fun () ->
+                    pendingUpdateAppWindowsToken |> Option.iter (fun token -> token.Dispose()))
+                pendingUpdateAppWindowsToken <- None
+                attempt "WinEvent disable" (fun () -> WinEventHooks.setEnabled false)
+                attempt "foreground hook dispose" (fun () -> foregroundHotKeyHook |> Option.iter (fun hook -> hook.Dispose()))
+                attempt "cloak hook dispose" (fun () -> cloakHook |> Option.iter (fun hook -> hook.Dispose()))
+                attempt "shell hooks dispose" registerShellHooks.Dispose
+                attempt "hotkeys sync" this.syncHotKeys
+                attempt "hotkeys dispose" (fun () -> (hotKeyManager :> IDisposable).Dispose())
 #if DEBUG
-            DesktopManagerFormState.log "shutdown: begin"
+                attempt "debug shutdown stall" ShutdownDeadline.stall
 #endif
-            // Stop the periodic save before the explicit final save, so we don't
-            // race against an in-flight Tick during shutdown teardown.
-            periodicSaveTimer.Stop()
-            desktopPassTimer.Stop()
-            desktopReader.Stop()
-            // A normal WindowTabs exit gets one final snapshot. During Windows
-            // logoff/restart, SessionEnding already froze the last known-good
-            // periodic snapshot; saving here could overwrite it after other
-            // applications have started tearing down their windows.
-            if inSessionEnd.value.not then
-                this.saveTabGroupsToSettings()
-                // Bounded: what does not finish stays listed for the next start.
-                TaskbarAppId.releaseAndWait "exit" 2000
-            inShutdown.set(true)
-#if DEBUG
-            DesktopManagerFormState.log "shutdown: saved settings; removing grouped windows"
-#endif
-            this.desktop.groups.iter <| fun gi ->
-                gi.windows.iter <| fun window ->
-                    gi.removeWindow window
-            this.updateAppWindows()
-#if DEBUG
-            DesktopManagerFormState.log "shutdown: window update returned"
-#endif
-                   
+                attempt "group windows removal" (fun () ->
+                    this.desktop.groups.iter <| fun gi ->
+                        gi.windows.iter <| fun window ->
+                            attempt "group window removal" (fun () -> gi.removeWindow window))
+                attempt "shutdown window update" this.updateAppWindows
+                attempt "shutdown completion check" this.exitIfNeeded
+
+
         member x.tabLimit = None
      
         member x.setWindowNameOverride((hwnd, name)) = 
@@ -4205,7 +4239,20 @@ type Program() as this =
         plugins.iter <| fun p -> p.init()
 
         SettingsBenchmark.install()
+#if DEBUG
+        use shutdownAfter = new System.Windows.Forms.Timer()
+        match Int32.TryParse(Environment.GetEnvironmentVariable("WINDOWTABS_DEBUG_SHUTDOWN_AFTER_MS")) with
+        | true, ms when ms > 0 ->
+            shutdownAfter.Interval <- ShutdownTrace.remainingDelay ms
+            shutdownAfter.Tick.Add(fun _ ->
+                shutdownAfter.Stop()
+                Services.program.shutdown())
+            shutdownAfter.Start()
+        | _ -> ()
+#endif
         Application.Run()
+        ShutdownDeadline.setStage "main plugins dispose"
+        ShutdownTrace.write "main message loop ended"
 #if DEBUG
         DesktopManagerFormState.log "shutdown: message loop returned; disposing plugins"
 #endif
@@ -4213,6 +4260,21 @@ type Program() as this =
             match p with
             | :? IDisposable as d -> d.Dispose()
             | _ -> ()
+        ShutdownDeadline.setStage "main timers dispose"
+        periodicSaveTimer.Dispose()
+        desktopPassTimer.Dispose()
+        titleSyncTimer.Dispose()
+        hotKeyRetryTimer.Dispose()
+        catchUpTimer.Dispose()
+        shutdownTimer.Dispose()
+        ShutdownDeadline.setStage "manager view dispose"
+        managerView.dispose()
+        ShutdownDeadline.setStage "main invoker dispose"
+        (invoker :> IDisposable).Dispose()
+        ShutdownDeadline.setStage "main COM release"
+        VirtualDesktopHelper.ReleaseCurrentThread()
+        ShutdownDeadline.setStage "main cleanup complete; process termination wait"
+        ShutdownTrace.write "main cleanup complete"
 #if DEBUG
         DesktopManagerFormState.log "shutdown: plugins disposed"
 #endif
@@ -4220,6 +4282,7 @@ type Program() as this =
 [<STAThread>]
 [<EntryPoint>]
 let main argv =
+    ShutdownTrace.install()
     CrashLog.install()
     let restarting = Watchdog.awaitRestartParent argv
 #if DEBUG
