@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next2
+
+- Fixed: WindowTabs ended with an error when it was closed or restarted
+  from the tray menu.
+  - It now removes its hooks and stops its threads before it ends.
+  - If closing takes longer than 15 seconds, it ends at once.
+
 ## version ss_2026.10.17_next1
 
 - Taskbar: fixed buttons that could stay combined after "Combine taskbar
