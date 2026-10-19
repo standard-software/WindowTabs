@@ -232,7 +232,7 @@ type ProgramView() as this=
         // separator. Default Margin = (0,0,0,0) on a ToolStripSeparator.
         separator.Margin <- Padding(2, 0, 12, 0)
         ts.Items.Add(separator) |> ignore
-        let checkBoxCtrl = new CheckBox()
+        let checkBoxCtrl = new SettingsCheckBox()
         checkBoxCtrl.Text <- Localization.getString("ShowAllSettings")
         checkBoxCtrl.AutoSize <- true
         checkBoxCtrl.Checked <- false
