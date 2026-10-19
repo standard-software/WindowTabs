@@ -64,8 +64,11 @@ type TopEdgeGuard(os: OS) =
     let mutable shown = false
     // (window, width, height, band) -> width of the band before the buttons
     let mutable buttonScan : ((IntPtr * int * int) * int) option = None
-    // (window, dpi) -> how far down its own top border reaches
-    let mutable borderScan : ((IntPtr * int) * int) option = None
+    // Only completed measurements enter borderScan; retries have separate state.
+    let mutable borderScan : ((IntPtr * int * (IntPtr * int * int * int) list) * int) option = None
+    let mutable pendingScan = None
+    let mutable childSnapshot : (IntPtr * int * TopEdgeChildHit.Box * int64 * TopEdgeChildHit.Target list) option = None
+    let scanClock = Diagnostics.Stopwatch.StartNew()
     let mutable eligible = false
     let mutable disposed = false
     let mutable strip = IntPtr.Zero
@@ -148,61 +151,57 @@ type TopEdgeGuard(os: OS) =
             window <- Some(w)
             w
 
-    // How far down the window's own top border reaches, asked of the window
+    // How far down the window's top border reaches, asked of the window
     // itself rather than computed. Applications disagree: at 100% Chrome
     // answers "top border" for six pixels and Edge for eight, and the gap grows
     // with the scale. A band built from the system metrics is right for one of
     // them and wrong for the other, and being one pixel too tall puts it over
     // the top of Chrome's tabs.
     //
-    // The middle of the window is asked, away from the corners and the caption
-    // buttons. The answer only changes when the window moves to another display
-    // or its frame changes, so it is kept per window; a window inside a
-    // move/size loop is never asked (see widthBeforeButtons for why).
+    // The top-level window is not the only one to ask. Explorer's own frame
+    // answers for two pixels, while the title bar child laid over it answers
+    // for eight; asking the frame alone left six pixels that still resized.
+    // So every visible child across the top edge is asked too, and the
+    // deepest answer wins (TopEdgeChildHit).
+    //
+    // Completed answers are kept by owner, DPI and relevant child geometry.
+    // A move/size loop never asks or lists children (see widthBeforeButtons).
     member private this.topBorderHeight(ownerHwnd: IntPtr, windowBounds: Rect, dpi: int, mayScan: bool) =
         let fallback () = TopEdgeGuard.bandHeightForDpi dpi
-        let key = ownerHwnd, dpi
-        match borderScan with
-        | Some(cached, value) when cached = key -> value
-        | Some(_, value) when not mayScan -> value
-        | _ when not mayScan -> fallback ()
-        | _ ->
-            let x = windowBounds.location.x + windowBounds.size.width / 2
-            let top = windowBounds.location.y
-            // Twice the tallest border any scale asks for is enough to find the
-            // end of it, and short enough to stay cheap.
-            let reach = min 28 (max 1 (windowBounds.size.height / 2))
-            let started = Diagnostics.Stopwatch.GetTimestamp()
-            let elapsedMs () =
-                float (Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0
-                / float Diagnostics.Stopwatch.Frequency
-            let mutable last = -1
-            let mutable y = 0
-            let mutable asking = true
-            while asking && y < reach do
-                let packed = (((top + y) &&& 0xffff) <<< 16) ||| (x &&& 0xffff)
-                let mutable result = IntPtr.Zero
-                let answered =
-                    try
-                        TopEdgeGuardNative.SendMessageTimeout(ownerHwnd, 0x0084u (* WM_NCHITTEST *),
-                            IntPtr.Zero, IntPtr(packed), 0x0002u (* SMTO_ABORTIFHUNG *), 60u, &result) <> IntPtr.Zero
-                    with _ -> false
-                // The border runs from the top edge without a break, so the
-                // first row that is not it ends the measurement - there is
-                // nothing below it to find. A window that did not answer will
-                // not answer the next row either: asking it all twenty-eight
-                // rows would hold this thread for a second and a half.
-                if not answered then asking <- false
-                elif result.ToInt32() = 12 (* HTTOP *) then last <- y
-                else asking <- false
-                // However it behaves, the whole measurement is over quickly.
-                if elapsedMs () > 100.0 then asking <- false
-                y <- y + 1
-            // Nothing named the border - a window that resizes itself (LINE), or
-            // one that was busy. The metrics are all there is to go on then.
-            let value = if last >= 0 then last + 1 else fallback ()
-            borderScan <- Some(key, value)
-            value
+        if not mayScan then
+            match pendingScan, borderScan with
+            | Some(_, _, _, value), _ -> value
+            | _, Some(_, value) -> value
+            | _ -> fallback ()
+        else
+            let bounds : TopEdgeChildHit.Box =
+                { left=windowBounds.x; top=windowBounds.y
+                  right=windowBounds.x+windowBounds.width; bottom=windowBounds.y+windowBounds.height }
+            let now = scanClock.ElapsedMilliseconds
+            let children =
+                match childSnapshot with
+                | Some(hwnd, oldDpi, oldBounds, time, targets)
+                    when TopEdgeChildHit.reuseChildren now time (hwnd=ownerHwnd && oldDpi=dpi && oldBounds=bounds) -> targets
+                | _ ->
+                    let targets = TopEdgeChildHit.children ownerHwnd bounds
+                    childSnapshot <- Some(ownerHwnd, dpi, bounds, now, targets)
+                    targets
+            let key = ownerHwnd, dpi, TopEdgeChildHit.signature bounds children
+            match borderScan with
+            | Some(cached, value) when cached = key -> pendingScan <- None; value
+            | _ ->
+                let scan, due, previous =
+                    match pendingScan with
+                    | Some(cached, scan, time, value) when cached=key ->
+                        scan, TopEdgeChildHit.retryDue now time, value
+                    | _ -> TopEdgeChildHit.Scan(), true, fallback ()
+                if not due then previous
+                else
+                    let result = scan.Advance(ownerHwnd, bounds, children, fallback (), TopEdgeChildHit.measureTarget)
+                    match TopEdgeChildHit.completedEntry key result with
+                    | Some entry -> borderScan <- Some entry; pendingScan <- None
+                    | None -> pendingScan <- Some(key, scan, scanClock.ElapsedMilliseconds, result.height)
+                    result.height
 
     // Where the caption buttons begin, measured by asking the window what is
     // at points along the row the band covers, from the right edge inwards.
@@ -348,6 +347,9 @@ type TopEdgeGuard(os: OS) =
     member private this.trace(line: string) =
         this.auditDecision(line)
         this.trace(box line, fun () -> line)
+
+    // The periodic check must also see changes confined to child windows.
+    member this.refreshChildren() = childSnapshot <- None
 
     member this.followsStrip = eligible && not disposed
 
