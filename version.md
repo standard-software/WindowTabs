@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next3
+
+- Settings: clicking the empty space beside a check box no longer
+  toggles it.
+  - Only the box and its own caption toggle it.
+
 ## version ss_2026.10.17_next2
 
 - Fixed: WindowTabs ended with an error when it was closed or restarted
