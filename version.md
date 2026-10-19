@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next4
+
+- Fixed: "Prevent moving windows and resizing them from the top" did not
+  stop File Explorer windows from being resized from the top.
+
 ## version ss_2026.10.17_next3
 
 - Settings: clicking the empty space beside a check box no longer
