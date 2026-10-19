@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next5
+
+- Fixed: in the tab menu, clicking an item of a submenu that opened over
+  another menu sometimes did nothing.
+  - For example "Same position" under "Detach this tab".
+
 ## version ss_2026.10.17_next4
 
 - Fixed: "Prevent moving windows and resizing them from the top" did not
