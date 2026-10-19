@@ -111,8 +111,66 @@ type TextEditor() =
         member x.control = control :> Control
         member x.changed = control.TextChanged |> Event.map ignore
 
+/// Keep layout and keyboard behavior intact while excluding the unused part
+/// of a settings cell from mouse activation. Read current metrics on every
+/// click so font, caption and monitor-scale changes need no cached geometry.
+type SettingsCheckBox() =
+    inherit CheckBox()
+    let mutable contentHot = false
+
+    member private this.ContainsContent(point: Point) =
+        if not (this.ClientRectangle.Contains(point)) then false
+        else
+            let dark = this.FlatStyle = FlatStyle.Flat && this.BackColor = DarkMode.darkSurface
+            let glyph =
+                if this.FlatStyle = FlatStyle.Flat then
+                    let bounds = SettingsCheckBoxLayout.glyph this
+                    // DrawRectangle includes the right and bottom border pixel.
+                    Rectangle(bounds.Location, Size(bounds.Width + (if dark then 1 else 0), bounds.Height + (if dark then 1 else 0)))
+                else
+                    use graphics = this.CreateGraphics()
+                    let size = CheckBoxRenderer.GetGlyphSize(graphics, VisualStyles.CheckBoxState.UncheckedNormal)
+                    Rectangle(0, (this.Height - size.Height) / 2, size.Width, size.Height)
+            if glyph.Contains(point) then true
+            elif String.IsNullOrEmpty(this.Text) then false
+            else
+                use graphics = this.CreateGraphics()
+                (SettingsCheckBoxLayout.caption this graphics).Contains(point)
+
+    override this.OnMouseEnter(e) =
+        // MouseMove supplies client coordinates; entering the cell alone is not hot.
+        ()
+
+    override this.OnMouseMove(e) =
+        base.OnMouseMove(e)
+        let hot = this.ContainsContent(e.Location)
+        if hot <> contentHot then
+            contentHot <- hot
+            if hot then base.OnMouseEnter(EventArgs.Empty)
+            else base.OnMouseLeave(EventArgs.Empty)
+
+    override this.OnMouseLeave(e) =
+        contentHot <- false
+        base.OnMouseLeave(e)
+
+    override this.WndProc(message: Message byref) =
+        let mouseDown = message.Msg = 0x0201 || message.Msg = 0x0203
+        let mouseUp = message.Msg = 0x0202
+        if mouseDown || mouseUp then
+            let packed = message.LParam.ToInt64()
+            let point = Point(int (int16 (packed &&& 0xffffL)), int (int16 ((packed >>> 16) &&& 0xffffL)))
+            if mouseDown && not (this.ContainsContent(point)) then
+                message.Result <- IntPtr.Zero
+            else
+                // A press on the glyph followed by release in the empty cell
+                // must also cancel. Let WinForms perform its normal cleanup.
+                if mouseUp && not (this.ContainsContent(point)) then this.Capture <- false
+                base.WndProc(&message)
+        else
+            base.WndProc(&message)
+
 type BoolEditor() =
-    let control = CheckBox()
+    let control = SettingsCheckBox()
     interface IPropEditor with
         member x.value
             with get() = box(control.Checked)

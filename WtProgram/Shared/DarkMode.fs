@@ -5,6 +5,46 @@ open System.Runtime.InteropServices
 open System.Windows.Forms
 open Aga.Controls.Tree
 
+module SettingsCheckBoxLayout =
+    // Settings use a left-to-right, middle-left glyph and caption, normally on one line.
+    let glyph (control: Control) =
+        let side = 13 + control.Padding.Left
+        Rectangle(0, (control.Height - side) / 2, side, side)
+
+    let caption (cb: CheckBox) (graphics: Graphics) =
+        if String.IsNullOrEmpty(cb.Text) then Rectangle.Empty
+        else
+            // Match the Flat adapter: padded client, native check + 1, then
+            // the two-pixel text inset. Keep native painting and focus intact.
+            let native = int (11.0 * float graphics.DpiX / 96.0)
+            let field = Rectangle(cb.Padding.Left + native + 1, cb.Padding.Top,
+                                  max 0 (cb.ClientSize.Width - cb.Padding.Horizontal - native - 1),
+                                  max 0 (cb.ClientSize.Height - cb.Padding.Vertical))
+            let area = Rectangle.Inflate(field, -2, -2)
+            if area.Width <= 0 || area.Height <= 0 then Rectangle.Empty
+            else
+                let size =
+                    if cb.UseCompatibleTextRendering then
+                        // The Framework adapter measures on a display DC, even
+                        // when painting into a bitmap with a different DPI.
+                        use measure = cb.CreateGraphics()
+                        use format = new StringFormat(Alignment = StringAlignment.Near,
+                                                      LineAlignment = StringAlignment.Center,
+                                                      Trimming = StringTrimming.Character)
+                        format.HotkeyPrefix <- if cb.UseMnemonic then Drawing.Text.HotkeyPrefix.Show else Drawing.Text.HotkeyPrefix.None
+                        Size.Ceiling(measure.MeasureString(cb.Text, cb.Font, SizeF(float32 area.Width, float32 area.Height), format))
+                    else
+                        let flags = TextFormatFlags.WordBreak ||| TextFormatFlags.TextBoxControl |||
+                                    (if cb.UseMnemonic then enum<TextFormatFlags> 0 else TextFormatFlags.NoPrefix)
+                        TextRenderer.MeasureText(cb.Text, cb.Font, area.Size, flags)
+                let bounds = Rectangle(area.X, area.Y + (area.Height - size.Height) / 2, size.Width, size.Height)
+                let bounds = Rectangle.Intersect(bounds, field)
+                let clip = if cb.UseCompatibleTextRendering then field else area
+                let bounds = Rectangle.Intersect(bounds, clip)
+                // PaintField shifts GDI+ text left by one and extends its width.
+                if cb.UseCompatibleTextRendering then Rectangle(bounds.X - 1, bounds.Y, bounds.Width + 1, bounds.Height)
+                else bounds
+
 module ScaledChoiceGlyph =
     let private images = System.Collections.Generic.Dictionary<bool * int * bool, Bitmap>()
 
@@ -58,11 +98,10 @@ module ScaledChoiceGlyph =
                         | :? RadioButton as rb -> if rb.Checked then 5 else 1
                         | _ -> 1
                     let state = state + (if not control.Enabled then 3 elif pressed then 2 elif hot then 1 else 0)
-                    let size = 13 + control.Padding.Left
                     let native = int ((if radio then 12.0 else 11.0) * float e.Graphics.DpiX / 96.0)
                     use background = new SolidBrush(control.BackColor)
                     e.Graphics.FillRectangle(background, Rectangle(0, 0, control.Padding.Left + native + 1, control.Height))
-                    draw e.Graphics (Rectangle(0, (control.Height - size) / 2, size, size)) radio state)
+                    draw e.Graphics (SettingsCheckBoxLayout.glyph control) radio state)
         | _ -> ()
         for child in control.Controls do applyLight child
 
@@ -335,7 +374,8 @@ module DarkMode =
                 SettingsDpi.applyGlyphPadding cb
                 cb.Paint.Add(fun e ->
                     let g = e.Graphics
-                    let boxSize = 13 + cb.Padding.Left
+                    let boxRect = SettingsCheckBoxLayout.glyph cb
+                    let boxSize = boxRect.Width
                     // WinForms drew its own glyph before this handler runs,
                     // and while the LAYOUT reserves a constant 13 px for it,
                     // the flat-style PAINT sizes it as (int)(11 * DpiX / 96)
@@ -365,8 +405,6 @@ module DarkMode =
                     let native = int (11.0 * float g.DpiX / 96.0)
                     use wipe = new SolidBrush(cb.BackColor)
                     g.FillRectangle(wipe, Rectangle(0, 0, cb.Padding.Left + native + 1, cb.Height))
-                    let boxY = (cb.Height - boxSize) / 2
-                    let boxRect = Rectangle(0, boxY, boxSize, boxSize)
                     // Fill the box with the parent surface tone so the box
                     // visually melts into the background (only the grey
                     // border outlines it). Matches the "transparent / match

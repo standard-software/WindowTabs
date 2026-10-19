@@ -58,7 +58,7 @@ type ShortcutKeysView() =
     // would read as a separate item of the form. The captions are also the
     // longest on the tab and would wrap in the 250-px column.
     let modeCheckBox captionKey =
-        let checkBox = CheckBox()
+        let checkBox = SettingsCheckBox()
         // A space between the box and its caption, the width of one of
         // them, so the two do not read as one word.
         checkBox.Text <- " " + Localization.getString captionKey
