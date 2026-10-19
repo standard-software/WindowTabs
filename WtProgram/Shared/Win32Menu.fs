@@ -23,6 +23,12 @@ and CmiPopUp = {
     }
 
 module Win32Menu =
+    // Resolve only the actual window under the point; a covered menu must not
+    // contribute item hits. Keeping this selection pure allows overlap tests.
+    let internal tryFindMenuForWindow (windowAtPoint: IntPtr) (visibleMenus: Map<IntPtr, IntPtr>) =
+        if windowAtPoint = IntPtr.Zero then None
+        else visibleMenus |> Map.tryPick (fun menu window ->
+            if window = windowAtPoint then Some menu else None)
     /// Top-level menu handle (valid while menu is displayed)
     let mutable lastTopMenuHandle = IntPtr.Zero
     /// Whether dark mode is enabled for the current menu
@@ -232,13 +238,15 @@ module Win32Menu =
         pressedSinceLastCheck () |> ignore
         let foregroundAtOpen = WinUserApi.GetForegroundWindow()
         let foregroundSeenElsewhere = ref false
+        // WindowFromPoint resolves overlap in screen z-order, including windows
+        // outside this menu. Rectangle unions would count covered menus too.
+        let menuAtPoint (x: int) (y: int) =
+            let windowAtPoint = WinUserApi.WindowFromPoint(POINT(x, y))
+            visibleMenuWindows() |> tryFindMenuForWindow windowAtPoint
+        let pointOverMenu (x: int) (y: int) =
+            menuAtPoint x y |> Option.isSome
         let closeOnOutsideInput (cursor: POINT) =
             let pressed = pressedSinceLastCheck ()
-            let overMenu () =
-                visibleMenuWindows()
-                |> Map.exists (fun _ w ->
-                    let r = windowRect w
-                    cursor.X >= r.Left && cursor.X < r.Right && cursor.Y >= r.Top && cursor.Y < r.Bottom)
             // Zero means "no window is in the foreground", which Windows
             // reports for a moment while a menu is being worked - opening a
             // submenu from its parent item does it - and that is not a switch
@@ -249,7 +257,7 @@ module Win32Menu =
                 foregroundNow <> IntPtr.Zero && foregroundNow <> foregroundAtOpen
             if switchedAway && foregroundSeenElsewhere.Value then
                 EndMenu() |> ignore
-            elif pressed && not (overMenu ()) then
+            elif pressed && not (pointOverMenu cursor.X cursor.Y) then
                 EndMenu() |> ignore
             foregroundSeenElsewhere := switchedAway
 
@@ -258,29 +266,21 @@ module Win32Menu =
         // reads. A low-level mouse hook, installed only while the menu is open,
         // is told about every press wherever it lands. Its callback runs on
         // this thread, which the menu loop keeps pumping.
-        let pointOverMenu (x: int) (y: int) =
-            visibleMenuWindows()
-            |> Map.exists (fun _ w ->
-                let r = windowRect w
-                x >= r.Left && x < r.Right && y >= r.Top && y < r.Bottom)
-
         // Is the point on an item that only opens a submenu? Such an item does
         // nothing when clicked - hovering opens it - so the press can be
         // dropped, and dropping it is what keeps Windows from losing the
         // foreground window under a menu whose owner is not the active window.
         let pointOverSubMenuParent (x: int) (y: int) =
-            visibleMenuWindows()
-            |> Map.exists (fun hMenu w ->
-                let r = windowRect w
-                if x < r.Left || x >= r.Right || y < r.Top || y >= r.Bottom then false
-                else
-                    let count = WinUserApi.GetMenuItemCount(hMenu)
-                    seq { 0 .. count - 1 }
-                    |> Seq.exists (fun i ->
-                        let mutable ir = RECT()
-                        WinUserApi.GetMenuItemRect(hwnd, hMenu, i, &ir)
-                        && x >= ir.Left && x < ir.Right && y >= ir.Top && y < ir.Bottom
-                        && WinUserApi.GetSubMenu(hMenu, i) <> IntPtr.Zero))
+            match menuAtPoint x y with
+            | None -> false
+            | Some hMenu ->
+                let count = WinUserApi.GetMenuItemCount(hMenu)
+                seq { 0 .. count - 1 }
+                |> Seq.exists (fun i ->
+                    let mutable ir = RECT()
+                    WinUserApi.GetMenuItemRect(hwnd, hMenu, i, &ir)
+                    && x >= ir.Left && x < ir.Right && y >= ir.Top && y < ir.Bottom
+                    && WinUserApi.GetSubMenu(hMenu, i) <> IntPtr.Zero)
         // A right-click ON the menu does nothing in Windows menus, but on a menu
         // whose owner is not the foreground window it puts the desktop into
         // "no foreground window" - and the next submenu to open from there is
