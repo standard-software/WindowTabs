@@ -621,6 +621,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         groupInfoTimer.Tick.Add(fun _ ->
             this.updateGroupInfo()
             group.refreshWindowMargins()
+            // Child-only frame changes need an update even when placement is stable.
+            if topEdgeGuard.followsStrip then
+                topEdgeGuard.refreshChildren()
+                this.updateTopEdgeGuard()
             repairGuardOrder()
             // Same tick, same thread as the rest of this group's upkeep.
             this.reconcileVirtualDesktop()
