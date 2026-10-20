@@ -78,16 +78,69 @@ namespace Bemo.Win32
         private static extern bool GetCaretPos(out Point point);
         [DllImport("user32.dll")]
         private static extern bool SetCaretPos(int x, int y);
+        [DllImport("user32.dll")]
+        private static extern bool HideCaret(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        private static extern bool ShowCaret(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint MapVirtualKey(uint code, uint mapType);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetKeyNameText(int keyData, System.Text.StringBuilder text, int size);
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int key);
+
+        private const System.Windows.Forms.TextFormatFlags NativeTextFlags =
+            System.Windows.Forms.TextFormatFlags.Left | System.Windows.Forms.TextFormatFlags.Top |
+            System.Windows.Forms.TextFormatFlags.NoPadding | System.Windows.Forms.TextFormatFlags.NoPrefix |
+            System.Windows.Forms.TextFormatFlags.SingleLine;
+
+        private static string NativeKeyName(int vk, bool extended)
+        {
+            var text = new System.Text.StringBuilder(256);
+            int keyData = (int)(MapVirtualKey((uint)vk, 0) << 16);
+            if (extended) keyData |= 1 << 24;
+            GetKeyNameText(keyData, text, text.Capacity);
+            return text.ToString();
+        }
+
+        // The native hotkey class does not expose its display text via WM_GETTEXT.
+        private static string FormatNativeHotKey(int packed)
+        {
+            int vk = packed & 0xFF;
+            int mods = (packed >> 8) & 0xFF;
+            var text = new System.Text.StringBuilder();
+            if ((mods & 2) != 0) text.Append(NativeKeyName((int)Keys.ControlKey, false)).Append(" + ");
+            if ((mods & 1) != 0) text.Append(NativeKeyName((int)Keys.ShiftKey, false)).Append(" + ");
+            if ((mods & 4) != 0) text.Append(NativeKeyName((int)Keys.Menu, false)).Append(" + ");
+            if (vk != 0) text.Append(NativeKeyName(vk, (mods & 8) != 0));
+            return text.Length == 0 ? NoneLabel : text.ToString();
+        }
+
+        private string NativeDisplayText()
+        {
+            int packed = HotKey;
+            if ((packed & 0xFF) == 0)
+            {
+                int mods = 0;
+                if (Focused)
+                {
+                    if (GetKeyState((int)Keys.ControlKey) < 0) mods |= 2;
+                    if (GetKeyState((int)Keys.ShiftKey) < 0) mods |= 1;
+                    if (GetKeyState((int)Keys.Menu) < 0) mods |= 4;
+                }
+                packed = mods << 8;
+            }
+            return FormatNativeHotKey(packed);
+        }
 
         private void PaintCenteredNativeText(Graphics graphics)
         {
             Color background = !Enabled && BackColor == SystemColors.Window ? SystemColors.Control : BackColor;
             using (Brush brush = new SolidBrush(background))
                 graphics.FillRectangle(brush, ClientRectangle);
-            TextRenderer.DrawText(graphics, FormatHotKey(HotKey), Font, _centeredTextBounds,
-                Enabled ? ForeColor : SystemColors.GrayText,
-                System.Windows.Forms.TextFormatFlags.Left | System.Windows.Forms.TextFormatFlags.Top | System.Windows.Forms.TextFormatFlags.NoPadding |
-                System.Windows.Forms.TextFormatFlags.NoPrefix | System.Windows.Forms.TextFormatFlags.SingleLine);
+            TextRenderer.DrawText(graphics, NativeDisplayText(), Font, _centeredTextBounds,
+                Enabled ? ForeColor : SystemColors.GrayText, NativeTextFlags);
         }
 
         public event EventHandler HotKeyChanged;
@@ -207,20 +260,44 @@ namespace Bemo.Win32
             base.WndProc(ref m);
             if (!UseManaged && _centeredTextBounds.Height > 0)
             {
-                if (m.Msg == 0x000F || m.Msg == 0x0318) // WM_PAINT / WM_PRINTCLIENT
+                // Painting outside BeginPaint must not overwrite the visible caret.
+                IntPtr caretWindow = Handle;
+                bool caretHidden = Focused && (m.Msg == 0x000F || m.Msg == 0x0318) &&
+                    HideCaret(caretWindow);
+                try
                 {
-                    using (Graphics graphics = m.Msg == 0x000F
-                        ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(m.WParam))
-                        PaintCenteredNativeText(graphics);
+                    if (m.Msg == 0x000F || m.Msg == 0x0318) // WM_PAINT / WM_PRINTCLIENT
+                    {
+                        using (Graphics graphics = m.Msg == 0x000F
+                            ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(m.WParam))
+                            PaintCenteredNativeText(graphics);
+                    }
+                    bool textChanged = m.Msg == 0x0100 || m.Msg == 0x0101 || m.Msg == 0x0104 ||
+                        m.Msg == 0x0105 || m.Msg == HotKeyConstants.HKM_SETHOTKEY ||
+                        m.Msg == 0x0007 || m.Msg == 0x0008 || m.Msg == 0x0051 || // Focus / WM_INPUTLANGCHANGE
+                        ((m.Msg == 0x0111 || m.Msg == 0x2111) &&
+                            WinDefApi.HIWORD(m.WParam) == WindowMessages.EN_CHANGE);
+                    // Restrict this to updates: reading HotKey sends a nested window message.
+                    if (Focused && (textChanged || m.Msg == 0x000F || m.Msg == 0x0318 ||
+                        m.Msg == 0x0030 || m.Msg == 0x0201)) // WM_SETFONT / WM_LBUTTONDOWN
+                    {
+                        Point caret;
+                        if (GetCaretPos(out caret))
+                        {
+                            using (Graphics graphics = Graphics.FromHwnd(Handle))
+                            {
+                                int width = TextRenderer.MeasureText(graphics, NativeDisplayText(), Font,
+                                    new Size(int.MaxValue, int.MaxValue), NativeTextFlags).Width;
+                                SetCaretPos(_centeredTextBounds.Left + width, _centeredTextBounds.Top);
+                            }
+                        }
+                    }
+                    if (textChanged) Invalidate();
                 }
-                if (Focused)
+                finally
                 {
-                    Point caret;
-                    if (GetCaretPos(out caret)) SetCaretPos(caret.X, _centeredTextBounds.Top);
+                    if (caretHidden) ShowCaret(caretWindow);
                 }
-                if (m.Msg == 0x0100 || m.Msg == 0x0101 || m.Msg == 0x0104 ||
-                    m.Msg == 0x0105 || m.Msg == HotKeyConstants.HKM_SETHOTKEY)
-                    Invalidate();
             }
         }
     }
