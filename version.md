@@ -2,6 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next7
+
+- Settings: a new System page shows the APPDATA and exe folders
+  and the settings file in use.
+  - The settings file can be copied or moved to the exe folder,
+    and moved back to APPDATA.
+- When APPDATA has no settings file, WindowTabs uses the one in
+  the exe folder, so the exe folder alone can be carried around.
+- Settings: the text in hot key, colour and path fields is centred
+  vertically.
+
 ## version ss_2026.10.17_next6
 
 - Taskbar: a window that split off from its group's taskbar button joins it
