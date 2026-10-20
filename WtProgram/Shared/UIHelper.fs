@@ -117,6 +117,29 @@ type TextEditor() =
 type SettingsCheckBox() =
     inherit CheckBox()
     let mutable contentHot = false
+    let mutable paintingEmptyCaption = false
+
+    override this.ShowFocusCues =
+        not paintingEmptyCaption && base.ShowFocusCues
+
+    override this.OnPaint(e) =
+        let emptyCaption = String.IsNullOrEmpty(this.Text) && this.Appearance = Appearance.Normal
+        let showFocus = emptyCaption && this.Focused && this.ShowFocusCues
+        // Suppress only the adapter's empty-caption focus, including Paint handlers.
+        paintingEmptyCaption <- emptyCaption
+        try base.OnPaint(e)
+        finally paintingEmptyCaption <- false
+        if showFocus then
+            let glyph =
+                if this.FlatStyle = FlatStyle.Flat then
+                    let bounds = SettingsCheckBoxLayout.glyph this
+                    Rectangle(bounds.Location, Size(bounds.Width + 1, bounds.Height + 1))
+                else
+                    let size = CheckBoxRenderer.GetGlyphSize(e.Graphics, VisualStyles.CheckBoxState.UncheckedNormal)
+                    Rectangle(0, (this.Height - size.Height) / 2, size.Width, size.Height)
+            // Clip at the cell's left edge without moving the glyph or its hit area.
+            let bounds = Rectangle.Intersect(this.ClientRectangle, Rectangle.Inflate(glyph, 2, 2))
+            ControlPaint.DrawFocusRectangle(e.Graphics, bounds, this.ForeColor, this.BackColor)
 
     member private this.ContainsContent(point: Point) =
         if not (this.ClientRectangle.Contains(point)) then false
