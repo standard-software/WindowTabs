@@ -5,8 +5,16 @@ open System.Runtime.InteropServices
 // The production native operation is also used by the isolated-desktop probe.
 module TopEdgeGuardPlacement =
     let private guards = System.Collections.Concurrent.ConcurrentDictionary<nativeint, byte>()
-    let registerGuard hwnd = guards.[hwnd] <- 0uy
-    let unregisterGuard hwnd = guards.TryRemove(hwnd) |> ignore
+    let registerGuard hwnd =
+        guards.[hwnd] <- 0uy
+#if DEBUG
+        Bemo.Win32.ShellCallTrace.GuardRegister(hwnd)
+#endif
+    let unregisterGuard hwnd =
+        guards.TryRemove(hwnd) |> ignore
+#if DEBUG
+        Bemo.Win32.ShellCallTrace.GuardUnregister(hwnd)
+#endif
     let isGuard hwnd = guards.ContainsKey hwnd
 
     module private Native =
@@ -84,6 +92,12 @@ module TopEdgeGuardPlacement =
             Some { x = r.left; y = r.top
                    width = r.right - r.left; height = r.bottom - r.top }
         else None
+
+    let blocksInput hwnd = visible hwnd && TopEdgeGuardPolicy.blocksInput true (rectOf hwnd)
+    let aboveVisible hwnd = TopEdgeGuardPolicy.visiblePredecessor above blocksInput hwnd
+    // Include our hidden band while validating a staged, non-showing insertion.
+    let private aboveIncludingBand band target =
+        TopEdgeGuardPolicy.visiblePredecessor above (fun hwnd -> hwnd = band || blocksInput hwnd) target
 
     // Bound the walk even if another process changes the chain while reading.
     // An incomplete observation is not evidence that the band is safe.
@@ -192,7 +206,13 @@ module TopEdgeGuardPlacement =
 #endif
 
     let private setPosition band strip owner anchor x y width height flags =
+#if DEBUG
+        let wasVisible = visible band
+#endif
         let ok = Native.SetWindowPos(band, anchor, x, y, width, height, flags)
+#if DEBUG
+        Bemo.Win32.ShellCallTrace.GuardVisibility(band, wasVisible, visible band)
+#endif
         // Capture BEFORE validation can hide the guard or a queued repair runs.
 #if DEBUG
         let requested : TopEdgeGuardPolicy.Band = { x = x; y = y; width = width; height = height }
@@ -257,7 +277,11 @@ module TopEdgeGuardPlacement =
                 setPosition band strip owner strip 0 0 0 0 0x0213u |> ignore
 
     let hide band =
-        if visible band then Native.ShowWindow(band, 0) |> ignore
+        if visible band then
+            Native.ShowWindow(band, 0) |> ignore
+#if DEBUG
+            Bemo.Win32.ShellCallTrace.GuardVisibility(band, true, visible band)
+#endif
 
     let observe band strip owner rect : TopEdgeGuardPolicy.Observation =
         { ownerReady = Native.IsWindow(owner) && visible owner &&
@@ -430,7 +454,7 @@ module TopEdgeGuardPlacement =
             // Foreground and strip order do not determine whether an exposed
             // background border is locked. Only the guard's own native order does.
             target <> 0n && ownerOf band = owner &&
-            not (isTopMost band) && above target = band
+            not (isTopMost band) && aboveIncludingBand band target = Some band
 
     // A stale frame snapshot can fail adjacency after a successful insertion.
     // Keep that best position only while it cannot intercept another group's
@@ -466,20 +490,32 @@ module TopEdgeGuardPlacement =
                 ok <- ownerOf band = owner
             if ok && isTopMost band then
                 ok <- setPosition band strip owner -2n 0 0 0 0 0x0213u
+            let mutable insertionBlocked = false
             let target = if ok then targetBelow band strip owner rect else 0n
 #if DEBUG
             traceDecision (sprintf "selected-frame(target=%X)" (int64 target)) band strip owner (Some rect) None None
 #endif
             if target = 0n then ok <- false
             if ok then
-                let previous = above target
-                let previous = if previous = band then above band else previous
-                // HWND_TOP keeps an ordinary band below the topmost layer.
-                let anchor = if isTopMost previous then 0n else previous
-                ok <- setPosition band strip owner anchor rect.x rect.y rect.width rect.height 0x0250u
-                ok <- ok && ownerSafe band strip owner && rectOf band = Some rect
-                traceDecision (if ok then "validated" else "validation-failed") band strip owner (Some rect) (Some anchor) None
-            if not ok && canKeepShown band owner then
+                let plan =
+                    TopEdgeGuardPolicy.ownerInsertion band (aboveVisible target) above blocksInput isTopMost
+                match plan with
+                | None ->
+                    insertionBlocked <- true
+                    ok <- false
+                    traceDecision "insertion-blocked" band strip owner (Some rect) None None
+                | Some(anchor, sameOrder) ->
+                    // Stage hidden bands without SWP_SHOWWINDOW, then verify the
+                    // actual native order/layer before exposing any input area.
+                    let wasVisible = visible band
+                    let flags = TopEdgeGuardPolicy.positionFlags true sameOrder
+                    ok <- TopEdgeGuardPolicy.placeVerified wasVisible
+                        (fun () -> setPosition band strip owner anchor rect.x rect.y rect.width rect.height flags)
+                        (fun () -> ownerSafe band strip owner && rectOf band = Some rect)
+                        // The verified position is preserved by SWP_NOZORDER.
+                        (fun () -> setPosition band strip owner 0n 0 0 0 0 0x0257u)
+                    traceDecision (if ok then "validated" else "validation-failed") band strip owner (Some rect) (Some anchor) None
+            if not ok && not insertionBlocked && canKeepShown band owner then
                 traceDecision "validation-deferred-keep-shown" band strip owner (Some rect) None None
                 ok <- true
             if not ok then hide band

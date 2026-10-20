@@ -152,6 +152,53 @@ module TopEdgeGuardPolicy =
         elif o.bandVisible && o.sameRectangle && o.sameOwner then Unchanged
         else Moved
 
+    // Invisible windows cannot intercept input. Keep every visible sibling as
+    // a barrier, regardless of ownership or overlap. Exhaustion is not proof.
+    let visiblePredecessor previous visible start =
+        let rec walk hwnd remaining =
+            if hwnd = 0n then Some 0n
+            elif remaining = 0 then None
+            elif visible hwnd then Some hwnd
+            else walk (previous hwnd) (remaining - 1)
+        walk (previous start) 4096
+
+    // Unknown geometry remains a barrier; only proven empty rectangles vanish.
+    let blocksInput visible (rect: Band option) =
+        visible && (rect |> Option.forall (fun r -> r.width > 0 && r.height > 0))
+
+    // Never insert after a topmost HWND. HWND_TOP is safe only when no ordinary
+    // input window lies above that predecessor. Interleaved layers fail closed.
+    let ownerInsertion band predecessor previous blocks topmost =
+        match predecessor with
+        | None -> None
+        | Some hwnd when hwnd = band -> Some(0n, true)
+        | Some hwnd when hwnd = 0n || not (topmost hwnd) -> Some(hwnd, false)
+        | Some hwnd ->
+            let rec allTopmost current remaining =
+                if current = 0n then true
+                elif remaining = 0 then false
+                elif current <> band && blocks current && not (topmost current) then false
+                else allTopmost (previous current) (remaining - 1)
+            if allTopmost (previous hwnd) 4096 then Some(0n, false) else None
+
+    // A failed staging call or validation can never reach the show operation.
+    let placeVerified wasVisible stage validate show =
+        if stage() && validate() then
+            if wasVisible then true else show() && validate()
+        else false
+
+    type HiddenRetry<'Key when 'Key: equality>() =
+        let mutable failure : ('Key * int64) option = None
+        member this.Ready now = failure |> Option.forall (fun (_, time) -> now - time >= 10000L)
+        member this.Allow(now, key) =
+            failure |> Option.forall (fun (old, time) -> old <> key || now - time >= 10000L)
+        member this.Fail(now, key) = failure <- Some(key, now)
+        member this.Reset() = failure <- None
+
+    let positionFlags visible sameOrder =
+        0x0210u ||| (if visible then 0u else 0x0040u) |||
+        (if sameOrder then 0x0004u else 0u)
+
     // Compare state before formatting diagnostics or taking extra native reads.
     type ChangeTrace<'Key when 'Key: equality>() =
         let mutable last = None

@@ -615,9 +615,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // that do not publish an accessibility reorder event.
         let guardReorder = os.setSingleWinEvent WinEvent.EVENT_OBJECT_REORDER (fun _ ->
             // A frame can pass other siblings without changing owner adjacency.
-            topEdgeGuard.invalidateOrder()
+            topEdgeGuard.invalidateOrder(false)
             repairGuardOrder())
-        let guardForeground = os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ -> repairGuardOrder())
+        let guardForeground = os.setSingleWinEvent WinEvent.EVENT_SYSTEM_FOREGROUND (fun _ ->
+            topEdgeGuard.invalidateOrder(true)
+            repairGuardOrder())
         groupInfoTimer.Tick.Add(fun _ ->
             this.updateGroupInfo()
             group.refreshWindowMargins()

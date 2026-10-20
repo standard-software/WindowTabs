@@ -525,3 +525,27 @@ module TaskbarAppIdPolicy =
 
     let returnDesktop desktop =
         if desktop = Some windowPinnedDesktop || isAppPinned desktop then Some sharedDesktop else desktop
+
+    /// Only a lost promotion that returned to the original app pin is retryable.
+    let retryLostPin reason pin same original current desktop =
+        reason = "pin-lost" && pin && same && current = Some original && isAppPinned desktop
+
+    let retryWaitMs attempt =
+        match attempt with
+        | n when n <= 1 -> 5000
+        | 2 -> 30000
+        | 3 -> 120000
+        | _ -> 300000
+
+    /// Unsigned elapsed time remains valid across the TickCount sign boundary.
+    let retryDue now at attempt changed =
+        changed || uint32 (now - at) >= uint32 (retryWaitMs attempt)
+
+    /// Reordering tabs alone does not bypass the retry delay.
+    let retryMembership hwnd (groups: (IntPtr * IntPtr list) list) =
+        groups |> List.filter (fun (_, members) -> List.contains hwnd members)
+               |> List.map (fun (group, members) -> group, Set.ofList members) |> Set.ofList
+
+    /// An identity marker outlives retries while any owner still needs it.
+    let removeRetryMarker identity hasCookie retained =
+        identity = Same && hasCookie && not retained

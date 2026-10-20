@@ -553,7 +553,11 @@ namespace Bemo
             try
             {
                 bool onCurrentDesktop;
-                int hr = _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop);
+                int hr;
+#if DEBUG
+                using (Bemo.Win32.ShellCallTrace.Measure(1))
+#endif
+                { hr = _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop); }
                 if (hr == 0)
                     return onCurrentDesktop;
             }
@@ -574,7 +578,10 @@ namespace Bemo
                 return -1;
             try
             {
-                return _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop);
+#if DEBUG
+                using (Bemo.Win32.ShellCallTrace.Measure(1))
+#endif
+                { return _manager.IsWindowOnCurrentVirtualDesktop(hwnd, out onCurrentDesktop); }
             }
             catch (Exception ex)
             {
@@ -652,7 +659,10 @@ namespace Bemo
 
             try
             {
-                return _manager.GetWindowDesktopId(hwnd, out desktopId);
+#if DEBUG
+                using (Bemo.Win32.ShellCallTrace.Measure(0))
+#endif
+                { return _manager.GetWindowDesktopId(hwnd, out desktopId); }
             }
             catch (Exception ex)
             {
@@ -670,7 +680,11 @@ namespace Bemo
             try
             {
                 Guid desktopId;
-                int hr = _manager.GetWindowDesktopId(hwnd, out desktopId);
+                int hr;
+#if DEBUG
+                using (Bemo.Win32.ShellCallTrace.Measure(0))
+#endif
+                { hr = _manager.GetWindowDesktopId(hwnd, out desktopId); }
                 if (hr == 0)
                     return desktopId;
             }
