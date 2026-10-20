@@ -75,6 +75,7 @@ type TopEdgeGuard(os: OS) =
     let mutable keepTopmost = false
     let mutable lastOrder = None
     let mutable lastFailedOrder = None
+    let hiddenRetry = TopEdgeGuardPolicy.HiddenRetry<obj>()
     let traceChanges = TopEdgeGuardPolicy.ChangeTrace<obj>()
 
     // The strip of a window that starts a top resize: the sizing frame plus
@@ -353,7 +354,9 @@ type TopEdgeGuard(os: OS) =
 
     member this.followsStrip = eligible && not disposed
 
-    member this.invalidateOrder() = lastOrder <- None
+    member this.invalidateOrder(resetRetry: bool) =
+        lastOrder <- None
+        if resetRetry then hiddenRetry.Reset()
 
     member private this.orderKey(stripHwnd: IntPtr, guard: IntPtr) =
         (stripHwnd, TopEdgeGuardPlacement.above owner, TopEdgeGuardPlacement.above guard,
@@ -365,8 +368,9 @@ type TopEdgeGuard(os: OS) =
         match window with
         | Some w when this.followsStrip ->
             if not shown then
-                this.auditDecision("repair-hidden-request")
-                true
+                let ready = hiddenRetry.Ready scanClock.ElapsedMilliseconds
+                this.auditDecision(if ready then "repair-hidden-request" else "repair-hidden-backoff")
+                ready
             else
                 let aboveOwner = TopEdgeGuardPlacement.above owner
                 let key = this.orderKey(stripHwnd, w.hwnd)
@@ -492,7 +496,21 @@ type TopEdgeGuard(os: OS) =
                 shown <-
                     match TopEdgeGuardPlacement.coverOwnedTopFrames w.hwnd stripHwnd ownerHwnd rect with
                     | Some covered ->
-                        TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
+                        let key = box (ownerHwnd, stripHwnd, keepTopmost, covered, (body.x, body.y, body.width, body.height),
+                                       this.orderKey(stripHwnd, w.hwnd), WinUserApi.GetForegroundWindow())
+                        if not shown && not (hiddenRetry.Allow(scanClock.ElapsedMilliseconds, key)) then
+                            this.auditDecision("placement-hidden-backoff")
+                            false
+                        else
+                            let placed = TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
+                            if placed then hiddenRetry.Reset()
+                            else
+                                // Read after native work: our own failed insertion
+                                // must not immediately invalidate the retry key.
+                                let failedKey = box (ownerHwnd, stripHwnd, keepTopmost, covered, (body.x, body.y, body.width, body.height),
+                                                     this.orderKey(stripHwnd, w.hwnd), WinUserApi.GetForegroundWindow())
+                                hiddenRetry.Fail(scanClock.ElapsedMilliseconds, failedKey)
+                            placed
                     | None ->
                         this.auditDecision("coverage-unavailable")
                         this.hide()

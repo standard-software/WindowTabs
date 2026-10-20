@@ -76,6 +76,8 @@ namespace Bemo.Win32
         public struct Call
         {
             internal long start;
+            internal int metric, explorerMetric;
+            internal long metricStart, explorerStart;
             internal string stage;
             internal IntPtr target;
             internal IntPtr strip;
@@ -84,7 +86,10 @@ namespace Bemo.Win32
         public static Call Begin(string api, IntPtr target)
         {
             Call call = new Call();
-            if (strip == IntPtr.Zero || target == IntPtr.Zero) return call;
+            int metric = api == "SendMessage" || api == "SendMessageTimeout" ? 7 :
+                api == "SetWindowPos" || api == "DeferWindowPos" || api == "MoveWindow" ||
+                api == "BringWindowToTop" || api == "SetWindowPlacement" ? 8 : -1;
+            if (target == IntPtr.Zero || (strip == IntPtr.Zero && metric < 0)) return call;
             uint error = (uint)Marshal.GetLastWin32Error();
             try
             {
@@ -92,10 +97,23 @@ namespace Bemo.Win32
                 GetWindowThreadProcessId(target, out pid);
                 if (pid != 0 && pid != processId)
                 {
+                    call.metric = metric;
+                    if (metric >= 0) call.metricStart = ShellCallTrace.Begin(metric);
+                    if (metric >= 0 && pid == (uint)ShellCallTrace.ExplorerPid)
+                    {
+                        call.explorerMetric = call.metric + 2;
+                        call.explorerStart = ShellCallTrace.Begin(call.explorerMetric);
+                    }
                     call.target = target;
                     call.strip = strip;
                     call.stage = stage + "/" + api;
                     call.start = Stopwatch.GetTimestamp();
+                }
+                else if (pid == processId && metric == 8)
+                {
+                    call.metric = 13;
+                    call.metricStart = ShellCallTrace.Begin(13);
+                    call.start = call.metricStart;
                 }
             }
             finally { RestoreError(error); }
@@ -108,8 +126,10 @@ namespace Bemo.Win32
             long ended = Stopwatch.GetTimestamp();
             try
             {
+                if (call.metricStart != 0) ShellCallTrace.End(call.metric, call.metricStart);
+                if (call.explorerStart != 0) ShellCallTrace.End(call.explorerMetric, call.explorerStart);
                 double ms = (ended - call.start) * 1000.0 / Stopwatch.Frequency;
-                if (ms >= 300.0)
+                if (ms >= 300.0 && call.strip != IntPtr.Zero)
                 {
                     string name = call.stage;
                     if (call.batchTargets != null)

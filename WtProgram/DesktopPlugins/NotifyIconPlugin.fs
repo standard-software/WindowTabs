@@ -14,9 +14,7 @@ open System.Threading
 open Microsoft.Win32
 
 // Watchdog module to detect UI thread freeze and auto-restart
-#if DEBUG
-// Debug builds only: which processes have a hung top-level window, named in
-// the watchdog log when the UI thread stalls (process names only, no titles).
+// Read-only hung-window evidence; only counts enter the watchdog log.
 module HungProbe =
     type EnumProc = delegate of nativeint * nativeint -> bool
     [<System.Runtime.InteropServices.DllImport("user32.dll")>]
@@ -27,26 +25,28 @@ module HungProbe =
     extern bool IsWindowVisible(nativeint h)
     [<System.Runtime.InteropServices.DllImport("user32.dll")>]
     extern uint32 GetWindowThreadProcessId(nativeint h, uint32& pid)
-    let describe () =
-        let hung = System.Collections.Generic.List<string>()
+    [<System.Runtime.InteropServices.DllImport("kernel32.dll")>]
+    extern uint32 GetCurrentThreadId()
+    let snapshot () =
+        let mutable foreign = 0
+        use current = Process.GetCurrentProcess()
         let cb = EnumProc(fun h _ ->
             if IsWindowVisible h && IsHungAppWindow h then
                 let mutable pid = 0u
                 GetWindowThreadProcessId(h, &pid) |> ignore
-                let name = try System.Diagnostics.Process.GetProcessById(int pid).ProcessName with _ -> "?"
-                hung.Add(sprintf "%s(%d)" name pid)
+                if pid <> 0u && pid <> uint32 current.Id then foreign <- foreign + 1
             true)
-        EnumWindows(cb, 0n) |> ignore
-        System.GC.KeepAlive cb
-        if hung.Count = 0 then "none" else String.Join(", ", hung |> Seq.distinct)
-#endif
+        let known = EnumWindows(cb, 0n)
+        GC.KeepAlive cb
+        known, foreign
 
 module Watchdog =
     let mutable private watchdogThread: Thread option = None
     let mutable private stopRequested = false
     let mutable private uiThreadInvoker: Invoker option = None  // Store UI thread's invoker
-#if DEBUG
     let mutable private uiNativeThreadId = 0u
+    let mutable private pingPending = 0
+#if DEBUG
     let mutable private uiThread: Thread option = None
     let mutable private switchesLogged = 0
     let mutable private lastTimer = 0L
@@ -59,10 +59,11 @@ module Watchdog =
 #else
     let private checkInterval = 5000   // Check every 5 seconds
 #endif
-    let private requiredConsecutiveFailures = 1  // Restart after 1 timeout (10 seconds unresponsive)
+    let private requiredConsecutiveFailures = 1  // Classify after one timeout; only isolated stalls may restart.
 
     // Use AutoResetEvent for more reliable signaling
     let private pingResponse = new AutoResetEvent(false)
+    let private postPing = new AutoResetEvent(false)
 
     // Debug builds only. This began as evidence from real machines that the
     // watchdog had nothing left to catch, but a released copy runs on machines
@@ -72,10 +73,8 @@ module Watchdog =
     // now writes no log of any kind. What guards the settings file there is
     // the refusal to save over it and the recovery from a backup, neither of
     // which needs a log to work.
-    // A timeout adds a stack trace and restart progress, then ends in a restart, so there is
-    // no repeating state to spam. The 1 MB guard is there only in case that
-    // assumption is ever wrong, and it keeps the overflow as watchdog.log.old
-    // instead of dropping it.
+    // Repeated stalls are diagnosed at most once a minute. The 1 MB guard
+    // keeps one older copy while external desktop stalls remain suppressed.
 #if DEBUG
     let private logPath =
         Path.Combine(
@@ -234,7 +233,7 @@ module Watchdog =
                 capture.Name <- "WindowTabs Watchdog Stack Capture"
                 capture.Start()
                 if not (capture.Join(5000)) then
-                    log (fun () -> "UI stack capture timed out after 5000 ms; continuing restart")
+                    log (fun () -> "UI stack capture timed out after 5000 ms; continuing watchdog decision")
         with ex ->
             log (fun () -> sprintf "UI stack diagnostic failed: %s" (ex.GetType().Name))
 #endif
@@ -246,24 +245,22 @@ module Watchdog =
         log (fun () -> "FIRED - the UI thread stopped answering; saving the tab groups and restarting")
         try
             // Try to save tab groups before restart
-            let saveComplete = new ManualResetEvent(false)
             try
                 log (fun () -> "restart: save requested (waiting up to 2000 ms)")
-                match uiThreadInvoker with
-                | Some invoker ->
-                    invoker.asyncInvoke(fun () ->
-                        try
-                            log (fun () -> "restart: save started on UI thread")
-                            Services.program.saveTabGroupsBeforeExit()
-                            log (fun () -> "restart: save completed")
-                        with ex ->
-                            log (fun () -> sprintf "restart: save failed: %s" (ex.GetType().Name))
-                        saveComplete.Set() |> ignore
-                    )
-                | None -> log (fun () -> "restart: save unavailable - no UI invoker")
-                // Wait max 2 seconds for save
-                if not (saveComplete.WaitOne(2000)) then
-                    log (fun () -> "restart: save wait timed out after 2000 ms")
+                let saved = RestartRequest.waitForSave 2000 (fun complete ->
+                    match uiThreadInvoker with
+                    | Some invoker ->
+                        invoker.asyncInvoke(fun () ->
+                            try
+                                log (fun () -> "restart: save started on UI thread")
+                                Services.program.saveTabGroupsBeforeExit()
+                                log (fun () -> "restart: save completed")
+                            with ex ->
+                                log (fun () -> sprintf "restart: save failed: %s" (ex.GetType().Name))
+                            complete())
+                    | None -> ())
+                if not saved then
+                    log (fun () -> "restart: save did not complete within 2000 ms")
             with ex ->
                 log (fun () -> sprintf "restart: save dispatch failed: %s" (ex.GetType().Name))
 
@@ -304,31 +301,42 @@ module Watchdog =
             use current = Process.GetCurrentProcess()
             current.Kill()
 
+    let private pingLoop () =
+        while not stopRequested do
+            postPing.WaitOne() |> ignore
+            if not stopRequested then
+                try
+                    match uiThreadInvoker with
+                    | Some invoker ->
+                        let posted = Stopwatch.GetTimestamp()
+                        invoker.asyncInvoke(fun () ->
+                            Interlocked.Exchange(&pingPending, 0) |> ignore
+                            respondToPing()
+#if DEBUG
+                            let answered = Stopwatch.GetTimestamp()
+                            let ms = float (answered - posted) * 1000.0 / float Stopwatch.Frequency
+                            if ms >= 100.0 then InputStallTrace.completed InputStallTrace.Kind.PingAck "ping" ms answered
+#endif
+                        )
+                    | None -> Interlocked.Exchange(&pingPending, 0) |> ignore
+                with _ -> Interlocked.Exchange(&pingPending, 0) |> ignore
+
     let private watchdogLoop() =
         // Wait before starting monitoring to allow app to initialize
         Thread.Sleep(10000)
 
         let mutable consecutiveFailures = 0
+        let mutable deferredSince: int64 option = None
+        let mutable lastDiagnostic = -60000L
+        let clock = Stopwatch.StartNew()
 
         while not stopRequested do
             try
+                let diagnosticDue = clock.ElapsedMilliseconds - lastDiagnostic >= 60000L
+                // Only one outstanding post: a blocked PostMessage must not stop the watchdog.
                 // Send ping to UI thread using the stored UI thread invoker
-                match uiThreadInvoker with
-                | Some invoker ->
-                    try
-#if DEBUG
-                        let posted = Stopwatch.GetTimestamp()
-                        invoker.asyncInvoke(fun () ->
-                            let answered = Stopwatch.GetTimestamp()
-                            respondToPing()
-                            let ms = float (answered - posted) * 1000.0 / float Stopwatch.Frequency
-                            if ms >= 100.0 then
-                                InputStallTrace.completed InputStallTrace.Kind.PingAck "ping" ms answered)
-#else
-                        invoker.asyncInvoke(fun () -> respondToPing())
-#endif
-                    with _ -> ()
-                | None -> ()
+                if Interlocked.CompareExchange(&pingPending, 1, 0) = 0 then
+                    postPing.Set() |> ignore
 
                 // Wait for response with timeout
 #if DEBUG
@@ -339,47 +347,72 @@ module Watchdog =
                 let quick = pingResponse.WaitOne(1500)
                 let responded =
                     if quick then true else
-                    InputStallTrace.context InputStallTrace.Kind.Watchdog IntPtr.Zero (float stallWatch.ElapsedMilliseconds)
-                    log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
-                    let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
-                    log (fun () -> sprintf "[PumpProbe] timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
-                    log (fun () -> "STALL: UI thread has not answered for 1500 ms; hung windows: " + (try HungProbe.describe() with ex -> ex.GetType().Name))
-                    Bemo.Win32.UiStallDiagnostics.Capture(uiNativeThreadId, Bemo.Win32.UiStallDiagnostics.LogLine(fun line -> log (fun () -> line)))
-                    logUiStack()
-                    logAllStacks 0 500
+                    if diagnosticDue then
+                        lastDiagnostic <- clock.ElapsedMilliseconds
+                        Bemo.Win32.ShellCallTrace.Stall()
+                        InputStallTrace.context InputStallTrace.Kind.Watchdog IntPtr.Zero (float stallWatch.ElapsedMilliseconds)
+                        log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
+                        let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
+                        log (fun () -> sprintf "[PumpProbe] timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
+                        let known, foreign = HungProbe.snapshot ()
+                        log (fun () -> sprintf "STALL: probe-known=%b foreign-hung=%d" known foreign)
+                        Bemo.Win32.UiStallDiagnostics.Capture(uiNativeThreadId, Bemo.Win32.UiStallDiagnostics.LogLine(fun line -> log (fun () -> line)))
+                        logUiStack()
+                        logAllStacks 0 500
                     let late = pingResponse.WaitOne(max 0 (freezeTimeout - int stallWatch.ElapsedMilliseconds))
-                    if late then log (fun () -> sprintf "STALL ended: UI thread answered after %d ms" stallWatch.ElapsedMilliseconds)
+                    if late && diagnosticDue then log (fun () -> sprintf "STALL ended: UI thread answered after %d ms" stallWatch.ElapsedMilliseconds)
                     late
 #else
                 let responded = pingResponse.WaitOne(freezeTimeout)
 #endif
 
                 if responded then
-                    // UI thread responded, reset failure count
+                    // Any UI response starts a fresh deferral budget.
                     consecutiveFailures <- 0
+                    deferredSince <- None
                 else
+                    // Anchor the budget to the timeout, before diagnostic work.
+                    let timedOutAt = clock.ElapsedMilliseconds
                     // UI thread did not respond
                     consecutiveFailures <- consecutiveFailures + 1
-                    log (fun () -> sprintf "ping timed out after %d ms (%d of %d before a restart)"
-                                        freezeTimeout consecutiveFailures requiredConsecutiveFailures)
+                    if diagnosticDue then
+                        log (fun () -> sprintf "ping timed out after %d ms (%d of %d before a restart)"
+                                            freezeTimeout consecutiveFailures requiredConsecutiveFailures)
 #if DEBUG
-                    log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
-                    let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
-                    log (fun () -> sprintf "[PumpProbe] timeout timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
-                    logUiStack()
-                    // Two 500 ms capture allowances total at most one second.
-                    // Reserve the final allowance inside the five-second window
-                    // so the follow-up completes before restart, not next tick.
-                    let diagnostics = Stopwatch.StartNew()
-                    logAllStacks 1 500
-                    let delay = max 0 (4500 - int diagnostics.ElapsedMilliseconds)
-                    if delay > 0 then Thread.Sleep(delay)
-                    logAllStacks 2 (max 0 (min 500 (5000 - int diagnostics.ElapsedMilliseconds)))
+                        log (fun () -> Bemo.Win32.UiStallDiagnostics.PumpSnapshot(uiNativeThreadId))
+                        let age stamp = (Stopwatch.GetTimestamp() - stamp) * 1000L / Stopwatch.Frequency
+                        log (fun () -> sprintf "[PumpProbe] timeout timer-age-ms=%d idle-age-ms=%d" (age (Interlocked.Read(&lastTimer))) (age (Interlocked.Read(&lastIdle))))
+                        logUiStack()
+                        // Two 500 ms capture allowances total at most one second.
+                        // Reserve the final allowance inside the five-second window
+                        // so the follow-up completes before restart, not next tick.
+                        let diagnostics = Stopwatch.StartNew()
+                        logAllStacks 1 500
+                        let delay = max 0 (4500 - int diagnostics.ElapsedMilliseconds)
+                        if delay > 0 then Thread.Sleep(delay)
+                        logAllStacks 2 (max 0 (min 500 (5000 - int diagnostics.ElapsedMilliseconds)))
 #endif
-
                     if consecutiveFailures >= requiredConsecutiveFailures && not stopRequested && not ForceExitState.isForceExiting then
-                        // UI thread is frozen (confirmed by multiple consecutive failures), force restart
-                        trySaveAndRestart()
+                        let probeKnown, foreignHung = try HungProbe.snapshot () with _ -> false, 0
+                        // Consume late responses even while deferring, so the next
+                        // unanswered period cannot inherit an earlier wait budget.
+                        if pingResponse.WaitOne(0) then
+                            consecutiveFailures <- 0
+                            deferredSince <- None
+                        else
+                            let elapsed = deferredSince |> Option.map (fun started -> clock.ElapsedMilliseconds - started) |> Option.defaultValue 0L
+                            let decision = RestartRequest.restartDecision probeKnown (foreignHung > 0) elapsed
+                            let defer = decision = "wait-desktop-hung"
+                            if defer && deferredSince.IsNone then deferredSince <- Some timedOutAt
+                            if diagnosticDue || not defer then
+                                lastDiagnostic <- clock.ElapsedMilliseconds
+                                log (fun () -> sprintf "restart-decision=%s probe-known=%b foreign-hung=%d deferred-ms=%d" decision probeKnown foreignHung elapsed)
+                            if not defer then
+                                // Preserve cancellation by an acknowledgement arriving during logging.
+                                if pingResponse.WaitOne(0) then
+                                    consecutiveFailures <- 0
+                                    deferredSince <- None
+                                else trySaveAndRestart()
 
                 // Wait before next check
                 Thread.Sleep(checkInterval)
@@ -421,9 +454,11 @@ module Watchdog =
                 freeze.Start()
             | _ -> ()
             uiThread <- Some Thread.CurrentThread
-            uiNativeThreadId <- Bemo.Win32.UiStallDiagnostics.GetCurrentThreadId()
 #endif
+            uiNativeThreadId <- HungProbe.GetCurrentThreadId()
             stopRequested <- false
+            let poster = Thread(ThreadStart(pingLoop), IsBackground = true, Name = "WindowTabs watchdog ping")
+            poster.Start()
             let thread = new Thread(ThreadStart(watchdogLoop))
             thread.IsBackground <- true
             thread.Name <- "WindowTabs Watchdog"
@@ -435,6 +470,7 @@ module Watchdog =
     let stop() =
         if watchdogThread.IsSome && not stopRequested then log (fun () -> "stopped")
         stopRequested <- true
+        postPing.Set() |> ignore
         pingResponse.Set() |> ignore  // Unblock any waiting
 
 // Auto-update: checks the GitHub releases of this repository and installs a

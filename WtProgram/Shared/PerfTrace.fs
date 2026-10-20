@@ -48,6 +48,7 @@ module PerfTrace =
         let mutable outsideRange = 0
         member _.Range = minEvent, maxEvent, pid = 0, tid = 0
         member _.Record(evt: int, objectZero: bool, threadId: int) =
+            Bemo.Win32.ShellCallTrace.Event(evt)
             let index = evt - minEvent
             if index >= 0 && index < events.Length then
                 System.Threading.Interlocked.Increment(&events.[index]) |> ignore
@@ -251,6 +252,7 @@ module PerfTrace =
             recordTimeAt name ms ended
 
     let timeCaptionQuery hwnd f =
+        use metric = Bemo.Win32.ShellCallTrace.Caption(hwnd)
         let pid = captionQueryPid hwnd
         let start = Stopwatch.GetTimestamp()
         try time "captionButtons.query" f

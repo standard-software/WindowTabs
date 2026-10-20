@@ -185,6 +185,9 @@ module TaskbarAppId =
             finally CloseHandle(handle) |> ignore
 
     let private withStore hwnd (f: IPropertyStore -> 'a) (failed: int -> 'a) =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(2)
+#endif
         let mutable iid = typeof<IPropertyStore>.GUID
         let mutable store = Unchecked.defaultof<IPropertyStore>
         try
@@ -208,6 +211,9 @@ module TaskbarAppId =
     /// PKEY_AppUserModel_ID of a window: Some None when it has none (VT_EMPTY),
     /// Some(Some id) for a string, None when it cannot be read or is of another type.
     let private readId hwnd : string option option =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(3)
+#endif
         try
             withStore hwnd
                 (fun store ->
@@ -225,6 +231,9 @@ module TaskbarAppId =
     /// SetValue of PKEY_AppUserModel_ID; None writes VT_EMPTY (an empty string
     /// is refused).
     let private setId hwnd (id: string option) =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(4)
+#endif
         withStore hwnd
             (fun store ->
                 withVariant (fun value ->
@@ -242,6 +251,9 @@ module TaskbarAppId =
     /// The taskbar buttons, as (AutomationId, Name). Only the tray windows are
     /// asked, never other top-level windows (some of them are WindowTabs' own).
     let private readButtons secondary =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(5)
+#endif
         let trays =
             [ for className in (if secondary then [ "Shell_TrayWnd"; "Shell_SecondaryTrayWnd" ] else [ "Shell_TrayWnd" ]) do
                 let mutable after = IntPtr.Zero
@@ -332,9 +344,18 @@ module TaskbarAppId =
     let mutable private stuck: Map<IntPtr, Written> = Map.empty
     // Old rows survive cleanup until their off-return preparation is durable.
     let mutable private offSavePending: Set<IntPtr> = Set.empty
-    // Windows never written again in this run (by process): refused writes,
-    // unreadable values, and applications that set their own ID again.
+    // Excluded windows (by process): permanent failures, plus lost app pins
+    // whose explicitly scheduled retry has not yet passed its safety checks.
     let mutable private declined: Map<IntPtr, uint32> = Map.empty
+    type private Retry = { entry: Written; original: string option; attempt: int; at: int
+                           members: Set<IntPtr * Set<IntPtr>>; pending: bool }
+    // Keep the backoff after success; repeated external resets never restart it.
+    let mutable private retries: Map<IntPtr, Retry> = Map.empty
+    let mutable private retryGroups: (IntPtr * IntPtr list) list = []
+    let private retryWaiting () = retries |> Map.exists (fun _ r -> r.pending)
+    let private retryReady now groups =
+        retries |> Map.exists (fun hwnd r ->
+            r.pending && retryDue now r.at r.attempt (retryMembership hwnd groups <> r.members))
     // Sets of windows that, written and rebuilt, still did not combine.
     let mutable private refused: Set<Set<IntPtr>> = Set.empty
     let mutable private checks: Map<SlotKey, Check> = Map.empty
@@ -364,11 +385,11 @@ module TaskbarAppId =
     let private updateFlags () =
         let now = Environment.TickCount
         Volatile.Write(&wantsPass,
-                       waiting || replan || not unpinning.IsEmpty || (held |> Map.exists (fun _ h -> h.entry.pin)) ||
+                       waiting || replan || retryWaiting () || not unpinning.IsEmpty || (held |> Map.exists (fun _ h -> h.entry.pin)) ||
                        (checks |> Map.exists (fun key c -> needsSettledObservation now c.at (fun () -> verificationHere lastCurrent key.desktop (fun () -> c.members |> List.forall onCurrentDesktop)))) ||
                        (given |> Map.exists (fun h g -> not g.paused && (g.confirmed || needsSettledObservation now g.at (fun () -> dueHere g.desktop && (lastCurrent.IsSome || onCurrentDesktop h))))))
         // Kept rows still need the next settings transition, even without active checks.
-        Volatile.Write(&holding, waiting || not stuck.IsEmpty || not unpinning.IsEmpty || not held.IsEmpty || not checks.IsEmpty || (given |> Map.exists (fun _ g -> not g.paused)))
+        Volatile.Write(&holding, waiting || retryWaiting () || not stuck.IsEmpty || not unpinning.IsEmpty || not held.IsEmpty || not checks.IsEmpty || (given |> Map.exists (fun _ g -> not g.paused)))
 
     // ------------------------------------------------------- recovery file --
 
@@ -437,6 +458,9 @@ module TaskbarAppId =
     /// again under its current ID. Only windows shown on this desktop. A
     /// window without a button has nothing to refile.
     let private rebuild reason (hwnd: IntPtr) =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(12)
+#endif
         if not (hasButton hwnd) then
             trace hwnd "rebuild-skip" reason 0 "no-button"
             Done
@@ -467,7 +491,69 @@ module TaskbarAppId =
 
     let private newId () = prefix + Guid.NewGuid().ToString("N")
 
-    let private decline hwnd =
+#if DEBUG
+    // Diagnostic state is separate from policy state; elapsed time is not a key.
+    let mutable private diagnosticStates = Map.empty
+    let mutable private returnReasons: Map<IntPtr, string> = Map.empty
+    let private traceChange hwnd action reason state detail =
+        try
+            let key = hwnd, action, reason
+            if diagnosticStates.TryFind key <> Some state then
+                diagnosticStates <- diagnosticStates.Add(key, state)
+                trace hwnd action reason 0 detail
+        with _ -> ()
+
+    let private idClass (entry: Written) original value =
+        match value with
+        | None -> "unreadable"
+        | Some None -> "empty"
+        | Some value when entry.id.IsSome && value = entry.id -> "ours-current"
+        | Some value when entry.previous.IsSome && value = entry.previous -> "ours-previous"
+        | Some value when value = original -> "original"
+        | _ -> "other"
+
+    let private desktopClass = function
+        | None -> "failed"
+        | Some d when d = windowPinnedDesktop -> "window"
+        | Some d when d = appPinnedDesktop -> "app"
+        | Some _ -> "normal"
+#endif
+
+    // Return the exact reading to the caller, without another property-store read.
+    let private observedId path hwnd (h: Held) value =
+#if DEBUG
+        let classification = idClass { h.entry with id = Some h.id } h.original value
+        let detail = sprintf "id=%s original=%b" classification (value = Some h.original)
+        traceChange hwnd "id-observed" path detail detail
+#endif
+        value
+
+    let private sameWindow (entry: Written) =
+        let hwnd = nativeint entry.hwnd
+        let alive = IsWindow(hwnd)
+        let pid = if alive then processOf hwnd else 0u
+        let result = identity entry alive pid (if alive && pid = entry.pid then startedOf pid else None)
+        if result = Same && (entry.cookie |> Option.exists (fun c -> GetProp(hwnd, marker) <> nativeint c)) then Undecided else result
+
+    let private cancelRetry hwnd =
+        let retry = retries.TryFind hwnd
+        retries <- retries.Remove hwnd
+        match retry with
+        | Some r ->
+            let retained = held.ContainsKey hwnd || given.ContainsKey hwnd ||
+                           unpinning.ContainsKey hwnd || stuck.ContainsKey hwnd ||
+                           offSavePending.Contains hwnd || damagedWindows.Contains hwnd ||
+                           (saved |> List.exists (fun entry -> entry.hwnd = int64 hwnd))
+            if not retained && removeRetryMarker (sameWindow r.entry) r.entry.cookie.IsSome retained then
+                RemoveProp(hwnd, marker) |> ignore
+        | _ -> ()
+
+    let private decline reason hwnd =
+#if DEBUG
+        let detail = if declined.ContainsKey hwnd then "membership=existing" else "membership=new"
+        traceChange hwnd "decline" reason detail detail
+#endif
+        cancelRetry hwnd
         declined <- declined.Add(hwnd, processOf hwnd)
 
     let private desktopOf hwnd =
@@ -477,6 +563,9 @@ module TaskbarAppId =
         else None
 
     let private changePin hwnd pin =
+#if DEBUG
+        use metric = Bemo.Win32.ShellCallTrace.Measure(11)
+#endif
         withPinnedView hwnd (fun pins view ->
             let hr = if pin then pins.PinView(view) else pins.UnpinView(view)
             trace hwnd "pin" (if pin then "apply" else "return") hr ""
@@ -491,31 +580,42 @@ module TaskbarAppId =
         result
 
     /// Left as it is; listed for the next start, never touched again in this run.
-    let private keep hwnd (entry: Written) =
+    let private keep reason hwnd (entry: Written) =
         stuck <- stuck.Add(hwnd, entry)
-        decline hwnd
-
-    let private sameWindow (entry: Written) =
-        let hwnd = nativeint entry.hwnd
-        let alive = IsWindow(hwnd)
-        let pid = if alive then processOf hwnd else 0u
-        let result = identity entry alive pid (if alive && pid = entry.pid then startedOf pid else None)
-        if result = Same && (entry.cookie |> Option.exists (fun c -> GetProp(hwnd, marker) <> nativeint c)) then Undecided else result
+        decline reason hwnd
 
     /// Writes the window's own value back if it still carries an ID of ours.
     /// An application that set a value of its own since keeps it.
     let private giveBackCore off unpinned reason hwnd (entry: Written) (original: string option) desktop =
         try
+#if DEBUG
+            // Keep the initiating reason through deferred unpin completion.
+            if reason <> "unpin-observed" || not (returnReasons.ContainsKey hwnd) then
+                returnReasons <- returnReasons.Add(hwnd, reason)
+#endif
             let current = if off then readId hwnd else None
             match (if offReturn (not off) current then Same else sameWindow entry) with
-            | Gone -> ()
-            | Undecided -> keep hwnd entry
+            | Gone ->
+#if DEBUG
+                traceChange hwnd "restore-skip" reason "gone" "identity=gone"
+#endif
+                ()
+            | Undecided ->
+#if DEBUG
+                traceChange hwnd "restore-skip" reason "undecided" "identity=undecided"
+#endif
+                keep "restore-identity" hwnd entry
             | Same ->
                 match (if off then current else readId hwnd) with
                 | None ->
                     trace hwnd "restore-failure" reason 0 "unreadable"
-                    keep hwnd entry
+                    keep "restore-unreadable" hwnd entry
                 | Some current ->
+#if DEBUG
+                    if held.ContainsKey hwnd then
+                        let detail = sprintf "id=%s original=%b" (idClass entry original (Some current)) (current = original)
+                        traceChange hwnd "id-observed" "give-back" detail detail
+#endif
                     // Only the off path trusts the prefix without generation evidence.
                     let owned = offReturn (not off) (Some current) || ownsGeneration entry current
                     if owned then
@@ -539,17 +639,21 @@ module TaskbarAppId =
                                 // A failed ID return must not strand our window unpinned.
                                 if (removing || unpinned) && sameWindow entry = Same && ownsGeneration entry (readId hwnd |> Option.flatten) then
                                     changePin hwnd true |> ignore
-                                keep hwnd entry
+                                keep "restore-readback-failed" hwnd entry
                     elif current = original then
+#if DEBUG
+                        let detail = sprintf "already-original id=%s release=%s" (idClass entry original (Some current)) (defaultArg (returnReasons.TryFind hwnd) reason)
+                        traceChange hwnd "restore-skip" reason detail detail
+#endif
                         stuck <- stuck.Remove hwnd
                         given <- given.Add(hwnd, { entry = { entry with phase = Returned }; desktop = desktop
                                                    at = Environment.TickCount; rebuilt = false; retried = false; paused = false; confirmed = false })
                     else
                         trace hwnd "leave" reason 0 (if entry.id.IsNone && isOurs current then "legacy-unknown-generation" else "application-changed")
-                        keep hwnd entry
+                        keep "restore-application-changed" hwnd entry
         with ex ->
             trace hwnd "restore-failure" reason ex.HResult "exception"
-            keep hwnd entry
+            keep "restore-exception" hwnd entry
 
     let private giveBackTo reason hwnd entry original desktop =
         giveBackCore false false reason hwnd entry original desktop
@@ -651,14 +755,14 @@ module TaskbarAppId =
             | Gone -> unpinning <- unpinning.Remove hwnd
             | Undecided ->
                 unpinning <- unpinning.Remove hwnd
-                keep hwnd u.entry
+                keep "unpin-identity" hwnd u.entry
             | Same ->
                 let state = readPin hwnd
                 if state = Some false || final || settled Environment.TickCount u.at then
                     unpinning <- unpinning.Remove hwnd
                     if state = Some true then
                         // Keep the applied record while our protection is still present.
-                        keep hwnd u.entry
+                        keep "unpin-still-pinned" hwnd u.entry
                     else
                         // On expiry attempt the original ID even if IsView is unavailable.
                         // A failed write compensates only our own removed protection.
@@ -672,7 +776,13 @@ module TaskbarAppId =
     /// The entry leaves `held` only once the give-back is done, failed into
     /// `stuck` or left to the application: it is never dropped on the way.
     let private release' reason hwnd =
-        match held.TryFind hwnd with
+        if reason <> "pin-lost" then cancelRetry hwnd
+        let holding = held.TryFind hwnd
+#if DEBUG
+        let detail = sprintf "held=%b" holding.IsSome
+        traceChange hwnd "release-enter" reason detail detail
+#endif
+        match holding with
         | Some h ->
             giveBackTo reason hwnd h.entry h.original (filed.TryFind hwnd |> Option.map (fun key -> key.desktop))
             held <- held.Remove hwnd
@@ -713,7 +823,7 @@ module TaskbarAppId =
                 | Undecided ->
                     alive <- alive + 1
                     trace hwnd "keep" "undecided" 0 ""
-                    keep hwnd entry
+                    keep "recover-identity" hwnd entry
                 | Same ->
                     alive <- alive + 1
                     let desktop = desktopOf hwnd
@@ -727,7 +837,7 @@ module TaskbarAppId =
                         | None ->
                             // On retains the unknown original for a later start.
                             trace hwnd "keep" (if entry.secret = Some "unknown-original" then "legacy-unknown-original" else "unseal-failure") 0 ""
-                            keep hwnd entry
+                            keep "recover-original-unavailable" hwnd entry
         if off then
             for hwnd in damagedWindows do
                 returnOffKeeping hwnd (entries |> List.tryFind (fun e -> e.hwnd = int64 hwnd))
@@ -735,7 +845,11 @@ module TaskbarAppId =
         trace IntPtr.Zero "recover" "startup" 0 (sprintf "listed=%d alive=%d damaged=%b" entries.Length alive damaged)
         saveIfChanged ()
 
+    let private clearRetries () =
+        for KeyValue(hwnd, _) in retries do cancelRetry hwnd
+
     let private releaseAll reason =
+        clearRetries ()
         if reason = "disable" then returnOffKnown ()
         let windows = held |> Map.toList |> List.map fst
         for hwnd in windows do
@@ -745,7 +859,7 @@ module TaskbarAppId =
                 | Same -> release' reason hwnd
                 | Undecided ->
                     held <- held.Remove hwnd
-                    keep hwnd h.entry
+                    keep "release-identity" hwnd h.entry
                 | Gone -> held <- held.Remove hwnd
             | None -> ()
         lastProcessed <- None
@@ -772,7 +886,7 @@ module TaskbarAppId =
             if trySaveFile remaining then
                 given <- given.Remove hwnd
                 completed <- true
-                if g.entry.cookie.IsSome && sameWindow g.entry = Same then RemoveProp(hwnd, marker) |> ignore
+                if not (retries.ContainsKey hwnd) && g.entry.cookie.IsSome && sameWindow g.entry = Same then RemoveProp(hwnd, marker) |> ignore
         let due = given |> Map.filter (fun h g -> not g.paused && (g.confirmed || (onCurrentDesktop h && givenCheckDue final now g.at)))
         for KeyValue(hwnd, g) in due do
             let pause reason =
@@ -811,6 +925,10 @@ module TaskbarAppId =
                         let reason = if not valueOnly then "given-back" else
                                      match counts.Value with Configuration -> "given-value-only-configuration" | _ -> "given-value-only-unavailable"
                         trace hwnd "verify" reason 0 ""
+#if DEBUG
+                        let detail = sprintf "release=%s" (defaultArg (returnReasons.TryFind hwnd) "startup")
+                        traceChange hwnd "return-complete" reason detail detail
+#endif
                         finish hwnd g
                     | GivenUnverified when retryGivenCount final g.retried counts.Value ->
                         given <- given.Add(hwnd, { g with retried = true; at = now })
@@ -826,6 +944,17 @@ module TaskbarAppId =
                 | _ -> pause "given-value-unverified"
         completed
 
+#if DEBUG
+    let private retryVerification = System.Collections.Generic.Dictionary<IntPtr, int * int>()
+    let private retryResult members verdict =
+        for hwnd in members do
+            match retryVerification.TryGetValue hwnd with
+            | true, (attempt, at) ->
+                Bemo.Win32.ShellCallTrace.Retry(verdict, attempt, Environment.TickCount - at)
+                retryVerification.Remove hwnd |> ignore
+            | _ -> ()
+#endif
+
     let private verify (s: Snapshot) seq =
         let now = Environment.TickCount
         let due = checks |> Map.filter (fun key c -> verificationHere s.current key.desktop (fun () -> c.members |> List.forall onCurrentDesktop) && c.seq < seq && settled now c.at && (c.members |> List.forall (fun h -> held.TryFind h |> Option.forall (fun h -> not h.pinPending))))
@@ -834,16 +963,24 @@ module TaskbarAppId =
             let expected = c.members |> List.filter hasButton |> List.length
             let actual = countMap counts.Value |> Option.bind (fun m -> m.TryFind c.id) |> Option.defaultValue 0
             let detail = sprintf "group=%X expected=%d actual=%d" (int64 key.group) expected actual
-            match verdict c.rebuilt expected (countMap counts.Value) c.id (fun () -> c.members |> List.map (fun h -> h, readId h)) with
+            match verdict c.rebuilt expected (countMap counts.Value) c.id (fun () -> c.members |> List.map (fun hwnd ->
+                let value = readId hwnd
+                hwnd, (match held.TryFind hwnd with Some h -> observedId "verify" hwnd h value | None -> value))) with
             | Merged ->
+#if DEBUG
+                retryResult c.members "merged"
+#endif
                 trace IntPtr.Zero "verify" "merged" 0 detail
                 checks <- checks.Remove key
             | Declined off ->
+#if DEBUG
+                retryResult c.members "application-changed"
+#endif
                 // The application set its own ID again: it keeps its own
                 // button, and the slot is planned again without it.
                 for hwnd in off do
                     trace hwnd "decline" "application-changed" 0 ""
-                    decline hwnd
+                    decline "verify-application-changed" hwnd
                     release' "declined" hwnd
                 checks <- checks.Remove key
                 replan <- true
@@ -851,10 +988,13 @@ module TaskbarAppId =
                 trace IntPtr.Zero "verify" "short-rebuild" 0 detail
                 for hwnd in c.members do
                     match held.TryFind hwnd with
-                    | Some h when sameWindow h.entry = Same && readId hwnd = Some(Some c.id) -> rebuild "verify" hwnd |> ignore
+                    | Some h when sameWindow h.entry = Same && (readId hwnd |> observedId "verify-rebuild" hwnd h) = Some(Some c.id) -> rebuild "verify" hwnd |> ignore
                     | _ -> ()
                 checks <- checks.Add(key, { c with rebuilt = true; at = Environment.TickCount; seq = seq })
             | Short ->
+#if DEBUG
+                retryResult c.members "short"
+#endif
                 // Which window stays out cannot be told: the whole button
                 // is given back, and this set of windows is not tried again.
                 trace IntPtr.Zero "verify" "short" 0 detail
@@ -866,6 +1006,9 @@ module TaskbarAppId =
             | Unverified when retryCount c.retried counts.Value ->
                 checks <- checks.Add(key, { c with retried = true; seq = seq; at = now })
             | Unverified ->
+#if DEBUG
+                retryResult c.members "unverified"
+#endif
                 trace IntPtr.Zero "verify" "unverified" 0 detail
                 checks <- checks.Remove key
         let completed = verifyGiven counts false
@@ -874,10 +1017,14 @@ module TaskbarAppId =
 
     let private finishPin hwnd (h: Held) =
         let fail reason =
-            decline hwnd
+#if DEBUG
+            let detail = sprintf "pin=%b pending=%b issued=%b" h.entry.pin h.pinPending h.pinIssued
+            traceChange hwnd "finish-pin-failed" reason detail detail
+#endif
+            decline reason hwnd
             release' reason hwnd
             replan <- true
-        if sameWindow h.entry <> Same || readId hwnd <> Some(Some h.id) then
+        if sameWindow h.entry <> Same || (readId hwnd |> observedId "finish-pin" hwnd h) <> Some(Some h.id) then
             fail "pin-changed"
         else
             match pinObservation Environment.TickCount h.pinAt h.pinIssued (desktopOf hwnd) with
@@ -894,19 +1041,62 @@ module TaskbarAppId =
         for KeyValue(hwnd, h) in held do
             if h.pinPending then finishPin hwnd h
             elif h.entry.pin && sameWindow h.entry = Same then
-                // Do not reinstate a pin the owner may have deliberately removed.
-                match desktopOf hwnd with
-                | Some d when d <> windowPinnedDesktop && settled Environment.TickCount h.pinAt ->
-                    decline hwnd
+                // Retry only when the original app pin survived an external ID reset.
+                let live = desktopOf hwnd
+                let mutable pinCheckAt = 0
+                match live with
+                | Some d when d <> windowPinnedDesktop && (pinCheckAt <- Environment.TickCount; settled pinCheckAt h.pinAt) ->
+                    let value = readId hwnd
+#if DEBUG
+                    let state = sprintf "desktop=%s pin=%b pending=%b issued=%b identity=same id=%s original=%b"
+                                    (desktopClass live) h.entry.pin h.pinPending h.pinIssued
+                                    (idClass h.entry h.original value) (value = Some h.original)
+                    traceChange hwnd "finish-pins" "pin-lost" state (sprintf "%s elapsed-ms=%d" state (pinCheckAt - h.pinAt))
+#endif
+                    let previous = retries.TryFind hwnd
+                    decline "pin-lost" hwnd
+                    if retryLostPin "pin-lost" h.entry.pin true h.original value live then
+                        let attempt = previous |> Option.map (fun r -> min 4 (r.attempt + 1)) |> Option.defaultValue 1
+                        retries <- retries.Add(hwnd, { entry = h.entry; original = h.original; attempt = attempt
+                                                       at = pinCheckAt; members = retryMembership hwnd retryGroups; pending = true })
+                        trace hwnd "retry" "pin-lost" 0 (sprintf "attempt=%d wait-ms=%d" attempt (retryWaitMs attempt))
                     release' "pin-lost" hwnd
                     replan <- true
                 | _ -> ()
+
+    /// Retire only a verified return, durably, before allowing normal preparation.
+    let private retryPending (s: Snapshot) =
+        for KeyValue(hwnd, r) in retries do
+            let changed = retryMembership hwnd s.groups <> r.members
+            if r.pending && retryDue Environment.TickCount r.at r.attempt changed then
+                if sameWindow r.entry <> Same then decline "retry-identity" hwnd
+                elif stuck.ContainsKey hwnd || unpinning.ContainsKey hwnd then decline "retry-return-pending" hwnd
+                elif readId hwnd <> Some r.original || not (isAppPinned (desktopOf hwnd)) then
+                    decline "retry-application-changed" hwnd
+                else
+                    let retired =
+                        not (given.ContainsKey hwnd) ||
+                        trySaveFile (listed () |> List.filter (fun e -> e.hwnd <> int64 hwnd))
+                    if retired then
+                        given <- given.Remove hwnd
+                        declined <- declined.Remove hwnd
+                        retries <- retries.Add(hwnd, { r with pending = false })
+#if DEBUG
+                        retryVerification.[hwnd] <- (r.attempt, Environment.TickCount)
+#endif
+                        trace hwnd "retry-due" "pin-lost" 0
+                            (sprintf "attempt=%d wait-ms=%d changed=%b" r.attempt (retryWaitMs r.attempt) changed)
+                    else
+                        // File failures must not turn a due retry into a busy loop.
+                        retries <- retries.Add(hwnd, { r with at = Environment.TickCount; members = retryMembership hwnd s.groups })
 
     let private fullPass (s: Snapshot) seq =
         lastCurrent <- s.current
         observed <- Set.union (s.places |> Map.toSeq |> Seq.map fst |> Set.ofSeq) (s.groups |> List.collect snd |> Set.ofList)
         replan <- false
-        if not s.enabled then returnOffKnown ()
+        if not s.enabled then
+            clearRetries ()
+            returnOffKnown ()
         // Windows that closed, or whose handle another process now uses.
         let gone (entry: Written) = forgetGone (offSavePending.Contains(nativeint entry.hwnd)) (sameWindow entry)
         for KeyValue(hwnd, h) in held do
@@ -920,6 +1110,16 @@ module TaskbarAppId =
                            | _ -> { g with desktop = returnDesktop (desktopOf hwnd) })
         stuck <- stuck |> Map.filter (fun _ e -> not (gone e))
         declined <- declined |> Map.filter (fun hwnd pid -> IsWindow(hwnd) && processOf hwnd = pid)
+#if DEBUG
+        diagnosticStates <- diagnosticStates |> Map.filter (fun (hwnd, _, _) _ -> IsWindow(hwnd))
+        returnReasons <- returnReasons |> Map.filter (fun hwnd _ -> IsWindow(hwnd))
+#endif
+        for KeyValue(hwnd, r) in retries do
+            let alive = IsWindow(hwnd) && processOf hwnd = r.entry.pid
+            if not (alive && (s.groups |> List.exists (fun (_, members) -> List.contains hwnd members))) then
+                if alive && r.pending then declined <- declined.Remove hwnd
+                cancelRetry hwnd
+        if s.enabled then retryPending s
         prepareMisses <- prepareMisses |> Map.filter (fun hwnd (pid, _, _) -> IsWindow(hwnd) && processOf hwnd = pid)
         refused <- refused |> Set.filter (Set.forall (fun h -> IsWindow(h)))
         finishUnpins false
@@ -971,7 +1171,7 @@ module TaskbarAppId =
                             prepareMisses <- prepareMisses.Add(hwnd, (pid, misses, first))
                             if misses >= 3 && settled now first then
                                 trace hwnd "refuse" "desktop-unreadable" 0 ""
-                                decline hwnd
+                                decline "prepare-desktop-unreadable" hwnd
                             replan <- true
                             None
                         | Some started, Some value, Some desktop ->
@@ -979,7 +1179,7 @@ module TaskbarAppId =
                             match originalOf value with
                             | None ->
                                 trace hwnd "keep" (if damagedJournal then "damaged-original" else "unknown-original") 0 ""
-                                decline hwnd
+                                decline "prepare-unknown-original" hwnd
                                 replan <- true
                                 None
                             | Some original ->
@@ -992,11 +1192,11 @@ module TaskbarAppId =
                         | _ ->
                             // Its own value or its process cannot be read: never written, never retried.
                             trace hwnd "refuse" "unreadable" 0 ""
-                            decline hwnd
+                            decline "prepare-unreadable" hwnd
                             None
                     with ex ->
                         trace hwnd "refuse" "prepare" ex.HResult ""
-                        decline hwnd
+                        decline "prepare-exception" hwnd
                         None
                 | _ -> None)
             |> Map.ofList
@@ -1022,8 +1222,14 @@ module TaskbarAppId =
             // Recheck live state immediately before replacing the ID, even on rotation.
             let rotating = held.ContainsKey hwnd
             let live = desktopOf hwnd
-            if not (pinWriteAllowed entry.pin rotating live) || (entry.pin && not (canPin hwnd)) then
-                if live.IsSome then decline hwnd
+            let allowed = pinWriteAllowed entry.pin rotating live
+            if not allowed || (entry.pin && not (canPin hwnd)) then
+                let reason = if not allowed then "pin-write-disallowed" else "can-pin-failed"
+#if DEBUG
+                let detail = sprintf "desktop=%s pin=%b rotating=%b" (desktopClass live) entry.pin rotating
+                traceChange hwnd "write-refused" reason detail detail
+#endif
+                if live.IsSome then decline reason hwnd
                 replan <- true
                 if held.ContainsKey hwnd then release' "app-pinned" hwnd
                 else giveBackTo "app-pinned" hwnd entry original (Some key.desktop)
@@ -1036,6 +1242,7 @@ module TaskbarAppId =
                 if accepted then
                     stuck <- stuck.Remove hwnd
                     held <- held.Add(hwnd, { entry = entry; original = original; id = id; pinPending = entry.pin && not rotating; pinIssued = rotating; pinAt = lastWrite })
+                    retries.TryFind hwnd |> Option.iter (fun r -> retries <- retries.Add(hwnd, { r with entry = entry }))
                     filed <- filed.Add(hwnd, key)
                     touched <- touched.Add key
                     trace hwnd "apply" role hr (sprintf "group=%X" (int64 key.group))
@@ -1043,7 +1250,7 @@ module TaskbarAppId =
                     if held.[hwnd].pinPending then finishPin hwnd held.[hwnd]
                 else
                     trace hwnd "refuse" (if hr < 0 then "write" else "readback") hr role
-                    decline hwnd
+                    decline (if hr < 0 then "write-failed" else "readback-failed") hwnd
                     // Whatever of ours may be on it goes; its own value comes back.
                     if held.ContainsKey hwnd then release' "refused" hwnd
                     else giveBackTo "refused" hwnd entry original (Some key.desktop)
@@ -1056,16 +1263,16 @@ module TaskbarAppId =
                     | Some h ->
                         // Moving to a new ID: only over a value of ours.
                         match (if not isListed || sameWindow h.entry <> Same then Unreadable
-                               else rewriteGeneration h.id (readId hwnd)) with
+                               else rewriteGeneration h.id (readId hwnd |> observedId "rewrite" hwnd h)) with
                         | Rewrite -> write hwnd id slotOf.[hwnd] (h.entry, h.original)
                         | ApplicationChanged ->
                             trace hwnd "decline" "application-changed" 0 "rewrite"
-                            decline hwnd
+                            decline "rewrite-application-changed" hwnd
                             release' "declined" hwnd
                             replan <- true
                         | Unreadable ->
                             trace hwnd "refuse" "unreadable" 0 "rewrite"
-                            decline hwnd
+                            decline "rewrite-unreadable" hwnd
                             replan <- true
                     | None ->
                         match fresh.TryFind hwnd with
@@ -1074,7 +1281,7 @@ module TaskbarAppId =
                                 write hwnd id slotOf.[hwnd] (entry, original)
                             else
                                 trace hwnd "keep" "prepare-changed" 0 ""
-                                keep hwnd entry
+                                keep "prepare-changed" hwnd entry
                                 replan <- true
                         | _ -> ()
                 with ex ->
@@ -1083,7 +1290,7 @@ module TaskbarAppId =
                     | Some _, _ -> release' "apply-exception" hwnd
                     | None, Some(entry, original) when isListed -> giveBackTo "apply-exception" hwnd entry original (Some slotOf.[hwnd].desktop)
                     | _ -> ()
-                    decline hwnd
+                    decline "apply-exception" hwnd
                     replan <- true
             | Restore _ -> ()
         slotState <- retainSharedSlots s.groups shared slotState next
@@ -1102,10 +1309,11 @@ module TaskbarAppId =
         saveIfChanged ()
 
     let private pass (s: Snapshot) seq =
+        retryGroups <- s.groups
         let previous = lastProcessed
         lastProcessed <- None
         let monitorOnly = previous = Some s && s.enabled && not waiting && not replan &&
-                          unpinning.IsEmpty &&
+                          unpinning.IsEmpty && not (retryReady Environment.TickCount s.groups) &&
                           (checks |> Map.forall (fun key c -> not (needsSettledObservation Environment.TickCount c.at (fun () -> verificationHere s.current key.desktop (fun () -> c.members |> List.forall onCurrentDesktop))))) &&
                           (given |> Map.forall (fun h g -> g.paused || (not g.confirmed && not (needsSettledObservation Environment.TickCount g.at (fun () -> dueHere g.desktop && (s.current.IsSome || onCurrentDesktop h)))))) &&
                           (held |> Map.forall (fun _ h -> not h.pinPending))
