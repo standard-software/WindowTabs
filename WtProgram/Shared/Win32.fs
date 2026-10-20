@@ -301,32 +301,6 @@ type OS() as this=
         window.registerShellHookWindow()
         iWindow :?> IDisposable
 
-    member this.registerKeyboardLLHook(callback) =
-        let proc nCode (wParam:IntPtr) lParam = 
-            let hookStruct = unbox<KBDLLHOOKSTRUCT>(Marshal.PtrToStructure(lParam, typeof<KBDLLHOOKSTRUCT>))
-            match callback(wParam, hookStruct) with
-            | Some(rv) -> rv
-            | None -> WinUserApi.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam)
-        let del = HOOKPROC(proc)
-        let handle = GCHandle.Alloc(del)
-        let hookId = WinUserApi.SetWindowsHookEx(
-            WindowHookTypes.WH_KEYBOARD_LL, 
-            del, 
-            WinBaseApi.GetModuleHandle(IntPtr.Zero),
-            0)
-        let dispose() =
-            WinUserApi.UnhookWindowsHookEx(hookId).ignore
-            handle.Free()
-        { 
-            new Object() with
-                override this.Finalize() = 
-                    dispose()
-            interface IDisposable with
-                member this.Dispose() =
-                    GC.SuppressFinalize(this)
-                    dispose()
-        }
-
     member this.screenRegion =
         Mon.all.fold (Rgn()) <| fun rgn mon ->
             rgn.union(Rgn(mon.displayRect))
