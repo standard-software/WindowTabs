@@ -2,6 +2,16 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next6
+
+- Taskbar: a window that split off from its group's taskbar button joins it
+  again within minutes, instead of staying apart.
+- When the whole desktop stops answering, WindowTabs waits up to two
+  minutes before restarting itself, instead of restarting at once.
+- Fixed: with "Prevent moving windows and resizing them from the top",
+  the strip guarding the top edge of some windows was hidden and shown
+  again several times a second.
+
 ## version ss_2026.10.17_next5
 
 - Fixed: in the tab menu, clicking an item of a submenu that opened over
