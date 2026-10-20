@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next8
+
+- Settings: in light mode, the shortcut key fields name keys such as
+  "," and ";" as Windows does, and show the held Ctrl / Shift / Alt
+  while a key is being typed.
+
 ## version ss_2026.10.17_next7
 
 - Settings: a new System page shows the APPDATA and exe folders

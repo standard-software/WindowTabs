@@ -2,6 +2,12 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.17_next8
+
+- 設定: ライトモードのショートカットキーの欄で、「,」「;」などのキーを
+  Windows と同じ名前で表示し、入力中は押している Ctrl / Shift / Alt を
+  表示するようにした。
+
 ## version ss_2026.10.17_next7
 
 - 設定: [システム] タブを追加した。APPDATA と Exe のフォルダ、
