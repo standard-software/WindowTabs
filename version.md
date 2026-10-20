@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next9
+
+- Settings: when a check box without its own caption gets the keyboard
+  focus, the focus frame is drawn around the box only.
+
 ## version ss_2026.10.17_next8
 
 - Settings: in light mode, the shortcut key fields name keys such as
