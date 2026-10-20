@@ -807,6 +807,9 @@ type NotifyIconPlugin() as this =
         member this.init() =
             AppDialog.initialize()
             let notifyIcon = this.icon
+            PortableSettings.writeFailed.Publish.Add(fun () ->
+                notifyIcon.ShowBalloonTip(5000, "WindowTabs", Localization.getString("PortableWriteFailed"), ToolTipIcon.Warning))
+            PortableSettings.writeNotificationReady()
             let contextMenu = notifyIcon.ContextMenu
 
             // Create menu items

@@ -18,6 +18,15 @@ module ColorMix =
             (int c1.B + int c2.B) / 2)
 
 type Settings(isStandAlone) as this =
+    // Weak keys retain the source path without keeping caller-owned JSON alive.
+    let jsonPaths = System.Runtime.CompilerServices.ConditionalWeakTable<JObject, string>()
+#if DEBUG
+    let mutable pathResolutionCount = 0
+#endif
+    let mutable operationPath : string option = None
+    let mutable cachedPath : string option = None
+    let mutable lastRefusedContent : string option = None
+    let mutable lastSaveSucceeded = false
     let mutable cachedSettingsString = None
     // JObject is mutable, so keep an internal parsed template and return a
     // clone to callers. This avoids reparsing unchanged JSON without allowing
@@ -62,25 +71,77 @@ type Settings(isStandAlone) as this =
         cachedSettingsRec <- None
         this.settings |> ignore
 
+    member private this.resolvePath() =
+#if DEBUG
+        pathResolutionCount <- pathResolutionCount + 1
+        let benchmarkPath = Environment.GetEnvironmentVariable("WINDOWTABS_BENCHMARK_SETTINGS")
+        if not (String.IsNullOrEmpty(benchmarkPath)) then benchmarkPath else
+#endif
+        let appData, exe = PortableSettings.appDataPath(), PortableSettings.exePath()
+        PortableSettings.choosePath appData exe (File.Exists(appData)) (File.Exists(exe))
+
     member this.path =
+        match operationPath with
+        | Some(path) -> path
+        | None -> this.resolvePath()
+
+    // Nested reads and writes share one selection, including recovery and cache publication.
+    member private this.withPath(action: bool -> 'T) : 'T =
+        match operationPath with
+        | Some(_) -> action false
+        | None ->
+            let path = this.resolvePath()
+            let changed = cachedPath.IsSome && cachedPath <> Some(path)
+            operationPath <- Some(path)
+            try
+                if cachedPath <> Some(path) then
+                    cachedPath <- Some(path)
+                    cachedSettingsString <- None
+                    cachedSettingsJson <- None
+                    cachedSettingsRec <- None
+                    backedUpThisProcess <- false
+                    settingsUntrusted <- false
+                    recoveryAttempted <- false
+                    lastRefusedContent <- None
+                    loggedFallbacks.Clear()
+                    hasExistingSettings <- File.Exists(path)
+                action changed
+            finally operationPath <- None
+
+    member private this.writeWithPath(action: unit -> unit) =
+        this.withPath(fun changed ->
+            if changed then
+                // The incoming value belongs to the previous file. Reload before accepting edits.
+                lastSaveSucceeded <- false
+                this.settings |> ignore
+            else action())
+
+    member private this.cloneSettingsJson(source: JObject) =
+        let clone = source.DeepClone() :?> JObject
+        let path =
+            match jsonPaths.TryGetValue(source) with
+            | true, path -> Some(path)
+            | _ -> cachedPath
+        path |> Option.iter (fun path -> jsonPaths.Add(clone, path))
+        clone
+
+    member private this.diagnosticPath =
 #if DEBUG
         let benchmarkPath = Environment.GetEnvironmentVariable("WINDOWTABS_BENCHMARK_SETTINGS")
         if not (String.IsNullOrEmpty(benchmarkPath)) then benchmarkPath else
 #endif
-        let path = 
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-        Path.Combine(path, "WindowTabsSettings.txt")
-    // // debug: use local settings file
-    // member this.path =
-    //     let path = 
-    //         if isStandAlone then "."
-    //         else Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowTabs")
-    //     Path.Combine(path, "WindowTabsSettings.txt")
+        PortableSettings.appDataPath()
 
-    member this.fileExists : bool = File.Exists(this.path) 
+    member this.fileExists : bool = File.Exists(this.path)
 
     member this.settingsString
-        with get() = 
+        with get() =
+            if cachedSettingsString.IsSome then this.settingsStringCore
+            else this.withPath(fun _ -> this.settingsStringCore)
+        and set(value) = this.writeWithPath(fun () -> this.settingsStringCore <- value)
+
+    member private this.settingsStringCore
+        with get() =
             if cachedSettingsString.IsNone then
                 cachedSettingsString <-
                     try
@@ -106,7 +167,7 @@ type Settings(isStandAlone) as this =
                         settingsUntrusted <- true
 #if DEBUG
                         (try
-                            File.AppendAllText(this.path + ".read_error.log",
+                            File.AppendAllText(this.diagnosticPath + ".read_error.log",
                                 sprintf "%s read failed: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")) ex + Environment.NewLine)
                          with _ -> ())
 #endif
@@ -114,12 +175,14 @@ type Settings(isStandAlone) as this =
             cachedSettingsString
 
         and set(newSettings : string option) =
+            lastSaveSucceeded <- false
             try
                 let newContent = newSettings.Value
                 // Dirty check: skip when the on-disk content (mirrored in cache) is identical.
                 // Periodic save fires every 10s; this avoids the ~7 ms disk write when nothing changed.
                 match cachedSettingsString with
-                | Some(prev) when prev = newContent -> ()
+                | _ when settingsUntrusted && lastRefusedContent = Some(newContent) -> ()
+                | Some(prev) when prev = newContent && File.Exists(this.path) && not settingsUntrusted -> lastSaveSucceeded <- true
                 | _ ->
                     let settingsDir = Path.GetDirectoryName(this.path)
                     if Directory.Exists(settingsDir).not then
@@ -141,7 +204,7 @@ type Settings(isStandAlone) as this =
                         try
                             File.Copy(this.path, this.path + ".bak." + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true)
                             let old =
-                                Directory.GetFiles(settingsDir, Path.GetFileName(this.path) + ".bak.*")
+                                PortableSettings.backups this.path
                                 |> Array.sortDescending
                             if old.Length > 10 then
                                 old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
@@ -179,6 +242,7 @@ type Settings(isStandAlone) as this =
                             Some("shrank to a third with no Version")
                         else None
                     let looksLikeWipe = refusedReason.IsSome
+                    if settingsUntrusted then lastRefusedContent <- Some(newContent)
                     // DEBUG builds only: trace every write with the caller
                     // stack, so the next wipe-like incident names the code
                     // path that produced it. Not compiled into Release - it
@@ -191,7 +255,7 @@ type Settings(isStandAlone) as this =
                     // rather than the oldest of it.
 #if DEBUG
                     try
-                        let tracePath = this.path + ".write_trace.log"
+                        let tracePath = this.diagnosticPath + ".write_trace.log"
                         if File.Exists(tracePath) && (FileInfo(tracePath)).Length > 5_000_000L then
                             let previous = tracePath + ".1"
                             (try File.Delete(previous) with _ -> ())
@@ -209,7 +273,7 @@ type Settings(isStandAlone) as this =
 #if DEBUG
                     if looksLikeWipe then
                         (try
-                            File.AppendAllText(this.path + ".read_error.log",
+                            File.AppendAllText(this.diagnosticPath + ".read_error.log",
                                 sprintf "%s REFUSED settings write (%s: %d bytes over %d on disk)" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) (refusedReason.def "") newContent.Length existingLen + Environment.NewLine)
                          with _ -> ())
 #endif
@@ -223,6 +287,7 @@ type Settings(isStandAlone) as this =
                             File.Replace(tempPath, this.path, null)
                         else
                             File.Move(tempPath, this.path)
+                        lastSaveSucceeded <- true
                         // Refresh in-memory caches with the freshly written content
                         cachedSettingsString <- Some(newContent)
                         cachedSettingsJson <- None
@@ -230,9 +295,11 @@ type Settings(isStandAlone) as this =
                         this.settings |> ignore
             with
             | ex ->
+                if this.path = PortableSettings.exePath() then PortableSettings.notifyWriteFailure()
                 // Log error but don't crash
                 System.Diagnostics.Debug.WriteLine(sprintf "Failed to save settings: %s" ex.Message)
-            
+
+
     // Falling back to an empty JObject is what turns a single swallowed
     // exception into "the settings are the defaults" further up - the wipe
     // signature seen on 08-24 / 08-25. The fallbacks stay (crashing here
@@ -243,7 +310,7 @@ type Settings(isStandAlone) as this =
 #if DEBUG
         if loggedFallbacks.Add(where) then
             try
-                File.AppendAllText(this.path + ".read_error.log",
+                File.AppendAllText(this.diagnosticPath + ".read_error.log",
                     sprintf "%s %s fell back to empty settings - no setting is saved until a backup is adopted or WindowTabs is restarted: %O" (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")) where ex + Environment.NewLine)
             with _ -> ()
 #else
@@ -259,13 +326,12 @@ type Settings(isStandAlone) as this =
     // .bak.20260826_181345 was. The file that could not be read is kept as
     // <file>.corrupt.<stamp> instead of being overwritten.
     member private this.tryRecoverFromBackup() : JObject option =
+        let path = this.path
         if recoveryAttempted then None
         else
             recoveryAttempted <- true
             try
-                let dir = Path.GetDirectoryName(this.path)
-                let name = Path.GetFileName(this.path)
-                Directory.GetFiles(dir, name + ".bak.*")
+                PortableSettings.backups path
                 |> Array.sortDescending
                 |> Array.tryPick (fun backup ->
                     try
@@ -274,9 +340,15 @@ type Settings(isStandAlone) as this =
                         match parsed.getString("Version") with
                         | Some(version) when version <> "" ->
                             let stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss")
-                            let kept = this.path + ".corrupt." + stamp
-                            if File.Exists(this.path) then File.Move(this.path, kept)
-                            File.Copy(backup, this.path, true)
+                            let kept = path + ".corrupt." + stamp
+                            let staging = path + "." + Guid.NewGuid().ToString("N") + ".tmp"
+                            try
+                                File.Copy(backup, staging)
+                                if File.ReadAllText(staging) <> text then failwith "Backup verification failed."
+                                if File.Exists(path) then File.Replace(staging, path, kept)
+                                else File.Move(staging, path)
+                            finally
+                                try File.Delete(staging) with _ -> ()
                             // File and derived state are replaced together, so
                             // nothing built while the settings were unreadable
                             // survives into the recovered process.
@@ -286,7 +358,7 @@ type Settings(isStandAlone) as this =
                             settingsUntrusted <- false
 #if DEBUG
                             (try
-                                File.AppendAllText(this.path + ".read_error.log",
+                                File.AppendAllText(this.diagnosticPath + ".read_error.log",
                                     sprintf "%s RECOVERED the settings from %s (%d bytes, Version %s); the unreadable file is kept as %s"
                                         (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
                                         (Path.GetFileName(backup)) text.Length version (Path.GetFileName(kept))
@@ -299,6 +371,20 @@ type Settings(isStandAlone) as this =
             with _ -> None
 
     member private this.getSettingsJson(cloneForCaller: bool) =
+        if cachedSettingsJson.IsSome then this.getSettingsJsonCore(cloneForCaller)
+        else this.withPath(fun _ -> this.getSettingsJsonCore(cloneForCaller))
+
+    member this.settingsJson
+        with get() = this.getSettingsJson(true)
+        and set(value: JObject) =
+            this.writeWithPath(fun () ->
+                match jsonPaths.TryGetValue(value) with
+                | true, path when Some(path) <> operationPath ->
+                    lastSaveSucceeded <- false
+                    this.clearCaches()
+                | _ -> this.settingsJsonCore <- value)
+
+    member private this.getSettingsJsonCore(cloneForCaller: bool) =
         let result =
             try
                 match this.settingsString with
@@ -333,14 +419,14 @@ type Settings(isStandAlone) as this =
                 this.logEmptyFallback "settingsJson outer" ex
                 JObject()  // Return empty JObject if any error occurs
 
-        if cloneForCaller then result.DeepClone() :?> JObject else result
+        if cloneForCaller then this.cloneSettingsJson(result) else result
 
     member this.settingsJsonReadOnly =
         // This object must never escape code that only reads it. Mutating
         // callers use settingsJson, which returns an isolated clone.
         this.getSettingsJson(false)
 
-    member this.settingsJson
+    member private this.settingsJsonCore
         with get() = this.getSettingsJson(true)
         and set(settingsJson:JObject) =
             // Cleanup belongs to a normal save, never to loading or recovery.
@@ -576,10 +662,16 @@ type Settings(isStandAlone) as this =
 
     member this.update f = this.settings <- f(this.settings)
 
-    member x.settings
+    member this.settings
+        with get() =
+            if cachedSettingsRec.IsSome then this.settingsCore
+            else this.withPath(fun _ -> this.settingsCore)
+        and set(value) = this.writeWithPath(fun () -> this.settingsCore <- value)
+
+    member private x.settingsCore
         with get() =
             let rebuilding = cachedSettingsRec.IsNone
-            if rebuilding then 
+            if rebuilding then
                 try
                     let settingsJson = this.settingsJson
                     let settings = {
@@ -642,7 +734,7 @@ type Settings(isStandAlone) as this =
                                         if not (isNull left) then appearanceObject.[rightKey] <- left.DeepClone()
                                 appearanceObject.items.fold this.defaultTabAppearance <| fun appearance (key,value) ->
                                     try
-                                        let value = 
+                                        let value =
                                             let value = (value :?> JValue).Value
                                             let fieldType = Serialize.getFieldType (appearance.GetType()) key
                                             if fieldType = typeof<Int32> then box(unbox<Int64>(value).Int32)
@@ -757,6 +849,26 @@ type Settings(isStandAlone) as this =
             this.settingsJson <- settingsJson
 
     interface ISettings with
+        member _.activePath = this.settings |> ignore; cachedPath.Value
+        member _.transferSettings(toExe, move) =
+            let appData, exe = PortableSettings.appDataPath(), PortableSettings.exePath()
+            let source, destination = if toExe then appData, exe else exe, appData
+            let validateSource() =
+                if this.path <> source || not (File.Exists(source)) || settingsUntrusted ||
+                   (not toExe && File.Exists(appData)) then
+                    failwith "Settings source is unavailable."
+            validateSource()
+            if not (PortableSettings.canWrite(destination)) then failwith "Settings destination is not writable."
+            this.settingsJson <- this.settingsJson
+            if not lastSaveSucceeded then failwith "Settings could not be saved."
+            validateSource()
+            // Return must also refuse a destination created after the checks above.
+            try PortableSettings.transfer source destination move toExe
+            finally
+                backedUpThisProcess <- false
+                this.clearCaches()
+
+
 
         member x.setValue((key,value)) =
             let settings = x.settings
@@ -781,5 +893,5 @@ type Settings(isStandAlone) as this =
                 if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then
                     this.settings |> ignore
                 let _, json = snapshot.value.Value
-                json.DeepClone() :?> JObject
-            and set(value) = this.settingsJson <- value 
+                this.cloneSettingsJson(json)
+            and set(value) = this.settingsJson <- value

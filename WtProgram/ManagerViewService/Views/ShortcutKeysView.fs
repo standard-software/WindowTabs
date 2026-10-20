@@ -199,46 +199,6 @@ type ShortcutKeysView() =
         form.Padding <- UIHelper.settingsPagePadding
         form
 
-    // Match the color swatch's painted height without changing row spacing.
-    // A dark edit has one frame pixel outside each vertical edge; the light
-    // swatch's themed background is inset one pixel inside its bounds.
-    do
-        let fields = [for _, editor in numberEditors -> editor.control] @
-                     [nextTabEditor.control; prevTabEditor.control; newTabRightEditor.control]
-        let mutable fitting = false
-        let mutable measuredScale = -1.0
-        let mutable originalHeight = SettingsField.heightPx
-        let mutable swatchHeight = SettingsField.heightPx
-        let fit () =
-            if not fitting then
-                fitting <- true
-                try
-                    let scale = SettingsDpi.current()
-                    if measuredScale <> scale then
-                        use probe = new TextBox(Multiline = true, AutoSize = false, Height = SettingsField.heightPx)
-                        probe.Scale(SizeF(float32 scale, float32 scale))
-                        use swatch = new Button(Height = SettingsField.heightPx)
-                        swatch.Scale(SizeF(float32 scale, float32 scale))
-                        swatchHeight <- swatch.Height
-                        // The native hotkey window has no non-client border;
-                        // its full height scales like the swatch. The managed
-                        // edit excludes its non-client border while scaling.
-                        originalHeight <- if HotKeyControl.UseManaged then probe.Height else swatch.Height
-                        measuredScale <- scale
-                    let height = swatchHeight - 2
-                    for field in fields do
-                        if obj.ReferenceEquals(field.Parent, panel) then
-                            let spacing = originalHeight + 2 * SettingsDpi.px UIHelper.settingsRowMarginPx - height
-                            let margin = Padding(field.Margin.Left, spacing / 2, field.Margin.Right, spacing - spacing / 2)
-                            if field.Margin <> margin then field.Margin <- margin
-                        if field.Height <> height then field.Height <- height
-                finally fitting <- false
-        for field in fields do
-            field.SizeChanged.Add(fun _ -> fit ())
-            field.FontChanged.Add(fun _ -> fit ())
-        panel.Layout.Add(fun _ -> fit ())
-        fit ()
-
     member this.refresh() =
         let previous = suppress
         suppress <- true

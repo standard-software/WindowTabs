@@ -238,6 +238,7 @@ type ColorEditor() as this =
         tb.CharacterCasing <- CharacterCasing.Upper
         tb.Margin <- Padding(1)
         SettingsField.apply tb
+        SettingsField.alignHeight tb
         tb.BorderStyle <- BorderStyle.FixedSingle
         tb.KeyPress.Add <| fun e ->
             try
@@ -301,8 +302,6 @@ type ColorEditor() as this =
             let inset = 1
             let margin = Padding(textBox.Margin.Left, inset, textBox.Margin.Right, inset)
             if textBox.Margin <> margin then textBox.Margin <- margin
-            let height = chooserButton.Height - 2 * inset
-            if textBox.Height <> height then textBox.Height <- height
         panel.Layout.Add(fun _ -> alignField ())
         chooserButton.SizeChanged.Add(fun _ -> alignField ())
         textBox.SizeChanged.Add(fun _ -> alignField ())
@@ -330,7 +329,9 @@ type ColorEditor() as this =
 
 type HotKeyEditor() =
     let control = HotKeyControl()
-    do SettingsField.apply control
+    do
+        SettingsField.apply control
+        SettingsField.alignHeight control
     interface IPropEditor with
         member x.value 
             with get() = box(control.HotKey)
