@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Bemo.Win32;
 
@@ -61,6 +63,31 @@ namespace Bemo.Win32
                     return _managedHotKey;
                 return (int)WinUserApi.SendMessage(Handle, HotKeyConstants.HKM_GETHOTKEY, IntPtr.Zero, IntPtr.Zero);
             }
+        }
+
+        // SettingsField supplies the same font-height rectangle used by EDIT.
+        // The native hotkey class does not implement EM_SETRECT.
+        private Rectangle _centeredTextBounds;
+        public Rectangle CenteredTextBounds
+        {
+            get { return _centeredTextBounds; }
+            set { if (_centeredTextBounds != value) { _centeredTextBounds = value; Invalidate(); } }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCaretPos(out Point point);
+        [DllImport("user32.dll")]
+        private static extern bool SetCaretPos(int x, int y);
+
+        private void PaintCenteredNativeText(Graphics graphics)
+        {
+            Color background = !Enabled && BackColor == SystemColors.Window ? SystemColors.Control : BackColor;
+            using (Brush brush = new SolidBrush(background))
+                graphics.FillRectangle(brush, ClientRectangle);
+            TextRenderer.DrawText(graphics, FormatHotKey(HotKey), Font, _centeredTextBounds,
+                Enabled ? ForeColor : SystemColors.GrayText,
+                System.Windows.Forms.TextFormatFlags.Left | System.Windows.Forms.TextFormatFlags.Top | System.Windows.Forms.TextFormatFlags.NoPadding |
+                System.Windows.Forms.TextFormatFlags.NoPrefix | System.Windows.Forms.TextFormatFlags.SingleLine);
         }
 
         public event EventHandler HotKeyChanged;
@@ -177,7 +204,24 @@ namespace Bemo.Win32
                     }
                     break;
             }
- 	         base.WndProc(ref m);
+            base.WndProc(ref m);
+            if (!UseManaged && _centeredTextBounds.Height > 0)
+            {
+                if (m.Msg == 0x000F || m.Msg == 0x0318) // WM_PAINT / WM_PRINTCLIENT
+                {
+                    using (Graphics graphics = m.Msg == 0x000F
+                        ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(m.WParam))
+                        PaintCenteredNativeText(graphics);
+                }
+                if (Focused)
+                {
+                    Point caret;
+                    if (GetCaretPos(out caret)) SetCaretPos(caret.X, _centeredTextBounds.Top);
+                }
+                if (m.Msg == 0x0100 || m.Msg == 0x0101 || m.Msg == 0x0104 ||
+                    m.Msg == 0x0105 || m.Msg == HotKeyConstants.HKM_SETHOTKEY)
+                    Invalidate();
+            }
         }
     }
 }

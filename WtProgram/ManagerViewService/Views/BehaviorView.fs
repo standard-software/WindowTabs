@@ -131,3 +131,106 @@ type GeneralView() =
         member _.key = SettingsViewType.GeneralSettings
         member _.title = Localization.getString("General")
         member _.control = table :> Control
+
+
+type SystemView() =
+    let text key = Localization.getString(key)
+    let pathField path =
+        let field = new TextBox(ReadOnly = true, Text = path,
+                                Anchor = (AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right))
+        SettingsField.apply field
+        SettingsField.alignHeight field
+        field
+    let active = pathField ""
+    let explanation = new Label(AutoSize = true, Anchor = (AnchorStyles.Left ||| AnchorStyles.Right),
+                                MinimumSize = Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx),
+                                Margin = Padding(3, 0, 3, 0), TextAlign = ContentAlignment.MiddleLeft,
+                                Text = text "PortableDescription")
+    let reason = new Label(AutoSize = true, Anchor = (AnchorStyles.Left ||| AnchorStyles.Right))
+    let operations = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 5)
+    let buttons = ResizeArray<Button * bool>()
+    let showFailure() =
+        active.Text <- Services.settings.activePath
+        AppDialog.showReserved "WindowTabs" (text "PortableOperationFailed" + Environment.NewLine + text "PortableActive" + Environment.NewLine + active.Text) AppDialog.OkOnly AppDialog.DefaultOk |> ignore
+    let refreshState() =
+        active.Text <- Services.settings.activePath
+        let appData, exe = PortableSettings.appDataPath(), PortableSettings.exePath()
+        let exeWritable = PortableSettings.canWrite(exe)
+        for button, toExe in buttons do
+            let source, destination = if toExe then appData, exe else exe, appData
+            let applicable = active.Text = source && File.Exists(source) && (toExe || not (File.Exists(appData)))
+            button.Enabled <-
+                not (String.Equals(source, destination, StringComparison.OrdinalIgnoreCase)) && applicable &&
+                (if toExe then exeWritable else PortableSettings.canWrite(appData))
+        reason.Text <- if exeWritable then "" else text "PortableExeNotWritable"
+        reason.Visible <- not exeWritable
+    let folder path =
+        let row = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2)
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore
+        let value = pathField path
+        row.Margin <- Padding(0)
+        // The outer form owns the vertical margins; both children share one cell height.
+        value.Margin <- Padding(0)
+        let button = new Button(AutoSize = false, Anchor = (AnchorStyles.Top ||| AnchorStyles.Left),
+                                Height = value.Height, Margin = Padding(3, 0, 3, 0),
+                                Text = text "PortableOpen")
+        // Follow alignHeight after font and DPI changes without changing row margins.
+        let alignButton () =
+            if button.Height <> value.Height then button.Height <- value.Height
+        value.SizeChanged.Add(fun _ -> alignButton ())
+        row.Layout.Add(fun _ -> alignButton ())
+        button.Click.Add(fun _ ->
+            try
+                Directory.CreateDirectory(path) |> ignore
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, UseShellExecute = true)) |> ignore
+            with _ -> showFailure())
+        row.Controls.Add(value, 0, 0)
+        row.Controls.Add(button, 1, 0)
+        row :> Control
+    do
+        // Percent-width cells wrap labels to the available content width, as on the adjacent pages.
+        operations.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        for _ in 1 .. 5 do operations.RowStyles.Add(new RowStyle(SizeType.AutoSize)) |> ignore
+        operations.Controls.Add(explanation)
+        for key, toExe, move in ["PortableCopy", true, false; "PortableMove", true, true; "PortableReturn", false, true] do
+            let button = new Button(AutoSize = true, Text = text key)
+            buttons.Add(button, toExe)
+            operations.Controls.Add(button)
+            button.Click.Add(fun _ ->
+                refreshState()
+                if button.Enabled then
+                    let destination = if toExe then PortableSettings.exePath() else PortableSettings.appDataPath()
+                    let confirmed =
+                        not toExe || not (File.Exists(destination)) ||
+                        AppDialog.showReserved "WindowTabs" (text (if move then "PortableMoveOverwrite" else "PortableOverwrite")) AppDialog.OkCancel AppDialog.DefaultCancel = DialogResult.OK
+                    if confirmed then
+                        try
+                            Services.program.saveTabGroupsBeforeExit()
+                            Services.settings.transferSettings(toExe, move)
+                        with _ -> showFailure()
+                refreshState())
+        operations.Controls.Add(reason)
+    let table =
+        let panel = UIHelper.form (List2([
+            "PortableAppData", folder (Path.GetDirectoryName(PortableSettings.appDataPath()))
+            "PortableExe", folder (Path.GetDirectoryName(PortableSettings.exePath()))
+            "PortableActive", active :> Control
+            "", new Panel() :> Control
+            "PortableOperations", operations :> Control
+        ]))
+        // Match the Interaction page's half-row section gap before DPI scaling.
+        let gapRow = 3
+        for column in 0 .. 1 do
+            let control = panel.GetControlFromPosition(column, gapRow)
+            panel.Controls.Remove(control)
+            control.Dispose()
+        panel.RowStyles.[gapRow].SizeType <- SizeType.Absolute
+        panel.RowStyles.[gapRow].Height <- float32 (UIHelper.settingsRowHeightPx / 2)
+        panel.Padding <- UIHelper.settingsPagePadding
+        panel
+    member _.refresh() = refreshState()
+    interface ISettingsView with
+        member _.key = SettingsViewType.SystemSettings
+        member _.title = text "System"
+        member _.control = table :> Control

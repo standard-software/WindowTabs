@@ -2,6 +2,21 @@ namespace Bemo
 
 module Localization_English =
     let strings = dict [
+        ("System", "System")
+        ("PortableAppData", "APPDATA folder")
+        ("PortableExe", "Exe folder")
+        ("PortableActive", "Active settings file")
+        ("PortableOperations", "Settings file operations")
+        ("PortableOpen", "Open")
+        ("PortableCopy", "Copy to Exe folder")
+        ("PortableMove", "Move to Exe folder")
+        ("PortableReturn", "Return to APPDATA")
+        ("PortableDescription", "Operations for creating a version that runs using only the Exe folder.")
+        ("PortableExeNotWritable", "The Exe folder is not writable, so copying and moving are unavailable.")
+        ("PortableOverwrite", "Replace the existing destination settings file?")
+        ("PortableMoveOverwrite", "Replace the settings file at the move destination?")
+        ("PortableOperationFailed", "The operation failed. The source settings file has been retained.")
+        ("PortableWriteFailed", "Portable settings could not be saved. Check that the Exe folder is writable.")
         ("Programs", "Programs")
         ("Refresh", "Refresh")
         ("ShowAllSettings", "Show all settings")

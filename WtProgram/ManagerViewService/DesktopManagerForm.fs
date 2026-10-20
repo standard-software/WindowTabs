@@ -191,6 +191,7 @@ type DesktopManagerForm() =
         GeneralView() :> ISettingsView
         ShortcutKeysView() :> ISettingsView
         WorkspaceView() :> ISettingsView
+        SystemView() :> ISettingsView
         ])
 #if DEBUG
     do DesktopManagerFormState.log (sprintf "settings pages ms=%.1f" constructionClock.Elapsed.TotalMilliseconds)
@@ -228,6 +229,15 @@ type DesktopManagerForm() =
             page.Controls.Add(control)
             page.Dock <- DockStyle.Fill
             tabControl.TabPages.Add(page)
+        let refreshSystem () =
+            if form.Visible && tabControl.SelectedIndex >= 0 then
+                tabs.iteri(fun index view ->
+                    if index = tabControl.SelectedIndex then
+                        match view with
+                        | :? SystemView as system -> system.refresh()
+                        | _ -> ())
+        tabControl.SelectedIndexChanged.Add(fun _ -> refreshSystem())
+        form.VisibleChanged.Add(fun _ -> refreshSystem())
         tabControl.Dock <- DockStyle.Fill
         form.Controls.Add(tabControl)
         form.FormBorderStyle <- FormBorderStyle.SizableToolWindow

@@ -72,7 +72,11 @@ module SettingsField =
         let centre () =
             if not box.IsDisposed && box.IsHandleCreated then
                 let line = TextRenderer.MeasureText("Wg", box.Font).Height
-                let inset = max 0 ((box.ClientSize.Height - line) / 2 - 1)
+                let inset = max 0 ((box.ClientSize.Height - line) / 2)
+                match box with
+                | :? Bemo.Win32.HotKeyControl as hotKey ->
+                    hotKey.CenteredTextBounds <- Rectangle(3, inset, max 0 (box.ClientSize.Width - 4), line)
+                | _ -> ()
                 let mutable rect = RECT()
                 // Clear of the border: drawing from the very edge left no room
                 // for the left line of the box.
@@ -133,6 +137,34 @@ module SettingsField =
         box.FontChanged.Add(fun _ -> refresh ())
         box.Layout.Add(fun _ -> queueCentre ())
         refresh ()
+
+    /// Use the same outer height as the colour text field, including its
+    /// one-pixel inset at each edge of the swatch. Recompute from design
+    /// pixels so EDIT non-client scaling cannot accumulate rounding errors.
+    let alignHeight (box: TextBoxBase) =
+        let mutable fitting = false
+        let fit () =
+            if not fitting then
+                fitting <- true
+                try
+                    let height = max 1 (SettingsDpi.px heightPx - 2)
+                    if box.Height <> height then box.Height <- height
+                finally fitting <- false
+        box.SizeChanged.Add(fun _ -> fit ())
+        box.FontChanged.Add(fun _ -> fit ())
+        box.Layout.Add(fun _ -> fit ())
+        let mutable parent : Control = null
+        let layout = LayoutEventHandler(fun _ _ -> fit ())
+        let followParent () =
+            if not (isNull parent) then parent.Layout.RemoveHandler(layout)
+            parent <- box.Parent
+            if not (isNull parent) then parent.Layout.AddHandler(layout)
+            fit ()
+        box.ParentChanged.Add(fun _ -> followParent ())
+        box.Disposed.Add(fun _ ->
+            if not (isNull parent) then parent.Layout.RemoveHandler(layout))
+        followParent ()
+        fit ()
 
     /// A drop-down list takes its closed height from the item height, and it
     /// listens to that only when it draws its own items: left to the system,

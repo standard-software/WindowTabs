@@ -65,6 +65,8 @@ type ILicenseManager =
     abstract member setTicketString : string -> unit
 
 type ISettings =
+    abstract member activePath : string
+    abstract member transferSettings : bool * bool -> unit
     abstract member setValue: (string * obj) -> unit
     [<ServiceMethod(direct=true)>]
     abstract member getValue: string -> obj
@@ -92,6 +94,7 @@ type SettingsViewType =
     // The "Shortcut Keys" tab.
     | ShortcutKeySettings
     | ColorSettings
+    | SystemSettings
 
 type ISettingsView =
     abstract key : SettingsViewType
