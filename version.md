@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next10
+
+- Taskbar grouping: a window shown on every desktop no longer drops out
+  of its group's taskbar button by mistake.
+  - A window that leaves the group's button joins it again when it comes
+    back, or when it becomes an ordinary window on one desktop.
+
 ## version ss_2026.10.17_next9
 
 - Settings: when a check box without its own caption gets the keyboard
