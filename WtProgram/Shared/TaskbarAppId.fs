@@ -1126,7 +1126,7 @@ module TaskbarAppId =
 #endif
                     let previous = retries.TryFind hwnd
                     decline "pin-lost" hwnd
-                    let attempt = previous |> Option.map (fun r -> min 4 (r.attempt + 1)) |> Option.defaultValue 1
+                    let attempt = previous |> Option.map (fun r -> min retryStageCount (r.attempt + 1)) |> Option.defaultValue 1
                     retries <- retries.Add(hwnd, { entry = h.entry; original = h.original; attempt = attempt
                                                    at = now; members = retryMembership hwnd retryGroups; pending = true; observation = None })
                     trace hwnd "retry" "pin-lost" 0 (sprintf "attempt=%d wait-ms=%d" attempt (retryWaitMs attempt))
