@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.17_next11
+
+- Taskbar grouping: a window that drops out of its group's taskbar
+  button is tried again in smaller steps.
+  - After 5, 10, 20 and 30 seconds, 1 and 2 minutes, then every
+    5 minutes.
+
 ## version ss_2026.10.17_next10
 
 - Taskbar grouping: a window shown on every desktop no longer drops out
