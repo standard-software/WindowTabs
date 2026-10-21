@@ -471,6 +471,19 @@ module TaskbarAppIdPolicy =
     let pinReturnVerified (entry: Written) desktop =
         not entry.pin || isAppPinned desktop
 
+    /// An obsolete app pin needs no restoration once the original ID and a
+    /// normal desktop survive two separated reads. Unknown reads reset proof.
+    let returnedPinObservation entry same original current now previous desktop =
+        if not (same && current = Some original) then None, false
+        elif pinReturnVerified entry desktop then None, true
+        else
+            match desktop with
+            | Some d when d <> Guid.Empty && d <> windowPinnedDesktop && d <> appPinnedDesktop ->
+                match previous with
+                | Some (prior, at) when prior = d -> previous, settled now at
+                | _ -> Some (d, now), false
+            | _ -> None, false
+
     /// The live check also covers an app pin enabled after preparation.
     let pinWriteAllowed pin rotating desktop =
         if pin then
@@ -496,6 +509,11 @@ module TaskbarAppIdPolicy =
 
     /// Disable continues normal observations; only process exit skips settling.
     let givenCheckDue final now writtenAt = final || settled now writtenAt
+
+    /// Keep uncertain returns observable, but avoid a full pass on every hand-over.
+    let returnedCheckDue final slow now at =
+        if slow then final || uint32 (now - at) >= 30000u
+        else givenCheckDue final now at
     let retryGivenCount final retried reading = not final && retryCount retried reading
 
     /// Called only after window identity and the original value were verified.
@@ -526,9 +544,47 @@ module TaskbarAppIdPolicy =
     let returnDesktop desktop =
         if desktop = Some windowPinnedDesktop || isAppPinned desktop then Some sharedDesktop else desktop
 
-    /// Only a lost promotion that returned to the original app pin is retryable.
+    /// Rebuild only a known ordinary desktop, with no owned promotion.
+    let canRebuild pin desktop =
+        not pin && (desktop |> Option.exists (fun d -> d <> windowPinnedDesktop && d <> appPinnedDesktop))
+
+    /// A verified ordinary return no longer owns a promotion; recheck before rebuilding.
+    let canRebuildReturned pin verified observed current =
+        canRebuild (pin && not verified) current && (not pin || observed = current)
+
+    /// Restart rejected rebuilds slowly unless an ordinary desktop is known.
+    let returnedRebuildSlow desktop =
+        not (desktop |> Option.exists (fun d -> d <> Guid.Empty && d <> windowPinnedDesktop && d <> appPinnedDesktop))
+
+    /// A veto leaves ownership intact and delays the next candidate by 30 seconds.
+    let pinLossRejectedAt now confirmed view =
+        if confirmed && view <> Some false then Some now else None
+
+    let pinLossCheckDue now rejectedAt =
+        rejectedAt |> Option.forall (fun at -> uint32 (now - at) >= 30000u)
+
+    /// Contradictory or failed IsView reads must not discard an owned pin.
+    let corroboratePinLoss candidate confirmed view =
+        if confirmed && view <> Some false then None, false else candidate, confirmed
+
+    /// Two matching, separated observations; failed reads break the sequence.
+    let lostPinObservation now at previous desktop =
+        match desktop with
+        | Some d when d <> Guid.Empty && d <> windowPinnedDesktop ->
+            Some d, previous = Some d && settled now at
+        | _ -> None, false
+
+    /// Do not turn an unconfirmed pin change into a permanent refusal elsewhere.
+    let pinSettling pending (candidate: Guid option) = pending || candidate.IsSome
+
+    /// Retry a lost promotion only after the original value and sharing return.
     let retryLostPin reason pin same original current desktop =
-        reason = "pin-lost" && pin && same && current = Some original && isAppPinned desktop
+        reason = "pin-lost" && pin && same && current = Some original && (isAppPinned desktop || desktop = Some windowPinnedDesktop)
+
+    /// Ordinary returns must also finish Shell verification and durable removal.
+    let retryReturnedPin pin original current desktop verified returning =
+        retryLostPin "pin-lost" pin true original current desktop ||
+        (pin && current = Some original && verified && canRebuild false desktop && not returning)
 
     let retryWaitMs attempt =
         match attempt with
