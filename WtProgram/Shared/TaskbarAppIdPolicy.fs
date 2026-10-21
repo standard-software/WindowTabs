@@ -586,12 +586,11 @@ module TaskbarAppIdPolicy =
         retryLostPin "pin-lost" pin true original current desktop ||
         (pin && current = Some original && verified && canRebuild false desktop && not returning)
 
+    let private retryWaitsMs = [| 5000; 10000; 20000; 30000; 60000; 120000; 300000 |]
+    let retryStageCount = retryWaitsMs.Length
+
     let retryWaitMs attempt =
-        match attempt with
-        | n when n <= 1 -> 5000
-        | 2 -> 30000
-        | 3 -> 120000
-        | _ -> 300000
+        retryWaitsMs.[max 1 (min retryStageCount attempt) - 1]
 
     /// Unsigned elapsed time remains valid across the TickCount sign boundary.
     let retryDue now at attempt changed =
