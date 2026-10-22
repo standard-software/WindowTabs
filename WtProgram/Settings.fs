@@ -39,7 +39,6 @@ type Settings(isStandAlone) as this =
     // an unsaved caller mutation to leak into later reads.
     let mutable cachedSettingsJson : (string * JObject) option = None
     let mutable cachedSettingsRec = None
-    let mutable hasExistingSettings = false
     // One safety copy of the settings file per process, taken the first time
     // this process overwrites it. On 2026-08-24 a freshly started build wrote
     // pure defaults over the user's settings; whatever causes such a write,
@@ -67,7 +66,6 @@ type Settings(isStandAlone) as this =
     let snapshot = PublishedSnapshot<(Map<string, obj> * JObject) option>(None)
 
     do
-        hasExistingSettings <- this.fileExists
         this.settings |> ignore
         Services.register(this :> ISettings)
 
@@ -111,7 +109,6 @@ type Settings(isStandAlone) as this =
                     recoveryAttempted <- false
                     lastRefusedContent <- None
                     loggedFallbacks.Clear()
-                    hasExistingSettings <- File.Exists(path)
                 action changed
             finally operationPath <- None
 
@@ -695,10 +692,10 @@ type Settings(isStandAlone) as this =
                         autoGroupingPaths = Set2(settingsJson.getStringArray("AutoGroupingPaths").def(List2()))
                         licenseKey = settingsJson.getString("LicenseKey").def("")
                         ticket = settingsJson.getString("Ticket")
-                        runAtStartup = settingsJson.getBool("RunAtStartup").def(hasExistingSettings.not)
+                        runAtStartup = settingsJson.getBool("RunAtStartup").def(false)
                         hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
                         groupTaskbarButtons = settingsJson.getBool("GroupTaskbarButtons").def(false)
-                        enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(hasExistingSettings.not)
+                        enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(false)
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
@@ -781,7 +778,7 @@ type Settings(isStandAlone) as this =
                         runAtStartup = false
                         hideInactiveTabs = false
                         groupTaskbarButtons = false
-                        enableTabbingByDefault = true
+                        enableTabbingByDefault = false
                         enableCtrlNumberHotKey = false
                         enableAltNumberHotKey = false
                         enableHoverActivate = false
