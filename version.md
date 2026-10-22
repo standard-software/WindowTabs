@@ -2,6 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.23_next3
+
+- "Run WindowTabs at startup" now puts a shortcut in your Startup folder
+  instead of writing to the registry.
+  - The check box shows whether a shortcut or the old registry entry
+    starts this WindowTabs.exe.
+  - Turning it off removes both. A failure is reported instead of
+    showing an error screen.
+
 ## version ss_2026.10.23_next2
 
 - Taskbar grouping: a File Explorer window that dropped out of its
