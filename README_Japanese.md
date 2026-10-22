@@ -115,7 +115,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ## バージョン
 
-最新のバージョン: **ss_2026.10.17_next11**
+最新のバージョン: **ss_2026.10.23**
 
 詳細は [version_Japanese.md](version_Japanese.md) を参照してください。
 
@@ -139,7 +139,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - トレイアイコンの右クリックで「設定」を開き、「プログラム」タブでタブ化する対象を選びます。
 - タブをドラッグ&ドロップしてグループ化し、右クリックで各種操作を行います。
 
-![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+![Task Tray Menu](README_Image/TaskTrayMenuImage_Japanese.png)
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
@@ -240,14 +240,14 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 - 同じ exe を新規起動し、そのタブの右・指定位置の新しいウィンドウ・他のタブグループに配置できます。
 
-![Popup Menu](README_Image/PopupMenu.png)
+![Popup Menu](README_Image/PopupMenu_Japanese.png)
 
 ### 位置移動
 
 - スナップは幅・高さを維持して画面端へ移動し、% 指定時はディスプレイに対する比率でサイズを変えます。画面端や四隅への移動、ディスプレイ・デスクトップ全体への最大化もできます。
 - マルチディスプレイ時は、位置移動系のメニューがディスプレイごとに出ます (例:「位置移動 左ディスプレイ」)。現在のディスプレイには「(ここ)」が付き、他のディスプレイには「このディスプレイと同じ位置」が先頭に付きます。
 
-![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
+![Popup Menu Move Other](README_Image/PopupMenuMoveOther_Japanese.png)
 
 ### このグループを他のタブグループに連結
 
@@ -264,7 +264,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ### タブを閉じる
 
-![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
+![Popup Menu Close Tab](README_Image/PopupMenuCloseTab_Japanese.png)
 
 ### タブの配置
 
@@ -314,19 +314,17 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ### 設定ファイル
 
+- 利用者の設定は `WindowTabsSettings.json` に保存します
+    - `%APPDATA%\WindowTabs\WindowTabsSettings.json` を使います。無いときは `WindowTabs.exe` と同じ場所の `WindowTabsSettings.json` を使うので、Exeフォルダだけを持ち運ぶポータブル版にできます
+    - 設定ダイアログの [システム] タブで、使用中の設定ファイルを確かめられます。Exeフォルダへのコピー・移動と、APPDATAフォルダに戻す操作もできます
+    - バックアップは `%APPDATA%\WindowTabs\` に `WindowTabsSettings.json.bak.<日付>_<時刻>` として、新しいものから 10 個残します。Exeフォルダの設定ファイルのバックアップも、`WindowTabsSettings.portable-<ID>.json.bak.<日付>_<時刻>` としてここに置くので、Exeフォルダには設定ファイルしか残りません
 - `WindowTabs.exe` と同じ場所の `Settings\` に既定値があります
     - `Settings\VersionFolder.json` — 更新のたびにフォルダ名が変わるアプリを、同じアプリとして扱う設定
         - アプリごとの設定は exe のパスに結びつけて保存するので、パスの途中にバージョンの数字のフォルダがあるアプリは、アプリの更新のたびに設定が外れます。
         - その対応のために、ここに exe 名を書くと、数字とドットだけのフォルダを無視して同じアプリとして扱います
-        - 同梱しているのは `LineMediaPlayer.exe` です (`...\LineMediaPlayer\1.2.0.635\LineMediaPlayer.exe` のように、バージョンのフォルダの下に exe があります)
-        - 書いたアプリだけに適用します。`C:\Program Files\Microsoft Visual Studio\18\...` のように同じ形のフォルダでも、複数のバージョンを別々に扱いたいアプリがあるためです
         - Store アプリは、フォルダ名にバージョンが入りますが、ここに書かなくても自動で同じアプリとして扱います
     - `Settings\FramelessWindow.json` — タイトルバーや枠を自分で描くアプリのウィンドウを、タブの対象にする設定
         - GTK3 のアプリなどは、タイトルバー・枠・最小化や最大化のボタンを Windows に任せずに自分で描きます。Windows から見ると飾りのないウィンドウで、スプラッシュ画面やポップアップと見分けられないため、通常はタブを付けません
-        - ここに exe 名を書いたアプリだけ、飾りのないウィンドウにもタブを付けます。`"example.exe": true` と書きます
-        - こうしたアプリは影もウィンドウの内側に描くことがあり、そのままではタブが本体から離れて見えます。見えない余白の大きさを `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` のように書くと、タブとタブグループ内の位置を、見えている本体に合わせます。値は拡大率 100% でのピクセル数です
-        - 同梱しているのは virt-viewer の `remote-viewer.exe` と `virt-viewer.exe` です
-        - アプリ自身のリサイズの動きによっては、タブや他のウィンドウと位置がずれることがあります
     - `Settings\Language\FileList.json` と `Settings\Language\言語.json` — 言語ファイル
 - ここのファイルはバージョンアップのたびに上書きされます。ユーザー自身で翻訳内容を変更するときは `%APPDATA%\WindowTabs\Settings\` に同名のファイルを置いてください。項目単位で同梱のものに重なります
 - 言語を追加するには、`MyLanguage.json` と、それを載せた `FileList.json` を `%APPDATA%\WindowTabs\Settings\Language` に置きます
@@ -335,6 +333,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 ### 読まなくなった設定ファイル
 
+- `WindowTabsSettings.txt` (ss_2026.10.17 まで): 新しいバージョンの最初の起動で、中身を `WindowTabsSettings.json` にコピーします。`.txt` はそのまま残すので古いバージョンも起動できますが、コピーのあとに変えた設定は `.txt` には入りません
 - 言語ファイル: ss_2026.09.02 までは `Settings\Language\` ではなく `Language\` にあり、直接編集する仕様でした。編集していた場合は `%APPDATA%\WindowTabs\Settings\Language\` へ移してください
 - 余白の設定: アプリの外枠を WindowTabs が自動で見分けるようになったので、設定は不要になりました。次のファイルはもう読みません
     - `Settings\Window_Margin.json` (ss_2026.09.02 まで)
@@ -430,6 +429,13 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - タブグループの配置と、タブの装飾・ピン・名前・寄せを保存・復元できます。
 - [新規] は、今のデスクトップのタブグループとタブを保存します。仮想デスクトップが複数あるときは「現在のデスクトップのタブ」と「全てのデスクトップのタブ」を選べます
 - [復元] は、タブグループの構成と位置を戻します。ウィンドウを別の仮想デスクトップへ移すことはしません。各ウィンドウは今あるデスクトップのままタブグループに入り、別のデスクトップにあるものは半透明のタブになります
+
+### システムタブ
+
+- APPDATAフォルダ、Exeフォルダ、使用中の設定ファイルを表示します。[開く] でフォルダを開きます。
+- **設定ファイル操作**: [Exeフォルダにコピー]・[Exeフォルダに移動]・[APPDATAフォルダに戻す] で、Exeフォルダだけで動くポータブル版を作ったり、元に戻したりできます。[設定ファイル](#設定ファイル) も見てください。
+
+![Settings System](README_Image/SettingsSystem_Japanese.png)
 
 ## ソースからビルド
 

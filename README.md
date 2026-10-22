@@ -115,7 +115,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.17_next11**
+Latest version: **ss_2026.10.23**
 
 See [version.md](version.md) for details.
 
@@ -314,19 +314,19 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Settings Files
 
+- Your settings are saved in `WindowTabsSettings.json`
+    - WindowTabs uses `%APPDATA%\WindowTabs\WindowTabsSettings.json`. When there is none, it uses `WindowTabsSettings.json` beside `WindowTabs.exe`, so the exe folder alone can be carried around as a portable copy
+    - The System page of the settings dialog shows the file in use, and copies or moves it to the exe folder, or moves it back to APPDATA
+    - Backups are kept in `%APPDATA%\WindowTabs\` as `WindowTabsSettings.json.bak.<date>_<time>`, the newest 10. The backups of a settings file in the exe folder are kept there too, as `WindowTabsSettings.portable-<id>.json.bak.<date>_<time>`, so the exe folder holds only the settings file itself
 - `Settings\` beside `WindowTabs.exe` holds the defaults
     - `Settings\VersionFolder.json` - treats an application whose folder name changes with every update as one application
         - Per-application settings are stored against the path of the exe, so an application with a version-number folder in its path loses them every time it is updated.
         - To deal with that, name the exe here, and folders made only of digits and dots are ignored for it
-        - The bundled file lists `LineMediaPlayer.exe` (its exe sits under a version folder, as in `...\LineMediaPlayer\1.2.0.635\LineMediaPlayer.exe`)
-        - Only the applications listed are affected. A folder such as `C:\Program Files\Microsoft Visual Studio\18\...` has the same shape, and some people want two versions kept apart
         - Store applications carry the version in their folder name too, but are recognised as one application without being listed here
     - `Settings\FramelessWindow.json` - gives tabs to the windows of applications that draw their own title bar and frame
         - Applications such as those built with GTK 3 draw the title bar, the frame and the minimize and maximize buttons themselves. To Windows such a window has no decoration at all and cannot be told from a splash screen or a popup, so it normally gets no tab
         - Only the applications whose exe name is written here get tabs on such windows. Write `"example.exe": true`
         - These applications may also draw their shadow inside the window, which leaves the tab apart from the visible window. Write the size of that invisible margin as `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` and the tab and the positions within a tab group follow the visible window. The values are pixels at 100% scale
-        - Shipped with `remote-viewer.exe` and `virt-viewer.exe` of virt-viewer
-        - Depending on how the application resizes itself, it may end up out of line with its tab or with the other windows
     - `Settings\Language\FileList.json` and `Settings\Language\<language>.json` - the language files
 - Those files are replaced by every upgrade. To change a translation yourself, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
 - To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
@@ -335,6 +335,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Settings files that are no longer read
 
+- `WindowTabsSettings.txt` (up to ss_2026.10.17): on the first start of a newer version, its settings are copied into `WindowTabsSettings.json`. The `.txt` is left as it was, so an older version still starts with it, but changes made after the copy do not reach it
 - Language files: up to ss_2026.09.02 they sat in `Language\`, not `Settings\Language\`, and were edited in place. If you edited them, move your copies to `%APPDATA%\WindowTabs\Settings\Language\`
 - Margins: WindowTabs now finds the frame windows an application draws around its own window, so nothing has to be set. These files are no longer read
     - `Settings\Window_Margin.json` (up to ss_2026.09.02)
@@ -430,6 +431,13 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
 - [New] saves the tab groups and tabs on the current desktop. With several virtual desktops it offers "Tabs on the current desktop" and "Tabs on all desktops"
 - [Restore] brings back the tab groups and their positions. It does not move a window to another virtual desktop: each window joins its tab group on the desktop it is on now, and one that is on another desktop becomes a dimmed tab
+
+### System Tab
+
+- Shows the APPDATA folder, the exe folder and the settings file in use. [Open] opens a folder.
+- **Settings file operations**: [Copy to Exe folder], [Move to Exe folder] and [Return to APPDATA] make or undo a portable copy that runs from the exe folder alone. See [Settings Files](#settings-files).
+
+![Settings System](README_Image/SettingsSystem.png)
 
 ## Building from Source
 
