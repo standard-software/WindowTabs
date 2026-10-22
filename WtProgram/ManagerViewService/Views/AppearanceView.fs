@@ -730,8 +730,8 @@ type AppearanceView() as this =
         | Some(_, editor) ->
             match editor.value with
             | :? int as overlap -> overlap
-            | _ -> 20
-        | None -> 20
+            | _ -> 12
+        | None -> 12
 
     // `count` tabs standing on a base line, `height` px tall, at (x, y), in
     // the proportions of the default strip (an 18 px edge band on a 24 px
