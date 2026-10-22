@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.23_next2
+
+- Taskbar grouping: a File Explorer window that dropped out of its
+  group's button after going to Home or opening a new tab is put back.
+  - It goes back within a few seconds.
+
 ## version ss_2026.10.23_next1
 
 ## version ss_2026.10.23
