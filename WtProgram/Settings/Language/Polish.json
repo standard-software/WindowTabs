@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Nie można zmienić wpisu autostartu. Sprawdź uprawnienia dostępu i spróbuj ponownie.",
   "System": "System",
   "PortableAppData": "Folder APPDATA",
   "PortableExe": "Folder Exe",

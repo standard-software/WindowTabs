@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Não foi possível alterar o registro de inicialização. Verifique as permissões de acesso e tente novamente.",
   "System": "Sistema",
   "PortableAppData": "Pasta APPDATA",
   "PortableExe": "Pasta Exe",

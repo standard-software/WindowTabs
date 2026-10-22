@@ -108,9 +108,28 @@ type GeneralView() =
                 member _.value
                     with get() = unbox<bool>(Services.settings.getValue key)
                     and set value = Services.settings.setValue(key, box value) }
+    let startupCheckbox() =
+        let editor = BoolEditor() :> IPropEditor
+        let read() = editor.value <- Services.settings.getValue "runAtStartup"
+        read()
+        refreshers.Add(read)
+        editor.changed.Add(fun () ->
+            if not refreshing then
+                let mutable failed = false
+                refreshing <- true
+                try
+                    try Services.settings.setValue("runAtStartup", editor.value)
+                    with StartupRegistration.ChangeFailed -> failed <- true
+                finally
+                    try read()
+                    finally refreshing <- false
+                if failed then
+                    AppDialog.showOwned (editor.control.FindForm()) "WindowTabs"
+                        (Localization.getString("StartupRegistrationFailed")))
+        editor.control
     let table =
         let fields = List2([
-            ("RunAtStartup", settingsCheckbox "runAtStartup")
+            ("RunAtStartup", startupCheckbox())
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
             ("GroupTaskbarButtons", settingsCheckbox "groupTaskbarButtons")
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")

@@ -2,6 +2,7 @@ namespace Bemo
 
 module Localization_English =
     let strings = dict [
+        ("StartupRegistrationFailed", "Could not change startup registration. Check access permissions and try again.")
         ("System", "System")
         ("PortableAppData", "APPDATA folder")
         ("PortableExe", "Exe folder")

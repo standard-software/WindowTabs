@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Der Autostart-Eintrag konnte nicht geändert werden. Prüfen Sie die Zugriffsrechte und versuchen Sie es erneut.",
   "System": "System",
   "PortableAppData": "APPDATA-Ordner",
   "PortableExe": "Exe-Ordner",

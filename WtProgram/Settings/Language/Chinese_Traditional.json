@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "無法變更啟動項目登錄。請檢查存取權限後重試。",
   "System": "系統",
   "PortableAppData": "APPDATA 資料夾",
   "PortableExe": "Exe 資料夾",

@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "No se pudo cambiar el registro de inicio automático. Comprueba los permisos de acceso e inténtalo de nuevo.",
   "System": "Sistema",
   "PortableAppData": "Carpeta APPDATA",
   "PortableExe": "Carpeta Exe",

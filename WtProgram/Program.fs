@@ -665,6 +665,8 @@ type Program() as this =
     let catchUpTimer = new System.Windows.Forms.Timer(Interval = 1000)
     let hotKeyRetryLimit = 10
     let mutable hotKeyRetriesLeft = hotKeyRetryLimit
+    let startupExe = System.Reflection.Assembly.GetEntryAssembly().Location
+    let mutable updatingStartup = false
     // The fields dropped as duplicates at the last sync, so the Debug line
     // is written once per change rather than once per sync.
     let mutable reportedDuplicateHotKeys : HotKeyPolicy.Binding list = []
@@ -699,6 +701,7 @@ type Program() as this =
         Services.settings.notifyValue HotKeyPolicy.enableCtrlNumberSetting (fun _ -> this.syncHotKeys())
         Services.settings.notifyValue HotKeyPolicy.enableAltNumberSetting (fun _ -> this.syncHotKeys())
         this.syncHotKeys()
+        Services.settings.setValue("runAtStartup", box (StartupRegistration.isEnabled startupExe))
         Services.settings.notifyValue "runAtStartup" this.updateRunAtStartup
         Services.desktop.groupExited.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
         Services.desktop.groupRemoved.Add <| fun _ -> invoker.asyncInvoke(fun() -> this.updateAppWindows())
@@ -813,15 +816,18 @@ type Program() as this =
             isTabMonitoringSuspendedCell.set(false)
 
     member this.updateRunAtStartup(value)=
-        let runAtStartup = value.cast<bool>()
-        let key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true)
-        let keyName = "WindowTabs"
-        if runAtStartup then
-            let entryAssembly = System.Reflection.Assembly.GetEntryAssembly()
-            let exeUri = Uri(entryAssembly.CodeBase)
-            key.SetValue(keyName, sprintf "\"%s\"" exeUri.LocalPath)
-        else
-            key.DeleteValue(keyName, false)
+        if not updatingStartup then
+            updatingStartup <- true
+            try
+                let enabled = value.cast<bool>()
+                let actual, failed =
+                    StartupRegistration.changeAndRead enabled
+                        (fun () -> StartupRegistration.change startupExe enabled)
+                        (fun () -> StartupRegistration.isEnabled startupExe)
+                Services.settings.setValue("runAtStartup", box actual)
+                // The synchronous settings caller owns the dialog and reports once.
+                if failed then raise StartupRegistration.ChangeFailed
+            finally updatingStartup <- false
 
     member this.isAppWindow(window:Window) =
         Services.filter.isAppWindow(window.hwnd)

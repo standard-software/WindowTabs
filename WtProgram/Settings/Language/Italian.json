@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Impossibile modificare la registrazione per l’avvio automatico. Controlla i permessi di accesso e riprova.",
   "System": "Sistema",
   "PortableAppData": "Cartella APPDATA",
   "PortableExe": "Cartella Exe",

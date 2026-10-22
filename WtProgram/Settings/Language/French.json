@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Impossible de modifier l’inscription au démarrage. Vérifiez les droits d’accès et réessayez.",
   "System": "Système",
   "PortableAppData": "Dossier APPDATA",
   "PortableExe": "Dossier Exe",

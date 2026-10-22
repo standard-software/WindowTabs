@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "无法更改启动项注册。请检查访问权限后重试。",
   "System": "系统",
   "PortableAppData": "APPDATA 文件夹",
   "PortableExe": "Exe 文件夹",
