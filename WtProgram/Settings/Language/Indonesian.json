@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Tidak dapat mengubah pendaftaran startup. Periksa izin akses dan coba lagi.",
   "System": "Sistem",
   "PortableAppData": "Folder APPDATA",
   "PortableExe": "Folder Exe",

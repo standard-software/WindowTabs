@@ -60,6 +60,7 @@ type Settings(isStandAlone) as this =
     // first occurrence - the only one that still explains the incident.
     let loggedFallbacks = HashSet<string>()
     let settingChangedEvent = Event<string* obj>()
+    let mutable runAtStartup = false
     let ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId
     // The map contains only immutable record fields. The private JSON clone is
     // never handed out or mutated; each root reader receives a fresh clone.
@@ -692,7 +693,7 @@ type Settings(isStandAlone) as this =
                         autoGroupingPaths = Set2(settingsJson.getStringArray("AutoGroupingPaths").def(List2()))
                         licenseKey = settingsJson.getString("LicenseKey").def("")
                         ticket = settingsJson.getString("Ticket")
-                        runAtStartup = settingsJson.getBool("RunAtStartup").def(false)
+                        runAtStartup = runAtStartup
                         hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
                         groupTaskbarButtons = settingsJson.getBool("GroupTaskbarButtons").def(false)
                         enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(false)
@@ -775,7 +776,7 @@ type Settings(isStandAlone) as this =
                         autoGroupingPaths = Set2(List2())
                         licenseKey = ""
                         ticket = None
-                        runAtStartup = false
+                        runAtStartup = runAtStartup
                         hideInactiveTabs = false
                         groupTaskbarButtons = false
                         enableTabbingByDefault = false
@@ -819,7 +820,6 @@ type Settings(isStandAlone) as this =
             settingsJson.setString("Version", settings.version)
             settingsJson.setString("LicenseKey", settings.licenseKey)
             settings.ticket.iter <| fun ticket -> settingsJson.setString("Ticket", ticket)
-            settingsJson.setBool("RunAtStartup", settings.runAtStartup)
             settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
             settingsJson.setBool("GroupTaskbarButtons", settings.groupTaskbarButtons)
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
@@ -883,9 +883,12 @@ type Settings(isStandAlone) as this =
 
 
         member x.setValue((key,value)) =
-            let settings = x.settings
-            let settings = Serialize.writeField settings key value
-            x.settings <- unbox<SettingsRec>(settings)
+            if key = "runAtStartup" then
+                runAtStartup <- unbox<bool>(value)
+            else
+                let settings = x.settings
+                let settings = Serialize.writeField settings key value
+                x.settings <- unbox<SettingsRec>(settings)
             settingChangedEvent.Trigger(key, value)
 
         member x.getValue(key) =
@@ -894,7 +897,7 @@ type Settings(isStandAlone) as this =
             if System.Threading.Thread.CurrentThread.ManagedThreadId = ownerThreadId then
                 this.settings |> ignore
             let values, _ = snapshot.value.Value
-            values.[key]
+            if key = "runAtStartup" then box runAtStartup else values.[key]
 
         member x.notifyValue key f =
             settingChangedEvent.Publish.Add <| fun(changedKey, value) ->

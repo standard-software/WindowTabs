@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Başlangıç kaydı değiştirilemedi. Erişim izinlerini kontrol edip yeniden deneyin.",
   "System": "Sistem",
   "PortableAppData": "APPDATA klasörü",
   "PortableExe": "Exe klasörü",

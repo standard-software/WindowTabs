@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "시작 프로그램 등록을 변경할 수 없습니다. 접근 권한을 확인한 후 다시 시도하세요.",
   "System": "시스템",
   "PortableAppData": "APPDATA 폴더",
   "PortableExe": "Exe 폴더",

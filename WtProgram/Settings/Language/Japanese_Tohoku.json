@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "スタートアップの登録を変更できねがった。アクセス権を確認して、もう一度試してけろ。",
   "System": "システム",
   "PortableAppData": "APPDATAフォルダ",
   "PortableExe": "Exeフォルダ",

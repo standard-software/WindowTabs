@@ -1,4 +1,5 @@
 {
+  "StartupRegistrationFailed": "Không thể thay đổi đăng ký khởi động. Hãy kiểm tra quyền truy cập và thử lại.",
   "System": "Hệ thống",
   "PortableAppData": "Thư mục APPDATA",
   "PortableExe": "Thư mục Exe",
