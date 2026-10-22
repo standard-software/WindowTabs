@@ -13,6 +13,7 @@
   "PortableOverwrite": "Zastąpić istniejący plik ustawień?",
   "PortableMoveOverwrite": "Zastąpić plik ustawień w miejscu docelowym przenoszenia?",
   "PortableOperationFailed": "Operacja nie powiodła się. Zachowano plik źródłowy.",
+  "SettingsMigrationFailed": "Migracja ustawień nie powiodła się. Ustawienia nie będą zapisywane w tej sesji. Uruchom aplikację ponownie, aby spróbować jeszcze raz.",
   "PortableWriteFailed": "Nie można zapisać ustawień przenośnych. Sprawdź uprawnienia folderu Exe.",
 
   "Programs": "Programy",

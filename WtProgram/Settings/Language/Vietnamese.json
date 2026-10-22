@@ -13,6 +13,7 @@
   "PortableOverwrite": "Thay thế tệp cài đặt hiện có?",
   "PortableMoveOverwrite": "Thay thế tệp cài đặt tại đích di chuyển?",
   "PortableOperationFailed": "Thao tác thất bại. Tệp nguồn đã được giữ lại.",
+  "SettingsMigrationFailed": "Di chuyển cài đặt thất bại. Cài đặt sẽ không được lưu trong phiên này. Khởi động lại ứng dụng để thử lại.",
   "PortableWriteFailed": "Không thể lưu cài đặt di động. Kiểm tra quyền ghi vào thư mục Exe.",
 
   "Programs": "Chương trình",

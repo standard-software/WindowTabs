@@ -13,6 +13,7 @@
   "PortableOverwrite": "기존 대상 설정 파일을 덮어쓰시겠습니까?",
   "PortableMoveOverwrite": "이동 대상 위치의 설정 파일을 덮어쓰시겠습니까?",
   "PortableOperationFailed": "작업에 실패했습니다. 원본 설정 파일은 유지되었습니다.",
+  "SettingsMigrationFailed": "설정 마이그레이션에 실패했습니다. 이번 실행 중에는 설정이 저장되지 않습니다. 다음 실행 시 다시 시도합니다.",
   "PortableWriteFailed": "휴대용 설정을 저장할 수 없습니다. Exe 폴더의 쓰기 권한을 확인하세요.",
 
   "Programs": "프로그램",

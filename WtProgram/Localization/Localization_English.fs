@@ -16,6 +16,7 @@ module Localization_English =
         ("PortableOverwrite", "Replace the existing destination settings file?")
         ("PortableMoveOverwrite", "Replace the settings file at the move destination?")
         ("PortableOperationFailed", "The operation failed. The source settings file has been retained.")
+        ("SettingsMigrationFailed", "Settings migration failed. Settings will not be saved during this session. Restart the application to try again.")
         ("PortableWriteFailed", "Portable settings could not be saved. Check that the Exe folder is writable.")
         ("Programs", "Programs")
         ("Refresh", "Refresh")

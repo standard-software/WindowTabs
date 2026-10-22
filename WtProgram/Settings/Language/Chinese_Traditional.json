@@ -13,6 +13,7 @@
   "PortableOverwrite": "是否覆寫現有的目的地設定檔？",
   "PortableMoveOverwrite": "是否覆寫移動目的地的設定檔？",
   "PortableOperationFailed": "操作失敗。來源設定檔已保留。",
+  "SettingsMigrationFailed": "設定移轉失敗。本次執行期間不會儲存設定。下次啟動時將重試。",
   "PortableWriteFailed": "無法儲存可攜版設定。請檢查 Exe 資料夾的寫入權限。",
 
   "Programs": "程式",

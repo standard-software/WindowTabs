@@ -13,6 +13,7 @@
   "PortableOverwrite": "¿Reemplazar el archivo de ajustes existente?",
   "PortableMoveOverwrite": "¿Reemplazar el archivo de ajustes en el destino del traslado?",
   "PortableOperationFailed": "La operación falló. Se conservó el archivo original.",
+  "SettingsMigrationFailed": "La migración de la configuración falló. La configuración no se guardará durante esta sesión. Reinicie la aplicación para volver a intentarlo.",
   "PortableWriteFailed": "No se pudieron guardar los ajustes portátiles. Compruebe los permisos de la carpeta Exe.",
 
   "Programs": "Programas",

@@ -13,6 +13,7 @@
   "PortableOverwrite": "Substituir o arquivo de configurações existente?",
   "PortableMoveOverwrite": "Substituir o arquivo de configurações no destino da movimentação?",
   "PortableOperationFailed": "A operação falhou. O arquivo original foi preservado.",
+  "SettingsMigrationFailed": "A migração das configurações falhou. As configurações não serão salvas durante esta sessão. Reinicie o aplicativo para tentar novamente.",
   "PortableWriteFailed": "Não foi possível salvar as configurações portáteis. Verifique as permissões da pasta Exe.",
 
   "Programs": "Programas",

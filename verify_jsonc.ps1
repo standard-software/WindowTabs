@@ -97,14 +97,14 @@ try {
         Check $f.Name $ok 'no longer parses'
     }
     # The live settings file, when there is one - it is the file this protects.
-    $settings = Join-Path $env:APPDATA 'WindowTabs\WindowTabsSettings.txt'
+    $settings = Join-Path $env:APPDATA 'WindowTabs\WindowTabsSettings.json'
     if (Test-Path $settings) {
         $raw = Get-Content $settings -Raw -Encoding UTF8
         $out = Strip $raw
         $ok = $true
         try { $null = [Newtonsoft.Json.Linq.JObject]::Parse($out) } catch { $ok = $false }
-        Check 'WindowTabsSettings.txt parses' $ok 'the live settings no longer parse'
-        Check 'WindowTabsSettings.txt is untouched' ($out -eq $raw) 'the stripper altered a file with no comments'
+        Check 'WindowTabsSettings.json parses' $ok 'the live settings no longer parse'
+        Check 'WindowTabsSettings.json is untouched' ($out -eq $raw) 'the stripper altered a file with no comments'
     }
 }
 finally {

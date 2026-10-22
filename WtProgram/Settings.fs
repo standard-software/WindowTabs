@@ -23,6 +23,12 @@ type Settings(isStandAlone) as this =
 #if DEBUG
     let mutable pathResolutionCount = 0
 #endif
+    let migrationFailed = lazy (
+#if DEBUG
+        let benchmarkPath = Environment.GetEnvironmentVariable("WINDOWTABS_BENCHMARK_SETTINGS")
+        if not (String.IsNullOrEmpty(benchmarkPath)) then false else
+#endif
+        PortableSettings.migrate (PortableSettings.appDataPath()) (PortableSettings.exePath()))
     let mutable operationPath : string option = None
     let mutable cachedPath : string option = None
     let mutable lastRefusedContent : string option = None
@@ -78,7 +84,8 @@ type Settings(isStandAlone) as this =
         if not (String.IsNullOrEmpty(benchmarkPath)) then benchmarkPath else
 #endif
         let appData, exe = PortableSettings.appDataPath(), PortableSettings.exePath()
-        PortableSettings.choosePath appData exe (File.Exists(appData)) (File.Exists(exe))
+        if migrationFailed.Value then PortableSettings.legacyPath appData
+        else PortableSettings.choosePath appData exe (File.Exists(appData)) (File.Exists(exe))
 
     member this.path =
         match operationPath with
@@ -132,6 +139,9 @@ type Settings(isStandAlone) as this =
 #endif
         PortableSettings.appDataPath()
 
+    member private this.backupPath =
+        PortableSettings.backupPath (PortableSettings.appDataPath()) (PortableSettings.exePath()) this.path
+
     member this.fileExists : bool = File.Exists(this.path)
 
     member this.settingsString
@@ -177,6 +187,9 @@ type Settings(isStandAlone) as this =
         and set(newSettings : string option) =
             lastSaveSucceeded <- false
             try
+                if migrationFailed.Value then
+                    PortableSettings.notifyMigrationFailure()
+                    failwith "Settings migration failed; saving is disabled."
                 let newContent = newSettings.Value
                 // Dirty check: skip when the on-disk content (mirrored in cache) is identical.
                 // Periodic save fires every 10s; this avoids the ~7 ms disk write when nothing changed.
@@ -202,9 +215,11 @@ type Settings(isStandAlone) as this =
                     if existingLen > 0L && (not backedUpThisProcess || int64 newContent.Length * 3L < existingLen) then
                         backedUpThisProcess <- true
                         try
-                            File.Copy(this.path, this.path + ".bak." + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true)
+                            let backupPath = this.backupPath
+                            Directory.CreateDirectory(Path.GetDirectoryName(backupPath)) |> ignore
+                            File.Copy(this.path, backupPath + ".bak." + DateTime.Now.ToString("yyyyMMdd_HHmmss"), true)
                             let old =
-                                PortableSettings.backups this.path
+                                PortableSettings.backups this.backupPath
                                 |> Array.sortDescending
                             if old.Length > 10 then
                                 old.[10..] |> Array.iter (fun f -> try File.Delete(f) with _ -> ())
@@ -327,11 +342,11 @@ type Settings(isStandAlone) as this =
     // <file>.corrupt.<stamp> instead of being overwritten.
     member private this.tryRecoverFromBackup() : JObject option =
         let path = this.path
-        if recoveryAttempted then None
+        if migrationFailed.Value || recoveryAttempted then None
         else
             recoveryAttempted <- true
             try
-                PortableSettings.backups path
+                PortableSettings.backups this.backupPath
                 |> Array.sortDescending
                 |> Array.tryPick (fun backup ->
                     try
@@ -340,13 +355,13 @@ type Settings(isStandAlone) as this =
                         match parsed.getString("Version") with
                         | Some(version) when version <> "" ->
                             let stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss")
-                            let kept = path + ".corrupt." + stamp
+                            let kept = PortableSettings.retainedPath (PortableSettings.appDataPath()) (PortableSettings.exePath()) path "corrupt" stamp
+                            let mutable preserved = false
                             let staging = path + "." + Guid.NewGuid().ToString("N") + ".tmp"
                             try
                                 File.Copy(backup, staging)
                                 if File.ReadAllText(staging) <> text then failwith "Backup verification failed."
-                                if File.Exists(path) then File.Replace(staging, path, kept)
-                                else File.Move(staging, path)
+                                preserved <- PortableSettings.replaceRecovered staging path kept
                             finally
                                 try File.Delete(staging) with _ -> ()
                             // File and derived state are replaced together, so
@@ -359,9 +374,9 @@ type Settings(isStandAlone) as this =
 #if DEBUG
                             (try
                                 File.AppendAllText(this.diagnosticPath + ".read_error.log",
-                                    sprintf "%s RECOVERED the settings from %s (%d bytes, Version %s); the unreadable file is kept as %s"
+                                    sprintf "%s RECOVERED the settings from %s (%d bytes, Version %s); unreadable file preserved: %b (%s)"
                                         (DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
-                                        (Path.GetFileName(backup)) text.Length version (Path.GetFileName(kept))
+                                        (Path.GetFileName(backup)) text.Length version preserved (Path.GetFileName(kept))
                                     + Environment.NewLine)
                              with _ -> ())
 #endif
@@ -854,7 +869,7 @@ type Settings(isStandAlone) as this =
             let appData, exe = PortableSettings.appDataPath(), PortableSettings.exePath()
             let source, destination = if toExe then appData, exe else exe, appData
             let validateSource() =
-                if this.path <> source || not (File.Exists(source)) || settingsUntrusted ||
+                if migrationFailed.Value || this.path <> source || not (File.Exists(source)) || settingsUntrusted ||
                    (not toExe && File.Exists(appData)) then
                     failwith "Settings source is unavailable."
             validateSource()

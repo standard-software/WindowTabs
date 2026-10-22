@@ -13,6 +13,7 @@
   "PortableOverwrite": "Vorhandene Einstellungsdatei ersetzen?",
   "PortableMoveOverwrite": "Die Einstellungsdatei am Verschiebeziel ersetzen?",
   "PortableOperationFailed": "Vorgang fehlgeschlagen. Die Quelldatei wurde beibehalten.",
+  "SettingsMigrationFailed": "Die Migration der Einstellungen ist fehlgeschlagen. In dieser Sitzung werden keine Einstellungen gespeichert. Starten Sie die Anwendung neu, um es erneut zu versuchen.",
   "PortableWriteFailed": "Portable Einstellungen konnten nicht gespeichert werden. Schreibrechte im Exe-Ordner prüfen.",
 
   "Programs": "Programme",

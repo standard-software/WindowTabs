@@ -13,6 +13,7 @@
   "PortableOverwrite": "Ganti berkas pengaturan yang ada?",
   "PortableMoveOverwrite": "Ganti berkas pengaturan di tujuan pemindahan?",
   "PortableOperationFailed": "Operasi gagal. Berkas sumber dipertahankan.",
+  "SettingsMigrationFailed": "Migrasi pengaturan gagal. Pengaturan tidak akan disimpan selama sesi ini. Mulai ulang aplikasi untuk mencoba lagi.",
   "PortableWriteFailed": "Pengaturan portabel tidak dapat disimpan. Periksa izin tulis folder Exe.",
 
   "Programs": "Program",

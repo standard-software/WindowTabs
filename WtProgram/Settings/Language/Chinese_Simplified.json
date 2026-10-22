@@ -13,6 +13,7 @@
   "PortableOverwrite": "是否覆盖现有的目标设置文件？",
   "PortableMoveOverwrite": "是否覆盖移动目标位置的设置文件？",
   "PortableOperationFailed": "操作失败。源设置文件已保留。",
+  "SettingsMigrationFailed": "设置迁移失败。本次运行期间不会保存设置。下次启动时将重试。",
   "PortableWriteFailed": "无法保存便携版设置。请检查 Exe 文件夹的写入权限。",
 
   "Programs": "程序",

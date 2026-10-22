@@ -13,6 +13,7 @@
   "PortableOverwrite": "Remplacer le fichier de paramètres existant ?",
   "PortableMoveOverwrite": "Remplacer le fichier de paramètres à la destination du déplacement ?",
   "PortableOperationFailed": "Échec de l’opération. Le fichier source a été conservé.",
+  "SettingsMigrationFailed": "La migration des paramètres a échoué. Les paramètres ne seront pas enregistrés pendant cette session. Redémarrez l’application pour réessayer.",
   "PortableWriteFailed": "Impossible d’enregistrer les paramètres portables. Vérifiez les droits d’écriture du dossier Exe.",
 
   "Programs": "Programmes",

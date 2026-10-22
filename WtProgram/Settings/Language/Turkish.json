@@ -13,6 +13,7 @@
   "PortableOverwrite": "Mevcut ayar dosyası değiştirilsin mi?",
   "PortableMoveOverwrite": "Taşıma hedefindeki ayar dosyası değiştirilsin mi?",
   "PortableOperationFailed": "İşlem başarısız. Kaynak dosya korundu.",
+  "SettingsMigrationFailed": "Ayarlar taşınamadı. Bu oturum sırasında ayarlar kaydedilmeyecek. Yeniden denemek için uygulamayı yeniden başlatın.",
   "PortableWriteFailed": "Taşınabilir ayarlar kaydedilemedi. Exe klasörünün yazma izinlerini denetleyin.",
 
   "Programs": "Programlar",
