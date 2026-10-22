@@ -285,8 +285,7 @@ module TaskbarAppIdPolicy =
         /// At least as many windows as expected are under one button.
         | Merged
         /// Windows whose value is no longer ours: the application set its own
-        /// again. They leave the button for good, and the slot is planned anew
-        /// without them (its first tab may change, and with it the ID).
+        /// again. The caller schedules a bounded repair for owned windows.
         | Declined of IntPtr list
         /// Fewer: rebuild the buttons once.
         | RebuildOnce
@@ -604,3 +603,40 @@ module TaskbarAppIdPolicy =
     /// An identity marker outlives retries while any owner still needs it.
     let removeRetryMarker identity hasCookie retained =
         identity = Same && hasCookie && not retained
+
+    /// An unreadable property or another owned generation is not an app reset.
+    let externallyChangedId expected current =
+        match current with
+        | Some value -> value <> Some expected && not (isOurs value)
+        | None -> false
+
+    /// Wait for the app's write burst and limit reads even under continuous events.
+    let idObservationDue now changedAt readAt slow =
+        let elapsed at delay = uint32 (now - at) >= delay
+        (slow || (changedAt |> Option.exists (fun at -> elapsed at 400u))) &&
+        (readAt |> Option.forall (fun at -> elapsed at 1000u))
+
+    /// Only resets within 15 seconds of a successful repair extend the backoff.
+    let externalRetryAttempt now succeededAt attempt =
+        if uint32 (now - succeededAt) >= 15000u then 1
+        else min retryStageCount (attempt + 1)
+
+    /// Keep repairs in slot order and hold all members behind a waiting leader.
+    let orderIdRepairs (desired: Map<SlotKey, IntPtr list>) (next: Map<SlotKey, Slot>)
+                       (pending: Set<IntPtr>) (ready: Set<IntPtr>) steps =
+        let restores = steps |> List.filter (function Restore _ -> true | _ -> false)
+        let applies = steps |> List.choose (function Apply(h, id) -> Some(h, id) | _ -> None) |> Map.ofList
+        restores @ (desired |> Map.toList |> List.collect (fun (key, members) ->
+            match next.TryFind key with
+            | Some slot when not (pending.Contains slot.leader) || ready.Contains slot.leader ->
+                members |> List.choose (fun h ->
+                    if ready.Contains h then Some(Apply(h, slot.id))
+                    elif pending.Contains h then None
+                    else applies.TryFind h |> Option.map (fun id -> Apply(h, id)))
+            | _ -> []))
+
+    /// A repair never falls through to ordinary rotation when the desktop moves.
+    let idRewriteDecision repairing here expected value =
+        if repairing && not here then None
+        elif repairing && externallyChangedId expected value then Some Rewrite
+        else Some(rewriteGeneration expected value)

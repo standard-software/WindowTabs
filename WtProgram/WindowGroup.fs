@@ -2112,6 +2112,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             VirtualDesktopGroups.adoptsMoveOf false ((VirtualDesktopGroups.Live.shared()).Contains hwnd) false
         match evt with
         | WinEvent.EVENT_OBJECT_NAMECHANGE ->
+            if this.windows.contains(hwnd) then TaskbarAppId.nameChanged hwnd
             TitleTrace.log (fun () -> sprintf "namechange(background) hwnd=%X member=%b" (hwnd.ToInt64()) (this.windows.contains(hwnd)))
             if this.windows.contains(hwnd) then this.setTabInfo hwnd
         | WinEvent.EVENT_SYSTEM_FOREGROUND ->
@@ -2281,6 +2282,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.saveZorder()
             this.repairStripZorder("member-reorder")
         | WinEvent.EVENT_OBJECT_NAMECHANGE ->
+            if this.windows.contains(hwnd) then TaskbarAppId.nameChanged hwnd
             TitleTrace.log (fun () -> sprintf "namechange hwnd=%X member=%b inMoveSize=%b" (hwnd.ToInt64()) (this.windows.contains(hwnd)) inMoveSize.value)
             if  this.windows.contains(hwnd) &&
                 //some windows (e.g. chrome on GoogleAnalitics page) fire namechange constantly as they are resized
