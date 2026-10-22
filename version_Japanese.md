@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.23_next1
+
 ## version ss_2026.10.23
 
 - 設定ダイアログ
