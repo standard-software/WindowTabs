@@ -1001,7 +1001,7 @@ module TaskbarAppId =
     let private scheduleIdRetry hwnd (h: Held) value =
         if externallyChangedId h.id value &&
            not (retries.TryFind hwnd |> Option.exists (fun r -> r.pending)) then
-            let attempt = retries.TryFind hwnd |> Option.map (fun r -> min retryStageCount (r.attempt + 1)) |> Option.defaultValue 1
+            let attempt = retries.TryFind hwnd |> Option.map (fun r -> externalRetryAttempt Environment.TickCount r.at r.attempt) |> Option.defaultValue 1
             retries <- retries.Add(hwnd, { entry = h.entry; original = h.original; attempt = attempt
                                            at = Environment.TickCount; members = retryMembership hwnd retryGroups
                                            pending = true; externalId = true; observation = None })
@@ -1269,11 +1269,9 @@ module TaskbarAppId =
                                       not (pinSettling h.pinPending h.lostDesktop) -> Some(Apply(hwnd, next.[key].id))
                 | _ -> None))
         let repairing = repairs |> List.choose (function Apply(hwnd, _) -> Some hwnd | _ -> None) |> Set.ofList
-        let steps = (steps |> List.filter (function
-            | Apply(hwnd, _) ->
-                not (repairing.Contains hwnd) &&
-                not (retries.TryFind hwnd |> Option.exists (fun r -> r.externalId && r.pending))
-            | _ -> true)) @ repairs
+        let pendingIds = retries |> Map.toSeq |> Seq.choose (fun (hwnd, r) ->
+            if r.externalId && r.pending then Some hwnd else None) |> Set.ofSeq
+        let steps = orderIdRepairs desired next pendingIds repairing steps
         let steps = retainWaitingShared shared filed desired eligible steps
         let steps = steps |> List.filter (function
             | Apply(hwnd, _) ->
@@ -1376,7 +1374,7 @@ module TaskbarAppId =
                 if accepted then
                     stuck <- stuck.Remove hwnd
                     held <- held.Add(hwnd, { entry = entry; original = original; id = id; pinPending = entry.pin && not rotating; pinIssued = rotating; pinAt = lastWrite; lostDesktop = None; lostAt = lastWrite; lostRejectedAt = None })
-                    retries.TryFind hwnd |> Option.iter (fun r -> retries <- retries.Add(hwnd, { r with entry = entry; pending = false }))
+                    retries.TryFind hwnd |> Option.iter (fun r -> retries <- retries.Add(hwnd, { r with entry = entry; pending = false; at = if r.externalId then lastWrite else r.at }))
                     filed <- filed.Add(hwnd, key)
                     touched <- touched.Add key
                     trace hwnd "apply" role hr (sprintf "group=%X" (int64 key.group))
@@ -1392,23 +1390,28 @@ module TaskbarAppId =
             match step with
             | Apply(hwnd, id) ->
                 try
+                    let leader = next.[slotOf.[hwnd]].leader
+                    let leaderReady = leader = hwnd ||
+                                      ((held.TryFind leader |> Option.exists (fun h -> h.id = id)) &&
+                                       not (retries.TryFind leader |> Option.exists (fun r -> r.externalId && r.pending)))
                     match held.TryFind hwnd with
+                    | _ when not leaderReady -> replan <- true
                     | Some h when pinSettling h.pinPending h.lostDesktop -> replan <- true
                     | Some h ->
-                        // Ordinary rotation needs our generation; a due repair
-                        // also accepts an application reset on the current desktop.
-                        match (if not isListed || sameWindow h.entry <> Same then Unreadable
-                               else
-                                   let value = readId hwnd |> observedId "rewrite" hwnd h
-                                   if repairing.Contains hwnd && externallyChangedId h.id value && onCurrentDesktop hwnd then Rewrite
-                                   else rewriteGeneration h.id value) with
-                        | Rewrite -> write hwnd id slotOf.[hwnd] (h.entry, h.original)
-                        | ApplicationChanged ->
+                        let value =
+                            if not isListed || sameWindow h.entry <> Same then None
+                            else readId hwnd |> observedId "rewrite" hwnd h
+                        match idRewriteDecision (repairing.Contains hwnd) (not (repairing.Contains hwnd) || onCurrentDesktop hwnd) h.id value with
+                        | Some Rewrite -> write hwnd id slotOf.[hwnd] (h.entry, h.original)
+                        | Some ApplicationChanged when externallyChangedId h.id value ->
+                            scheduleIdRetry hwnd h value
+                        | Some ApplicationChanged ->
                             trace hwnd "decline" "application-changed" 0 "rewrite"
                             decline "rewrite-application-changed" hwnd
                             release' "declined" hwnd
                             replan <- true
-                        | Unreadable ->
+                        | None -> replan <- true
+                        | Some Unreadable ->
                             trace hwnd "refuse" "unreadable" 0 "rewrite"
                             decline "rewrite-unreadable" hwnd
                             replan <- true
