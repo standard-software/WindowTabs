@@ -2,80 +2,25 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.17_next11
+## version ss_2026.10.23
 
-- Taskbar grouping: a window that drops out of its group's taskbar
-  button is tried again in smaller steps.
-  - After 5, 10, 20 and 30 seconds, 1 and 2 minutes, then every
-    5 minutes.
-
-## version ss_2026.10.17_next10
-
-- Taskbar grouping: a window shown on every desktop no longer drops out
-  of its group's taskbar button by mistake.
-  - A window that leaves the group's button joins it again when it comes
-    back, or when it becomes an ordinary window on one desktop.
-
-## version ss_2026.10.17_next9
-
-- Settings: when a check box without its own caption gets the keyboard
-  focus, the focus frame is drawn around the box only.
-
-## version ss_2026.10.17_next8
-
-- Settings: in light mode, the shortcut key fields name keys such as
-  "," and ";" as Windows does, and show the held Ctrl / Shift / Alt
-  while a key is being typed.
-
-## version ss_2026.10.17_next7
-
-- Settings: a new System page shows the APPDATA and exe folders
-  and the settings file in use.
-  - The settings file can be copied or moved to the exe folder,
-    and moved back to APPDATA.
-- When APPDATA has no settings file, WindowTabs uses the one in
-  the exe folder, so the exe folder alone can be carried around.
-- Settings: the text in hot key, colour and path fields is centred
-  vertically.
-
-## version ss_2026.10.17_next6
-
-- Taskbar: a window that split off from its group's taskbar button joins it
-  again within minutes, instead of staying apart.
+- Settings dialog
+  - New System tab: shows the folders, and makes a portable copy.
+  - A check box toggles only from its box and its caption.
+- Combined taskbar buttons
+  - Fixed buttons that could stay combined after the setting was turned off.
+  - A window that dropped out of its button is put back at shorter intervals.
+- Settings are now saved in WindowTabsSettings.json.
+  - The .txt is copied on the first start, and left as it is.
+- Bug fix: closing or restarting from the tray menu no longer ends with
+  an error.
+- Bug fix: "Prevent moving windows and resizing them from the top"
+  - File Explorer windows can no longer be resized from the top.
+  - The strip along the top edge no longer flickers.
+- Bug fix: an item of a submenu opened over another menu sometimes did
+  nothing when clicked; it now works.
 - When the whole desktop stops answering, WindowTabs waits up to two
-  minutes before restarting itself, instead of restarting at once.
-- Fixed: with "Prevent moving windows and resizing them from the top",
-  the strip guarding the top edge of some windows was hidden and shown
-  again several times a second.
-
-## version ss_2026.10.17_next5
-
-- Fixed: in the tab menu, clicking an item of a submenu that opened over
-  another menu sometimes did nothing.
-  - For example "Same position" under "Detach this tab".
-
-## version ss_2026.10.17_next4
-
-- Fixed: "Prevent moving windows and resizing them from the top" did not
-  stop File Explorer windows from being resized from the top.
-
-## version ss_2026.10.17_next3
-
-- Settings: clicking the empty space beside a check box no longer
-  toggles it.
-  - Only the box and its own caption toggle it.
-
-## version ss_2026.10.17_next2
-
-- Fixed: WindowTabs ended with an error when it was closed or restarted
-  from the tray menu.
-  - It now removes its hooks and stops its threads before it ends.
-  - If closing takes longer than 15 seconds, it ends at once.
-
-## version ss_2026.10.17_next1
-
-- Taskbar: fixed buttons that could stay combined after "Combine taskbar
-  buttons for tab groups" was turned off.
+  minutes before restarting itself.
 
 ## version ss_2026.10.17
 
