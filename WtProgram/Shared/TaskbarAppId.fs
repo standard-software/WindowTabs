@@ -350,9 +350,16 @@ module TaskbarAppId =
     // whose explicitly scheduled retry has not yet passed its safety checks.
     let mutable private declined: Map<IntPtr, uint32> = Map.empty
     type private Retry = { entry: Written; original: string option; attempt: int; at: int
-                           members: Set<IntPtr * Set<IntPtr>>; pending: bool; observation: (Guid * int) option }
+                           members: Set<IntPtr * Set<IntPtr>>; pending: bool; externalId: bool; observation: (Guid * int) option }
     // Keep the backoff after success; repeated external resets never restart it.
     let mutable private retries: Map<IntPtr, Retry> = Map.empty
+    // Event threads only enqueue owned windows; property reads stay on the STA.
+    let private observationGate = obj()
+    let mutable private monitored: Set<IntPtr> = Set.empty
+    let mutable private nameChanges: Map<IntPtr, int> = Map.empty
+    let mutable private idReadAt: Map<IntPtr, int> = Map.empty
+    let mutable private slowIdReadAt = Environment.TickCount
+
     let mutable private retryGroups: (IntPtr * IntPtr list) list = []
     let private retryWaiting () = retries |> Map.exists (fun _ r -> r.pending)
     let private retryReady now groups =
@@ -991,6 +998,41 @@ module TaskbarAppId =
     let mutable private awayCountAt = 0
 #endif
 
+    let private scheduleIdRetry hwnd (h: Held) value =
+        if externallyChangedId h.id value &&
+           not (retries.TryFind hwnd |> Option.exists (fun r -> r.pending)) then
+            let attempt = retries.TryFind hwnd |> Option.map (fun r -> min retryStageCount (r.attempt + 1)) |> Option.defaultValue 1
+            retries <- retries.Add(hwnd, { entry = h.entry; original = h.original; attempt = attempt
+                                           at = Environment.TickCount; members = retryMembership hwnd retryGroups
+                                           pending = true; externalId = true; observation = None })
+            trace hwnd "id-observed" (if value = Some None then "cleared" else "changed") 0 ""
+            trace hwnd "retry" "id-changed" 0 (sprintf "attempt=%d wait-ms=%d" attempt (retryWaitMs attempt))
+            checks <- checks |> Map.filter (fun _ c -> not (List.contains hwnd c.members))
+            replan <- true
+
+    let private observeIds (s: Snapshot) =
+        let now = Environment.TickCount
+        let targets = lock observationGate (fun () ->
+            let slow = uint32 (now - slowIdReadAt) >= 30000u
+            if slow then slowIdReadAt <- now
+            let targets = monitored |> Set.filter (fun hwnd ->
+                idObservationDue now (nameChanges.TryFind hwnd) (idReadAt.TryFind hwnd) slow)
+            for hwnd in targets do
+                nameChanges <- nameChanges.Remove hwnd
+                idReadAt <- idReadAt.Add(hwnd, now)
+            targets)
+        if s.enabled && not targets.IsEmpty then
+            let members = s.groups |> List.collect snd |> Set.ofList
+            for hwnd in targets do
+                match held.TryFind hwnd, filed.TryFind hwnd with
+                | Some h, Some key when not (s.excluded.Contains hwnd) &&
+                                       members.Contains hwnd &&
+                                       not (pinSettling h.pinPending h.lostDesktop) &&
+                                       verificationHere s.current key.desktop (fun () -> onCurrentDesktop hwnd) &&
+                                       sameWindow h.entry = Same ->
+                    scheduleIdRetry hwnd h (readId hwnd)
+                | _ -> ()
+
     let private verify (s: Snapshot) seq =
         let now = Environment.TickCount
         let due = checks |> Map.filter (fun key c -> verificationHere s.current key.desktop (fun () -> c.members |> List.forall onCurrentDesktop) && c.seq < seq && settled now c.at && (c.members |> List.forall (fun h -> held.TryFind h |> Option.forall (fun h -> not (pinSettling h.pinPending h.lostDesktop)))))
@@ -1012,12 +1054,9 @@ module TaskbarAppId =
 #if DEBUG
                 retryResult c.members "application-changed"
 #endif
-                // The application set its own ID again: it keeps its own
-                // button, and the slot is planned again without it.
+                // Use the same bounded repair as the name-change observer.
                 for hwnd in off do
-                    trace hwnd "decline" "application-changed" 0 ""
-                    decline "verify-application-changed" hwnd
-                    release' "declined" hwnd
+                    held.TryFind hwnd |> Option.iter (fun h -> scheduleIdRetry hwnd h (readId hwnd))
                 checks <- checks.Remove key
                 replan <- true
             | RebuildOnce ->
@@ -1128,7 +1167,7 @@ module TaskbarAppId =
                     decline "pin-lost" hwnd
                     let attempt = previous |> Option.map (fun r -> min retryStageCount (r.attempt + 1)) |> Option.defaultValue 1
                     retries <- retries.Add(hwnd, { entry = h.entry; original = h.original; attempt = attempt
-                                                   at = now; members = retryMembership hwnd retryGroups; pending = true; observation = None })
+                                                   at = now; members = retryMembership hwnd retryGroups; pending = true; externalId = false; observation = None })
                     trace hwnd "retry" "pin-lost" 0 (sprintf "attempt=%d wait-ms=%d" attempt (retryWaitMs attempt))
                     release' "pin-lost" hwnd
                     replan <- true
@@ -1139,7 +1178,7 @@ module TaskbarAppId =
     let private retryPending (s: Snapshot) =
         for KeyValue(hwnd, r) in retries do
             let changed = retryMembership hwnd s.groups <> r.members
-            if r.pending && retryDue Environment.TickCount r.at r.attempt changed then
+            if r.pending && not r.externalId && retryDue Environment.TickCount r.at r.attempt changed then
                 if sameWindow r.entry <> Same then decline "retry-identity" hwnd
                 elif stuck.ContainsKey hwnd then decline "retry-return-pending" hwnd
                 else
@@ -1220,6 +1259,21 @@ module TaskbarAppId =
         let returning = given |> Map.toSeq |> Seq.choose (fun (hwnd, g) -> if g.paused || g.slow then None else Some hwnd) |> Set.ofSeq
         let desired = eligible |> deferReturningGroups s.groups returning shared
         let next, steps, waitingNow = settledSharedPlan newId lastDesired slotState (held |> Map.map (fun _ h -> h.id)) desired shared
+        let repairs = desired |> Map.toList |> List.collect (fun (key, members) ->
+            members |> List.choose (fun hwnd ->
+                match retries.TryFind hwnd, held.TryFind hwnd with
+                | Some r, Some h when r.externalId && r.pending && next.ContainsKey key &&
+                                      lastDesired.TryFind key = Some members &&
+                                      retryDue Environment.TickCount r.at r.attempt false &&
+                                      verificationHere s.current key.desktop (fun () -> onCurrentDesktop hwnd) &&
+                                      not (pinSettling h.pinPending h.lostDesktop) -> Some(Apply(hwnd, next.[key].id))
+                | _ -> None))
+        let repairing = repairs |> List.choose (function Apply(hwnd, _) -> Some hwnd | _ -> None) |> Set.ofList
+        let steps = (steps |> List.filter (function
+            | Apply(hwnd, _) ->
+                not (repairing.Contains hwnd) &&
+                not (retries.TryFind hwnd |> Option.exists (fun r -> r.externalId && r.pending))
+            | _ -> true)) @ repairs
         let steps = retainWaitingShared shared filed desired eligible steps
         let steps = steps |> List.filter (function
             | Apply(hwnd, _) ->
@@ -1322,7 +1376,7 @@ module TaskbarAppId =
                 if accepted then
                     stuck <- stuck.Remove hwnd
                     held <- held.Add(hwnd, { entry = entry; original = original; id = id; pinPending = entry.pin && not rotating; pinIssued = rotating; pinAt = lastWrite; lostDesktop = None; lostAt = lastWrite; lostRejectedAt = None })
-                    retries.TryFind hwnd |> Option.iter (fun r -> retries <- retries.Add(hwnd, { r with entry = entry }))
+                    retries.TryFind hwnd |> Option.iter (fun r -> retries <- retries.Add(hwnd, { r with entry = entry; pending = false }))
                     filed <- filed.Add(hwnd, key)
                     touched <- touched.Add key
                     trace hwnd "apply" role hr (sprintf "group=%X" (int64 key.group))
@@ -1341,9 +1395,13 @@ module TaskbarAppId =
                     match held.TryFind hwnd with
                     | Some h when pinSettling h.pinPending h.lostDesktop -> replan <- true
                     | Some h ->
-                        // Moving to a new ID: only over a value of ours.
+                        // Ordinary rotation needs our generation; a due repair
+                        // also accepts an application reset on the current desktop.
                         match (if not isListed || sameWindow h.entry <> Same then Unreadable
-                               else rewriteGeneration h.id (readId hwnd |> observedId "rewrite" hwnd h)) with
+                               else
+                                   let value = readId hwnd |> observedId "rewrite" hwnd h
+                                   if repairing.Contains hwnd && externallyChangedId h.id value && onCurrentDesktop hwnd then Rewrite
+                                   else rewriteGeneration h.id value) with
                         | Rewrite -> write hwnd id slotOf.[hwnd] (h.entry, h.original)
                         | ApplicationChanged ->
                             trace hwnd "decline" "application-changed" 0 "rewrite"
@@ -1391,6 +1449,7 @@ module TaskbarAppId =
     let private pass (s: Snapshot) seq =
         if s.current <> lastCurrent then lastSwitch <- Some Environment.TickCount
         retryGroups <- s.groups
+        observeIds s
         let previous = lastProcessed
         lastProcessed <- None
         let monitorOnly = previous = Some s && (s.enabled || (given |> Map.exists (fun _ g -> not g.paused && g.slow))) && not waiting && not replan &&
@@ -1409,6 +1468,10 @@ module TaskbarAppId =
             if replan then fullPass s seq
         else fullPass s seq
         lastProcessed <- Some s
+        lock observationGate (fun () ->
+            monitored <- if s.enabled then held |> Map.toSeq |> Seq.map fst |> Set.ofSeq else Set.empty
+            nameChanges <- nameChanges |> Map.filter (fun hwnd _ -> monitored.Contains hwnd)
+            idReadAt <- idReadAt |> Map.filter (fun hwnd _ -> monitored.Contains hwnd))
 
     // --------------------------------------------------------------- worker --
 
@@ -1495,15 +1558,27 @@ module TaskbarAppId =
     /// Main thread, from the desktop pass. Posts only what changed, or when a
     /// slot waits to settle or a written group waits for its check.
     let publish (snapshot: Snapshot) =
-        if lastPosted <> Some snapshot || Volatile.Read(&wantsPass) then
+        let observationDue = lock observationGate (fun () ->
+            let now = Environment.TickCount
+            let slow = not monitored.IsEmpty && uint32 (now - slowIdReadAt) >= 30000u
+            snapshot.enabled && (slow || (nameChanges |> Map.exists (fun hwnd at ->
+                idObservationDue now (Some at) (idReadAt.TryFind hwnd) false))))
+        if lastPosted <> Some snapshot || Volatile.Read(&wantsPass) || observationDue then
             lastPosted <- Some snapshot
             post (fun inbox -> inbox.snapshot <- Some snapshot)
+
+    /// Coalesce a burst without postponing observation indefinitely.
+    let nameChanged hwnd =
+        lock observationGate (fun () ->
+            if monitored.Contains hwnd && not (nameChanges.ContainsKey hwnd) then
+                nameChanges <- nameChanges.Add(hwnd, Environment.TickCount))
 
     let private running () = lock gate (fun () -> not (isNull worker))
 
     /// Gives every window its own button back (disable). Asynchronous. Also
     /// reaches a first pass still in progress, which holds nothing yet.
     let release reason =
+        lock observationGate (fun () -> monitored <- Set.empty; nameChanges <- Map.empty; idReadAt <- Map.empty)
         lastPosted <- None
         if isHolding () || running () then post (fun inbox -> inbox.release <- Some reason; inbox.snapshot <- None)
 

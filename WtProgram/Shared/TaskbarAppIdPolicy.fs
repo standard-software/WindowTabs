@@ -285,8 +285,7 @@ module TaskbarAppIdPolicy =
         /// At least as many windows as expected are under one button.
         | Merged
         /// Windows whose value is no longer ours: the application set its own
-        /// again. They leave the button for good, and the slot is planned anew
-        /// without them (its first tab may change, and with it the ID).
+        /// again. The caller schedules a bounded repair for owned windows.
         | Declined of IntPtr list
         /// Fewer: rebuild the buttons once.
         | RebuildOnce
@@ -604,3 +603,15 @@ module TaskbarAppIdPolicy =
     /// An identity marker outlives retries while any owner still needs it.
     let removeRetryMarker identity hasCookie retained =
         identity = Same && hasCookie && not retained
+
+    /// An unreadable property or another owned generation is not an app reset.
+    let externallyChangedId expected current =
+        match current with
+        | Some value -> value <> Some expected && not (isOurs value)
+        | None -> false
+
+    /// Wait for the app's write burst and limit reads even under continuous events.
+    let idObservationDue now changedAt readAt slow =
+        let elapsed at delay = uint32 (now - at) >= delay
+        (slow || (changedAt |> Option.exists (fun at -> elapsed at 400u))) &&
+        (readAt |> Option.forall (fun at -> elapsed at 1000u))
