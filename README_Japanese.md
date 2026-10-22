@@ -1,6 +1,6 @@
 <img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
 
-# WindowTabs
+# WindowTabs version ss (Standard-Software edition)
 
 **Language:** [English](README.md)
 
