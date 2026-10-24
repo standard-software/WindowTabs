@@ -95,7 +95,7 @@
   "EnableHoverActivate": "Ativar guia ao passar o mouse",
 
   "TabPositionByDefault": "Disposição das guias",
-  "ChangeTabPositionOnSnap": "Disposição das guias ao ajustar à esquerda/direita",
+  "ChangeTabPositionOnSnap": "Alinhamento das guias ao ajustar e mover",
   "ChangeTabPositionOnSnapWhenUniform": "Alterar quando todas as guias do grupo compartilham a mesma posição",
   "ChangeTabPositionOnSnapNever": "Não alterar",
   "TabVerticalDirection": "Guias externas ou internas",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "Ocultar guias quando a janela estiver em tela cheia",
   "HideTabsWhileMoving": "Ocultar guias ao mover uma janela",
   "LockWindowPosition": "Impedir mover janelas e redimensioná-las pela borda superior",
-  "SnapTabHeightMargin": "Adicionar margem da altura da guia ao ajustar",
+  "SnapTabHeightMargin": "Adicionar margem da altura da guia ao ajustar ou mover",
   "SnapOnDragDetach": "Ajustar à borda da tela ao arrastar uma guia para uma nova janela",
   "NextTab": "Próxima guia",
   "PrevTab": "Guia anterior",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "Comportamento do grupo de guias",
   "LockWindowPositionMenu": "Impedir mover janelas e redimensioná-las pela borda superior",
-    "SnapTabMarginTop": "Adicionar margem da altura da guia ao ajustar",
+    "SnapTabMarginTop": "Adicionar margem da altura da guia ao ajustar ou mover",
 
   "TabAlignMenu": "Alinhamento da guia",
   "AlignAllTopLeft": "Alinhar todas as guias à esquerda",

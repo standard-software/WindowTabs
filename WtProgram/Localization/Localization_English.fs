@@ -98,7 +98,7 @@ module Localization_English =
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
         ("TabPositionByDefault", "Tab placement")
-        ("ChangeTabPositionOnSnap", "Tab placement on left/right snap")
+        ("ChangeTabPositionOnSnap", "Tab alignment on snap and move")
         ("ChangeTabPositionOnSnapWhenUniform", "Change when all tabs in the group share the same position")
         ("ChangeTabPositionOnSnapNever", "Don't change")
         ("TabVerticalDirection", "Outer or inner tabs")
@@ -113,7 +113,7 @@ module Localization_English =
         ("HideTabsOnFullscreen", "Hide tabs when window is fullscreen")
         ("HideTabsWhileMoving", "Hide tabs while moving a window")
         ("LockWindowPosition", "Prevent moving windows and resizing them from the top")
-        ("SnapTabHeightMargin", "Add tab height margin when snapping")
+        ("SnapTabHeightMargin", "Add tab height margin when snapping or moving")
         ("SnapOnDragDetach", "Snap detached tabs by drop position")
         ("NextTab", "Next Tab")
         ("PrevTab", "Previous Tab")
@@ -211,7 +211,7 @@ module Localization_English =
 
         ("WindowBehaviorMenu", "Tab Group Behavior")
         ("LockWindowPositionMenu", "Prevent moving windows and resizing them from the top")
-        ("SnapTabMarginTop", "Add tab height margin when snapping")
+        ("SnapTabMarginTop", "Add tab height margin when snapping or moving")
 
         ("TabAlignMenu", "Tab Alignment")
         ("AlignAllTopLeft", "Align all tabs to Left")

@@ -95,7 +95,7 @@
   "EnableHoverActivate": "マウス乗せたらタブ切り替わるで",
 
   "TabPositionByDefault": "タブの配置",
-  "ChangeTabPositionOnSnap": "左右スナップ時のタブ配置",
+  "ChangeTabPositionOnSnap": "スナップ時と移動時のタブの寄せ",
   "ChangeTabPositionOnSnapWhenUniform": "グループの全部のタブ位置が同じときに変える",
   "ChangeTabPositionOnSnapNever": "変えへん",
   "TabVerticalDirection": "タブの外側内側",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示にするで",
   "HideTabsWhileMoving": "ウィンドウ移動中はタブを非表示にするで",
   "LockWindowPosition": "ウィンドウの移動や上端のサイズ変更はさせへん",
-  "SnapTabHeightMargin": "スナップ時にタブの高さ分の余白をあけるで",
+  "SnapTabHeightMargin": "スナップ時と移動時にタブの高さ分の余白をあけるで",
   "SnapOnDragDetach": "タブ分離したとき落とした位置でスナップするで",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "タブグループの動き",
   "LockWindowPositionMenu": "ウィンドウの移動や上端のサイズ変更はさせへん",
-    "SnapTabMarginTop": "スナップ時にタブの高さ分の余白をあけるで",
+    "SnapTabMarginTop": "スナップ時と移動時にタブの高さ分の余白をあけるで",
 
   "TabAlignMenu": "タブの配置やで",
   "AlignAllTopLeft": "全部のタブを左寄せにするで",

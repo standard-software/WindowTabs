@@ -142,18 +142,18 @@ module SnapGeometry =
         | _ ->
             (areaX, areaY, areaWidth, areaHeight)
 
-    // The alignment a left/right snap gives the snapped tabs ("Change tab
-    // position on left/right snap"): all left for a left snap, all right for a
-    // right snap, but only when the tabs are uniformly aligned (all left or all
-    // right) beforehand. A mixed set, a top/bottom snap, an empty set or the
-    // setting being off leaves the alignment alone (None).
+    // Align uniformly placed tabs to the horizontal component of a snap or move.
+    // Corners use their left/right component. Vertical-only moves, centered or
+    // maximized snaps, mixed/empty groups and a disabled setting leave tabs alone.
     let realignment (enabled: bool) (snapDirection: string) (alignments: 'a list) (left: 'a) (right: 'a) : 'a option =
         if not enabled || List.isEmpty alignments then None
         else
             let desired =
                 match snapDirection with
-                | "snapleft" -> Some left
-                | "snapright" -> Some right
+                | "snapleft" | "snaptopleft" | "snapbottomleft"
+                | "left" | "topleft" | "bottomleft" -> Some left
+                | "snapright" | "snaptopright" | "snapbottomright"
+                | "right" | "topright" | "bottomright" -> Some right
                 | _ -> None
             match desired with
             | Some _ when alignments |> List.forall ((=) left) || alignments |> List.forall ((=) right) -> desired

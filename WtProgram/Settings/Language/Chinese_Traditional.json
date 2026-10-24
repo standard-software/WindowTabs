@@ -95,7 +95,7 @@
   "EnableHoverActivate": "滑鼠懸停時切換分頁",
 
   "TabPositionByDefault": "分頁位置",
-  "ChangeTabPositionOnSnap": "左右吸附時的分頁位置",
+  "ChangeTabPositionOnSnap": "吸附和移動時的分頁對齊方式",
   "ChangeTabPositionOnSnapWhenUniform": "群組內所有分頁位置相同時變更",
   "ChangeTabPositionOnSnapNever": "不變更",
   "TabVerticalDirection": "分頁外側/內側",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "全螢幕視窗時隱藏分頁",
   "HideTabsWhileMoving": "移動視窗時隱藏分頁",
   "LockWindowPosition": "禁止移動視窗和從頂邊調整大小",
-  "SnapTabHeightMargin": "吸附時為分頁高度留出邊距",
+  "SnapTabHeightMargin": "吸附或移動時為分頁高度留出邊距",
   "SnapOnDragDetach": "拖出分頁建立新視窗時，依放開位置吸附到螢幕邊緣",
   "NextTab": "下一個分頁",
   "PrevTab": "上一個分頁",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "分頁群組行為",
   "LockWindowPositionMenu": "禁止移動視窗和從頂邊調整大小",
-    "SnapTabMarginTop": "吸附時為分頁高度留出邊距",
+    "SnapTabMarginTop": "吸附或移動時為分頁高度留出邊距",
 
   "TabAlignMenu": "分頁對齊",
   "AlignAllTopLeft": "將所有分頁靠左對齊",

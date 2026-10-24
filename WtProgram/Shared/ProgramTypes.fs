@@ -50,8 +50,8 @@ type SettingsRec = {
     hideTabsWhileMoving: bool
     lockWindowPosition: bool
     snapTabHeightMargin: bool
-    // "change": on a left/right snap, re-align every tab of a uniformly-aligned
-    // group to match the snap direction. "nochange": leave tab alignment alone.
+    // "change": on a snap or move to the left, right or a corner, re-align every
+    // tab of a uniformly aligned group to that side. "nochange": leave alignment alone.
     changeTabPositionOnSnap: string
     // Dragging tabs out of a strip to form a new group snaps the window to the
     // left/right/top/bottom edge of the display, chosen by which triangle of

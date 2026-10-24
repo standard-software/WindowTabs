@@ -1050,39 +1050,44 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         height: int) : (int * int) =
 
         let tabOffset = this.getTabHeightForSnap()
+        let minY = workArea.Top + tabOffset
+        // Prefer the top tab margin when the group is too tall, without resizing.
+        let bottomY =
+            if tabOffset > 0 then max minY (workArea.Bottom - height)
+            else workArea.Bottom - height
         match position with
         | Some "right" ->
             let x = workArea.Right - width
-            let y = max workArea.Top (min currentY (workArea.Bottom - height))
+            let y = max minY (min currentY (workArea.Bottom - height))
             (x, y)
         | Some "left" ->
             let x = workArea.Left
-            let y = max workArea.Top (min currentY (workArea.Bottom - height))
+            let y = max minY (min currentY (workArea.Bottom - height))
             (x, y)
         | Some "top" ->
             let x = max workArea.Left (min currentX (workArea.Right - width))
-            let y = workArea.Top + tabOffset
+            let y = minY
             (x, y)
         | Some "bottom" ->
             let x = max workArea.Left (min currentX (workArea.Right - width))
-            let y = workArea.Bottom - height
+            let y = bottomY
             (x, y)
         // Corner positions
         | Some "topright" ->
             let x = workArea.Right - width
-            let y = workArea.Top + tabOffset
+            let y = minY
             (x, y)
         | Some "topleft" ->
             let x = workArea.Left
-            let y = workArea.Top + tabOffset
+            let y = minY
             (x, y)
         | Some "bottomright" ->
             let x = workArea.Right - width
-            let y = workArea.Bottom - height
+            let y = bottomY
             (x, y)
         | Some "bottomleft" ->
             let x = workArea.Left
-            let y = workArea.Bottom - height
+            let y = bottomY
             (x, y)
         | _ ->
             (currentX, currentY)
@@ -1135,7 +1140,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             // Ensure position is within bounds
             let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
-            let finalY = max targetWorkArea.Top (min newTop (targetWorkArea.Bottom - newHeight))
+            // Preserve the tab margin when clamping an explicit edge or corner move.
+            let minY = targetWorkArea.Top + (if position.IsSome then this.getTabHeightForSnap() else 0)
+            let finalY = max minY (min newTop (targetWorkArea.Bottom - newHeight))
 
             // DPI-aware window placement: move position first, wait for DPI change, then set size
             let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -1521,6 +1528,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // ----- Detach menu dispatchers (single vs multi-tab) -----
     member private this.detachOrSplitToPosition(hwnd: IntPtr, position: Option<string>) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        position |> Option.iter (fun direction ->
+            this.applySnapRealign(targets, direction, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a))))
         if List.length targets <= 1 then this.detachTabToPosition(hwnd, position)
         else this.detachTabsToPosition(targets, position)
     member private this.detachOrSplitToSnap(hwnd: IntPtr, snapDirection: string) =
@@ -1537,6 +1546,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         else this.detachTabsToSnapWithPercent(targets, snapDirection, percent)
     member private this.detachOrSplitToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         let targets = this.actionTargetsInVisualOrder(hwnd)
+        position |> Option.iter (fun direction ->
+            this.applySnapRealign(targets, direction, fun hs a -> hs |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some a))))
         if List.length targets <= 1 then this.detachTabToScreen(hwnd, targetScreen, position)
         else this.detachTabsToScreen(targets, targetScreen, position)
     member private this.detachOrSplitToScreenSnap(hwnd: IntPtr, targetScreen: MonitorScreen, snapDirection: string) =
@@ -1811,6 +1822,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let baseBounds = Rect(Pt(newX,newY),bounds.size)
             window.move(FramePlacement.target activeHwnd margin baseBounds)
 
+        position |> Option.iter this.applyGroupSnapRealign
+
     member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         // Move the entire tab group to the specified screen and position
         // Always use the active window (topWindow) as the reference point
@@ -1861,7 +1874,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Ensure position is within bounds
         let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
-        let finalY = max targetWorkArea.Top (min newTop (targetWorkArea.Bottom - newHeight))
+        // Preserve the tab margin when clamping an explicit edge or corner move.
+        let minY = targetWorkArea.Top + (if position.IsSome then this.getTabHeightForSnap() else 0)
+        let finalY = max minY (min newTop (targetWorkArea.Bottom - newHeight))
 
         // DPI-aware window placement: move position first, wait for DPI change, then set size
         let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -1888,19 +1903,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if group.hasWindowMargin(activeHwnd) then
             group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
-    // Whether the "change tab position on left/right snap" setting is enabled.
+        position |> Option.iter this.applyGroupSnapRealign
+
+    // Whether the "Tab alignment on snap and move" setting is enabled.
     member private this.snapRealignEnabled() =
         try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
         with _ -> false
 
-    // Realign tabs to match a left/right snap, when the setting is enabled and
-    // the given tabs are uniformly aligned (all left or all right). A left snap
-    // makes them all left, a right snap all right; a mixed group is left as is.
-    // Non-left/right snaps (top/bottom) never realign. setAlign applies the new
-    // alignment (in-place group snap updates the visible tabs; detach persists
-    // it so the freshly formed group inherits it). tabHwnds are read from the
-    // current group for the uniformity check, so this must run before detaching.
-    // The rule itself is SnapGeometry.realignment, shared with Desktop.dragDrop.
+    // Realign uniformly placed tabs using the horizontal component of a snap or move.
+    // In-place operations update visible tabs; detach persists the alignment so
+    // the new group inherits it. Read the source tabs before detaching them.
+    // The rule is shared with Desktop.dragDrop through SnapGeometry.realignment.
     member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
         if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
             let alignments = tabHwnds |> List.map group.getTabAlign
@@ -1908,7 +1921,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             | Some desired -> setAlignAll tabHwnds desired
             | None -> ()
 
-    // Realign the whole current group after an in-place left/right snap.
+    // Realign the whole current group after an in-place snap or move.
     // Bulk-align so the tabs keep their relative order.
     member private this.applyGroupSnapRealign(snapDirection: string) =
         this.applySnapRealign(group.visualOrder.list, snapDirection, fun hs a -> group.setTabsAlign(hs, a))

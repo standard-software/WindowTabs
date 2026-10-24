@@ -95,7 +95,7 @@
   "EnableHoverActivate": "鼠标悬停时切换标签页",
 
   "TabPositionByDefault": "标签页位置",
-  "ChangeTabPositionOnSnap": "左右吸附时的标签页位置",
+  "ChangeTabPositionOnSnap": "吸附和移动时的标签页对齐方式",
   "ChangeTabPositionOnSnapWhenUniform": "组内所有标签页位置相同时更改",
   "ChangeTabPositionOnSnapNever": "不更改",
   "TabVerticalDirection": "标签页外侧/内侧",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "全屏窗口时隐藏标签页",
   "HideTabsWhileMoving": "移动窗口时隐藏标签页",
   "LockWindowPosition": "禁止移动窗口和从顶边调整大小",
-  "SnapTabHeightMargin": "吸附时为标签页高度留出边距",
+  "SnapTabHeightMargin": "吸附或移动时为标签页高度留出边距",
   "SnapOnDragDetach": "拖出标签页创建新窗口时，按放下位置吸附到屏幕边缘",
   "NextTab": "下一个标签页",
   "PrevTab": "上一个标签页",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "标签页组行为",
   "LockWindowPositionMenu": "禁止移动窗口和从顶边调整大小",
-    "SnapTabMarginTop": "吸附时为标签页高度留出边距",
+    "SnapTabMarginTop": "吸附或移动时为标签页高度留出边距",
 
   "TabAlignMenu": "标签页对齐",
   "AlignAllTopLeft": "将所有标签页靠左对齐",

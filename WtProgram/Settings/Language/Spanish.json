@@ -95,7 +95,7 @@
   "EnableHoverActivate": "Activar pestaña al pasar el cursor por encima",
 
   "TabPositionByDefault": "Disposición de las pestañas",
-  "ChangeTabPositionOnSnap": "Disposición de pestañas al acoplar a izquierda/derecha",
+  "ChangeTabPositionOnSnap": "Alineación de pestañas al acoplar y mover",
   "ChangeTabPositionOnSnapWhenUniform": "Cambiar cuando todas las pestañas del grupo comparten la misma posición",
   "ChangeTabPositionOnSnapNever": "No cambiar",
   "TabVerticalDirection": "Pestañas exteriores o interiores",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "Ocultar pestañas cuando la ventana está en pantalla completa",
   "HideTabsWhileMoving": "Ocultar pestañas al mover una ventana",
   "LockWindowPosition": "Impedir mover ventanas y redimensionarlas desde el borde superior",
-  "SnapTabHeightMargin": "Agregar margen de alto de pestaña al acoplar",
+  "SnapTabHeightMargin": "Agregar un margen de la altura de las pestañas al acoplar o mover",
   "SnapOnDragDetach": "Acoplar al borde de la pantalla al arrastrar una pestaña a una nueva ventana",
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "Comportamiento del grupo de pestañas",
   "LockWindowPositionMenu": "Impedir mover ventanas y redimensionarlas desde el borde superior",
-    "SnapTabMarginTop": "Agregar margen de alto de pestaña al acoplar",
+    "SnapTabMarginTop": "Agregar un margen de la altura de las pestañas al acoplar o mover",
 
   "TabAlignMenu": "Alineación de la pestaña",
   "AlignAllTopLeft": "Alinear todas las pestañas a la izquierda",

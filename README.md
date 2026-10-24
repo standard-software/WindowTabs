@@ -198,7 +198,7 @@ Close Tab
 ---
 Tab Group Behavior
   Prevent moving windows and resizing them from the top
-  Add tab height margin when snapping
+  Add tab height margin when snapping or moving
 Tab Alignment
   Align all tabs to Left
   Align all tabs to Right
@@ -270,7 +270,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 - Align tabs left / right individually or all at once.
 - Dragging a tab changes its alignment too.
-- With the "Tab placement on left/right snap" setting, a group whose tabs are all aligned to the same side realigns to the side it is snapped to.
+- With the "Tab alignment on snap and move" setting, a uniformly aligned group realigns left or right when snapped or moved to that side, including corners.
 
 ### Pinned Tabs
 
@@ -406,8 +406,8 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Pin button on pinned tabs**: "Button on the active tab only, icon on the others" (default), "Button on all tabs", or "Icon only". An icon indicates a pinned tab and cannot be clicked.
 - Configure activation on mouse-over.
 - **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
-- **Tab placement on left/right snap**: snapping a uniformly aligned group left or right (including x% snaps) realigns its tabs to that side. "Don't change" is also available.
-- Choose whether snapping leaves a tab-height margin and whether detached tabs snap at the drop position.
+- **Tab alignment on snap and move**: snapping or moving a uniformly aligned group left or right, including corners and x% snaps, realigns its tabs to that side. "Don't change" is also available.
+- Choose whether snapping or moving leaves a tab-height margin. Moves keep this margin above the group, including when its position is constrained by the work area. Moves within the same display preserve the group size; moves to another display preserve its size relative to the work area. You can also choose whether detached tabs snap at the drop position.
 
 ![Settings Interaction](README_Image/SettingsInteraction.png)
 
