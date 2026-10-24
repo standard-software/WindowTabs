@@ -157,6 +157,7 @@ module Localization_English =
         ("NewLaunchErrorUnexpected", "Unexpected error starting process:\n{0}")
 
         ("MoveEdgeMenu", "Move")
+        ("SizeMenu", "Size")
         ("MoveEdgeLeft", "Left Edge")
         ("MoveEdgeRight", "Right Edge")
         ("MoveEdgeTop", "Top Edge")

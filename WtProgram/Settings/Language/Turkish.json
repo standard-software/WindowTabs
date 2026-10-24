@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "İşlem başlatılırken beklenmeyen hata:\n{0}",
 
   "MoveEdgeMenu": "Taşı",
+  "SizeMenu": "Boyut",
   "MoveEdgeLeft": "Sol Kenar",
   "MoveEdgeRight": "Sağ Kenar",
   "MoveEdgeTop": "Üst Kenar",

@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "Unerwarteter Fehler beim Starten des Prozesses:\n{0}",
 
   "MoveEdgeMenu": "Verschieben",
+  "SizeMenu": "Größe",
   "MoveEdgeLeft": "Linker Rand",
   "MoveEdgeRight": "Rechter Rand",
   "MoveEdgeTop": "Oberer Rand",

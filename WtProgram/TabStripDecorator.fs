@@ -1913,6 +1913,57 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.applyGroupSnapRealign(snapDirection: string) =
         this.applySnapRealign(group.visualOrder.list, snapDirection, fun hs a -> group.setTabsAlign(hs, a))
 
+    member private this.sizeWorkArea(sourceScreen: MonitorScreen, targetScreen: MonitorScreen) =
+        let area = targetScreen.WorkingArea
+        let sameScreen = targetScreen.Equals(sourceScreen)
+        let reserved =
+            try
+                let targetScale =
+                    if sameScreen then this.ts.scale
+                    else Dpi.scaleForMonitorHandle targetScreen.Mon.hMonitor
+                SnapGeometry.sizeWorkArea sameScreen this.ts.scale targetScale
+                    (fun scale -> (group.tabAppearanceAt scale).tabHeight)
+                    group.snapTabHeightMargin (area.X, area.Y, area.Width, area.Height)
+            with | _ -> (area.X, area.Y, area.Width, area.Height)
+        let x, y, width, height = reserved
+        System.Drawing.Rectangle(x, y, width, height)
+
+    member private this.resizeTabGroup(targetScreen: MonitorScreen, width: int, height: int) =
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
+        let margin = group.capturePlacementMargin(activeHwnd)
+        let bounds = FramePlacement.read activeHwnd margin (FramePlacement.restoredBounds window)
+        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
+        let sameScreen = targetScreen.Equals(sourceScreen)
+        let sourceArea = sourceScreen.WorkingArea
+        let targetArea = targetScreen.WorkingArea
+        let position = SnapGeometry.sizePosition sameScreen
+                           (sourceArea.X, sourceArea.Y, sourceArea.Width, sourceArea.Height)
+                           (targetArea.X, targetArea.Y, targetArea.Width, targetArea.Height)
+                           (bounds.x, bounds.y)
+        let area = this.sizeWorkArea(sourceScreen, targetScreen)
+        match SnapGeometry.sizeBounds (area.X, area.Y, area.Width, area.Height)
+                  position (width, height) with
+        | None -> ()
+        | Some(x, y, w, h) ->
+            if window.isMinimized || window.isMaximized then
+                window.showWindow(ShowWindowCommands.SW_RESTORE)
+            if not sameScreen then
+                // Follow screen moves: settle the DPI change before writing the pixel size.
+                let initialDpi = WinUserApi.GetDpiForWindow(activeHwnd)
+                window.setPositionOnly x y
+                let mutable elapsed = 0
+                while elapsed < 200 && WinUserApi.GetDpiForWindow(activeHwnd) = initialDpi do
+                    System.Threading.Thread.Sleep(10)
+                    elapsed <- elapsed + 10
+                if WinUserApi.GetDpiForWindow(activeHwnd) <> initialDpi then
+                    System.Threading.Thread.Sleep(20)
+            let finalBounds = FramePlacement.target activeHwnd margin (Rect(Pt(x, y), Sz(w, h)))
+            // Moving the front member uses the same group propagation as snapping.
+            window.move(finalBounds)
+            if group.hasWindowMargin(activeHwnd) then
+                group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
+
     member this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
         let activeHwnd = group.topWindow
@@ -2287,6 +2338,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             })
 
+        let buildSizeSubMenu (screen: MonitorScreen) =
+            let area = this.sizeWorkArea(this.getCurrentScreenForWindow(group.topWindow), screen)
+            CmiPopUp({
+                text = Localization.getString("SizeMenu")
+                image = None
+                items = List2(SnapGeometry.sizePresets |> List.map (fun (label, width, height) ->
+                    let fits = SnapGeometry.sizeBounds (area.X, area.Y, area.Width, area.Height)
+                                   (area.X, area.Y) (width, height) |> Option.isSome
+                    CmiRegular({ text = label; image = None
+                                 click = (fun () -> this.resizeTabGroup(screen, width, height))
+                                 flags = List2(if fits then [] else [MenuFlags.MF_GRAYED]) })))
+                flags = List2()
+            })
+
         // Inner items for a "Position Move" submenu, flat (the old "Snap Other"
         // submenu is expanded in place): Snap Left / Right / Top / Bottom, the
         // percent-variant snap submenus, Snap Display (and Snap Desktop on
@@ -2330,6 +2395,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // show). The submenus are meant to be spliced into the parent menu in
         // place of the old single "<menuTextPrefix>" item.
         let buildPerDisplayPositionItems
+                (includeSize: bool)
                 (contextHwnd: IntPtr)
                 (menuTextPrefix: string)
                 (currentScreenExtraItems: ContextMenuItem list)
@@ -2362,7 +2428,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 CmiPopUp({
                     text = menuText
                     image = None
-                    items = List2(items)
+                    items = List2(items @ (if includeSize then [buildSizeSubMenu screen] else []))
                     flags = List2()
                 }))
             |> Array.toList
@@ -2453,7 +2519,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let snapPercentFn = (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
             if this.getAllScreensSorted().Length > 1 then
                 // Multi-monitor: flattened "New window (position) <display>" items
-                buildPerDisplayPositionItems hwnd (Localization.getString("NewWindowPositionMenu")) currentScreenExtraItems
+                buildPerDisplayPositionItems false hwnd (Localization.getString("NewWindowPositionMenu")) currentScreenExtraItems
                     moveFn snapFn snapPercentFn
                     (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
                     (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
@@ -3120,7 +3186,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 }) ]
             elif this.getAllScreensSorted().Length > 1 then
                 // Multi-monitor: flattened "<detach position move> <display>" items
-                buildPerDisplayPositionItems hwnd detachMoveText currentScreenExtraItems
+                buildPerDisplayPositionItems false hwnd detachMoveText currentScreenExtraItems
                     moveFn snapFn snapPercentFn
                     (fun s pos -> this.detachOrSplitToScreen(hwnd, s, pos))
                     (fun s dir -> this.detachOrSplitToScreenSnap(hwnd, s, dir))
@@ -3144,7 +3210,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let snapFn = (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
             let snapPercentFn = (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
             if this.getAllScreensSorted().Length > 1 then
-                buildPerDisplayPositionItems hwnd (Localization.getString("PositionMoveMenu")) []
+                buildPerDisplayPositionItems true hwnd (Localization.getString("PositionMoveMenu")) []
                     moveFn snapFn snapPercentFn
                     (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
                     (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
@@ -3153,7 +3219,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 [ CmiPopUp({
                     text = Localization.getString("PositionMoveMenu")
                     image = None
-                    items = List2(buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    items = List2(buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
+                                  @ [buildSizeSubMenu (this.getCurrentScreenForWindow(group.topWindow))])
                     flags = List2()
                 }) ]
 

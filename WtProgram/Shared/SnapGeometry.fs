@@ -158,3 +158,46 @@ module SnapGeometry =
             match desired with
             | Some _ when alignments |> List.forall ((=) left) || alignments |> List.forall ((=) right) -> desired
             | _ -> None
+
+    // Presets and placement use physical pixels, independently of display DPI.
+    let sizePresets = [
+        "640x400", 640, 400
+        "VGA 640x480", 640, 480
+        "SVGA 800x600", 800, 600
+        "XGA 1024x768", 1024, 768
+        "HD 1280x720", 1280, 720
+        "WXGA 1280x800", 1280, 800
+        "SXGA 1280x1024", 1280, 1024
+        "1366x768", 1366, 768
+        "WXGA+ 1440x900", 1440, 900
+        "HD+ 1600x900", 1600, 900
+        "WSXGA+ 1680x1050", 1680, 1050
+        "Full HD 1920x1080", 1920, 1080
+        "WUXGA 1920x1200", 1920, 1200
+        "WQHD 2560x1440", 2560, 1440
+        "WQXGA 2560x1600", 2560, 1600
+        "4K UHD 3840x2160", 3840, 2160
+    ]
+
+    let sizeBounds (areaX, areaY, areaWidth, areaHeight) (x, y) (width, height) =
+        if width <= 0 || height <= 0 || width > areaWidth || height > areaHeight then None
+        else
+            Some(max areaX (min x (areaX + areaWidth - width)),
+                 max areaY (min y (areaY + areaHeight - height)), width, height)
+
+    // Map position between unreserved work areas, as screen moves do.
+    // The requested size remains in physical pixels and is clamped separately.
+    let sizePosition sameScreen (sourceX, sourceY, sourceWidth, sourceHeight)
+                     (targetX, targetY, targetWidth, targetHeight) (x, y) =
+        if sameScreen then x, y
+        else
+            let leftPercent = float (x - sourceX) / float sourceWidth
+            let topPercent = float (y - sourceY) / float sourceHeight
+            targetX + int (float targetWidth * leftPercent),
+            targetY + int (float targetHeight * topPercent)
+
+    // Only size menus use destination DPI; existing snap margins are unchanged.
+    let sizeWorkArea sameScreen currentScale targetScale tabHeightAt enabled area =
+        let scale = if sameScreen then currentScale else targetScale
+        let margin = if enabled then tabHeightAt scale - 1 else 0
+        reserveTabHeight margin area

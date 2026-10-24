@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "啟動程序時發生意外錯誤:\n{0}",
 
   "MoveEdgeMenu": "移動",
+  "SizeMenu": "大小",
   "MoveEdgeLeft": "左端",
   "MoveEdgeRight": "右端",
   "MoveEdgeTop": "上端",

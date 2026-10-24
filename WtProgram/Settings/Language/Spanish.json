@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "Error inesperado al iniciar el proceso:\n{0}",
 
   "MoveEdgeMenu": "Mover",
+  "SizeMenu": "Tamaño",
   "MoveEdgeLeft": "Borde izquierdo",
   "MoveEdgeRight": "Borde derecho",
   "MoveEdgeTop": "Borde superior",

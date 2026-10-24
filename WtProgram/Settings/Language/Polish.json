@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "Nieoczekiwany błąd podczas uruchamiania procesu:\n{0}",
 
   "MoveEdgeMenu": "Przenieś",
+  "SizeMenu": "Rozmiar",
   "MoveEdgeLeft": "Lewa krawędź",
   "MoveEdgeRight": "Prawa krawędź",
   "MoveEdgeTop": "Górna krawędź",
