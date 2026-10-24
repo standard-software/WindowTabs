@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.25_next1
+
 ## version ss_2026.10.25
 
 - Position Move has a new Size submenu with common screen resolutions.

@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.25_next1
+
 ## version ss_2026.10.25
 
 - 位置移動のメニューに「サイズ」を追加した。よく使われる解像度にできる。
