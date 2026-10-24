@@ -2,6 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.23_next4
+
+- Snapping or moving a group to the left, right or a corner also aligns
+  its tabs to that side, when they all share one alignment.
+  - A move that fits the window into the screen keeps the room for tabs.
+- Position Move has a new Size submenu with common screen resolutions.
+  - Sizes that do not fit the screen are grayed out.
+- Japanese text writes "all" in hiragana.
+
 ## version ss_2026.10.23_next3
 
 - "Run WindowTabs at startup" now puts a shortcut in your Startup folder
