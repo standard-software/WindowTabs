@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "プロセスの起動で変なエラー出たで:\n{0}",
 
   "MoveEdgeMenu": "移動やで",
+  "SizeMenu": "サイズ",
   "MoveEdgeLeft": "左端",
   "MoveEdgeRight": "右端",
   "MoveEdgeTop": "上端",

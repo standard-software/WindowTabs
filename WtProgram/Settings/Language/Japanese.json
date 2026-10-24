@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "プロセスの起動で予期しないエラーが発生しました:\n{0}",
 
   "MoveEdgeMenu": "移動",
+  "SizeMenu": "サイズ",
   "MoveEdgeLeft": "左端",
   "MoveEdgeRight": "右端",
   "MoveEdgeTop": "上端",

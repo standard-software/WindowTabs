@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "Lỗi không mong muốn khi khởi động tiến trình:\n{0}",
 
   "MoveEdgeMenu": "Di chuyển",
+  "SizeMenu": "Kích thước",
   "MoveEdgeLeft": "Mép trái",
   "MoveEdgeRight": "Mép phải",
   "MoveEdgeTop": "Mép trên",

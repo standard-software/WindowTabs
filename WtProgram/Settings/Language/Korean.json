@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "프로세스 시작 중 예기치 않은 오류가 발생했습니다:\n{0}",
 
   "MoveEdgeMenu": "이동",
+  "SizeMenu": "크기",
   "MoveEdgeLeft": "왼쪽 가장자리",
   "MoveEdgeRight": "오른쪽 가장자리",
   "MoveEdgeTop": "위쪽 가장자리",

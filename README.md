@@ -245,6 +245,7 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 ### Position Move
 
 - Snap moves the group to a screen edge keeping its width / height; percentage snaps resize it relative to the display. Moves to edges and corners, and maximizing across a display or the desktop, are there too.
+- Size selects a common resolution in physical pixels for the group's visible window frame; sizes larger than the available work area are disabled.
 - On multi-monitor setups the position menus appear once per display, e.g. "Position Move Display Left". The display the window sits on is marked "(here)"; the others start with a "Same position on this display" item.
 
 ![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)

@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "Kesalahan tak terduga saat memulai proses:\n{0}",
 
   "MoveEdgeMenu": "Pindahkan",
+  "SizeMenu": "Ukuran",
   "MoveEdgeLeft": "Tepi Kiri",
   "MoveEdgeRight": "Tepi Kanan",
   "MoveEdgeTop": "Tepi Atas",

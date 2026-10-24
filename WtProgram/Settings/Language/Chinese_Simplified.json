@@ -153,6 +153,7 @@
   "NewLaunchErrorUnexpected": "启动进程时发生意外错误:\n{0}",
 
   "MoveEdgeMenu": "移动",
+  "SizeMenu": "大小",
   "MoveEdgeLeft": "左端",
   "MoveEdgeRight": "右端",
   "MoveEdgeTop": "上端",
