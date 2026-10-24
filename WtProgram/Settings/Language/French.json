@@ -95,7 +95,7 @@
   "EnableHoverActivate": "Activer l'onglet au survol de la souris",
 
   "TabPositionByDefault": "Placement des onglets",
-  "ChangeTabPositionOnSnap": "Placement des onglets lors de l'ancrage gauche/droite",
+  "ChangeTabPositionOnSnap": "Alignement des onglets lors de l’ancrage et du déplacement",
   "ChangeTabPositionOnSnapWhenUniform": "Changer quand tous les onglets du groupe partagent la même position",
   "ChangeTabPositionOnSnapNever": "Ne pas changer",
   "TabVerticalDirection": "Onglets extérieurs ou intérieurs",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "Masquer les onglets quand la fenêtre est en plein écran",
   "HideTabsWhileMoving": "Masquer les onglets pendant le déplacement d'une fenêtre",
   "LockWindowPosition": "Empêcher le déplacement des fenêtres et le redimensionnement par le haut",
-  "SnapTabHeightMargin": "Ajouter une marge de hauteur d'onglet lors de l'ancrage",
+  "SnapTabHeightMargin": "Ajouter une marge de la hauteur des onglets lors de l’ancrage ou du déplacement",
   "SnapOnDragDetach": "Ancrer au bord de l'écran en faisant glisser un onglet vers une nouvelle fenêtre",
   "NextTab": "Onglet suivant",
   "PrevTab": "Onglet précédent",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "Comportement du groupe d'onglets",
   "LockWindowPositionMenu": "Empêcher le déplacement des fenêtres et le redimensionnement par le haut",
-    "SnapTabMarginTop": "Ajouter une marge de hauteur d'onglet lors de l'ancrage",
+    "SnapTabMarginTop": "Ajouter une marge de la hauteur des onglets lors de l’ancrage ou du déplacement",
 
   "TabAlignMenu": "Alignement des onglets",
   "AlignAllTopLeft": "Aligner tous les onglets à gauche",

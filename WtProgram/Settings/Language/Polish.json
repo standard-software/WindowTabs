@@ -95,7 +95,7 @@
   "EnableHoverActivate": "Aktywuj kartę po wskazaniu myszą",
 
   "TabPositionByDefault": "Rozmieszczenie kart",
-  "ChangeTabPositionOnSnap": "Rozmieszczenie kart przy przyciąganiu w lewo/prawo",
+  "ChangeTabPositionOnSnap": "Wyrównanie kart przy przyciąganiu i przenoszeniu",
   "ChangeTabPositionOnSnapWhenUniform": "Zmieniaj, gdy wszystkie karty w grupie mają tę samą pozycję",
   "ChangeTabPositionOnSnapNever": "Nie zmieniaj",
   "TabVerticalDirection": "Karty zewnętrzne lub wewnętrzne",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "Ukrywaj karty, gdy okno jest w trybie pełnoekranowym",
   "HideTabsWhileMoving": "Ukrywaj karty podczas przenoszenia okna",
   "LockWindowPosition": "Blokuj przesuwanie okien i zmianę rozmiaru od górnej krawędzi",
-  "SnapTabHeightMargin": "Dodaj margines wysokości karty przy przyciąganiu",
+  "SnapTabHeightMargin": "Dodaj margines wysokości karty przy przyciąganiu lub przenoszeniu",
   "SnapOnDragDetach": "Przyciągaj do krawędzi ekranu przy przeciąganiu karty do nowego okna",
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "Zachowanie grupy kart",
   "LockWindowPositionMenu": "Blokuj przesuwanie okien i zmianę rozmiaru od górnej krawędzi",
-    "SnapTabMarginTop": "Dodaj margines wysokości karty przy przyciąganiu",
+    "SnapTabMarginTop": "Dodaj margines wysokości karty przy przyciąganiu lub przenoszeniu",
 
   "TabAlignMenu": "Wyrównanie kart",
   "AlignAllTopLeft": "Wyrównaj wszystkie karty do lewej",

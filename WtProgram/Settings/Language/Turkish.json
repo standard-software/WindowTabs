@@ -95,7 +95,7 @@
   "EnableHoverActivate": "Sekmeyi etkinleştirmek için fareyle üzerine gelmeyi etkinleştir",
 
   "TabPositionByDefault": "Sekme yerleşimi",
-  "ChangeTabPositionOnSnap": "Sola/sağa yaslamada sekme yerleşimi",
+  "ChangeTabPositionOnSnap": "Yaslama ve taşıma sırasında sekme hizalaması",
   "ChangeTabPositionOnSnapWhenUniform": "Gruptaki tüm sekmeler aynı konumu paylaştığında değiştir",
   "ChangeTabPositionOnSnapNever": "Değiştirme",
   "TabVerticalDirection": "Dış veya iç sekmeler",
@@ -110,7 +110,7 @@
   "HideTabsOnFullscreen": "Pencere tam ekranken sekmeleri gizle",
   "HideTabsWhileMoving": "Pencere taşınırken sekmeleri gizle",
   "LockWindowPosition": "Pencerelerin taşınmasını ve üst kenardan boyutlandırılmasını engelle",
-  "SnapTabHeightMargin": "Yaslarken sekme yüksekliği kadar boşluk ekle",
+  "SnapTabHeightMargin": "Yaslarken veya taşırken sekme yüksekliği kadar boşluk ekle",
   "SnapOnDragDetach": "Sekmeyi yeni pencereye sürükleyip ayırırken ekran kenarına yasla",
   "NextTab": "Sonraki Sekme",
   "PrevTab": "Önceki Sekme",
@@ -207,7 +207,7 @@
 
 "WindowBehaviorMenu": "Sekme grubu davranışı",
   "LockWindowPositionMenu": "Pencerelerin taşınmasını ve üst kenardan boyutlandırılmasını engelle",
-    "SnapTabMarginTop": "Yaslarken sekme yüksekliği kadar boşluk ekle",
+    "SnapTabMarginTop": "Yaslarken veya taşırken sekme yüksekliği kadar boşluk ekle",
 
   "TabAlignMenu": "Sekme Hizalama",
   "AlignAllTopLeft": "Tüm sekmeleri sola hizala",
