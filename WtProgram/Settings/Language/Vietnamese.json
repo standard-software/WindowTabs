@@ -89,6 +89,7 @@
   "General": "Chung",
   "RunAtStartup": "Chạy WindowTabs khi khởi động",
   "GroupTaskbarButtons": "Gộp các nút trên thanh tác vụ theo nhóm thẻ",
+  "GroupTaskbarButtonsNote": "Chỉ hoạt động khi Windows gộp các nút trên thanh tác vụ (ẩn nhãn). Khi hiện nhãn, mỗi cửa sổ vẫn có nút riêng.",
   "HideInactiveTabs": "Làm mờ thẻ trên cửa sổ không hoạt động",
   "IsTabbingEnabledForAllProcessesByDefault": "Bật thẻ cho tất cả chương trình theo mặc định",
   "EnableCtrlNumberHotKey": "Bật Ctrl+1, ...Ctrl+9 để kích hoạt thẻ",

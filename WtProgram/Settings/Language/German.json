@@ -89,6 +89,7 @@
   "General": "Allgemein",
   "RunAtStartup": "WindowTabs beim Systemstart ausführen",
   "GroupTaskbarButtons": "Taskleistenschaltflächen für Tabgruppen zusammenfassen",
+  "GroupTaskbarButtonsNote": "Wirkt nur, wenn Windows Taskleistenschaltflächen gruppiert (Beschriftungen ausgeblendet). Mit Beschriftungen behält jedes Fenster seine eigene Schaltfläche.",
   "HideInactiveTabs": "Tabs auf inaktiven Fenstern ausblenden",
   "IsTabbingEnabledForAllProcessesByDefault": "Tabs standardmäßig für alle Programme aktivieren",
   "EnableCtrlNumberHotKey": "Ctrl+1, ...Ctrl+9 zum Aktivieren von Tabs aktivieren",

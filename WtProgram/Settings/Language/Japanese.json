@@ -89,6 +89,7 @@
   "General": "全般",
   "RunAtStartup": "WindowTabs をスタートアップ時に起動",
   "GroupTaskbarButtons": "タブグループのタスクバーボタンをまとめる",
+  "GroupTaskbarButtonsNote": "Windows のタスクバーの設定で、ボタンをまとめる（ラベルを表示しない）ようにしているときだけ働きます。ラベルを表示する設定では、まとまりません。",
   "HideInactiveTabs": "非アクティブなグループのタブを半透明にする",
   "IsTabbingEnabledForAllProcessesByDefault": "すべてのプログラムのタブを既定で有効にする",
   "EnableCtrlNumberHotKey": "Ctrl+1...Ctrl+9 でタブをアクティブにする",

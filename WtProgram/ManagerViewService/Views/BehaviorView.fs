@@ -128,10 +128,21 @@ type GeneralView() =
                         (Localization.getString("StartupRegistrationFailed")))
         editor.control
     let table =
+        let taskbarButtons = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2)
+        taskbarButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        for _ in 1 .. 2 do taskbarButtons.RowStyles.Add(new RowStyle(SizeType.AutoSize)) |> ignore
+        let checkbox = settingsCheckbox "groupTaskbarButtons"
+        checkbox.Margin <- Padding(0)
+        taskbarButtons.Controls.Add(checkbox)
+        let note = new Label(AutoSize = true, Anchor = (AnchorStyles.Left ||| AnchorStyles.Right),
+                             MinimumSize = Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx),
+                             Margin = Padding(3, 0, 3, 0), TextAlign = ContentAlignment.MiddleLeft,
+                             Text = Localization.getString("GroupTaskbarButtonsNote"))
+        taskbarButtons.Controls.Add(note)
         let fields = List2([
             ("RunAtStartup", startupCheckbox())
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
-            ("GroupTaskbarButtons", settingsCheckbox "groupTaskbarButtons")
+            ("GroupTaskbarButtons", taskbarButtons :> Control)
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")

@@ -89,6 +89,7 @@
   "General": "全般だべ",
   "RunAtStartup": "パソコン起動したらWindowTabs立ち上げっぺ",
   "GroupTaskbarButtons": "タブグループのタスクバーボタンをまとめっぺ",
+  "GroupTaskbarButtonsNote": "Windows のタスクバーの設定で、ボタンをまとめる（ラベルを表示しねえ）ようにしてるときだけ働くべ。ラベルを表示する設定だと、まとまらねえ。",
   "HideInactiveTabs": "使ってねウィンドウのタブ薄ぐすっぺ",
   "IsTabbingEnabledForAllProcessesByDefault": "全部のプログラムでタブ使うべ",
   "EnableCtrlNumberHotKey": "Ctrl+1...+9 でタブ切り替えんべ",

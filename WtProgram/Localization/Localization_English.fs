@@ -92,6 +92,7 @@ module Localization_English =
         ("General", "General")
         ("RunAtStartup", "Run WindowTabs at startup")
         ("GroupTaskbarButtons", "Combine taskbar buttons for tab groups")
+        ("GroupTaskbarButtonsNote", "Works only when Windows combines taskbar buttons (taskbar setting with labels hidden). With labels shown, each window keeps its own button.")
         ("HideInactiveTabs", "Fade out tabs on inactive windows")
         ("IsTabbingEnabledForAllProcessesByDefault", "Enable tabs for all programs by default")
         ("EnableCtrlNumberHotKey", "Enable Ctrl+1, ...Ctrl+9 to activate tab")

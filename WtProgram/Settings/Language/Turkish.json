@@ -89,6 +89,7 @@
   "General": "Genel",
   "RunAtStartup": "WindowTabs'ı başlangıçta çalıştır",
   "GroupTaskbarButtons": "Sekme grupları için görev çubuğu düğmelerini birleştir",
+  "GroupTaskbarButtonsNote": "Yalnızca Windows görev çubuğu düğmelerini birleştirdiğinde (etiketler gizliyken) çalışır. Etiketler gösterildiğinde her pencerenin düğmesi ayrı kalır.",
   "HideInactiveTabs": "Etkin olmayan pencerelerdeki sekmeleri soluklaştır",
   "IsTabbingEnabledForAllProcessesByDefault": "Sekmeleri varsayılan olarak tüm programlar için etkinleştir",
   "EnableCtrlNumberHotKey": "Sekmeyi etkinleştirmek için Ctrl+1, ...Ctrl+9 kısayollarını etkinleştir",

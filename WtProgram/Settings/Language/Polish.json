@@ -89,6 +89,7 @@
   "General": "Ogólne",
   "RunAtStartup": "Uruchamiaj WindowTabs przy starcie systemu",
   "GroupTaskbarButtons": "Łącz przyciski paska zadań dla grup kart",
+  "GroupTaskbarButtonsNote": "Działa tylko, gdy Windows łączy przyciski paska zadań (etykiety ukryte). Przy widocznych etykietach każde okno zachowuje osobny przycisk.",
   "HideInactiveTabs": "Wygaszaj karty nieaktywnych okien",
   "IsTabbingEnabledForAllProcessesByDefault": "Domyślnie włącz karty dla wszystkich programów",
   "EnableCtrlNumberHotKey": "Włącz Ctrl+1, ...Ctrl+9 do aktywacji kart",
