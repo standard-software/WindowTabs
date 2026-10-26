@@ -89,6 +89,7 @@
   "General": "一般",
   "RunAtStartup": "開機時啟動 WindowTabs",
   "GroupTaskbarButtons": "合併分頁群組的工作列按鈕",
+  "GroupTaskbarButtonsNote": "僅當 Windows 設定為合併工作列按鈕（隱藏標籤）時才有效。顯示標籤時，每個視窗仍有獨立的按鈕。",
   "HideInactiveTabs": "將非活動視窗的分頁變為半透明",
   "IsTabbingEnabledForAllProcessesByDefault": "為所有程式啟用分頁",
   "EnableCtrlNumberHotKey": "使用 Ctrl+1...+9 切換分頁",

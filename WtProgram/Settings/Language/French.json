@@ -89,6 +89,7 @@
   "General": "Général",
   "RunAtStartup": "Lancer WindowTabs au démarrage",
   "GroupTaskbarButtons": "Regrouper les boutons de la barre des tâches par groupe d’onglets",
+  "GroupTaskbarButtonsNote": "Fonctionne seulement si Windows regroupe les boutons de la barre des tâches (libellés masqués). Si les libellés sont affichés, chaque fenêtre garde son bouton.",
   "HideInactiveTabs": "Estomper les onglets des fenêtres inactives",
   "IsTabbingEnabledForAllProcessesByDefault": "Activer les onglets pour tous les programmes par défaut",
   "EnableCtrlNumberHotKey": "Activer Ctrl+1, ...Ctrl+9 pour activer un onglet",

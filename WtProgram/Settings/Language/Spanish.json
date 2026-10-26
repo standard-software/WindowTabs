@@ -89,6 +89,7 @@
   "General": "General",
   "RunAtStartup": "Ejecutar WindowTabs al iniciar el sistema",
   "GroupTaskbarButtons": "Combinar los botones de la barra de tareas por grupo de pestañas",
+  "GroupTaskbarButtonsNote": "Solo funciona si Windows combina los botones de la barra de tareas (etiquetas ocultas). Con etiquetas visibles, cada ventana conserva su propio botón.",
   "HideInactiveTabs": "Atenuar pestañas en ventanas inactivas",
   "IsTabbingEnabledForAllProcessesByDefault": "Habilitar pestañas para todos los programas de forma predeterminada",
   "EnableCtrlNumberHotKey": "Habilitar Ctrl+1, ...Ctrl+9 para activar pestañas",

@@ -89,6 +89,7 @@
   "General": "Umum",
   "RunAtStartup": "Jalankan WindowTabs saat startup",
   "GroupTaskbarButtons": "Gabungkan tombol bilah tugas untuk grup tab",
+  "GroupTaskbarButtonsNote": "Hanya berfungsi jika Windows menggabungkan tombol bilah tugas (label disembunyikan). Jika label ditampilkan, setiap jendela tetap memiliki tombol sendiri.",
   "HideInactiveTabs": "Pudarkan tab pada jendela yang tidak aktif",
   "IsTabbingEnabledForAllProcessesByDefault": "Aktifkan tab untuk semua program secara default",
   "EnableCtrlNumberHotKey": "Aktifkan Ctrl+1, ...Ctrl+9 untuk mengaktifkan tab",
