@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.25_next2
+
+- "Combine taskbar buttons for tab groups" now has a note: it works only
+  while Windows combines taskbar buttons (labels hidden).
+
 ## version ss_2026.10.25_next1
 
 ## version ss_2026.10.25

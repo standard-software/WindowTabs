@@ -2,6 +2,11 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.25_next2
+
+- 「タブグループのタスクバーボタンをまとめる」の下に、Windows の設定で
+  ボタンをまとめる（ラベルを表示しない）ときだけ働く、と書き添えた。
+
 ## version ss_2026.10.25_next1
 
 ## version ss_2026.10.25
