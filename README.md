@@ -193,21 +193,32 @@ Close Tab
   Close {N} tabs to the left
   Close {N} tabs to the right
   ---
-  Close other tabs
-  Close all tabs
+  Close all top tabs except this one ({N})
+  Close all top tabs ({N}) (uses the clicked tab’s edge)
+  Close all tabs ({N})
 ---
 Tab Group Behavior
   Prevent moving windows and resizing them from the top
-  Add tab height margin when snapping or moving
+  Leave room for tabs when snapping or moving
 Tab Alignment
-  Align all tabs to Left
-  Align all tabs to Right
-  ---
   Align this tab to Left
   Align this tab to Right
+  ---
+  Align all top tabs to the left
+  Align all top tabs to the right
+Tab Direction
+  Change the direction of this tab (or Change the direction of {N} selected tabs)
+    Top tabs / Left tabs / Right tabs / Bottom tabs
+  Change the direction of all top tabs (uses the clicked tab’s edge)
+    Top tabs / Left tabs / Right tabs / Bottom tabs
+  Change the direction of all tabs
+    Top tabs / Left tabs / Right tabs / Bottom tabs
 Tab Pin
   Pin this tab
   Unpin this tab
+  ---
+  Pin all top tabs (uses the clicked tab’s edge)
+  Unpin all top tabs
   ---
   Pin all tabs
   Unpin all tabs
@@ -234,7 +245,9 @@ System
 Settings...
 ```
 
-In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. When the tab you right-clicked is not in the selection they read "Selected {N} tabs + target tab...", and "Close other tabs" becomes "Close {N} unselected tabs". Items that require a single target tab are disabled.
+The close-other command affects only the clicked edge and shows the number of tabs to close; it is disabled at zero. When all tabs share one edge, its caption omits the edge name. The edge and group close-all commands also show their target counts. The edge-specific close command appears before "Close all tabs" and closes only tabs on the clicked edge, using the same close handling. It is hidden when all tabs are on that edge. Edge-specific pin commands follow the same rule. Bulk alignment and edge-specific direction commands remain visible; the group-wide direction command is disabled when all tabs share one edge.
+
+In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. When the tab you right-clicked is not in the selection they read "Selected {N} tabs + target tab...", and the close-other command becomes "Close {N} unselected tabs". Items that require a single target tab are disabled.
 
 ### New Tab (New Launch)
 
@@ -269,14 +282,22 @@ In multi-select, per-tab items show "Selected {N} tabs..." and operate on the ac
 
 ### Tab Alignment
 
-- Align tabs left / right individually or all at once.
+- Align tabs left / right individually, as a selection, or all at once on the clicked edge. The bulk commands name the clicked edge, such as top tabs or left tabs. On left and right edges, alignment is top / bottom.
 - Dragging a tab changes its alignment too.
-- With the "Tab alignment on snap and move" setting, a uniformly aligned group realigns left or right when snapped or moved to that side, including corners.
+- With the "Tab alignment on snap and move" setting, tabs aligned alike on each edge realign along that edge when snapped or moved: top/bottom tabs follow left/right, and left/right tabs follow top/bottom, including corners.
+
+### Tab Direction
+
+- Move this tab / selected tabs, all tabs on the clicked edge, or all tabs in the group to another enabled edge. When all tabs share one edge, the group-wide command is disabled.
+- The menu is hidden when only one edge is enabled. All four destinations remain listed; disabled edges and destinations already containing every target tab are grayed out.
+- Moving between edges preserves alignment and pin state: left alignment maps to top, and right alignment maps to bottom, and vice versa. Within each alignment/pin zone, moved tabs keep their relative order and follow existing destination tabs.
 
 ### Pinned Tabs
 
 - Display pinned tabs as icons only, or at a specified width with a pin button.
-- Pinned tabs are placed leftmost within their (left- or right-aligned) group.
+- Pin or unpin this tab / selected tabs, all tabs on the named edge, or all tabs in the group. When every tab is on the same edge, the duplicate edge commands are hidden. Commands that would change nothing are disabled.
+- Multi-select keeps the existing active, selected, and right-clicked targets. Its label shows the selected count, with the target tab listed separately when added.
+- On every edge, pinned tabs come first within each alignment zone, followed by unpinned tabs; existing ordering rules are preserved.
 
 ![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
 ![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
@@ -378,14 +399,21 @@ Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray 
 
 ![Settings Programs](README_Image/SettingsPrograms.png)
 
-### Appearance Tab
+### Tabs Tab
 
-- **Tab Shape**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the S-curve.
+- **Top tabs, Left tabs, Right tabs, Bottom tabs**: Each edge of the window has its own page.
+- **Use top tabs**, **Use left tabs**, **Use right tabs**, **Use bottom tabs**: The first row of each page turns that edge on or off. At least one edge must stay on.
+- **Apply the same settings to the bottom tabs**: Copies the top page settings to the bottom edge. Each page has a corresponding button for its opposite edge (top/bottom or left/right).
+- The left, right and bottom pages have the same settings as the top page: tab style, tab size (height and max width), pinned tab width, tab overlap, alignment, outer or inner tabs, the distances from the edge, and hiding inner tabs. Tabs on the left and right edges show rotated text. By default, right-tab text reads from top to bottom, with the bottom of the letters facing the window. Left and right tabs also offer inward- or outward-facing text bottoms, independently; both default to inward.
+
+The top tabs page has these rows:
+
+- **Tab style**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the rounded vertical line.
 - **Tab size**: Set height and maximum width side by side, each with its own reset button.
 - **Pinned Tab Width**, **Tab Overlap**, **Distance from edge for outer tabs** and **Distance from edge for inner tabs** (left and right): Set as numbers. The button to the right of each puts back its default.
-- **Tab placement**: Choose the default left or right alignment.
+- **Tab alignment**: Choose the default left or right alignment.
 - **Outer or inner tabs**: choose "Outer, or inner when it would go off the display" (default) or "Always inner".
-- **Hide inner tabs**: Configure how to hide inner tabs and the hiding delay.
+- **Hide inner tabs**: Each edge page independently configures how to hide inner tabs and the hiding delay. Left, right and bottom tabs follow the current top-tab value for each of these settings until they have their own saved value.
 
 ![Settings Appearance](README_Image/SettingsAppearance.png)
 ![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape.png)
@@ -407,8 +435,8 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 - **Pin button on pinned tabs**: "Button on the active tab only, icon on the others" (default), "Button on all tabs", or "Icon only". An icon indicates a pinned tab and cannot be clicked.
 - Configure activation on mouse-over.
 - **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
-- **Tab alignment on snap and move**: snapping or moving a uniformly aligned group left or right, including corners and x% snaps, realigns its tabs to that side. "Don't change" is also available.
-- Choose whether snapping or moving leaves a tab-height margin. Moves keep this margin above the group, including when its position is constrained by the work area. Moves within the same display preserve the group size; moves to another display preserve its size relative to the work area. You can also choose whether detached tabs snap at the drop position.
+- **Tab alignment on snap and move**: snapping or moving realigns each uniformly aligned edge: top/bottom tabs follow the horizontal component, and left/right tabs follow the vertical component, including corners and x% snaps. "Don't change" is also available.
+- Choose whether snapping or moving leaves room for tabs. Moves reserve room on the occupied outside edges, including when the position is constrained by the work area. Inside-only edges reserve no room; a group with only top tabs keeps its usual top margin. Moves within the same display preserve the group size; moves to another display preserve its size relative to the work area. You can also choose whether detached tabs snap at the drop position.
 
 ![Settings Interaction](README_Image/SettingsInteraction.png)
 
