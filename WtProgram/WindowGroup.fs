@@ -237,6 +237,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // strip; the tick catches what none of them reports.
     let stripMaintenanceTimer = new System.Windows.Forms.Timer(Interval = 250)
     let mutable stripRepairing = false
+    let stripSwapRetry = VirtualDesktopGroups.StripSwapRetry()
     // What the last full refresh left behind (see stripStateSignature), and
     // when a reorder notification last started one.
     let mutable lastStripSignature : obj = null
@@ -1009,6 +1010,56 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             | VirtualDesktopGroups.AboveWindow h -> Some h
                             | VirtualDesktopGroups.TopmostLayer -> Some WindowHandleTypes.HWND_TOPMOST
                             | VirtualDesktopGroups.NormalLayer -> Some WindowHandleTypes.HWND_NOTOPMOST
+                            | VirtualDesktopGroups.SwapWithFront -> None
+#if DEBUG
+                        if not adjacent then
+                            let w h = this.os.windowFromHwnd(h)
+                            VirtualDesktopTrace.handover (fun () ->
+                                sprintf "excel-repair strip=%X front=%X plan=%A before=%X beforeClass=%s beforeTopmost=%b beforeOwner=%X stripAbove=%X stripTopmost=%b"
+                                    (strip.hwnd.ToInt64()) (front.ToInt64()) plan (before.ToInt64())
+                                    (if before = IntPtr.Zero then "-" else (w before).className) (before <> IntPtr.Zero && (w before).isTopMost)
+                                    (if before = IntPtr.Zero then 0L else WinUserApi.GetWindow(before, 4).ToInt64())
+                                    (strip.prevZorder.hwnd.ToInt64()) strip.isTopMost)
+#endif
+                        if plan = VirtualDesktopGroups.SwapWithFront && stripSwapRetry.TryBegin stripClock.ElapsedMilliseconds then
+                            // Preserve our guards as a block between the strip and frame.
+                            // Other owned windows are barriers, not windows we may reorder.
+                            let rec guardsAbove hwnd remaining guards =
+                                let p = this.os.windowFromHwnd(hwnd).prevZorder.hwnd
+                                if remaining > 0 && TopEdgeGuardPlacement.isGuard p && TopEdgeGuardPlacement.ownerOf p = front then
+                                    guardsAbove p (remaining - 1) (p :: guards)
+                                else p, guards
+                            let boundary, guards = guardsAbove front 16 []
+                            let normal h =
+                                let w = this.os.windowFromHwnd(h)
+                                w.isWindow && not w.isTopMost
+                            let boundarySafe h = h = IntPtr.Zero || this.os.windowFromHwnd(h).isTopMost
+                            let ordered() =
+                                (strip.hwnd :: guards @ [front]) |> List.pairwise
+                                |> List.forall (fun (a, b) -> normal a && normal b && this.os.windowFromHwnd(b).prevZorder.hwnd = a)
+                            let result = VirtualDesktopGroups.swapStripFront
+                                             (fun () ->
+                                                 normal strip.hwnd && normal front && List.forall normal guards &&
+                                                 boundarySafe boundary && strip.tryInsertAfter(front))
+                                             (fun () ->
+                                                 let currentBoundary, currentGuards = guardsAbove front 16 []
+                                                 strip.prevZorder.hwnd = front && normal strip.hwnd && normal front &&
+                                                 currentBoundary = boundary && currentGuards = guards &&
+                                                 boundarySafe currentBoundary && List.forall normal guards)
+                                             (fun () ->
+                                                 // Only proceed after observing the strip immediately below the frame.
+                                                 VirtualDesktopGroups.lowerStripFront strip.hwnd front guards
+                                                     (fun h anchor -> this.os.windowFromHwnd(h).tryInsertAfter(anchor)))
+                                             ordered
+                            if result.staged && result.stageVerified && result.lowered = Some true && result.ordered then
+                                stripSwapRetry.Succeeded()
+#if DEBUG
+                            VirtualDesktopTrace.handover (fun () ->
+                                sprintf "strip-swap strip=%X front=%X staged=%b stageVerified=%b lowered=%A ordered=%b stripAbove=%X frontAbove=%X retryDelayed=%b"
+                                    (strip.hwnd.ToInt64()) (front.ToInt64()) result.staged result.stageVerified result.lowered result.ordered
+                                    (strip.prevZorder.hwnd.ToInt64()) (frame.prevZorder.hwnd.ToInt64())
+                                    (not (result.staged && result.stageVerified && result.lowered = Some true && result.ordered)))
+#endif
                         after |> Option.iter (fun anchor ->
 #if DEBUG
                             let previousPosition = strip.prevZorder.hwnd, strip.isTopMost

@@ -585,13 +585,16 @@ and
     member this.bringToTop() = 
         WinUserApi.BringWindowToTop(hwnd).ignore
     
-    member this.insertAfter(hwndInsertAfter:IntPtr) =
+    member this.tryInsertAfter(hwndInsertAfter:IntPtr) =
         WinUserApi.SetWindowPos(hwnd,
             hwndInsertAfter, 0, 0, 0, 0,
             SetWindowPosFlags.SWP_NOOWNERZORDER |||
             SetWindowPosFlags.SWP_NOMOVE |||
             SetWindowPosFlags.SWP_NOSIZE |||
-            SetWindowPosFlags.SWP_NOACTIVATE) |> ignore
+            SetWindowPosFlags.SWP_NOACTIVATE)
+
+    member this.insertAfter(hwndInsertAfter:IntPtr) =
+        this.tryInsertAfter(hwndInsertAfter) |> ignore
 
     // Async z-order insert (posted to this window's thread): place this window
     // directly behind hwndInsertAfter without waiting on the app. Used when

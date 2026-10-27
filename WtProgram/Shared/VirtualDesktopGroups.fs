@@ -658,15 +658,45 @@ module VirtualDesktopGroups =
 
     // The guard may sit between the strip and the frame. Its position is
     // excluded from the predecessor supplied by the caller.
-    type StripStacking = KeepStacking | AboveWindow of IntPtr | TopmostLayer | NormalLayer
+    type StripStacking = KeepStacking | AboveWindow of IntPtr | TopmostLayer | NormalLayer | SwapWithFront
     let stripStacking adjacent sameLayer frontTopmost previous previousTopmost =
         if not sameLayer then
             if frontTopmost then TopmostLayer else NormalLayer
         elif adjacent then KeepStacking
         elif frontTopmost then
             if previous = IntPtr.Zero then TopmostLayer else AboveWindow previous
-        elif previous = IntPtr.Zero || previousTopmost then NormalLayer
+        // Raising a background strip can be denied; lower the front behind it instead.
+        elif previous = IntPtr.Zero || previousTopmost then SwapWithFront
         else AboveWindow previous
+
+    // Reserve the retry interval before native calls, including reentrant callbacks.
+    // A failed swap is retried soon (the front app may raise its window again
+    // right after the swap), backing off up to 5 s while it keeps failing.
+    type StripSwapRetry() =
+        let mutable nextAttempt = 0L
+        let mutable delay = 400L
+        member this.TryBegin now =
+            if now < nextAttempt then false
+            else
+                nextAttempt <- now + delay
+                delay <- min 5000L (delay * 2L)
+                true
+        member this.Succeeded() =
+            nextAttempt <- 0L
+            delay <- 400L
+
+    // Move the frame first, then restore only our intervening guards in order.
+    let lowerStripFront strip front guards insertAfter =
+        insertAfter front strip &&
+        ((strip :: guards) |> List.pairwise |> List.forall (fun (a, b) -> insertAfter b a))
+
+    type StripSwapResult = { staged: bool; stageVerified: bool; lowered: bool option; ordered: bool }
+    let swapStripFront stage verifyStage lower verifyOrder =
+        let staged = stage()
+        let stageVerified = staged && verifyStage()
+        let lowered = if stageVerified then Some(lower()) else None
+        // Read the actual order even when a native call reports failure.
+        { staged=staged; stageVerified=stageVerified; lowered=lowered; ordered=verifyOrder() }
 
     type StripPreview = { target: IntPtr; destination: Guid; expires: int64; dimmed: IntPtr list }
     let previewStrip now shown shared target (reads: WindowRead list) =
