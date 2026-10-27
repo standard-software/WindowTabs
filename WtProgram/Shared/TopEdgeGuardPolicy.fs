@@ -58,6 +58,29 @@ module TopEdgeGuardPolicy =
         // Preserve upward availability; avoid new fullscreen input interception.
         (not inside || (not fullscreen && stripVisible))
 
+    // What the band stands on (four-edge tabs, 7-3). A group with tabs on
+    // the top edge has its top strip, drawn outside or inside, shown or not,
+    // and nothing about it changes. A group whose tabs are all on other
+    // edges has no top strip to show, and the band still guards the top
+    // border while the lock is on - said here in so many words rather than
+    // by calling the group's tabs "outside": there is no strip to stand
+    // behind, so it is placed as it is over upward tabs, and a fullscreen
+    // window, which upward tabs never face, is still never covered.
+    type TopView =
+        | TopStrip of inside: bool * visible: bool
+        | NoTopTabs
+
+    let wantedFor locked hasBounds moving fullscreen view =
+        match view with
+        | TopStrip(inside, visible) -> wanted locked hasBounds moving inside fullscreen visible
+        | NoTopTabs -> locked && hasBounds && not moving && not fullscreen
+
+    // Whether the band goes behind the top strip, inside the window.
+    let behindStrip view =
+        match view with
+        | TopStrip(inside, _) -> inside
+        | NoTopTabs -> false
+
     let canPlace wanted ownerValid minimized maximized inside stripValid =
         wanted && ownerValid && not minimized && not maximized &&
         (not inside || stripValid)
@@ -113,9 +136,12 @@ module TopEdgeGuardPolicy =
 
     // The snapshot is front-to-back and complete. The first sibling is ahead
     // of every other frame, so placing before it covers multiple frame windows.
-    let marginOrder complete band strip owner (windows: OwnedWindow list) =
+    // `others`: the group's strips of the other edges. They share the owner
+    // with the top strip and are not margin frames.
+    let marginOrderAmong complete band strip (others: nativeint list) owner (windows: OwnedWindow list) =
         let peers = windows |> List.filter (fun w ->
-            w.hwnd <> band && w.hwnd <> strip && (w.hwnd = owner || w.owner = owner))
+            w.hwnd <> band && w.hwnd <> strip && not (List.contains w.hwnd others) &&
+            (w.hwnd = owner || w.owner = owner))
         let stripWindow = windows |> List.tryFind (fun w -> w.hwnd = strip)
         if not complete || not (windows |> List.exists (fun w -> w.hwnd = owner)) ||
            stripWindow.IsNone || stripWindow.Value.owner <> owner ||
@@ -127,6 +153,9 @@ module TopEdgeGuardPolicy =
                 let index hwnd = windows |> List.findIndex (fun w -> w.hwnd = hwnd)
                 if not stripWindow.Value.topmost && index strip < index first.hwnd then Ordered
                 else Before first.hwnd
+
+    let marginOrder complete band strip owner (windows: OwnedWindow list) =
+        marginOrderAmong complete band strip [] owner windows
 
     let useMarginOrder inside marginTop = inside && marginTop > 0
     let temporaryStripTopmost inside uwp hasMargin locked =

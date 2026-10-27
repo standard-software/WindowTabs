@@ -144,7 +144,7 @@ type SettingsCheckBox() =
     member private this.ContainsContent(point: Point) =
         if not (this.ClientRectangle.Contains(point)) then false
         else
-            let dark = this.FlatStyle = FlatStyle.Flat && this.BackColor = DarkMode.darkSurface
+            let dark = SettingsCheckBoxLayout.isDark this
             let glyph =
                 if this.FlatStyle = FlatStyle.Flat then
                     let bounds = SettingsCheckBoxLayout.glyph this

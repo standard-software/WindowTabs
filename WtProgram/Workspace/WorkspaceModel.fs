@@ -124,6 +124,7 @@ type WorkspaceWindow() as this =
 
     // Not in `data`: the tree binds to that, and these are not shown there.
     member val tabState : WorkspaceTabState option = None with get, set
+    member val tabEdge = TabEdges.Edge.Top with get, set
     // Full path of the executable, for the dialog to show; matching is by
     // title, so this is information only. Empty for a window saved before
     // it was recorded.
@@ -203,6 +204,8 @@ type WorkspaceWindow() as this =
             st.name |> Option.iter (fun v -> obj.setString("tabName", v))
             st.align |> Option.iter (fun v -> obj.setString("tabAlign", v))
             obj.setInt32("tabOrder", st.order))
+        // Top-only workspaces retain the existing JSON exactly.
+        if this.tabEdge <> TabEdges.Edge.Top then obj.setString("tabEdge", string this.tabEdge)
         obj
 
     static member deserialize(obj:JObject) =
@@ -212,6 +215,12 @@ type WorkspaceWindow() as this =
         window.zorder <- obj.getInt32("zorder").Value
         window.matchType <- enum<WorkspaceWindowTitleMatchType>(obj.getInt32("matchType").Value)
         window.processPath <- (obj.getString("processPath") |> Option.defaultValue "")
+        window.tabEdge <-
+            match obj.getString("tabEdge") with
+            | Some "Left" -> TabEdges.Edge.Left
+            | Some "Right" -> TabEdges.Edge.Right
+            | Some "Bottom" -> TabEdges.Edge.Bottom
+            | _ -> TabEdges.Edge.Top
         // tabOrder is the marker: a window saved with its tab state always
         // has it, one saved before this version never does.
         window.tabState <-
@@ -245,6 +254,8 @@ and
 
     member this.windows = List2(_windows)
     member this.children = this.windows
+    // Missing in older workspaces: keep the new group's current default.
+    member val snapTabHeightMargin : bool option = None with get, set
     
     interface IWorkspaceNode with
         member x.showSettings = false
@@ -268,6 +279,8 @@ and
         groupObj.setString("name", this.name)
         groupObj.setObject("placement", placementObj)
         groupObj.setObjectArray("windows", windowObjects)
+        this.snapTabHeightMargin |> Option.iter (fun margin ->
+            groupObj.Add("snapTabHeightMargin", JValue(margin)))
         groupObj
 
     static member deserialize(obj:JObject) =
@@ -284,6 +297,7 @@ and
                 })
         )
         obj.getObjectArray("windows").Value.map(WorkspaceWindow.deserialize).iter(group.addWindow)
+        group.snapTabHeightMargin <- SavedTabState.groupSnapMargin obj
         group
 
 
@@ -430,7 +444,8 @@ type WorkspaceModel() as this =
             if VirtualDesktopHelper.TryReadCurrentDesktopId(&id) then Some id else None
         let current =
             if VirtualDesktopGroups.Live.usable fresh explorerDesktop state then state.current else None
-        let capturedGroups = Services.desktop.groups.choose(fun group ->
+        let groupsNow = Services.desktop.groups
+        let capturedGroups = groupsNow.choose(fun group ->
             let members =
                 if allDesktops then group.windows.list
                 else VirtualDesktopGroups.captureWindows supported captureDesktop current
@@ -441,6 +456,7 @@ type WorkspaceModel() as this =
             let innerZorder = Map2(windowsInZorder.enumerate.map(fun(innerZorder, hwnd) -> hwnd, innerZorder))
             let wsGroup = WorkspaceGroup(
                 name = sprintf "Group %d" (i + 1),
+                snapTabHeightMargin = Some group.snapTabHeightMargin,
                 // Read in the DPI-unaware coordinate space - see the comment
                 // on restoreWorkspace below. GetWindowPlacement answers in the
                 // caller's space, and this rectangle goes straight into
@@ -465,6 +481,13 @@ type WorkspaceModel() as this =
                 ww.processPath <- (try AppPath.normalize window.pid.processPath with _ -> "")
                 ww.title <- window.text
                 ww.zorder <- innerZorder.find(hwnd)
+                let edge =
+                    if state.shared.Contains hwnd &&
+                       (groupsNow.list |> List.filter (fun g -> g.windows.contains((=) hwnd)) |> List.length) > 1 then
+                        try group.tabEdgeThreadSafe(hwnd) with _ -> TabEdges.Edge.Top
+                    else Services.program.getWindowEdge(hwnd)
+                let allowed = try TabEdgeSettings.allowedOf Services.settings.root with _ -> TabEdges.topOnly
+                ww.tabEdge <- TabEdges.fallback allowed edge
                 ww.matchType <- WorkspaceWindowTitleMatchType.ExactMatch
                 // The tab's state, read the way the context menu reads it.
                 // Anything failing here leaves the window as it was saved
@@ -634,14 +657,21 @@ type WorkspaceModel() as this =
                         target <- Some destination
                         trace index "create" "end" members
                         onGroup false index "add" members (destination :?> GroupInfo) (fun group ->
+                            (groupInfo :?> WorkspaceGroup).snapTabHeightMargin
+                            |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
                             // OS owns thread-affine caches; never use the model's OS here.
                             let groupOs = OS()
+                            let savedEdges =
+                                resolved.list |> List.map(fun (w, hwnd) ->
+                                    let edge = match w with :? WorkspaceWindow as ww -> ww.tabEdge | _ -> TabEdges.Edge.Top
+                                    hwnd, edge) |> Map.ofList
                             for hwnd in members do
+                                let edge = TabEdges.fallback group.ts.allowedEdges savedEdges.[hwnd]
                                 trace index "add-window" "start" [hwnd]
-                                try group.addWindowForWorkspace(hwnd, placement)
+                                try group.addWindowForWorkspace(hwnd, placement, edge=edge)
                                 with error ->
                                     logError index "add-window" error
-                                    group.recoverWorkspaceWindow(hwnd)
+                                    group.recoverWorkspaceWindow(hwnd, edge=edge)
                                 trace index "add-window" "end" [hwnd]
                             // The first member is the window that was in front when
                             // the workspace was saved: the saved rectangle is its own.
@@ -665,10 +695,21 @@ type WorkspaceModel() as this =
                                 with error -> logError index "tab-state" error
                                 trace index "tab-state" "end" [hwnd]
                             trace index "tab-order" "start" members
-                            withState |> List.sortBy(fun (st, _) -> st.order)
-                            |> List.iteri(fun i (_, hwnd) ->
-                                try group.ts.moveTab(Tab(hwnd), i)
-                                with error -> logError index "tab-order" error)
+                            let ordered = withState |> List.sortBy(fun (st, _) -> st.order)
+                            if TabEdges.isTopOnly group.ts.allowedEdges &&
+                               (savedEdges |> Map.forall(fun _ edge -> edge = TabEdges.Edge.Top)) then
+                                ordered |> List.iteri(fun i (_, hwnd) ->
+                                    try group.ts.moveTab(Tab(hwnd), i)
+                                    with error -> logError index "tab-order" error)
+                            else
+                                // Restore order without the drag operation's smart-pin
+                                // inference, keeping residents before migrated edges.
+                                try
+                                    ordered
+                                    |> TabEdges.residentsFirst group.ts.allowedEdges (fun (_, hwnd) -> savedEdges.[hwnd])
+                                    |> List.map(fun (_, hwnd) -> Tab(hwnd))
+                                    |> group.ts.setVisualOrder
+                                with error -> logError index "tab-order" error
                             trace index "tab-order" "end" members
                             trace index "z-order" "start" members
                             try

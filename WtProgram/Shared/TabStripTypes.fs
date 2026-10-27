@@ -18,6 +18,8 @@ and TabDragInfo = {
     tab: Tab
     tabOffset: Pt
     imageOffset: Pt
+    // Source image geometry; None preserves the legacy top-edge drop path.
+    previewWindowOffset: Pt option
     tabInfo: TabInfo
     // Multi-select drag continuation: source group hwnd + selection snapshot
     // (excluding the dragged tab) so the target group's dragEnter can move
@@ -28,6 +30,7 @@ and TabDragInfo = {
     retainSource: unit -> IDisposable
     sourceGroupHwnd: IntPtr
     selectedHwnds: List<IntPtr>
+    transferOrder: Tab list
     // Snap on drag-detach (Desktop.dragDrop): what the source group knew at
     // drag start. dragExit removes the tabs from the source before the drop,
     // and a source whose tabs all left may already be gone by then.
@@ -43,6 +46,7 @@ and TabDragInfo = {
     //   suddenly become movable by being detached.
     sourceLockWindowPosition: bool
     sourceTabAligns: List<TabAlign>
+    sourceTabEdges: Map<IntPtr, TabEdges.Edge>
     }
 
 and TabStripPlacment = {

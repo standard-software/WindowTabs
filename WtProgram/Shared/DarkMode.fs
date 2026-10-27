@@ -5,14 +5,34 @@ open System.Runtime.InteropServices
 open System.Windows.Forms
 open Aga.Controls.Tree
 
+module private SettingsColors =
+    let darkSurface = Color.FromArgb(32, 32, 32)
+
 module SettingsCheckBoxLayout =
+    let isDark (cb: CheckBox) =
+        cb.FlatStyle = FlatStyle.Flat && cb.BackColor = SettingsColors.darkSurface
+
+    let darkCaptionFlags =
+        TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.NoPadding
+
     // Settings use a left-to-right, middle-left glyph and caption, normally on one line.
     let glyph (control: Control) =
         let side = 13 + control.Padding.Left
         Rectangle(0, (control.Height - side) / 2, side, side)
 
+    let darkCaptionArea (cb: CheckBox) =
+        let x = (glyph cb).Width + SettingsDpi.px 4
+        Rectangle(x, 0, max 0 (cb.Width - x), cb.Height)
+
     let caption (cb: CheckBox) (graphics: Graphics) =
         if String.IsNullOrEmpty(cb.Text) then Rectangle.Empty
+        elif isDark cb then
+            let area = darkCaptionArea cb
+            if area.Width <= 0 || area.Height <= 0 then Rectangle.Empty
+            else
+                // Match the custom GDI caption, including its clipping and vertical alignment.
+                let size = TextRenderer.MeasureText(graphics, cb.Text, cb.Font, area.Size, darkCaptionFlags)
+                Rectangle.Intersect(area, Rectangle(area.X, area.Y + (area.Height - size.Height) / 2, size.Width, size.Height))
         else
             // Match the Flat adapter: padded client, native check + 1, then
             // the two-pixel text inset. Keep native painting and focus intact.
@@ -105,6 +125,30 @@ module ScaledChoiceGlyph =
         | _ -> ()
         for child in control.Controls do applyLight child
 
+// Settings subpages share the form surface, while headers keep normal tab styling.
+type SettingsSurfaceTabControl() =
+    inherit TabControl()
+    override this.WndProc(m: byref<Message>) =
+        base.WndProc(&m)
+        if m.Msg = 0x000F || m.Msg = 0x0318 then
+            let paint (g: Graphics) =
+                let form = this.FindForm()
+                if not (isNull form) then
+                    let top =
+                        if this.TabCount = 0 then 0
+                        else this.GetTabRect(0).Bottom + 2
+                    let state = g.Save()
+                    g.ExcludeClip(this.DisplayRectangle)
+                    use brush = new SolidBrush(form.BackColor)
+                    g.FillRectangle(brush, Rectangle(0, top, this.Width, max 0 (this.Height - top)))
+                    g.Restore(state)
+            if m.Msg = 0x0318 && m.WParam <> IntPtr.Zero then
+                use g = Graphics.FromHdc(m.WParam)
+                paint g
+            elif m.Msg = 0x000F then
+                use g = Graphics.FromHwnd(this.Handle)
+                paint g
+
 module DarkMode =
     // Dark theme palette inspired by Win11 / VS Dark.
     //   darkSurface : form bg + most static surfaces (mid-dark)
@@ -115,7 +159,7 @@ module DarkMode =
     //   darkBorder  : separator strokes
     //   darkText    : foreground
     //   darkAccent  : selection / pressed / focus ring
-    let darkSurface = Color.FromArgb(32, 32, 32)
+    let darkSurface = SettingsColors.darkSurface
     let darkPanel = Color.FromArgb(45, 45, 45)
     let darkTabStrip = Color.FromArgb(20, 20, 20)
     let darkBorder = Color.FromArgb(64, 64, 64)
@@ -376,35 +420,14 @@ module DarkMode =
                     let g = e.Graphics
                     let boxRect = SettingsCheckBoxLayout.glyph cb
                     let boxSize = boxRect.Width
-                    // WinForms drew its own glyph before this handler runs,
-                    // and while the LAYOUT reserves a constant 13 px for it,
-                    // the flat-style PAINT sizes it as (int)(11 * DpiX / 96)
-                    // px starting at x = Padding.Left (CheckBoxFlatAdapter.
-                    // Layout via GetDpiScaleRatio, which falls back to the
-                    // Graphics DPI in this process). On a scaled monitor that
-                    // glyph runs past the box drawn below and its right edge
-                    // survived as a bright sliver. Erasing x = 0 .. Padding.
-                    // Left + native covers it whole.
-                    //
-                    // The caption is not at risk, and not by luck. The very
-                    // same Layout() call places the text from the same
-                    // `native`, so the two move together. Column-scanned on a
-                    // replica painted at DpiX = 96 * scale (checked and
-                    // unchecked, both glyphs):
-                    //
-                    //   scale   1.0  1.25  1.5  1.75  2.0  2.5
-                    //   glyph ends at Padding.Left + native - 1, always
-                    //   caption ink starts this far past the erased column:
-                    //           +3    +5   +5    +6   +6   +7
-                    //
-                    // The gap GROWS with the scale, so a clamp meant to
-                    // protect the caption above 175% would only start leaving
-                    // the sliver back (at 200% it would leave 2 px, at 250%
-                    // 7 px). Verified 100% - 250%; beyond that the relation is
-                    // still monotone but was not measured.
-                    let native = int (11.0 * float g.DpiX / 96.0)
+                    // Redraw disabled text in the standard readable grey, using
+                    // the same caption origin as enabled checkboxes.
                     use wipe = new SolidBrush(cb.BackColor)
-                    g.FillRectangle(wipe, Rectangle(0, 0, cb.Padding.Left + native + 1, cb.Height))
+                    g.FillRectangle(wipe, cb.ClientRectangle)
+                    let textRect = SettingsCheckBoxLayout.darkCaptionArea cb
+                    let textColor = if cb.Enabled then darkText else Color.FromArgb(160, 160, 160)
+                    TextRenderer.DrawText(g, cb.Text, cb.Font, textRect, textColor,
+                        SettingsCheckBoxLayout.darkCaptionFlags)
                     // Fill the box with the parent surface tone so the box
                     // visually melts into the background (only the grey
                     // border outlines it). Matches the "transparent / match
@@ -553,7 +576,7 @@ module DarkMode =
                 tc.ForeColor <- darkText
             | :? TabPage as tp ->
                 // Page area uses darkPanel so it matches the active tab's fill
-                tp.BackColor <- darkPanel
+                tp.BackColor <- if tp.Parent :? SettingsSurfaceTabControl then darkSurface else darkPanel
                 tp.ForeColor <- darkText
             | :? ListView as lv ->
                 lv.BackColor <- darkPanel
@@ -792,9 +815,8 @@ module DarkMode =
         let attach() =
             try if tc.IsHandleCreated && this.Handle = IntPtr.Zero then this.AssignHandle(tc.Handle)
             with _ -> ()
-        let paintAll() =
+        let paintAll (g: Graphics) =
             try
-                use g = Graphics.FromHwnd(tc.Handle)
                 let cr = tc.ClientRectangle
                 // Background: darkTabStrip everywhere first; will be
                 // overpainted with darkPanel for the page-frame area below.
@@ -812,7 +834,7 @@ module DarkMode =
                 // up to stripBottom (does NOT enter the tab strip), so
                 // inactive tabs keep their darker fill all the way to
                 // their bottom edge — no "light band under tabs".
-                use pageBrush = new SolidBrush(darkPanel)
+                use pageBrush = new SolidBrush(if tc :? SettingsSurfaceTabControl then darkSurface else darkPanel)
                 if cr.Height > stripBottom then
                     g.FillRectangle(pageBrush, Rectangle(0, stripBottom, cr.Width, cr.Height - stripBottom))
                 // Each tab: paint background + text. Replicates the per-
@@ -851,8 +873,13 @@ module DarkMode =
             | msg when msg = WM_ERASEBKGND ->
                 m.Result <- IntPtr(1)
             | msg when msg = WM_PAINT ->
-                paintAll()
+                use g = Graphics.FromHwnd(tc.Handle)
+                paintAll g
                 ValidateRect(tc.Handle, IntPtr.Zero) |> ignore
+                m.Result <- IntPtr.Zero
+            | 0x0318 when tc :? SettingsSurfaceTabControl && m.WParam <> IntPtr.Zero ->
+                use g = Graphics.FromHdc(m.WParam)
+                paintAll g
                 m.Result <- IntPtr.Zero
             | _ ->
                 base.WndProc(&m)

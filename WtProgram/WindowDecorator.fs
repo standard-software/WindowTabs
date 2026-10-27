@@ -40,20 +40,20 @@ type WindowDecorator = {
         )
 
     member this.shouldShowInside =
-        // How much of the strip a monitor would show, inside the window versus
-        // above it. Plain rectangle intersection: the same answer the GDI
-        // regions gave, without a handle per call.
-        let overlapHeight (monitor: Rect) (strip: Rect) =
-            let top = max monitor.top strip.top
-            let bottom = min monitor.bottom strip.bottom
-            max 0 (bottom - top)
-        let inside = this.insideBounds
-        let outside = this.outsideBounds
-        this.monitorBounds.any <| fun monitorBounds ->
-            let horizontal (strip: Rect) =
-                min monitorBounds.right strip.right > max monitorBounds.left strip.left
-            let heightOf strip = if horizontal strip then overlapHeight monitorBounds strip else 0
-            heightOf inside > heightOf outside
+        let box (r: Rect) = r.x, r.y, r.width, r.height
+        TabEdgeLayout.showsInside TabEdges.Edge.Top
+            (this.monitorBounds.list |> List.map box)
+            (box this.insideBounds) (box this.outsideBounds)
+
+    member this.placementFor(verticalDirection: string, restrictToMonitor: bool) =
+        let box (r: Rect) = r.x, r.y, r.width, r.height
+        let automaticInside =
+            if restrictToMonitor then
+                TabEdgeLayout.showsInsideHome TabEdges.Edge.Top
+                    (this.monitorBounds.list |> List.map box) (box this.outsideBounds)
+            else this.shouldShowInside
+        let inside = TabBehaviorPolicy.showInside verticalDirection automaticInside
+        inside, (if inside then this.insideBounds else this.outsideBounds)
 
     member this.showInside(verticalDirection: string) =
         TabBehaviorPolicy.showInside verticalDirection this.shouldShowInside

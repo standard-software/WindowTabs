@@ -138,9 +138,16 @@ type IProgram =
     abstract member setWindowPinned : IntPtr * bool -> unit
     [<ServiceMethod(direct=true)>]
     abstract member isWindowPinned : IntPtr -> bool
+    abstract member setWindowEdge : IntPtr * TabEdges.Edge -> unit
+    [<ServiceMethod(direct=true)>]
+    abstract member getWindowEdge : IntPtr -> TabEdges.Edge
     abstract member setWindowAlignment : IntPtr * TabAlign option -> unit
     [<ServiceMethod(direct=true)>]
     abstract member getWindowAlignment : IntPtr -> TabAlign option
+    [<ServiceMethod(direct=true)>]
+    abstract member getWindowAlignmentEdge : IntPtr -> TabEdges.Edge option
+    [<ServiceMethod(direct=true)>]
+    abstract member setWindowAlignmentEdge : IntPtr * TabEdges.Edge -> unit
     abstract member appWindows : List2<IntPtr>
     abstract member getAutoGroupingEnabled : string -> bool
     abstract member setAutoGroupingEnabled : string -> bool -> unit
@@ -246,6 +253,12 @@ type IGroup =
     // all desktops given a group on another desktop is where it is already.
     abstract member addWindowUnplaced: IntPtr -> unit
     abstract member unpinTab: IntPtr -> unit
+    // The edge a tab of this group is on (thread-safe snapshot; for a tab
+    // that has just left, the edge it was on), and putting back the edge the
+    // restore saved (an edge no longer allowed gives way to the first allowed
+    // one).
+    abstract member tabEdgeThreadSafe: IntPtr -> TabEdges.Edge
+    abstract member setTabEdge: IntPtr * TabEdges.Edge -> unit
 
 type IDesktop =
     abstract member isDragging : bool

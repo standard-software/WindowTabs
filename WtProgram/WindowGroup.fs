@@ -137,6 +137,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let lockChangedEvent = Event<unit>()
     let flashEvent = Event<_>()
     let foregroundEvent = Event<_>()
+#if DEBUG
+    let mutable dockStackTrace : (IntPtr * (IntPtr * bool) list) option = None
+#endif
 
     let isDestroyed = Cell.create(false)
     let mutable tabDragOwners = 0
@@ -156,6 +159,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let followerPlacements = FollowerPlacementQueue()
     let synchronousFollowers = System.Collections.Generic.HashSet<IntPtr>()
     let windowsCell = Cell.create(Set2())
+    // Membership is immutable. Publish on the owner before Cell listeners run;
+    // drag-thread hit tests must not enter this group's dependency stack.
+    let windowsSnapshot = windowsCell.createSnapshot()
     let _ts = ref None 
     let inMoveSize = Cell.create(false)
     // Thread-safe mirror of inMoveSize for cross-thread reads (the main
@@ -237,6 +243,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // strip; the tick catches what none of them reports.
     let stripMaintenanceTimer = new System.Windows.Forms.Timer(Interval = 250)
     let mutable stripRepairing = false
+    let mutable stripSwitchUntil = 0L
+#if DEBUG
+    let mutable stripSwitchTrace : obj = null
+    let mutable stripSkipTrace : string option = None
+#endif
     let stripSwapRetry = VirtualDesktopGroups.StripSwapRetry()
     // What the last full refresh left behind (see stripStateSignature), and
     // when a reorder notification last started one.
@@ -343,9 +354,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let topLevel =
                 try (int64 (WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE)) &&& 0x40000000L) = 0L
                 with _ -> true
-            if topLevel && now - lastReorderRefresh >= 50L then
+            if topLevel && (this.stripSwitchActive || now - lastReorderRefresh >= 50L) then
                 lastReorderRefresh <- now
-                this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))))
+                this.invokeAsync (fun () -> this.refreshStripState("global-reorder"))
+#if DEBUG
+            elif topLevel then this.traceStripSkip("throttled")
+#endif
+            ))
 
         // Apply default setting for tab position
         let defaultPosition = Services.settings.getValue("tabPositionByDefault") :?> string
@@ -480,6 +495,24 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 foregroundCell.set(value)
                 foregroundEvent.Trigger()
 
+#if DEBUG
+    // Read cached desktop evidence only; unknown is distinct from away.
+    member this.traceDockDrag(phase: string, edge: TabEdges.Edge, dragged: IntPtr) =
+        DragTrace.log (fun () ->
+            let handle = Option.map (fun (Tab h) -> h) >> Option.defaultValue IntPtr.Zero
+            let selected = handle this.ts.zorder.tryHead
+            let state = VirtualDesktopGroups.Live.snapshot()
+            let known h = VirtualDesktopGroups.Live.isFresh state &&
+                          (VirtualDesktopGroups.Live.read state h).presence <> VirtualDesktopGroups.Unsure
+            let top = Win32Helper.GetWindowsInZOrder() |> Array.tryFind this.windows.contains |> Option.defaultValue IntPtr.Zero
+            sprintf "[dockDrag] %s edge=%A group=%X drag=%X selected=%X highlight=%X groupTop=%X zTop=%X fg=%X dragKnown=%b dragHere=%b selectedKnown=%b selectedHere=%b"
+                phase edge ((this.hwnd: IntPtr).ToInt64()) (dragged.ToInt64()) (selected.ToInt64())
+                ((handle this.ts.foreground).ToInt64()) ((this.tryTopWindow |> Option.defaultValue IntPtr.Zero).ToInt64())
+                (top.ToInt64()) (WinUserApi.GetForegroundWindow().ToInt64())
+                (known dragged) (VirtualDesktopGroups.Live.isHere state dragged)
+                (known selected) (VirtualDesktopGroups.Live.isHere state selected))
+#endif
+
     member this.foregroundTab =
         match stripPreview with
         | Some p -> Some(Tab(p.target))
@@ -492,16 +525,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     
     member this.isPointInTs (pt:Pt) =
         let hwnd = Win32Helper.GetTopLevelWindowFromPoint(pt.Point)
-        this.ts.hwnd = hwnd
+        this.ts.ownsHwnd hwnd
 
     member this.isPointInGroup (pt:Pt) =
         let hwnd = Win32Helper.GetTopLevelWindowFromPoint(pt.Point)
-        this.ts.hwnd = hwnd || this.windows.contains(hwnd)
+        this.ts.ownsHwnd hwnd || this.windows.contains(hwnd)
     
     member this.topWindow = zorderCell.value.head
+    member this.tryTopWindow = zorderCell.value.tryHead
    
 
     member this.windows : Set2<IntPtr> = windowsCell.value
+    member this.windowsThreadSafe : Set2<IntPtr> = windowsSnapshot.value
 
     
     // Appearance exactly as the user configured it, in 96-dpi design units.
@@ -832,15 +867,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.stripStateSignature() : obj =
         let order = Win32Helper.GetWindowsInZOrder()
         let members = this.windows.items.list
-        let memberSet = Collections.Generic.HashSet<IntPtr>(members)
-        let strip = this.ts.hwnd
-        let placed =
-            [ for i in 0 .. order.Length - 1 do
-                let hwnd = order.[i]
-                if hwnd = strip then
-                    yield hwnd, (if i + 1 < order.Length then order.[i + 1] else IntPtr.Zero)
-                elif memberSet.Contains hwnd then
-                    yield hwnd, (if i > 0 then order.[i - 1] else IntPtr.Zero) ]
+        let strips = this.ts.hwnd :: this.ts.edgeHwnds
+        let placed = VirtualDesktopGroups.stripOrderSignature strips members order
         let states = members |> List.map (fun hwnd ->
             let w = this.os.windowFromHwnd(hwnd)
             hwnd, w.isWindow, w.isVisible, w.isMinimized, w.cloakedValue, w.isTopMost)
@@ -876,6 +904,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let _, order = this.stripFrontDecision(newZorder.list)
         let newZorder = List2(order)
         if zorderCell.value.list <> newZorder.list then
+#if DEBUG
+            if zorderCell.value.tryHead <> newZorder.tryHead then
+                DragTrace.log (fun () ->
+                    sprintf "[dockDrag] selection reason=group-setZorder group=%X before=%X after=%X"
+                        ((this.hwnd: IntPtr).ToInt64())
+                        ((zorderCell.value.tryHead |> Option.defaultValue IntPtr.Zero).ToInt64())
+                        ((newZorder.tryHead |> Option.defaultValue IntPtr.Zero).ToInt64()))
+#endif
             prevTop.set(zorderCell.value.tryHead)
             zorderCell.set(newZorder)
 
@@ -904,6 +940,89 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.bringToTop hwnd =
         this.setZorder(zorderCell.value.moveToEnd((=)hwnd))
+
+    // All drag-owned Z-order changes include bands and bodies in one batch.
+    // Native completion is synchronous, as in OS.setZorder; no async tail can
+    // surface a body after its bands were positioned.
+    member private this.applyDragStack(reason: string, bodies: IntPtr list, after: IntPtr) =
+        let bodies = bodies |> List.distinct |> List.filter (fun h ->
+            this.windows.contains h && this.os.windowFromHwnd(h).isWindow)
+        if not (List.isEmpty bodies) then
+            let strips = this.ts.hwnd :: this.ts.edgeHwnds
+            let order = TabEdges.dragStackOrder after strips bodies
+#if DEBUG
+            let trace phase =
+                DragTrace.log (fun () ->
+                    let front = List.head bodies
+                    sprintf "[dockDrag] batch phase=%s reason=%s group=%X front=%X after=%X aboveFront=%A"
+                        phase reason ((this.hwnd: IntPtr).ToInt64()) (front.ToInt64()) (after.ToInt64())
+                        (strips |> List.map (fun h -> h, TopEdgeGuardPlacement.isAbove h front)))
+            trace "before"
+#endif
+            this.os.setZorder(List2(order))
+#if DEBUG
+            trace "after"
+#endif
+
+    // Raise content and its strips without changing keyboard focus or capture.
+    member this.raiseDragWindow(hwnd, ?after: IntPtr, ?selected: IntPtr list, ?reason: string) =
+        if this.windows.contains hwnd then
+            let window = this.os.windowFromHwnd(hwnd)
+            if window.isWindow && not window.isMinimized then
+                // Hover does not rewrite logical selection. Only explicit
+                // source remainder/cancel restoration changes its front.
+                if reason.IsSome then this.bringToTop(hwnd)
+#if DEBUG
+                DragTrace.log (fun () ->
+                    sprintf "[dockDrag] raise-request group=%X drag=%X after=%X async=false"
+                        ((this.hwnd: IntPtr).ToInt64()) (hwnd.ToInt64())
+                        ((defaultArg after WindowHandleTypes.HWND_TOP).ToInt64()))
+#endif
+                let bodies = TabEdges.dragHoverWindows hwnd (defaultArg selected []) this.windows.contains
+                this.applyDragStack(defaultArg reason "drag-hover", bodies, defaultArg after WindowHandleTypes.HWND_TOP)
+
+    member this.captureDragGroupFront(excluded: IntPtr list) =
+        this.tryTopWindow |> Option.map (fun front ->
+            let order = Win32Helper.GetWindowsInZOrder() |> Array.toList
+            let predecessors =
+                order |> List.takeWhile ((<>) front) |> List.rev
+                |> List.filter (fun h ->
+                    not (List.contains h excluded) && not (this.ts.ownsHwnd h) &&
+                    not (TopEdgeGuardPlacement.isGuard h && TopEdgeGuardPlacement.ownerOf h = front))
+            front, predecessors)
+
+    member this.previewDragGroupFront(pivot: IntPtr, previous: IntPtr) =
+        let order = TabEdges.dragGroupFrontOrder pivot previous
+                    |> List.filter (fun h -> this.windows.contains h && this.os.windowFromHwnd(h).isWindow)
+        if not (List.isEmpty order) then
+            // A single ordered batch avoids the cross-thread completion race
+            // of independent async raises. Do not activate or recapture input.
+            this.applyDragStack("group-preview", order, WindowHandleTypes.HWND_TOP)
+            this.bringToTop(pivot)
+#if DEBUG
+            DragTrace.log (fun () ->
+                sprintf "[dockDrag] group-front group=%X drag=%X previous=%X"
+                    ((this.hwnd: IntPtr).ToInt64()) (pivot.ToInt64()) (previous.ToInt64()))
+#endif
+
+    member this.keepDragGroupFront(front: IntPtr) =
+        if this.windows.contains front && this.os.windowFromHwnd(front).isWindow then
+            // Keep the body in its current raised slot; only repair its bands.
+            this.bringToTop(front)
+            this.repairStripZorder("group-keep")
+
+    member this.restoreDragGroupFront(front: IntPtr, predecessors: IntPtr list) =
+        if this.windows.contains front && this.os.windowFromHwnd(front).isWindow then
+            let anchor = TabEdges.dragGroupRestoreAnchor
+                            (fun h -> this.os.windowFromHwnd(h).isWindow && this.os.windowFromHwnd(h).isVisible)
+                            predecessors WindowHandleTypes.HWND_TOP
+            this.applyDragStack("group-preview-restore", [front], anchor)
+            this.bringToTop(front)
+#if DEBUG
+            DragTrace.log (fun () ->
+                sprintf "[dockDrag] group-restore group=%X front=%X after=%X"
+                    ((this.hwnd: IntPtr).ToInt64()) (front.ToInt64()) (anchor.ToInt64()))
+#endif
 
     member this.isRenamed hwnd = Services.program.getWindowNameOverride(hwnd).IsSome
     
@@ -966,10 +1085,22 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.setTsParent(parentHwnd) =
         this.os.windowFromHwnd(this.ts.hwnd).setParent(this.os.windowFromHwnd(parentHwnd), reason="group")
+        this.ts.setEdgeOwners(this.os.windowFromHwnd(parentHwnd))
 
     member private this.updateStripOwner() =
         this.setTsParent(IntPtr.Zero)
         this.repairStripZorder("group-order")
+
+    member private this.stripSwitchActive =
+        stripPreview.IsSome || stripClock.ElapsedMilliseconds < stripSwitchUntil
+
+#if DEBUG
+    member private this.traceStripSkip(reason: string) =
+        if (!_ts).IsSome && stripSkipTrace <> Some reason then
+            stripSkipTrace <- Some reason
+            VirtualDesktopTrace.handover (fun () ->
+                sprintf "switch-zorder-skip group=%X reason=%s" (this.ts.hwnd.ToInt64()) reason)
+#endif
 
     member this.repairStripZorder(reason: string) =
         if (!_ts).IsSome && not stripRepairing && not isDestroyed.value && this.ts.visible then
@@ -981,24 +1112,44 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         sprintf "strip-anomaly strip=%X owned=%X"
                             (strip.hwnd.ToInt64()) (strip.parent.hwnd.ToInt64()))
                     this.setTsParent(IntPtr.Zero)
-                // During the animation use the last rectangle/order until a
-                // member is physically on screen. Never raise an away window.
+                // Move strips only. A shell-cloaked destination still has a
+                // native Z-order position; no member is activated or moved.
                 let candidates =
-                    this.stripMembers |> List.filter (fun w -> w.cloak = Some 0 || w.cloak.IsNone)
+                    this.stripMembers
+                    |> List.map (fun w ->
+                        // Uncloak can precede the coalesced desktop snapshot.
+                        if this.stripSwitchActive && w.cloak = Some 0 then
+                            { w with presence=VirtualDesktopGroups.Here }
+                        else w)
                     |> List.sortBy (let position = this.zorderIndex() in fun w -> position w.hwnd)
-                match VirtualDesktopGroups.stripFront candidates with
-                | None -> ()
+                let preferred = stripPreview |> Option.map (fun p -> p.target)
+                let front = VirtualDesktopGroups.stripRepairFront this.stripSwitchActive preferred candidates
+#if DEBUG
+                let beforeStack = (this.ts.hwnd :: this.ts.edgeHwnds) |> List.map (fun h ->
+                    h, front |> Option.exists (TopEdgeGuardPlacement.isAbove h)) |> Map.ofList
+#endif
+                match front with
+                | None ->
+#if DEBUG
+                    this.traceStripSkip("no-candidate")
+#else
+                    ()
+#endif
                 | Some front ->
                     let frame = this.os.windowFromHwnd(front)
+                    let edges = this.ts.edgeHwnds
                     let rec preceding hwnd depth =
                         let p = this.os.windowFromHwnd(hwnd).prevZorder.hwnd
-                        if depth > 0 && TopEdgeGuardPlacement.isGuard p && TopEdgeGuardPlacement.ownerOf p = front then
+                        if depth > 0 &&
+                           (List.contains p edges ||
+                            (TopEdgeGuardPlacement.isGuard p && TopEdgeGuardPlacement.ownerOf p = front)) then
                             preceding p (depth - 1)
                         else p
                     // A layer change needs its own native call. Repair the
                     // exact position immediately afterwards, before yielding.
                     for _ in 1 .. 2 do
-                        let before = preceding front 16
+                        // Retain the guard budget and allow every additional strip.
+                        let before = preceding front (16 + edges.Length)
                         let adjacent = before = strip.hwnd
                         let previous = if adjacent then strip.prevZorder.hwnd else before
                         let frontTopmost = frame.isTopMost
@@ -1073,7 +1224,36 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                         (anchor.ToInt64()) (strip.prevZorder.hwnd.ToInt64()) strip.isTopMost)
 #endif
                             )
+                // Other edges follow the repaired layer and the same visible front.
+                if not (List.isEmpty this.ts.edgeHwnds) then
+                    let front = front |> Option.defaultValue IntPtr.Zero
+                    try this.ts.followTopStrip(front) with _ -> ()
+#if DEBUG
+                    let stack = (this.ts.hwnd :: this.ts.edgeHwnds) |> List.map (fun h -> h, TopEdgeGuardPlacement.isAbove h front)
+                    if dockStackTrace <> Some(front, stack) then
+                        dockStackTrace <- Some(front, stack)
+                        DragTrace.log (fun () ->
+                            sprintf "[dockDrag] stack reason=%s group=%X front=%X aboveFront=%A"
+                                reason ((this.hwnd: IntPtr).ToInt64()) (front.ToInt64()) stack)
+#endif
+#if DEBUG
+                front |> Option.iter (fun target ->
+                    stripSkipTrace <- None
+                    let stack = (this.ts.hwnd :: this.ts.edgeHwnds) |> List.map (fun h ->
+                        h, this.ts.edgeOfHwnd h, TopEdgeGuardPlacement.isAbove h target)
+                    let state = box (target, beforeStack, stack)
+                    if not (state.Equals(stripSwitchTrace)) then
+                        stripSwitchTrace <- state
+                        for h, edge, above in stack do
+                            VirtualDesktopTrace.handover (fun () ->
+                                sprintf "switch-zorder group=%X strip=%X target=%X edge=%A aboveBefore=%b above=%b reason=%s"
+                                    (this.ts.hwnd.ToInt64()) (h.ToInt64()) (target.ToInt64()) edge beforeStack.[h] above reason))
+#endif
             finally stripRepairing <- false
+#if DEBUG
+        else
+            this.traceStripSkip(if stripRepairing then "repairing" elif isDestroyed.value then "destroyed" else "not-visible")
+#endif
 
     member private this.syncShellContentHold() =
         if stripPreview.IsNone then
@@ -1119,7 +1299,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 let previous = zorderCell.value.list |> List.map (fun h ->
                     h, (stripView.presence.TryFind h |> Option.defaultValue (VirtualDesktopGroups.Live.read request.state h).presence)) |> Map.ofList
                 let plan = VirtualDesktopGroups.predictStrip request.destination request.state.reads request.state.stripShared
-                               previous available this.ts.visible zorderCell.value.list
+                               previous available this.ts.visible (zorderCell.value.list |> List.sortBy (this.zorderIndex()))
                 // Only strips visible on both desktops predict their content.
                 // Native visibility remains under the ordinary desktop pass.
                 match plan.front with
@@ -1129,6 +1309,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     stripPreview <- Some { target=front; destination=request.destination
                                            expires=stripClock.ElapsedMilliseconds + 5000L - age; dimmed=plan.dimmed }
                     predictingOtherGroup <- true
+                    stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
+                    this.repairStripZorder("prediction")
 #if DEBUG
                     predictedContent <- Some(request.id, request.tick, plan.front, List.sort plan.dimmed, plan.order)
 #else
@@ -1185,12 +1367,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let view = { view with presence=view.presence |> Map.filter (fun h _ -> this.windows.contains h) }
         let unchanged = appliedStripView |> Option.exists (fun (oldShown, oldView) -> VirtualDesktopGroups.sameStripView shown oldShown view oldView)
         appliedStripView <- Some(shown, view)
+        if stripView.current <> view.current then
+            stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
         stripView <- view
         desktopShown <- shown
         this.ts.desktopNoticeTick <- view.noticeTick
         let ended = this.finishStripPreview()
-        if unchanged && not ended then
+        if unchanged && not ended && not this.stripSwitchActive then
 #if DEBUG
+            this.traceStripSkip("desktop-view")
             stripPassSkipped <- stripPassSkipped + 1
             VirtualDesktopTrace.periodic false (fun () ->
                 sprintf "desktop-strip-skip strip=%X count=%d noticeTick=%A" (this.ts.hwnd.ToInt64()) stripPassSkipped view.noticeTick)
@@ -1225,10 +1410,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // nearly always nothing that concerns this group has changed.
         let periodic = (reason = "maintenance" || reason = "global-reorder")
         let unchanged =
-            periodic && stripPreview.IsNone && not shellStripHold && (!_ts).IsSome &&
+            periodic && not this.stripSwitchActive && not shellStripHold && (!_ts).IsSome &&
             not isDestroyed.value && not (isNull lastStripSignature) &&
             (try lastStripSignature.Equals(this.stripStateSignature()) with _ -> false)
-        if unchanged then PerfTrace.count "strip.refresh.skipped"
+        if unchanged then
+            PerfTrace.count "strip.refresh.skipped"
+#if DEBUG
+            this.traceStripSkip("signature")
+#endif
         else
             PerfTrace.count "strip.refresh.run"
             this.refreshStripStateNow(reason)
@@ -1277,12 +1466,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.unpinTab(hwnd) =
         this.ts.unpinTab(Tab(hwnd))
         Services.program.setWindowPinned(hwnd, false)
-    member this.pinAll() =
-        this.ts.pinAll()
-        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, true))
-    member this.unpinAll() =
-        this.ts.unpinAll()
-        this.ts.visualOrder.iter(fun (Tab h) -> Services.program.setWindowPinned(h, false))
+    member this.pinAll(?edge: TabEdges.Edge) =
+        this.ts.pinAll(?edge=edge)
+        let targets = edge |> Option.map this.ts.bandOf |> Option.defaultValue this.ts.visualOrder
+        targets.iter(fun (Tab h) -> Services.program.setWindowPinned(h, true))
+    member this.unpinAll(?edge: TabEdges.Edge) =
+        this.ts.unpinAll(?edge=edge)
+        let targets = edge |> Option.map this.ts.bandOf |> Option.defaultValue this.ts.visualOrder
+        targets.iter(fun (Tab h) -> Services.program.setWindowPinned(h, false))
     member this.pinnedCount = this.ts.pinnedTabs.count
     member this.allPinned = this.ts.pinnedTabs.count = this.ts.tabs.count
     member this.nonePinned = this.ts.pinnedTabs.count = 0
@@ -1327,6 +1518,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.applySelected(Set2(List2([targetHwnd])))
         | Some active when active = targetHwnd ->
             this.clearSelected()
+        // A range is taken inside one edge only (3-3): a Shift+click on a tab
+        // of another edge leaves the selection as it is (TabEdges.selectRange).
+        | Some active when this.ts.edgeOf(Tab(active)) <> this.ts.edgeOf(Tab(targetHwnd)) ->
+            ()
         | Some active ->
             let order = this.ts.visualOrder.list |> List.map (fun (Tab h) -> h)
             let idxActive = order |> List.tryFindIndex ((=) active)
@@ -1395,6 +1590,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.ts.setTabsAlign(hwnds |> List.map Tab, alignment)
         hwnds |> List.iter (fun h -> Services.program.setWindowAlignment(h, Some(alignment)))
     member this.getTabAlign(hwnd) = this.ts.getTabAlign(Tab(hwnd))
+    // The edge of a tab of this group. Kept by the group and nowhere else: a
+    // window shown on all desktops can be on the left in one desktop's group
+    // and on the top in another's.
+    member this.setTabEdge(hwnd, edge: TabEdges.Edge) = this.ts.setTabEdge(Tab(hwnd), edge)
+    // A saved edge put back by the restore (1-4-1): an edge no longer allowed
+    // gives way to the first allowed one (1-5).
+    member this.restoreTabEdge(hwnd, edge: TabEdges.Edge) =
+        if this.windows.contains(hwnd) then
+            let restored = TabEdges.fallback this.ts.allowedEdges edge
+            if restored <> this.ts.edgeOf(Tab(hwnd)) then this.ts.setTabEdge(Tab(hwnd), restored)
+    member this.tabEdge(hwnd) = this.ts.edgeOf(Tab(hwnd))
+    member this.tabEdgeThreadSafe(hwnd) = this.ts.edgeOfThreadSafe(Tab(hwnd))
     member this.alignCountToLeft(hwnd) = this.ts.alignCountToLeft(Tab(hwnd))
     member this.alignCountToRight(hwnd) = this.ts.alignCountToRight(Tab(hwnd))
     member this.alignLeftTabs(hwnd, newAlignment) =
@@ -2280,7 +2487,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // Membership transitions still update activity, visibility and guard placement.
         if (evt = WinEvent.EVENT_SYSTEM_FOREGROUND && foregroundInvolvesGroup) ||
            (evt <> WinEvent.EVENT_SYSTEM_FOREGROUND && this.windows.contains(hwnd)) then
-            this.refreshStripState(PerfTrace.label (fun () -> string evt))
+            let reason =
+                if evt = WinEvent.EVENT_OBJECT_SHOW then "member-show"
+                elif evt = WinEvent.EVENT_OBJECT_REORDER then "member-reorder"
+                else PerfTrace.label (fun () -> string evt)
+            this.refreshStripState(reason)
         if this.windows.contains(hwnd) &&
            (evt = WinEvent.EVENT_OBJECT_LOCATIONCHANGE || evt = WinEvent.EVENT_OBJECT_SHOW ||
             evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND ||
@@ -2400,14 +2611,22 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 updateTabVisibility()
         | _ -> ()
       
+    /// The active strip, or the first allowed edge for an empty group.
+    member this.joinEdge =
+        let arrival =
+            match zorderCell.value.tryHead with
+            | Some(active) when this.ts.tabs.contains(Tab(active)) -> TabEdges.Joins(Some(this.ts.edgeOf(Tab(active))))
+            | _ -> TabEdges.StartsGroup
+        TabEdges.edgeFor this.ts.allowedEdges arrival |> Option.defaultValue TabEdges.Edge.Top
+
     member this.addWindow(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
-                          ?restoreOrder: TabOrder.Placed list -> IntPtr list) =
+                          ?restoreOrder: TabOrder.Placed list -> IntPtr list, ?edge: TabEdges.Edge) =
         this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
-                             ?after=after, ?restoreOrder=restoreOrder)
+                             ?after=after, ?restoreOrder=restoreOrder, ?edge=edge)
 
     // Workspace placement precedes hooks and membership, so no sibling follows
     // an intermediate restore and no ordinary add path can activate a window.
-    member this.addWindowForWorkspace(hwnd, placement: OSWindowPlacement) =
+    member this.addWindowForWorkspace(hwnd, placement: OSWindowPlacement, ?edge: TabEdges.Edge) =
 #if DEBUG
         use trace = Bemo.Win32.GroupCallTrace.Operation("group.addWorkspace")
 #endif
@@ -2416,7 +2635,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if not (Win32Helper.PlaceWorkspaceWindowNoActivate(hwnd, placement.rcNormalPosition.RECT,
                             placement.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED)) then
                     invalidOp "Workspace placement was refused.")
-        this.addWindowPlaced(hwnd, false, false)
+        this.addWindowPlaced(hwnd, false, false, ?edge=edge)
 
     // The saved rectangle is the one the window in front had, and every window
     // was just given it as it stands. With frame margins in play (LINE) that
@@ -2443,10 +2662,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (wanted.width, wanted.height))))
 
     // Recover a partial add without placing or activating the native window.
-    member this.recoverWorkspaceWindow(hwnd) =
+    member this.recoverWorkspaceWindow(hwnd, ?edge: TabEdges.Edge) =
         if not (this.windows.contains(hwnd) && this.ts.tabs.contains(Tab(hwnd))) then
             if this.windows.contains(hwnd) then this.removeWindow(hwnd, activate=false)
-            this.addWindowPlaced(hwnd, false, false)
+            this.addWindowPlaced(hwnd, false, false, ?edge=edge)
         else
             // A failure after tab creation may have preceded the membership notice.
             addedEvent.Trigger(hwnd)
@@ -2454,7 +2673,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Explicit links place only the joining window. Reading the destination's
     // placement must never restore or activate one of its existing members.
     member this.addWindowLinked(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
-                                ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun () ->
+                                ?restoreOrder: TabOrder.Placed list -> IntPtr list, ?edge: TabEdges.Edge) = this.withUpdate <| fun () ->
 #if DEBUG
         use trace = Bemo.Win32.GroupCallTrace.Operation("group.addLinked")
 #endif
@@ -2546,7 +2765,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 this.traceMarginGeometry("link-after-write", Some hwnd)
 #endif
                 this.addWindowPlaced(hwnd, withDelay, false, ?alignment=alignment, ?pinned=pinned,
-                                     ?after=after, ?restoreOrder=restoreOrder)
+                                     ?after=after, ?restoreOrder=restoreOrder, ?edge=edge)
             finally
                 if not (this.windows.contains(hwnd)) then
                     frameMargins.Remove(hwnd)
@@ -2557,7 +2776,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // first member's own rectangle is the group's, and moving the others to it
     // would be switching desktops moving windows.
     member this.addWindowPlaced(hwnd, withDelay, place, ?alignment: TabAlign, ?pinned: bool,
-                                ?after: IntPtr, ?restoreOrder: TabOrder.Placed list -> IntPtr list) = this.withUpdate <| fun() ->
+                                ?after: IntPtr, ?restoreOrder: TabOrder.Placed list -> IntPtr list, ?edge: TabEdges.Edge) = this.withUpdate <| fun() ->
        if this.windows.contains(hwnd).not then
 #if DEBUG
             use trace = Bemo.Win32.GroupCallTrace.Operation("group.addWindow")
@@ -2590,6 +2809,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 synchronousFollowers.Add(hwnd) |> ignore
                 try this.adjustWindowPlacement(hwnd)
                 finally synchronousFollowers.Remove(hwnd) |> ignore
+            // The group's active tab as it is before this window is counted
+            // in: setWindows puts the newcomer into the z-order, at its head
+            // when it is in front, and read after that the group would look
+            // new to it (TabEdges.arrivalOf).
+            let zorderBefore = zorderCell.value.list
             this.setWindows(this.windows.add hwnd)
             if placement.value.IsNone then
                 prevTop.set(Some(hwnd))
@@ -2603,7 +2827,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.traceMarginPlacement("detached-base", hwnd)
                 | _ -> this.saveTopWindowPlacement()
             let registerEvent evt =
-                let handler = fun() -> this.main(hwnd, evt)
+                let handler = fun() ->
+                    if evt = WinEvent.EVENT_OBJECT_CLOAKED || evt = WinEvent.EVENT_OBJECT_UNCLOAKED then
+                        this.invokeAsync (fun () ->
+                            stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
+                            this.repairStripZorder(if evt = WinEvent.EVENT_OBJECT_UNCLOAKED then "uncloak" else "cloak"))
+                    else this.main(hwnd, evt)
                 let handler =
                     match Map.tryFind evt conflateIntervals with
                     | Some(interval) ->
@@ -2630,7 +2859,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 throttled()
                         | _ -> Helper.conflate interval handler
                     | None -> handler
-                if evt = WinEvent.EVENT_OBJECT_SHOW then
+                if evt = WinEvent.EVENT_OBJECT_CLOAKED || evt = WinEvent.EVENT_OBJECT_UNCLOAKED then
+                    // Shell notifications need not originate on the member's thread.
+                    this.os.setWinEventHook(evt, evt,
+                        (fun _ _ _ _ _ _ _ -> handler()), 0, 0,
+                        beforePost=(fun candidate -> candidate = hwnd), targetHwnd=hwnd)
+                elif evt = WinEvent.EVENT_OBJECT_SHOW then
                     // Reuse the member's SHOW hook, restricted to its process.
                     // CREATE/SHOW for owned frames wakes a coalesced refresh;
                     // no global hook or enumeration in the callback.
@@ -2652,6 +2886,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let hooks = 
                 List2([
                     WinEvent.EVENT_OBJECT_NAMECHANGE
+                    WinEvent.EVENT_OBJECT_CLOAKED
+                    WinEvent.EVENT_OBJECT_UNCLOAKED
                     WinEvent.EVENT_OBJECT_SHOW
                     WinEvent.EVENT_OBJECT_HIDE
                     WinEvent.EVENT_OBJECT_DESTROY
@@ -2671,13 +2907,26 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.setTabInfo hwnd
 
             let tab = Tab(hwnd)
-            let knownAlignment = alignment |> Option.orElseWith (fun () -> Services.program.getWindowAlignment(hwnd))
+            let arrival =
+                TabEdges.arrivalOf zorderBefore hwnd (fun active ->
+                    if this.ts.tabs.contains(Tab(active)) then Some(this.ts.edgeOf(Tab(active))) else None)
+            let defaultEdge = TabEdges.edgeFor this.ts.allowedEdges arrival |> Option.defaultValue TabEdges.Edge.Top
+            let joinEdge = TabEdges.fallback this.ts.allowedEdges (defaultArg edge defaultEdge)
+            let defaultAlignment =
+                if joinEdge = TabEdges.Edge.Top then this.ts.getTabAlign(tab)
+                else
+                    let layout = TabEdgeSettings.edgeLayout (Services.settings.root) joinEdge
+                    if layout.defaultAlign = TabEdges.AlignStart then TopLeft else TopRight
+            let alignmentEdge = Services.program.getWindowAlignmentEdge(hwnd) |> Option.orElse edge
+            let knownAlignment =
+                alignment |> Option.orElseWith (fun () -> Services.program.getWindowAlignment(hwnd))
+                |> TabEdges.alignmentOnArrival alignmentEdge joinEdge
             let initialAlignment, initialPinned =
-                TabOrder.initialState (this.ts.getTabAlign(tab)) knownAlignment
+                TabOrder.initialState defaultAlignment knownAlignment
                     (pinned |> Option.defaultWith (fun () -> Services.program.isWindowPinned(hwnd)))
             this.ts.addTabWithState(tab, initialAlignment, initialPinned, after |> Option.map Tab,
-                                   ?restoreOrder=restoreOrder)
-            alignment |> Option.iter (fun a -> Services.program.setWindowAlignment(hwnd, Some a))
+                                   ?restoreOrder=restoreOrder, edge=joinEdge, ?alignmentEdge=alignmentEdge)
+            (alignment |> TabEdges.alignmentOnArrival alignmentEdge joinEdge) |> Option.iter (fun a -> Services.program.setWindowAlignment(hwnd, Some a))
             pinned |> Option.iter (fun p -> Services.program.setWindowPinned(hwnd, p))
             // Restore fill color from global (persists across group transfers)
             match Services.program.getWindowFillColor(hwnd) with
@@ -2742,12 +2991,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if wasActiveWindow && allTabs.count > 1 && not skipActivation then
                     closingIndex.bind <| fun index ->
                         // Get the next tab (or previous if it's the last tab)
-                        if index < allTabs.count - 1 then
-                            Some(allTabs.at(index + 1))  // Next tab
-                        elif index > 0 then
-                            Some(allTabs.at(index - 1))  // Previous tab
-                        else
-                            None
+                        TabEdges.indexAfterClose allTabs.count index |> Option.map allTabs.at
                 else
                     None
 
@@ -2774,16 +3018,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.switchWindow(next,force) =
         if this.windowCount > 1 then
             let order = this.ts.visualOrder
-            let max = order.count - 1
             let top = zorderCell.value.tryHead
             top.iter <| fun top ->
                 (order.tryFindIndex((=)(Tab(top)))).iter <| fun index ->
-                    let targetIndex = if next then index + 1 else index - 1
-                    let targetIndex = 
-                        if targetIndex > max then 0
-                        elif targetIndex < 0 then max
-                        else targetIndex
-                    this.activateIndex(targetIndex, force)
+                    this.activateIndex(TabEdges.stepIndex order.count index next, force)
                         
     // The drag's capture window and timer belong to this thread, even after
     // its last tab has left. Release only once the terminal callback has run.
@@ -2922,7 +3160,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 with _ -> false
             completed success)
 
-    member this.tabActivate(Tab(hwnd), force) =
+    member this.tabActivate(Tab(hwnd), force, ?drag: bool) =
 #if DEBUG
         let preparation = Stopwatch.StartNew()
         let mutable paintedAt = 0.0
@@ -2948,6 +3186,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 shellStripHold <- false
                 stripPreview <- Some p
                 predictingOtherGroup <- false
+                stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
+                this.repairStripZorder("prediction-click")
                 followerPlacements.Cancel(hwnd)
                 this.bringToTop(hwnd)
 #if DEBUG
@@ -2985,7 +3225,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
             // SetForegroundWindow already raises a successfully activated target.
             // Avoid a second cross-process activation while the shell switches.
-            if preview.IsNone then
+            if preview.IsNone && not (defaultArg drag false) then
 #if DEBUG
                 let raising = Stopwatch.StartNew()
 #endif
@@ -2995,7 +3235,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     sprintf "switch-raise-return strip=%X elapsedMs=%.3f" (this.ts.hwnd.ToInt64()) raising.Elapsed.TotalMilliseconds)
 #endif
             this.bringToTop(hwnd)
-            this.repairStripZorder("tab-activate")
+            if defaultArg drag false then
+                this.applyDragStack("drop-activate", [hwnd], WindowHandleTypes.HWND_TOP)
+            else this.repairStripZorder("tab-activate")
 
     member this.onTabMoved(hwnd, index) =
         // Sync pinned state to global after drag-based auto-pin/unpin

@@ -613,6 +613,16 @@ module VirtualDesktopGroups =
     let stripVisible shown minimized members = shown && not minimized && List.exists stripMemberVisible members
     let stripFront members = members |> List.tryFind stripMemberVisible |> Option.map (fun w -> w.hwnd)
 
+    // A destination preview may use shell-cloaked windows as Z-order anchors.
+    // Never bypass application/inherited cloak, hiding, or minimization.
+    let stripRepairFront switching preferred members =
+        let eligible = members |> List.filter (fun w ->
+            stripMemberVisible { w with presence=if preferred = Some w.hwnd then Here else w.presence } &&
+            (switching || w.cloak = Some 0 || w.cloak.IsNone))
+        match preferred |> Option.bind (fun h -> eligible |> List.tryFind (fun w -> w.hwnd = h)) with
+        | Some w -> Some w.hwnd
+        | None -> eligible |> List.tryHead |> Option.map (fun w -> w.hwnd)
+
     // Keep the remaining order intact; only an eligible, opaque member can
     // lead the strip. A prepared click supplies destination eligibility.
     let stripFrontOrder (eligible: Set<IntPtr>) (dimmed: Set<IntPtr>) preferred order =
@@ -655,6 +665,20 @@ module VirtualDesktopGroups =
 
     let stripForegroundInvolves (members: Set<IntPtr>) previous next =
         members.Contains previous || members.Contains next
+
+    // Track every strip as well as each member. A side strip can cross the
+    // frame without changing the top strip's or frame's immediate neighbors.
+    let stripOrderSignature (strips: IntPtr list) members (order: IntPtr array) =
+        let sideStrips = strips |> List.skip (min 1 strips.Length) |> Set.ofList
+        let memberSet = Set.ofList members
+        [ for i in 0 .. order.Length - 1 do
+            let hwnd = order.[i]
+            let before = if i > 0 then order.[i - 1] else IntPtr.Zero
+            let after = if i + 1 < order.Length then order.[i + 1] else IntPtr.Zero
+            // Preserve the top-only cache's original observations.
+            if Some hwnd = List.tryHead strips then yield hwnd, IntPtr.Zero, after
+            elif sideStrips.Contains hwnd then yield hwnd, before, after
+            elif memberSet.Contains hwnd then yield hwnd, before, IntPtr.Zero ]
 
     // The guard may sit between the strip and the frame. Its position is
     // excluded from the predecessor supplied by the caller.

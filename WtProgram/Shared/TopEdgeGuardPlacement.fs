@@ -349,7 +349,9 @@ module TopEdgeGuardPlacement =
         { decision = decision; before = before; after = observe band strip owner rect
           placements = placements; zorders = zorders; succeeded = ok }
 
-    let marginOrder band strip owner =
+    // `others`: the group's strips of the other edges (TopEdgeGuardPolicy.
+    // marginOrderAmong). The forms without it are the one-strip group's.
+    let marginOrderAmong band strip others owner =
         let rec walk hwnd remaining seen windows =
             if hwnd = 0n then true, List.rev windows
             elif remaining = 0 || Set.contains hwnd seen then false, List.rev windows
@@ -358,21 +360,25 @@ module TopEdgeGuardPlacement =
                     { hwnd = hwnd; owner = ownerOf hwnd; topmost = isTopMost hwnd }
                 walk (Native.GetWindow(hwnd, 2u)) (remaining - 1) (Set.add hwnd seen) (w :: windows)
         let complete, windows = walk (Native.GetTopWindow 0n) 4096 Set.empty []
-        TopEdgeGuardPolicy.marginOrder complete band strip owner windows
+        TopEdgeGuardPolicy.marginOrderAmong complete band strip others owner windows
 
-    let marginSafe band strip owner =
-        marginOrder band strip owner = TopEdgeGuardPolicy.Ordered &&
+    let marginOrder band strip owner = marginOrderAmong band strip [] owner
+
+    let marginSafeAmong band strip others owner =
+        marginOrderAmong band strip others owner = TopEdgeGuardPolicy.Ordered &&
         above band = strip && not (isTopMost band)
+
+    let marginSafe band strip owner = marginSafeAmong band strip [] owner
 
     // Only our strip and band are changed. Hide before moving either one:
     // intermediate positions must never let the band intercept tab input.
-    let placeMargin band strip owner rect =
+    let placeMarginAmong band strip others owner rect =
         let before = observe band strip owner rect
         let mutable moves = 0
         let mutable ok = before.ownerReady && before.stripReady
         try
             if ok then
-                match marginOrder band strip owner with
+                match marginOrderAmong band strip others owner with
                 | TopEdgeGuardPolicy.Unproven -> ok <- false
                 | TopEdgeGuardPolicy.Ordered -> ()
                 | TopEdgeGuardPolicy.Before target ->
@@ -392,7 +398,7 @@ module TopEdgeGuardPlacement =
                 else { decision = TopEdgeGuardPolicy.Hidden; before = before
                        after = observe band strip owner rect
                        placements = 0; zorders = 0; succeeded = false }
-            ok <- ok && result.succeeded && marginSafe band strip owner
+            ok <- ok && result.succeeded && marginSafeAmong band strip others owner
             if not ok then hide band
             { result with before = before; after = observe band strip owner rect
                           placements = result.placements + moves
@@ -400,6 +406,8 @@ module TopEdgeGuardPlacement =
         with _ ->
             hide band
             reraise()
+
+    let placeMargin band strip owner rect = placeMarginAmong band strip [] owner rect
 
     // Discover external top frames independently of configured margins. Only
     // visible windows directly owned by this target participate; no class or

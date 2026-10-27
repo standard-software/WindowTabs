@@ -9,18 +9,43 @@ open System.IO
 open System.Windows.Forms
 open Bemo.Win32.Forms
 
-type OleDropTarget(ts:TabStrip) as this=
+module private OleNative =
+    [<System.Runtime.InteropServices.DllImport("ole32.dll")>]
+    extern int RevokeDragDrop(IntPtr hwnd)
+    [<System.Runtime.InteropServices.DllImport("ole32.dll")>]
+    extern void OleUninitialize()
+
+// A strip's window as a place to drop files on a tab (copied or moved into
+// the folder the tab's window shows). The top strip's by default; the strip
+// of another edge passes its window and how to find the tab under a point
+// of it.
+type OleDropTarget(ts:TabStrip, hwnd: IntPtr, tryHit: Pt -> Option<Tab*TabPart>) as this=
     let Cell = CellScope()
     let os = OS()
-    let window = os.windowFromHwnd(ts.hwnd)
+    let window = os.windowFromHwnd(hwnd)
     let rButtonDown = Cell.create(false)
     let lastTabHwndCell = Cell.create(None)
+    let mutable initialized = false
+    let mutable registered = false
 
     do
         
-        Ole2Api.OleInitialize(IntPtr.Zero).ignore
-        Ole2Api.RegisterDragDrop(window.hwnd, this).ignore
+        let result = Ole2Api.OleInitialize(IntPtr.Zero).ToInt64()
+        initialized <- result = 0L || result = 1L
+        registered <- Ole2Api.RegisterDragDrop(window.hwnd, this) = IntPtr.Zero
 
+    new(ts: TabStrip) = OleDropTarget(ts, ts.hwnd, fun pt -> ts.tryHit(pt))
+
+    /// Take the window off as a place to drop on, before it is destroyed.
+    member this.revoke() =
+        try
+            if registered then
+                registered <- false
+                OleNative.RevokeDragDrop(window.hwnd) |> ignore
+        finally
+            if initialized then
+                initialized <- false
+                OleNative.OleUninitialize()
 
     member this.dragEnd() =
         rButtonDown.value <- false
@@ -37,7 +62,7 @@ type OleDropTarget(ts:TabStrip) as this=
             let ptScreen = Pt(pt.x, pt.y)
             let pt = window.ptToClient(Pt(pt.x, pt.y))
 
-            let tabHwnd = ts.tryHit(pt).map(fun(Tab(hwnd),part) -> hwnd)
+            let tabHwnd = tryHit(pt).map(fun(Tab(hwnd),part) -> hwnd)
             let effect = tabHwnd.map <| fun hwnd ->
                 let shellFolder = Shell.getShellFolder hwnd
                 if shellFolder.IsSome then 
@@ -67,7 +92,7 @@ type OleDropTarget(ts:TabStrip) as this=
             let initialEffect = pdwEffect
             let ptScreen = Pt(pt.x, pt.y)
             let pt = window.ptToClient(ptScreen)
-            ts.tryHit(pt).iter <| fun(Tab(hwnd),part) ->
+            tryHit(pt).iter <| fun(Tab(hwnd),part) ->
                 let shellFolder = Shell.getShellFolder hwnd
                 Shell.getShellFolder(hwnd).iter <| fun shellFolder ->
                     let files = List2(OleHelper.QueryFiles(pDataObj))

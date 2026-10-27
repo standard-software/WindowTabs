@@ -97,6 +97,11 @@ type ClosedTabInfo = {
     underlineColor: Color option
     borderColor: Color option
     tabAlign: TabAlign option
+    // The edge the tab was on, in its group. Used by the restore and by
+    // nothing else (1-4-1): unlike the alignment there is no per-window
+    // memory of it, since one window can be on different edges in the
+    // groups of different virtual desktops.
+    tabEdge: TabEdges.Edge
     groupRef: GroupRef
     tabIndex: int
     closedHwnd: IntPtr
@@ -312,6 +317,7 @@ type Program() as this =
     let inSessionEnd = Cell.create(false)
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
+    let pendingDragEdges = Cell.create(Map2<IntPtr, TabEdges.Edge>())
     let pendingDragSnapMargins = Cell.create(Map2<IntPtr, bool>())
     // The lock of the group a tab was dragged out of, waiting for the group
     // it lands in to be created (see IProgram.markDetachedLock).
@@ -464,6 +470,11 @@ type Program() as this =
     let windowPinnedSnapshot = windowPinned.createSnapshot()
     let windowAlignment = Cell.create(Map2() : Map2<IntPtr, TabAlign>)
     let windowAlignmentSnapshot = windowAlignment.createSnapshot()
+    let windowEdges = Cell.create(Map2() : Map2<IntPtr, TabEdges.Edge>)
+    let windowEdgesSnapshot = windowEdges.createSnapshot()
+    // The source edge of a stored alignment can differ from the current edge
+    // during an arrival, so it is separate from windowEdges.
+    let windowAlignmentEdges = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, TabEdges.Edge>()
     // Tab groups per virtual desktop (Shared/VirtualDesktopGroups.fs, and the
     // "Virtual desktops" section below). What the passes have gathered about
     // which windows are shown on all desktops; a plan for new groups waiting
@@ -1106,6 +1117,18 @@ type Program() as this =
                     underlineColor = windowUnderlineColor.value.tryFind(hwnd)
                     borderColor = windowBorderColor.value.tryFind(hwnd)
                     tabAlign = windowAlignment.value.tryFind(hwnd)
+                    // The edge of the tab in its group while it is there;
+                    // one that had already left its group alive (see
+                    // windowLastGroup) keeps the edge remembered then; else
+                    // the edge it left its group from.
+                    tabEdge =
+                        let inGroup (g: IGroup) = this.windowEdgeInGroup(g, hwnd)
+                        match owningGroup with
+                        | Some(g) when g.windows.contains((=) hwnd) -> inGroup g
+                        | owning ->
+                            match windowLastGroup.value.tryFind(hwnd) with
+                            | Some(last) -> last.tabEdge
+                            | None -> owning |> Option.map inGroup |> Option.defaultValue TabEdges.Edge.Top
                     groupRef = LiveStrip(groupHwnd)
                     tabIndex = tabIndex
                     closedHwnd = hwnd
@@ -1366,6 +1389,7 @@ type Program() as this =
                 windowUnderlineColor.map(fun m -> m.remove hwnd)
                 windowBorderColor.map(fun m -> m.remove hwnd)
                 windowAlignment.map(fun m -> m.remove hwnd)
+                windowEdges.map(fun m -> m.remove hwnd)
             claimedWindows.set(claimed)
             closedTabCache.set(remaining)
             this.refreshAmbiguousEntries()
@@ -1471,7 +1495,10 @@ type Program() as this =
             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
             info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
             if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
-            info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
+            windowEdges.map(fun m -> m.add hwnd (this.allowedWindowEdge (info.tabEdge)))
+            info.tabAlign |> Option.iter (fun a ->
+                windowAlignmentEdges.[hwnd] <- info.tabEdge
+                windowAlignment.set(windowAlignment.value.add hwnd a))
             // Remember old->new hwnd so siblings restored later can locate this
             // tab in their close-time order snapshot
             restoredFromMap.[hwnd] <- info.closedHwnd
@@ -1592,7 +1619,10 @@ type Program() as this =
                             info.underlineColor |> Option.iter (fun c -> windowUnderlineColor.set(windowUnderlineColor.value.add hwnd c))
                             info.borderColor |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
                             if info.isPinned then windowPinned.set(windowPinned.value.add hwnd)
-                            info.tabAlign |> Option.iter (fun a -> windowAlignment.set(windowAlignment.value.add hwnd a))
+                            windowEdges.map(fun m -> m.add hwnd (this.allowedWindowEdge (info.tabEdge)))
+                            info.tabAlign |> Option.iter (fun a ->
+                                windowAlignmentEdges.[hwnd] <- info.tabEdge
+                                windowAlignment.set(windowAlignment.value.add hwnd a))
                             restoredFromMap.[hwnd] <- info.closedHwnd
                             match this.groupOfWindow hwnd with
                             | Some(g) ->
@@ -1642,8 +1672,17 @@ type Program() as this =
                                             // holding the alignment this window had inherited
                                             // when it was auto-grouped, so the tab looked right
                                             // but came back right-aligned after the NEXT restart.
-                                            match info.tabAlign with
+                                            // The saved edge - used here, by the
+                                            // restore, and nowhere else (1-4-1);
+                                            // an edge no longer allowed gives way
+                                            // to the first allowed one (1-5).
+                                            let restoredEdge = TabEdges.fallback wg.ts.allowedEdges info.tabEdge
+                                            if restoredEdge <> wg.tabEdge(hwnd) then wg.setTabEdge(hwnd, restoredEdge)
+                                            match TabEdges.alignmentOnArrival (Some info.tabEdge) restoredEdge info.tabAlign with
                                             | Some a -> wg.setTabAlign(hwnd, a)
+                                            | None when info.tabEdge <> restoredEdge ->
+                                                wg.ts.clearTabAlign(tab)
+                                                Services.program.setWindowAlignment(hwnd, None)
                                             | None when replaceCurrentState -> wg.ts.clearTabAlign(tab)
                                             | None -> ()
                                             // Alignment and pin first, always,
@@ -2077,6 +2116,8 @@ type Program() as this =
                     // instead, for the destroy that may follow.
                     if window.isWindow.not then
                         if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
+                        windowAlignmentEdges.TryRemove(hwnd) |> ignore
+                        windowEdges.map(fun m -> m.remove hwnd)
                         claimedWindows.map(ClosedTabClaim.forget hwnd)
                         pendingLinkedRestores.map(Set.remove hwnd)
                         pendingClosedTabRestores.map(fun m -> m.remove hwnd)
@@ -2119,6 +2160,7 @@ type Program() as this =
                             underlineColor = windowUnderlineColor.value.tryFind(hwnd)
                             borderColor = windowBorderColor.value.tryFind(hwnd)
                             tabAlign = windowAlignment.value.tryFind(hwnd)
+                            tabEdge = this.windowEdgeInGroup(gi, hwnd)
                             groupRef = LiveStrip(groupHwnd)
                             tabIndex = ownIndex
                             closedHwnd = hwnd
@@ -2228,6 +2270,8 @@ type Program() as this =
         let withDelay = not isDropped && isNewGroup && delayTabExeNames.contains(window.pid.exeName)
         // Consume only the snap-drag metadata; keep the normal drop/regroup,
         // closed-tab and saved-alignment path for single-tab detach.
+        let detachedEdge = pendingDragEdges.value.tryFind(hwnd)
+        pendingDragEdges.map(fun m -> m.remove hwnd)
         let snapMargin = pendingDragSnapMargins.value.tryFind(hwnd)
         pendingDragSnapMargins.map(fun m -> m.remove hwnd)
         if isNewGroup then snapMargin |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
@@ -2298,24 +2342,29 @@ type Program() as this =
                     if linked then
                         addLinked(fun () ->
                             wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                               pinned=wg.ts.isPinned(invoker), after=invokerHwnd))
+                                               pinned=wg.ts.isPinned(invoker), after=invokerHwnd, edge=wg.ts.edgeOf invoker))
                     else
                         wg.addWindow(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
-                                     pinned=wg.ts.isPinned(invoker), after=invokerHwnd)
+                                     pinned=wg.ts.isPinned(invoker), after=invokerHwnd, edge=wg.ts.edgeOf invoker)
                 else
+                    let edge =
+                        (if isDropped then detachedEdge else None)
+                        |> Option.orElseWith (fun () -> returningState |> Option.map (fun info -> info.tabEdge))
+                        |> Option.map (TabEdges.fallback wg.ts.allowedEdges)
+                        |> Option.defaultValue wg.joinEdge
                     let alignment =
                         match returningState with
                         | Some info -> info.tabAlign
                         | None ->
                             savedAlign |> Option.orElseWith (fun () ->
                                 if isNewGroup then None
-                                else wg.ts.visualOrder.list |> List.tryLast |> Option.map wg.ts.getTabAlign)
+                                else wg.ts.visualOrder.list |> List.filter (fun t -> wg.ts.edgeOf t = edge) |> List.tryLast |> Option.map wg.ts.getTabAlign)
                     let pinned = returningState |> Option.map (fun info -> info.isPinned)
                     if linked then
                         addLinked(fun () ->
-                            wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
+                            wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder, edge=edge))
                     else
-                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder))
+                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder, edge=edge))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
         if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
@@ -2327,9 +2376,12 @@ type Program() as this =
                     let tabs = wg.ts.visualOrder
                     let newTab = Tab(hwnd)
                     // Find the rightmost tab of the same exe (excluding the new tab)
+                    // - on the new tab's own edge: a tab of another strip is
+                    // not beside it.
+                    let newEdge = wg.ts.edgeOf newTab
                     let mutable lastSameExeIdx = -1
                     tabs.iteri(fun i t ->
-                        if t <> newTab then
+                        if t <> newTab && wg.ts.edgeOf t = newEdge then
                             try
                                 let (Tab thwnd) = t
                                 let otherProcPath = os.windowFromHwnd(thwnd).pid.processPath
@@ -2399,7 +2451,7 @@ type Program() as this =
                 gi.invokeGroup <| fun() ->
                     try
                         let wg = gi.group
-                        // The add used the final alignment, pin and saved slot.
+                        // The add used the final edge, alignment, pin and saved slot.
                         if isSavedGroup then
                             RestoreTrace.log (fun () -> sprintf "  place(early) hwnd=%X rank=%d order=%s"
                                                               (hwnd.ToInt64()) info.tabIndex
@@ -2449,6 +2501,8 @@ type Program() as this =
                     // first has a place remembered for it; the second has no
                     // snapshot and is not worth a line.
                     this.recordClosedTabFromLastGroup(hwnd))
+                windowAlignmentEdges.TryRemove(hwnd) |> ignore
+                windowEdges.map(fun m -> m.remove hwnd)
                 windowLastGroup.map(fun m -> m.remove hwnd)
                 lateMissLogged.Remove(hwnd) |> ignore
                 windowInfoCache.map(fun m -> m.remove hwnd)
@@ -2793,6 +2847,8 @@ type Program() as this =
     /// copies a tab from the maps (a drag into another group, a closed tab's
     /// record, the save) then copies this desktop's.
     member private this.publishTabState(g: IGroup, hwnd: IntPtr) =
+        if os.windowFromHwnd(hwnd).isWindow && g.visualOrderThreadSafe.contains((=) hwnd) then
+            windowEdges.map(fun m -> m.add hwnd (this.allowedWindowEdge (g.tabEdgeThreadSafe(hwnd))))
         if g.isPinnedThreadSafe(hwnd) then windowPinned.set(windowPinned.value.add hwnd)
         else windowPinned.set(windowPinned.value.remove hwnd)
         match g.explicitTabAlign(hwnd) with
@@ -3178,6 +3234,7 @@ type Program() as this =
             underlineColor = e.underlineColor |> Option.map colorToRRGGBBAA
             borderColor = e.borderColor |> Option.map colorToRRGGBBAA
             align = e.tabAlign |> Option.map savedAlignOfTabAlign
+            edge = TabEdges.savedOfEdge e.tabEdge
             seedSince = Some(e.seedSince |> Option.defaultValue DateTime.Now)
             // Read back as a tab the user closed, not as a window still
             // waiting to start: only an exact title match may claim one of
@@ -3187,10 +3244,22 @@ type Program() as this =
             // had closed a week earlier.
             closedByUser = e.isRestoreSeed.not }
 
+    member private this.allowedWindowEdge(edge) =
+        let allowed = try TabEdgeSettings.allowedOf settingsManager.settingsJsonReadOnly with _ -> TabEdges.topOnly
+        TabEdges.fallback allowed edge
+
+    member private this.windowEdgeInGroup(g: IGroup, hwnd: IntPtr) =
+        let edge =
+            if (VirtualDesktopGroups.Live.shared()).Contains hwnd &&
+               (this.desktop.groups.list |> List.filter (fun group -> group.windows.contains((=) hwnd)) |> List.length) > 1 then
+                try g.tabEdgeThreadSafe(hwnd) with _ -> TabEdges.Edge.Top
+            else windowEdges.value.tryFind(hwnd) |> Option.defaultValue TabEdges.Edge.Top
+        this.allowedWindowEdge edge
+
     // One live window as the file records it, and None for a handle that is no
     // longer a window - the one thing here that cannot be decided without
     // asking Windows, which is why the save takes this as a function.
-    member private this.savedTabOfWindow(hwnd: IntPtr) =
+    member private this.savedTabOfWindow allowed (hwnd: IntPtr) =
         let window = os.windowFromHwnd(hwnd)
         if window.isWindow.not then None else
         // The window's identity goes in as well as its handle. A handle is
@@ -3215,6 +3284,7 @@ type Program() as this =
                  windowTitle = (if title <> "" then Some(normalizeClosedTabTitle title) else None)
                  rect = rect
                  renamedTabName = windowNameOverride.value.tryFind(hwnd) |> Option.bind id
+                 edge = TabEdges.savedOfEdge (TabEdges.fallback allowed (windowEdges.value.tryFind(hwnd) |> Option.defaultValue TabEdges.Edge.Top))
                  isPinned = windowPinned.value.contains(hwnd)
                  fillColor = windowFillColor.value.tryFind(hwnd) |> Option.map colorToRRGGBBAA
                  underlineColor = windowUnderlineColor.value.tryFind(hwnd) |> Option.map colorToRRGGBBAA
@@ -3243,6 +3313,7 @@ type Program() as this =
         if needsRestoreOnStartup.value then () else
         try
             let json = settingsManager.settingsJson
+            let allowed = try TabEdgeSettings.allowedOf json with _ -> TabEdges.topOnly
             let saveNow = DateTime.Now
             this.refreshAmbiguousEntries()
             // Saved windows whose application has not started yet are held in
@@ -3275,9 +3346,11 @@ type Program() as this =
             let keeps, marked =
                 this.savedMembers (groupsNow |> List.map (fun gi -> gi, gi.visualOrderThreadSafe.list @ gi.visualOrder.list))
             let stateIn (gi: IGroup) hwnd =
-                this.savedTabOfWindow hwnd
+                this.savedTabOfWindow allowed hwnd
                 |> Option.map (fun t ->
-                    if marked.Contains hwnd then { t with onAllDesktops = true; isPinned = gi.isPinnedThreadSafe(hwnd) }
+                    if marked.Contains hwnd then
+                        { t with onAllDesktops = true; isPinned = gi.isPinnedThreadSafe(hwnd)
+                                 edge = TabEdges.savedOfEdge (TabEdges.fallback allowed (try gi.tabEdgeThreadSafe(hwnd) with _ -> TabEdges.Edge.Top)) }
                     else t)
             let liveGroups =
                 groupsNow
@@ -3351,7 +3424,7 @@ type Program() as this =
                         Some(group))
             json.addOrUpdate("SavedTabGroupsForRestart",
                              SavedSession.writeEach
-                                 (liveGroups @ (waitingGroups |> List.map (fun g -> g, this.savedTabOfWindow))))
+                                 (liveGroups @ (waitingGroups |> List.map (fun g -> g, this.savedTabOfWindow allowed))))
             settingsManager.settingsJson <- json
         with
         | _ -> ()
@@ -3529,8 +3602,18 @@ type Program() as this =
                         (not (this.isInGroup(hwnd)) || VirtualDesktopGroups.Live.accepts readAt)
                     | None -> false
 
+                // The edges tabs may use now. A tab saved on an edge that is
+                // no longer allowed comes back after the tabs already on the
+                // edge it moves to (1-5, TabEdges.residentsFirst): the matched
+                // windows join in that order, and the windows still to come
+                // are placed against an order that says so.
+                let restoreAllowed = try TabEdgeSettings.allowedOf Services.settings.root with _ -> TabEdges.topOnly
+
                 for (gi, g) in List.indexed planned do
-                    let matched = g.tabs |> List.filter (fun t -> t.live.IsSome && goesInto gi t.live.Value)
+                    let matched =
+                        g.tabs
+                        |> List.filter (fun t -> t.live.IsSome && goesInto gi t.live.Value)
+                        |> TabEdges.residentsFirst restoreAllowed (fun t -> TabEdges.edgeOfSaved t.applied.edge)
 #if DEBUG
                     for ti,t in List.indexed g.tabs do
                         if t.live.IsSome && not (matched |> List.exists (fun x -> x.rank = t.rank)) then
@@ -3567,7 +3650,9 @@ type Program() as this =
                             |> Option.iter (fun c -> windowBorderColor.set(windowBorderColor.value.add hwnd c))
                             if e.isPinned then
                                 windowPinned.set(windowPinned.value.add hwnd)
+                            windowEdges.map(fun m -> m.add hwnd (this.allowedWindowEdge (TabEdges.edgeOfSaved e.edge)))
                             e.align |> Option.iter (fun a ->
+                                windowAlignmentEdges.[hwnd] <- TabEdges.edgeOfSaved e.edge
                                 windowAlignment.set(windowAlignment.value.add hwnd (tabAlignOfSavedAlign a)))
                             // Identity-matched window: remember new -> old
                             // handle, so a sibling restored later can find
@@ -3590,7 +3675,7 @@ type Program() as this =
                                     groupInfo.addWindowWith(hwnd, fun wg ->
                                         try
                                             wg.addWindow(hwnd, false, ?alignment=(e.align |> Option.map tabAlignOfSavedAlign),
-                                                         pinned=e.isPinned)
+                                                         pinned=e.isPinned, edge=TabEdges.edgeOfSaved e.edge)
 #if DEBUG
                                             let placed = wg.windows.contains(hwnd)
                                             RestoreTrace.log (fun () -> sprintf "restore-placement group=%d rank=%d hwnd=%X placed=%b" gi t.rank (hwnd.ToInt64()) placed)
@@ -3637,6 +3722,11 @@ type Program() as this =
                         // unique token; the order snapshot is the saved order
                         // in old handles, which the arrival resolves through
                         // restoredFromMap.
+                        let savedEdges = g.tabs |> List.map (fun t -> t.saved.hwnd, TabEdges.edgeOfSaved t.saved.edge) |> Map.ofList
+                        let restoreOrder =
+                            g.savedOrder
+                            |> TabEdges.residentsFirst restoreAllowed (fun h ->
+                                Map.tryFind h savedEdges |> Option.defaultValue TabEdges.Edge.Top)
                         g.tabs |> List.iter (fun t ->
                             let e = t.saved
                             let byUser = e.closedByUser
@@ -3682,6 +3772,7 @@ type Program() as this =
                                         underlineColor = p.tab.underlineColor |> Option.bind parseColorRRGGBBAA
                                         borderColor = p.tab.borderColor |> Option.bind parseColorRRGGBBAA
                                         tabAlign = p.tab.align |> Option.map tabAlignOfSavedAlign
+                                        tabEdge = TabEdges.edgeOfSaved p.tab.edge
                                         groupRef = SavedToken(g.token)
                                         tabIndex = p.rank
                                         closedHwnd = p.tab.hwnd
@@ -3697,7 +3788,7 @@ type Program() as this =
                                         savedGroupIndex = Some gi
                                         savedDesktop = RestorePosition.desktop g.desktop
                                         seedSince = p.tab.seedSince
-                                        orderSnapshot = g.savedOrder
+                                        orderSnapshot = restoreOrder
                                         stateIsCertain = t.stateIsCertain
                                     }
                                     RestoreTrace.log (fun () -> sprintf "  %s rank=%d token=%X unique=%b align=%A pin=%b"
@@ -3872,6 +3963,21 @@ type Program() as this =
         member x.getWindowAlignment(hwnd) =
             (readSnapshot windowAlignment windowAlignmentSnapshot).tryFind(hwnd)
 
+        member x.setWindowEdge(hwnd, edge) =
+            if os.windowFromHwnd(hwnd).isWindow then
+                windowEdges.map(fun m -> m.add hwnd edge)
+
+        member x.getWindowEdge(hwnd) =
+            (readSnapshot windowEdges windowEdgesSnapshot).tryFind(hwnd) |> Option.defaultValue TabEdges.Edge.Top
+
+        member x.getWindowAlignmentEdge(hwnd) =
+            match windowAlignmentEdges.TryGetValue(hwnd) with
+            | true, edge -> Some edge
+            | _ -> None
+
+        member x.setWindowAlignmentEdge(hwnd, edge) =
+            windowAlignmentEdges.[hwnd] <- edge
+
         member x.appWindows =
             os.windowsInZorder.where(this.isAppWindow).map(fun w -> w.hwnd)
 
@@ -4015,7 +4121,7 @@ type Program() as this =
                 let groupsNow = this.desktop.groups.list
                 let members = groupsNow |> List.map (fun gi ->
                     gi, SavedSession.mergedOrder gi.visualOrderThreadSafe.list gi.visualOrder.list)
-                let keeps, _ = this.savedMembers members
+                let keeps, marked = this.savedMembers members
                 let groupConfigs =
                     members |> List.mapi (fun i (gi, order) ->
                         let inStrip = gi.visualOrderThreadSafe.list |> Set.ofList
@@ -4023,6 +4129,7 @@ type Program() as this =
                             // Freeze each group's own state before its strip is destroyed.
                             // Global maps describe only the last group of a shared window.
                             { SavedTabState.ofHwnd hwnd with
+                                edge = TabEdges.savedOfEdge (this.allowedWindowEdge (if marked.Contains hwnd then (try gi.tabEdgeThreadSafe(hwnd) with _ -> TabEdges.Edge.Top) else windowEdges.value.tryFind(hwnd) |> Option.defaultValue TabEdges.Edge.Top))
                                 // A reserved arrival may not have reached the strip yet.
                                 isPinned = if inStrip.Contains hwnd then gi.isPinnedThreadSafe(hwnd) else windowPinned.value.contains(hwnd)
                                 align = (if inStrip.Contains hwnd then gi.explicitTabAlign(hwnd) else windowAlignment.value.tryFind(hwnd)) |> Option.map savedAlignOfTabAlign
@@ -4082,6 +4189,8 @@ type Program() as this =
                         let keep = VirtualDesktopGroups.keepOnReenable false window.isWindow false false
                         if not keep then trace rank tab.hwnd "destroyed"
                         keep)
+                    let allowed = try TabEdgeSettings.allowedOf Services.settings.root with _ -> TabEdges.topOnly
+                    let valid = valid |> TabEdges.residentsFirst allowed (fun (_, tab) -> TabEdges.edgeOfSaved tab.edge)
                     if not valid.IsEmpty then
                         let group = Services.desktop.createGroup()
                         group.perGroupTabPositionValue <- savedTabPos
@@ -4100,8 +4209,10 @@ type Program() as this =
                                         trace rank tab.hwnd "destroyed-before-add"
                                     else
                                         try
+                                            windowAlignmentEdges.[tab.hwnd] <- TabEdges.edgeOfSaved tab.edge
                                             wg.addWindowPlaced(tab.hwnd, false, false,
-                                                ?alignment=(tab.align |> Option.map tabAlignOfSavedAlign), pinned=tab.isPinned)
+                                                ?alignment=(tab.align |> Option.map tabAlignOfSavedAlign), pinned=tab.isPinned,
+                                                edge=TabEdges.edgeOfSaved tab.edge)
                                             // None also has meaning: clear another desktop's state.
                                             if tab.align.IsNone then
                                                 wg.ts.clearTabAlign(Tab(tab.hwnd))
@@ -4182,7 +4293,11 @@ type Program() as this =
                 hwnds |> List.fold (fun acc h -> acc.add h now) m)
 
     interface IDesktopNotification with
-        member x.dragDrop(hwnd, snapMargin) =
+        member x.dragDrop(hwnd, snapMargin, edge) =
+            pendingDragEdges.map(fun m ->
+                match edge with
+                | Some value -> m.add hwnd value
+                | None -> m.remove hwnd)
             DragTrace.log (fun () -> sprintf "Program.dragDrop: hwnd=%X" (hwnd.ToInt64()))
             pendingDragSnapMargins.map <| fun m ->
                 match snapMargin with

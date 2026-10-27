@@ -1,4 +1,4 @@
-﻿namespace Bemo
+namespace Bemo
 open System
 open System.Drawing
 open System.Windows.Forms
@@ -169,6 +169,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     let os = OS()
     let Cell = CellScope(false, true)
+    let readHideSettings () =
+        let root = Services.settings.root
+        TabEdges.priority |> List.map (fun edge -> edge, TabEdgeSettings.hideSettings root edge) |> Map.ofList
+    let edgeHideSettings = Cell.create(readHideSettings ())
     let isDraggingCell = Cell.create(false)
     let dragInfoCell = Cell.create(None)
     let dragPtCell = Cell.create(Pt.empty)
@@ -176,6 +180,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let mouseEvent = Event<IntPtr * MouseButton * TabPart * MouseAction * Pt>()
     let _ts = TabStrip(this :> ITabStripMonitor)
     // State for suppressing hover-driven reveal after an icon click.
+    let edgeIconProtection = System.Collections.Generic.Dictionary<TabEdges.Edge, System.DateTime>()
     let hiddenByIconClick = ref false
     let iconClickProtectUntil = ref System.DateTime.MinValue
     let iconClickHideProtection = System.TimeSpan.FromSeconds(1.0)
@@ -209,6 +214,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     let guardUpdates = TopEdgeGuardPolicy.UpdateQueue()
     let guardRepairTimer = new System.Windows.Forms.Timer(Interval = 50)
     let mutable menuLinkGeneration = 0
+    // The settings file's own values for each allowed edge other than the
+    // top (TabEdgeSettings), read with the allowed edges: when the group
+    // starts and whenever the dialog changes them.
+    let mutable edgeValues : Map<TabEdges.Edge, TabEdgeSettings.EdgeValues> = Map.empty
+    // The windows of the other edges as registered for drops and files,
+    // taken off again as the strip destroys them.
+    let mutable edgeRegistrations : (IntPtr * OleDropTarget option) list = []
 
     // Explorer-like selection: was the MouseDown'd tab already part of the
     // selection (or the active tab)? If yes, MouseUp / dragEnd without drag
@@ -217,6 +229,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // Drag origin tab — set on MouseDown so dragBegin can compute the
     // contiguous selected range and set ts.dragGroup before slide rendering
     // starts. Cleared in dragEnd.
+    // Only the source session owns these; foreign groups keep transferOrder.
+    let mutable foreignDragFront : (IntPtr * IntPtr list) option = None
+    let mutable pendingHoverRestore : (unit -> unit) option = None
+    let mutable ownDragBlock : Tab list option = None
+    let mutable restoreOwnRemainder : unit -> unit = ignore
     let mouseDownTab : Tab option ref = ref None
 
     do this.init()
@@ -590,12 +607,38 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.init() =
         Services.registerLocal(_ts)
+        // The edges tabs may use, from the settings file. Read before the
+        // group can take a window: a joining tab's edge depends on them.
+        let settingsRoot = try Services.settings.root with _ -> Newtonsoft.Json.Linq.JObject()
+        let allowed = try TabEdgeSettings.allowedOf settingsRoot with _ -> TabEdges.topOnly
+        this.ts.setAllowedEdges(allowed)
+        this.readEdgeValues settingsRoot allowed
         group.init(this.ts)
         // Register this decorator in the global registry
         lock decorators (fun () -> decorators.[group.hwnd] <- this)
 
         Services.dragDrop.registerTarget(this.ts.hwnd, this:>IDragDropTarget)
-    
+
+        // A window for each other allowed edge, registered as a place to drop
+        // on from the start: a drag takes its list of targets when it begins,
+        // so a strip made later could not take part in it. Nothing is made
+        // while the top edge is the only one.
+        this.addEdgeWindows()
+        // Taken off again while the windows still exist: the strip forgets
+        // them as it destroys them, and the group's exit comes after that.
+        // (Nothing to take off while the top edge is the only one.)
+        this.ts.destroying.Add <| fun () ->
+            for (hwnd, ole) in edgeRegistrations do
+                (try Services.dragDrop.unregisterTarget(hwnd) with _ -> ())
+                ole |> Option.iter (fun o -> try o.revoke() with _ -> ())
+            edgeRegistrations <- []
+        // The dialog's changes to the edges reach the group here, as its
+        // changes to the top edge's appearance do through "tabAppearance".
+        let edgeSettingsChanged =
+            TabEdgeSettings.changed.Publish.Subscribe(fun () ->
+                this.invokeAsync (fun () -> this.applyEdgeSettings()))
+        group.exited.Add <| fun () -> edgeSettingsChanged.Dispose()
+
         dropTarget.set(Some(OleDropTarget(this.ts)))
         
         this.initAutoHide()
@@ -660,15 +703,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             | MouseDown, MouseLeft ->
                 // This event runs before tab activation. Hide immediately only
                 // when the pressed icon belongs to the already-active tab.
-                let autoHideIconClick = group.bb.read("autoHideDoubleClick", false)
+                let autoHideIconClick =
+                    if TabEdges.isTopOnly this.ts.allowedEdges then group.bb.read("autoHideDoubleClick", false)
+                    else fst edgeHideSettings.value.[this.ts.edgeOf (Tab(hwnd))] = "doubleclick"
                 if TabBehaviorPolicy.hideFromIconMouseDown
-                       autoHideIconClick (hwnd = group.topWindow) (part = TabIcon) then
-                    hiddenByIconClick := true
-                    // Ignore hover/move-driven reveal immediately after the
-                    // strip disappears beneath the pointer.
-                    iconClickProtectUntil := System.DateTime.Now.Add(iconClickHideProtection)
-                    group.invokeAsync <| fun() ->
-                        this.ts.isShrunk <- true
+                       autoHideIconClick (hwnd = group.topWindow) (part = TabIcon)
+                   && (TabEdges.isTopOnly this.ts.allowedEdges
+                       || this.ts.isInsideOn (this.ts.edgeOf (Tab(hwnd)))) then
+                    if TabEdges.isTopOnly this.ts.allowedEdges then
+                        hiddenByIconClick := true
+                        // Ignore hover-driven reveal immediately after hiding.
+                        iconClickProtectUntil := System.DateTime.Now.Add(iconClickHideProtection)
+                        group.invokeAsync <| fun() -> this.ts.isShrunk <- true
+                    else
+                        let edge = this.ts.edgeOf (Tab(hwnd))
+                        edgeIconProtection.[edge] <- System.DateTime.Now.Add(iconClickHideProtection)
+                        group.invokeAsync <| fun() ->
+                            if not (TabEdges.isTopOnly this.ts.allowedEdges) then
+                                this.ts.setShrunkOn(edge, true)
                 capturedHwnd := Some(hwnd)
                 // Track the first click for double-click detection
                 // Only set if it's the active tab to ensure double-click only works on already active tabs
@@ -677,7 +729,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 else
                     firstClickTab := None
             | MouseUp, MouseRight ->
-                let ptScreen = os.windowFromHwnd(group.hwnd).ptToScreen(pt)
+                // From the strip the tab is on (the top strip's is group.hwnd).
+                let ptScreen = this.ts.screenPointOf(Tab(hwnd), pt)
                 // ONE scale for the whole menu, decided from the point the menu
                 // is anchored at and handed to both the item bitmaps (which
                 // Win32Menu resizes) and the swatches this decorator paints.
@@ -709,6 +762,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         group.bounds.changed.Add <| fun() ->
             this.updateTsPlacement()
 
+        // With tabs on several edges a tab coming or going can empty or fill
+        // the top strip, which moves the corner a side strip starts at and
+        // changes what the top edge guard stands on. (The edges can be
+        // changed in the dialog while the group lives, so asked each time.)
+        group.added.Add <| fun _ ->
+            if not (TabEdges.isTopOnly this.ts.allowedEdges) then this.invokeAsync (fun () -> this.updateTsPlacement())
+        group.removed.Add <| fun _ ->
+            if not (TabEdges.isTopOnly this.ts.allowedEdges) then this.invokeAsync (fun () -> this.updateTsPlacement())
+
         // Update placement when tab appearance changes (for height and indent values)
         Services.settings.notifyValue "tabAppearance" <| fun(_) ->
             this.invokeAsync <| fun() ->
@@ -732,20 +794,111 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         group.foregroundChanged.Add <| fun() ->
             if group.lockWindowPosition then this.queueTopEdgeGuard()
 
+        // Without tabs on the top edge the band is kept off a fullscreen
+        // window as well (TopEdgeGuardPolicy.wantedFor).
         group.isFullscreen.changed.Add <| fun() ->
             if group.lockWindowPosition then this.queueTopEdgeGuard()
 
         group.exited.Add <| fun() ->
             Services.dragDrop.unregisterTarget(this.ts.hwnd)
+            // The other edges' strips were taken off as they were destroyed
+            // (ts.destroying, see init).
             guardRepairTimer.Stop()
             guardRepairTimer.Dispose()
             guardUpdates.Dispose()
             topEdgeGuard.dispose()
-    
 
+
+    // The strip of another edge as a place to drop on. Its points come in
+    // its own window's coordinates and go on as the strip lays its tabs out
+    // (along it, then across). The start and end of a drag are the group's
+    // and reach it once, through the top strip's registration.
+    member private this.edgeDropTarget (edge: TabEdges.Edge) : IDragDropTarget =
+        let logical (pt: Pt) =
+            let bounds = os.windowFromHwnd(this.ts.hwndOf edge).bounds
+            if TabEdges.runsHorizontally edge then Pt(max 0 (min (max 0 (bounds.width - 1)) pt.x), pt.y)
+            else Pt(max 0 (min (max 0 (bounds.height - 1)) pt.y), pt.x)
+        { new IDragDropTarget with
+            member x.dragBegin() = ()
+            member x.dragEnd() = ()
+            member x.dragEnter data pt =
+                let logicalPt = group.invokeSync (fun () -> logical pt)
+                this.dragEnterOn(edge, data, logicalPt)
+            member x.dragMove pt =
+                group.invokeSync (fun () ->
+                    // Body routing supplies a real off-strip point. Never turn
+                    // it into a synthetic hover over a scroll button.
+                    let strip = os.windowFromHwnd(this.ts.hwndOf edge)
+                    if strip.bounds.containsPoint(strip.ptToScreen pt) then
+                        this.ts.dragScrollAcross(edge, pt, System.Diagnostics.Stopwatch.GetTimestamp() * 1000L / System.Diagnostics.Stopwatch.Frequency)
+                    else this.ts.stopDragScroll()
+                    this.dragMoveOn(logical pt))
+            member x.dragExit() =
+                group.invokeSync(fun () -> this.ts.stopDragScroll())
+                this.dragExitOn()
+          interface IGroupDragTarget with
+            member x.group = box this
+            member x.runsAcross = TabEdges.runsHorizontally edge
+          }
+
+    // The values of the allowed edges other than the top, and the top edge's
+    // own [right] distances, as the settings file has them now.
+    member private this.readEdgeValues (root: Newtonsoft.Json.Linq.JObject) (allowed: TabEdges.Allowed) =
+        edgeValues <-
+            TabEdges.edgesOf allowed
+            |> List.filter ((<>) TabEdges.Edge.Top)
+            |> List.map (fun edge -> edge, TabEdgeSettings.valuesOf root edge)
+            |> Map.ofList
+        let defaults =
+            [ TabEdges.Edge.Left; TabEdges.Edge.Right; TabEdges.Edge.Bottom ]
+            |> List.map (fun edge ->
+                let layout = TabEdgeSettings.edgeLayout root edge
+                edge, (if layout.defaultAlign = TabEdges.AlignStart then TopLeft else TopRight))
+            |> Map.ofList
+        this.ts.setEdgeDefaultAlignments(defaults)
+
+    // A window for each allowed edge other than the top that has none yet,
+    // registered for drops and for files dropped on its tabs.
+    member private this.addEdgeWindows() =
+        let existing = this.ts.edgeHwnds
+        for edge in edgeValues |> Map.toList |> List.map fst do
+            let hwnd = this.ts.addEdge(edge)
+            if not (List.contains hwnd existing) then
+                Services.dragDrop.registerTarget(hwnd, this.edgeDropTarget edge)
+                // Files dropped on a tab of this strip, as on the top strip's.
+                let ole = try Some(OleDropTarget(this.ts, hwnd, fun pt -> this.ts.tryHitOn(edge, pt))) with _ -> None
+                edgeRegistrations <- edgeRegistrations @ [ hwnd, ole ]
+
+    // The dialog changed the edges (TabEdgeSettings.changed); on this
+    // group's thread. A newly checked edge gets its strip; the tabs of an
+    // edge no longer checked go to the first checked edge in priority order,
+    // behind the tabs already there, in their order and with their pin,
+    // using the destination default, one unchecked edge at a time;
+    // the strips are placed again with the edges' new values. The strip of
+    // an unchecked edge stays, empty and hidden: the drag of a group that is
+    // under way holds the targets it began with.
+    member private this.applyEdgeSettings() =
+        try
+            let root = Services.settings.root
+            let before = this.ts.allowedEdges
+            let allowed = try TabEdgeSettings.allowedOf root with _ -> TabEdges.topOnly
+            this.ts.setAllowedEdges(allowed)
+            this.readEdgeValues root allowed
+            this.addEdgeWindows()
+            if allowed <> before then this.ts.moveOffUnchecked(allowed)
+            this.updateTsPlacement()
+        with ex ->
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine(sprintf "Applying edge settings failed: %s" (ex.ToString()))
+#endif
+            ()
+
+    // Along a strip written across, a tab grabbed on a longer tab is slid
+    // by the middle of its row (TabStrip.alongOffset); on every other strip
+    // by the offset it was grabbed at, as always.
     member private this.tabSlide =
         dragInfoCell.value.map <| fun dragInfo ->
-                dragInfo.tab, dragPtCell.value.sub(dragInfo.tabOffset).x
+                this.ts.slideFromPointer(dragInfo.tab, dragPtCell.value, dragInfo.tabOffset)
 
     member private this.updateTsSlide() =
         this.ts.slide <- this.tabSlide
@@ -759,10 +912,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.updateTopEdgeGuard() =
         try
+            // A group whose tabs are all on other edges has no top strip to
+            // show, and the band still guards the top border (7-3).
+            let view =
+                if this.ts.topShows then TopEdgeGuardPolicy.TopStrip(this.ts.showInside,
+                    this.ts.visible || (group.bounds.value.IsSome && os.foreground.hwnd <> group.topWindow))
+                else TopEdgeGuardPolicy.NoTopTabs
             let wanted =
-                TopEdgeGuardPolicy.wanted group.lockWindowPosition group.bounds.value.IsSome
-                    group.isInMoveSizeThreadSafe this.ts.showInside group.isFullscreen.value
-                    (this.ts.visible || (group.bounds.value.IsSome && os.foreground.hwnd <> group.topWindow))
+                TopEdgeGuardPolicy.wantedFor group.lockWindowPosition group.bounds.value.IsSome
+                    group.isInMoveSizeThreadSafe group.isFullscreen.value view
                 // A group of another virtual desktop guards nothing: a window
                 // shown on all desktops is guarded by the lock of the group of
                 // the desktop being looked at, and only by that one.
@@ -783,30 +941,161 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 | _ -> 0
             topEdgeGuard.update(wanted, ownerHwnd, group.bounds.value,
                                 marginTop, (ownerHwnd <> IntPtr.Zero && os.windowFromHwnd(ownerHwnd).isTopMost), not group.isInMoveSizeThreadSafe,
-                                this.ts.showInside, this.ts.hwnd,
+                                TopEdgeGuardPolicy.behindStrip view, this.ts.hwnd,
                                 ?ownerBounds=(if wanted then group.visibleBodyBounds(ownerHwnd) else None))
         with _ -> topEdgeGuard.hide()
 
-    member private this.updateTsPlacement() = this.ts.batch <| fun () ->
-        if group.bounds.value.IsNone then
-            this.ts.visible <- false
-        else
-            // Appearance and placement are pushed together, from ONE scale
-            // query, so the strip box and the metrics inside it can never
-            // belong to different monitors. Pushing the appearance on every
-            // update (not only when the user edits the settings) is what makes
-            // dragging a window to a monitor with a different scale re-lay-out
-            // the tabs instead of just resizing the box around stale metrics.
-            let placement = this.placement
-            this.ts.setTabAppearance(group.tabAppearanceAt placement.scale, placement.scale)
-            this.ts.setPlacement(placement)
-            // WindowGroup is the single owner of visibility policy. Keeping
-            // placement updates on the same decision prevents move-state races.
-            this.ts.visible <- group.shouldShowTabs
-            
-            group.repairStripZorder("placement")
+    member private this.updateTsPlacement() =
+        this.ts.batch (fun () ->
+            if group.bounds.value.IsNone then
+                this.ts.visible <- false
+            else
+                // Appearance and placement are pushed together, from ONE scale
+                // query, so the strip box and the metrics inside it can never
+                // belong to different monitors. Pushing the appearance on every
+                // update (not only when the user edits the settings) is what makes
+                // dragging a window to a monitor with a different scale re-lay-out
+                // the tabs instead of just resizing the box around stale metrics.
+                let placement = this.placement
+                this.ts.setTabAppearance(group.tabAppearanceAt placement.scale, placement.scale)
+                this.ts.setPlacement(placement)
+                // WindowGroup is the single owner of visibility policy. Keeping
+                // placement updates on the same decision prevents move-state races.
+                this.ts.visible <- group.shouldShowTabs
+                if TabEdges.isTopOnly this.ts.allowedEdges then group.repairStripZorder("placement")
 
-        this.updateTopEdgeGuard()
+                // The strips of the other edges (none while the top edge is the
+                // only one): placed from the same window rectangle, and kept in
+                // the top strip's layer.
+                if not (List.isEmpty this.ts.edgeHwnds) then
+                    this.updateSidePlacements(placement)
+
+            this.updateTopEdgeGuard()
+        )
+        // Rendering and side placement must finish before repairing the stack.
+        if not (TabEdges.isTopOnly this.ts.allowedEdges) then group.repairStripZorder("placement")
+
+    // The visible frame excludes invisible resize borders.
+    member private this.visibleFrame (hwnd: IntPtr) (windowBounds: Rect) : TabEdgeLayout.Box =
+        match group.visibleBodyBounds(hwnd) with
+        | Some body -> (body.x, body.y, body.width, body.height)
+        | None ->
+            let (insetLeft, insetTop, insetRight, insetBottom) = this.frameInsets
+            (windowBounds.location.x + insetLeft,
+             windowBounds.location.y + insetTop,
+             max 1 (windowBounds.size.width - insetLeft - insetRight),
+             max 1 (windowBounds.size.height - insetTop - insetBottom))
+
+    // The scale of the display an edge's side of the frame is on.
+    static member private sideScale (edge: TabEdges.Edge) ((fx, fy, fw, fh): TabEdgeLayout.Box) (fallback: float) =
+        let side =
+            match edge with
+            | TabEdges.Edge.Left -> Rect(Pt(fx, fy), Sz(1, fh))
+            | TabEdges.Edge.Right -> Rect(Pt(fx + fw - 1, fy), Sz(1, fh))
+            | TabEdges.Edge.Bottom -> Rect(Pt(fx, fy + fh - 1), Sz(fw, 1))
+            | TabEdges.Edge.Top -> Rect(Pt(fx, fy), Sz(fw, 1))
+        try Dpi.scaleForRect(side) with _ -> fallback
+
+    /// One edge's strip as TabEdgeLayout places it, and the appearance it is
+    /// drawn with, at `scale`: the edge's own values from the settings file
+    /// over `current` (the colours, common to all edges) and `defaults` (9:
+    /// the other edges start from the program's values; a left or right edge
+    /// written across, from the rounded line - TabEdgeSettings.edgeShape).
+    /// The heights, widths, overlap and distances all go through the edge's
+    /// own scale (8, 10).
+    static member edgeSpecOf(edge: TabEdges.Edge, values: TabEdgeSettings.EdgeValues, current: TabAppearanceInfo, defaults: TabAppearanceInfo, scale: float) =
+        let appearance = TabStrip.edgeAppearance(TabEdgeSettings.withShape edge defaults.tabShape values, current, defaults, scale)
+        let layout = TabEdgeSettings.layoutOf values (TabEdges.newEdgeLayout edge)
+        let outside, inside = TabEdgeSettings.scaledDistances scale layout
+        let across = layout.text = Some(TabEdges.SideText.Horizontal)
+        let px = Dpi.px scale
+        let textFont = Dpi.scaledFont SystemFonts.MenuFont scale
+        let rows = TabEdgeLayout.rowsOf px appearance.tabHeight appearance.tabOverlap textFont.Height
+        let iconOnly = TabEdgeLayout.iconOnlyRow px rows
+        let thickness = if across then appearance.tabMaxWidth else appearance.tabHeight
+        let spec : TabEdgeLayout.EdgeSpec =
+            { edge = edge
+              direction = layout.direction
+              across = across
+              thickness = thickness
+              minThickness = (if across then iconOnly else thickness)
+              outsideDistance = outside
+              insideDistance = inside
+              heightOffset = appearance.tabHeightOffset }
+        spec, appearance
+
+    /// The same destination-scale input builds every edge's snap metrics.
+    static member snapReserveAt(edges: TabEdges.Edge list, values: Map<TabEdges.Edge, TabEdgeSettings.EdgeValues>,
+                                current: TabAppearanceInfo, defaults: TabAppearanceInfo, scale: float, enabled: bool, topDirection: string) =
+        let top = if List.contains TabEdges.Edge.Top edges && TabBehaviorPolicy.reserveTopMargin enabled topDirection then Some((Dpi.scaleAppearance scale current).tabHeight) else None
+        let specs = edges |> List.filter ((<>) TabEdges.Edge.Top) |> List.map (fun edge ->
+            fst (TabStripDecorator.edgeSpecOf(edge, defaultArg (values.TryFind edge) TabEdgeSettings.noValues, current, defaults, scale)))
+        TabEdgeLayout.snapReserve enabled top specs
+
+    member private this.edgeSpec (edge: TabEdges.Edge) (values: TabEdgeSettings.EdgeValues) (scale: float) =
+        TabStripDecorator.edgeSpecOf(edge, values, group.tabAppearanceRaw, Services.program.defaultTabAppearanceInfo, scale)
+
+    // The strips of the other edges, each where TabEdgeLayout.place puts it
+    // for this frame and these displays: the bottom strip first, then the
+    // left and right strips, which give the corners to the top and the
+    // bottom strip (7-2). Each is drawn with its edge's appearance at the
+    // scale of its side, inside or outside as its direction and the screen
+    // decide (5).
+    member private this.updateSidePlacements(top: TabStripPlacment) =
+        match group.bounds.value, group.tryTopWindow with
+        | Some(windowBounds), Some(hwnd) ->
+            let frame = this.visibleFrame hwnd windowBounds
+            let box (r: Rect) = r.x, r.y, r.width, r.height
+            let monitors =
+                TabEdgeLayout.placementMonitors false
+                    (Mon.fromHwnd(hwnd) |> Option.map (fun m -> box m.workRect))
+                    (Mon.all.list |> List.map (fun m -> box m.workRect))
+            let topCorner =
+                if this.ts.topShows then
+                    let b = top.bounds
+                    [ b.location.x, b.location.y, b.size.width, b.size.height ]
+                else []
+            let mutable bottomCorner = []
+            for edge in [ TabEdges.Edge.Bottom; TabEdges.Edge.Left; TabEdges.Edge.Right ] do
+                match edgeValues.TryFind(edge) with
+                | Some(values) ->
+                    let scale = TabStripDecorator.sideScale edge frame top.scale
+                    let spec, appearance = this.edgeSpec edge values scale
+                    let placed = TabEdgeLayout.place spec frame monitors (topCorner @ bottomCorner)
+                    let (x, y, w, h) = placed.rect
+                    this.ts.setTextBottomInside(edge, defaultArg values.textBottomInside true)
+                    this.ts.setEdgePlacement(edge, Rect(Pt(x, y), Sz(w, h)), appearance, scale,
+                                             { inside = placed.inside; across = spec.across })
+                    if edge = TabEdges.Edge.Bottom && not (this.ts.bandOf edge).isEmpty then
+                        bottomCorner <- [ placed.rect ]
+                | None -> ()
+        | _ -> ()
+
+    // An edge's tabs look like the top edge's, with that edge's own size,
+    // overlap and shape (edgeSpecOf).
+    member private this.edgeAppearance (edge: TabEdges.Edge) (values: TabEdgeSettings.EdgeValues) (scale: float) =
+        snd (this.edgeSpec edge values scale)
+
+    // The invisible resize borders of the window in front: (left, top, right,
+    // bottom) between GetWindowRect and the DWM extended frame. A side strip
+    // stands against the visible frame, or it would float a few pixels away
+    // from the window. Zero when DWM cannot say, and capped so that a bogus
+    // answer cannot fling the strip across the screen.
+    member private this.frameInsets : int * int * int * int =
+        try
+            let hwnd = group.topWindow
+            let windowRect = os.windowFromHwnd(hwnd).bounds
+            let mutable frame = RECT()
+            let hr =
+                DwmApi.DwmGetWindowAttribute(
+                    hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                    System.Runtime.InteropServices.Marshal.SizeOf(typeof<RECT>))
+            if hr <> 0 then (0, 0, 0, 0)
+            else
+                let cap v = max 0 (min 32 v)
+                (cap (frame.Left - windowRect.left), cap (frame.Top - windowRect.top),
+                 cap (windowRect.right - frame.Right), cap (windowRect.bottom - frame.Bottom))
+        with _ -> (0, 0, 0, 0)
 
     member private this.invokeAsync f = group.invokeAsync f
     member private this.invokeSync f = group.invokeSync f
@@ -822,7 +1111,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let appearance = group.tabAppearanceAt scale
         let decorator =  {
             windowBounds = group.bounds.value.def(Rect())
-            monitorBounds = Mon.all.map(fun m -> m.workRect)
+            monitorBounds =
+                List2(TabEdgeLayout.placementMonitors (TabEdges.isTopOnly this.ts.allowedEdges)
+                    (group.tryTopWindow |> Option.bind Mon.fromHwnd |> Option.map (fun m -> m.workRect))
+                    (Mon.all.list |> List.map (fun m -> m.workRect)))
             decoratorHeight = appearance.tabHeight
             decoratorHeightOffset = appearance.tabHeightOffset
             decoratorIndentFlipped = appearance.tabIndentFlipped
@@ -833,20 +1125,27 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let verticalDirection =
             try Services.settings.getValue("tabVerticalDirection") :?> string
             with _ -> TabBehaviorPolicy.verticalAuto
+        let inside, bounds = decorator.placementFor(verticalDirection, not (TabEdges.isTopOnly this.ts.allowedEdges))
         {
-            showInside = decorator.showInside(verticalDirection)
-            bounds = decorator.boundsFor(verticalDirection)
+            showInside = inside
+            bounds = bounds
             scale = scale
         }
 
     member this.beginRename(hwnd) =
         let tab = Tab(hwnd)
+        // A tab of a left strip is written upwards; its box is put beside it
+        // (TabStrip.sideRenameRect) instead of over its text.
+        let sideBox = this.ts.sideRenameRect tab
         let textBounds =
-            this.ts.sprite.children.pick <| fun (tabOffset, tabSprite) ->
-                let tabSprite = tabSprite :?> TabSprite<Tab>
-                if tabSprite.id = tab then
-                    Some(Rect(tabSprite.textLocation.add(tabOffset), tabSprite.textSize))
-                else None
+            match sideBox with
+            | Some(box) -> box
+            | None ->
+                this.ts.sprite.children.pick <| fun (tabOffset, tabSprite) ->
+                    let tabSprite = tabSprite :?> TabSprite<Tab>
+                    if tabSprite.id = tab then
+                        Some(Rect(tabSprite.textLocation.add(tabOffset), tabSprite.textSize))
+                    else None
         let scale = this.ts.scale
         let verticalMargin = Dpi.px scale 2
 
@@ -870,7 +1169,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Convert the tab's text client position to screen coordinates.
         let mutable pt = POINT(X = textBounds.location.x, Y = textBounds.location.y + verticalMargin)
-        WinUserApi.ClientToScreen(this.ts.hwnd, &pt) |> ignore
+        if sideBox.IsNone then
+            WinUserApi.ClientToScreen(this.ts.hwnd, &pt) |> ignore
 
         form.Location <- Point(pt.X, pt.Y)
         form.SetSize(Size(textBounds.size.width, textBounds.size.height - 2 * verticalMargin))
@@ -934,33 +1234,41 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // Variant A (-4): pin + alignment boundary, with synchronized visual
     // slide of all group members.
     member private this.contiguousSelectedFromTab(origin: Tab) : Tab list =
-        let activeHwnd = group.topWindow
-        let inSelection (Tab h) =
-            h = activeHwnd || group.selectedTabs.contains h
-        if not (inSelection origin) then [origin]
-        else
-            let samePinAlign (a: Tab) (b: Tab) =
-                this.ts.isPinned a = this.ts.isPinned b &&
-                this.ts.getTabAlign a = this.ts.getTabAlign b
-            let vo = this.ts.visualOrder.list
-            let n = vo.Length
-            match vo |> List.tryFindIndex ((=) origin) with
-            | None -> [origin]
-            | Some originIdx ->
-                let mutable s = originIdx
-                while s > 0 && inSelection vo.[s-1] && samePinAlign vo.[s-1] origin do
-                    s <- s - 1
-                let mutable e = originIdx
-                while e < n - 1 && inSelection vo.[e+1] && samePinAlign vo.[e+1] origin do
-                    e <- e + 1
-                vo |> List.skip s |> List.take (e - s + 1)
+        match group.tryTopWindow with
+        | None -> []
+        | Some activeHwnd ->
+            let inSelection (Tab h) =
+                h = activeHwnd || group.selectedTabs.contains h
+            if not (inSelection origin) then [origin]
+            else
+                // ... and the same edge: a block is dragged along one strip.
+                let samePinAlign (a: Tab) (b: Tab) =
+                    this.ts.isPinned a = this.ts.isPinned b &&
+                    this.ts.getTabAlign a = this.ts.getTabAlign b &&
+                    this.ts.edgeOf a = this.ts.edgeOf b
+                let vo = this.ts.visualOrder.list
+                let n = vo.Length
+                match vo |> List.tryFindIndex ((=) origin) with
+                | None -> [origin]
+                | Some originIdx ->
+                    let mutable s = originIdx
+                    while s > 0 && inSelection vo.[s-1] && samePinAlign vo.[s-1] origin do
+                        s <- s - 1
+                    let mutable e = originIdx
+                    while e < n - 1 && inSelection vo.[e+1] && samePinAlign vo.[e+1] origin do
+                        e <- e + 1
+                    vo |> List.skip s |> List.take (e - s + 1)
 
     member private this.onCloseOtherWindows hwnd =
-        group.windows.items.where((<>)hwnd).iter this.onCloseWindow
+        let edge = this.ts.edgeOf(Tab hwnd)
+        (this.ts.bandOf edge).list
+        |> List.iter (fun (Tab h) -> if h <> hwnd then this.onCloseWindow h)
 
+    // "To the right / left" is along the tab's own strip, never across
+    // edges (3-3); the whole order while the top edge is the only one.
     member private this.onCloseRightTabWindows hwnd =
         let currentTab = Tab(hwnd)
-        let vo = this.ts.visualOrder
+        let vo = this.ts.bandOf (this.ts.edgeOf currentTab)
         let tabIndex = vo.tryFindIndex((=) currentTab)
         tabIndex.iter <| fun index ->
             let rightTabs = vo.skip(index + 1)
@@ -970,7 +1278,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
     member private this.onCloseLeftTabWindows hwnd =
         let currentTab = Tab(hwnd)
-        let vo = this.ts.visualOrder
+        let vo = this.ts.bandOf (this.ts.edgeOf currentTab)
         let tabIndex = vo.tryFindIndex((=) currentTab)
         tabIndex.iter <| fun index ->
             let leftTabs = vo.take(index)
@@ -978,8 +1286,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let (Tab(tabHwnd)) = tab
                 this.onCloseWindow tabHwnd
 
-    member private this.onCloseAllWindows() =
-        group.windows.items.iter this.onCloseWindow
+    member private this.onCloseAllWindows(?edge: TabEdges.Edge) =
+        group.windows.items.iter (fun hwnd ->
+            if edge |> Option.forall (fun e -> this.ts.edgeOf(Tab hwnd) = e) then
+                this.onCloseWindow hwnd)
 
     // Helper methods for multi-display detach support.
     //
@@ -1047,17 +1357,26 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         currentX: int,
         currentY: int,
         width: int,
-        height: int) : (int * int) =
+        height: int,
+        ?ofGroup: bool) : (int * int) =
 
-        let tabOffset = this.getTabHeightForSnap()
+        let topOnly = this.useTopOnlySnap(defaultArg ofGroup false)
+        let originalArea = workArea
+        let workArea =
+            if topOnly then workArea
+            else this.adjustWorkAreaForTabHeight(workArea, ofGroup = defaultArg ofGroup false)
+        let tabOffset = if topOnly then this.getTabHeightForSnap() else 0
         let minY = workArea.Top + tabOffset
-        // Prefer the top tab margin when the group is too tall, without resizing.
+        // Preserve leading tab margins when the group is too large, without resizing.
         let bottomY =
-            if tabOffset > 0 then max minY (workArea.Bottom - height)
+            if tabOffset > 0 || workArea.Top > originalArea.Top then max minY (workArea.Bottom - height)
             else workArea.Bottom - height
+        let rightX =
+            if workArea.Left > originalArea.Left then max workArea.Left (workArea.Right - width)
+            else workArea.Right - width
         match position with
         | Some "right" ->
-            let x = workArea.Right - width
+            let x = rightX
             let y = max minY (min currentY (workArea.Bottom - height))
             (x, y)
         | Some "left" ->
@@ -1074,7 +1393,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (x, y)
         // Corner positions
         | Some "topright" ->
-            let x = workArea.Right - width
+            let x = rightX
             let y = minY
             (x, y)
         | Some "topleft" ->
@@ -1082,7 +1401,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let y = minY
             (x, y)
         | Some "bottomright" ->
-            let x = workArea.Right - width
+            let x = rightX
             let y = bottomY
             (x, y)
         | Some "bottomleft" ->
@@ -1091,6 +1410,18 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             (x, y)
         | _ ->
             (currentX, currentY)
+
+    // A cross-display move must keep the same reserved area during its final clamp.
+    // Same-position moves keep the original, unreserved work-area clamp.
+    member private this.clampPositionInWorkArea(position: string option, workArea: System.Drawing.Rectangle,
+                                                x: int, y: int, width: int, height: int, ?ofGroup: bool) =
+        let area =
+            if position.IsNone then workArea
+            elif this.useTopOnlySnap(defaultArg ofGroup false) then
+                let offset = this.getTabHeightForSnap()
+                System.Drawing.Rectangle(workArea.X, workArea.Y + offset, workArea.Width, workArea.Height - offset)
+            else this.adjustWorkAreaForTabHeight(workArea, ofGroup = defaultArg ofGroup false)
+        max area.Left (min x (area.Right - width)), max area.Top (min y (area.Bottom - height))
 
     member private this.detachTabToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
         // This method is only called when group has multiple tabs (menu is disabled for single tab)
@@ -1139,10 +1470,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 newHeight)
 
             // Ensure position is within bounds
-            let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
-            // Preserve the tab margin when clamping an explicit edge or corner move.
-            let minY = targetWorkArea.Top + (if position.IsSome then this.getTabHeightForSnap() else 0)
-            let finalY = max minY (min newTop (targetWorkArea.Bottom - newHeight))
+            let finalX, finalY = this.clampPositionInWorkArea(
+                position, targetWorkArea, newLeft, newTop, newWidth, newHeight)
 
             // DPI-aware window placement: move position first, wait for DPI change, then set size
             let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -1247,13 +1576,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             try
                                 // Double-check window is not already in target group
                                 if not (targetGroup.windows.contains hwnd) then
+                                    let edge = targetGroup.joinEdge
                                     let alignment =
-                                        targetGroup.ts.visualOrder.list |> List.tryLast
+                                        targetGroup.ts.visualOrder.list
+                                        |> List.filter (fun t -> targetGroup.ts.edgeOf t = edge)
+                                        |> List.tryLast
                                         |> Option.map targetGroup.ts.getTabAlign
                                     if linked then
-                                        targetGroup.addWindowLinked(hwnd, false, ?alignment=alignment)
+                                        targetGroup.addWindowLinked(hwnd, false, ?alignment=alignment, edge=edge)
                                     else
-                                        targetGroup.addWindow(hwnd, false, ?alignment=alignment)
+                                        targetGroup.addWindow(hwnd, false, ?alignment=alignment, edge=edge)
                                     // Show window again (target group will handle positioning)
                                     if not away then window.showWindow(ShowWindowCommands.SW_SHOW)
                                     moveCompleted := true
@@ -1571,31 +1903,75 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // margin for a strip height the strip is not drawing - the one remaining
     // exception to "decide the scale once and hand it down" that the second
     // generation left behind.
+    /// Multi-edge keep-size snaps use the restored frame; top-only keeps its legacy input.
+    static member snapSourceBounds(topOnly: bool, before: Rect, restored: Rect) =
+        if topOnly then before else restored
+
     member private this.getTabHeightForSnap() =
         try
-            if group.snapTabHeightMargin then
+            if TabBehaviorPolicy.reserveTopMargin group.snapTabHeightMargin (Services.settings.getValue("tabVerticalDirection") :?> string) then
                 (group.tabAppearanceAt this.ts.scale).tabHeight - 1
             else 0
         with | _ -> 0
 
-    member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle) =
-        let tabHeight = this.getTabHeightForSnap()
+    // The room a snap leaves for the strips (7-1): on each of `edges` that
+    // stands outside, as thick as its strip at the scale of the destination
+    // (TabEdgeLayout.snapReserve); always-inside edges get no room. With the
+    // top edge the only one this is getTabHeightForSnap's room above and
+    // nothing else.
+    member private this.snapReserveFor (edges: TabEdges.Edge list) (workArea: System.Drawing.Rectangle) =
+        try
+            if not group.snapTabHeightMargin then TabEdgeLayout.noReserve
+            else
+                let scale =
+                    try Dpi.scaleForRect(Rect(Pt(workArea.X, workArea.Y), Sz(max 1 workArea.Width, max 1 workArea.Height)))
+                    with _ -> this.ts.scale
+                TabStripDecorator.snapReserveAt(edges, edgeValues, group.tabAppearanceRaw,
+                                                Services.program.defaultTabAppearanceInfo, scale, true,
+                                                Services.settings.getValue("tabVerticalDirection") :?> string)
+        with _ -> TabEdgeLayout.noReserve
+
+    // The edges whose room a snap leaves: the group's own for a snap of the
+    // group; for tabs detached into a new group, the edge they start on
+    // there (the first allowed one). The top edge while it is the only one.
+    member private this.snapEdges (ofGroup: bool) =
+        let allowed = this.ts.allowedEdges
+        if TabEdges.isTopOnly allowed then [ TabEdges.Edge.Top ]
+        elif ofGroup then this.ts.edgesInUse
+        else [ TabEdges.firstAllowed allowed ]
+
+    member private this.useTopOnlySnap(ofGroup: bool) =
+        TabEdges.useTopOnlySnap this.ts.allowedEdges this.ts.edgesInUse ofGroup
+
+    member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle, ?ofGroup: bool) =
         let (x, y, width, height) =
-            SnapGeometry.reserveTabHeight tabHeight (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+            if this.useTopOnlySnap(defaultArg ofGroup false) then
+                let tabHeight = this.getTabHeightForSnap()
+                let result = SnapGeometry.reserveTabHeight tabHeight (workArea.X, workArea.Y, workArea.Width, workArea.Height)
 #if DEBUG
-        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-reserve-tab-height group=%X amount=%d before=%A after=%A"
-                                    (int64 group.hwnd) tabHeight workArea (x,y,width,height))
+                WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-reserve-tab-height group=%X amount=%d before=%A after=%A"
+                                            (int64 group.hwnd) tabHeight workArea result)
 #endif
+                result
+            else
+                let reserve = this.snapReserveFor (this.snapEdges (defaultArg ofGroup false)) workArea
+                let result = TabEdgeLayout.reserveArea reserve (workArea.X, workArea.Y, workArea.Width, workArea.Height)
+#if DEBUG
+                WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-reserve-edges group=%X amount=%A before=%A after=%A"
+                                            (int64 group.hwnd) reserve workArea result)
+#endif
+                result
         System.Drawing.Rectangle(x, y, width, height)
 
     member private this.calculateSnapBounds(
         snapDirection: string,
         workArea: System.Drawing.Rectangle,
         currentWidth: int,
-        currentHeight: int) : (int * int * int * int) =
+        currentHeight: int,
+        ?ofGroup: bool) : (int * int * int * int) =
         // Keep-size menu geometry, also used for the drag staging position.
         // Variant B uses the percentage helper below for its final rectangle.
-        let workArea = this.adjustWorkAreaForTabHeight(workArea)
+        let workArea = this.adjustWorkAreaForTabHeight(workArea, defaultArg ofGroup false)
         let result = SnapGeometry.snapBounds snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
 #if DEBUG
         group.traceSnapGeometry(sprintf "direction=%s mode=keep-size inputSize=(%d,%d) reservedArea=%A base=%A"
@@ -1606,15 +1982,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     member private this.calculateSnapBoundsWithPercent(
         snapDirection: string,
         percent: int,
-        workArea: System.Drawing.Rectangle) : (int * int * int * int) =
+        workArea: System.Drawing.Rectangle,
+        ?ofGroup: bool) : (int * int * int * int) =
         // Returns (x, y, width, height) for snap position with percentage
         // Snap right/left: width = workArea.Width * percent, height = full
         // Snap top/bottom: width = full, height = workArea.Height * percent
+        let ofGroup = defaultArg ofGroup false
         let workArea =
             if snapDirection = "snapmaximizedesktop" then
-                this.adjustWorkAreaForTabHeight(System.Windows.Forms.SystemInformation.VirtualScreen)
+                this.adjustWorkAreaForTabHeight(System.Windows.Forms.SystemInformation.VirtualScreen, ofGroup)
             else
-                this.adjustWorkAreaForTabHeight(workArea)
+                this.adjustWorkAreaForTabHeight(workArea, ofGroup)
         let result = SnapGeometry.calculateSnapBoundsWithPercent snapDirection percent
                          (workArea.X, workArea.Y, workArea.Width, workArea.Height)
 #if DEBUG
@@ -1815,7 +2193,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             bounds.location.x,
             bounds.location.y,
             bounds.size.width,
-            bounds.size.height)
+            bounds.size.height, ofGroup = true)
 
         // Move the active window
         if newX <> bounds.location.x || newY <> bounds.location.y then
@@ -1870,13 +2248,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             currentX,
             currentY,
             newWidth,
-            newHeight)
+            newHeight, ofGroup = true)
 
         // Ensure position is within bounds
-        let finalX = max targetWorkArea.Left (min newLeft (targetWorkArea.Right - newWidth))
-        // Preserve the tab margin when clamping an explicit edge or corner move.
-        let minY = targetWorkArea.Top + (if position.IsSome then this.getTabHeightForSnap() else 0)
-        let finalY = max minY (min newTop (targetWorkArea.Bottom - newHeight))
+        let finalX, finalY = this.clampPositionInWorkArea(
+            position, targetWorkArea, newLeft, newTop, newWidth, newHeight, ofGroup = true)
 
         // DPI-aware window placement: move position first, wait for DPI change, then set size
         let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -1910,21 +2286,36 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
         with _ -> false
 
-    // Realign uniformly placed tabs using the horizontal component of a snap or move.
-    // In-place operations update visible tabs; detach persists the alignment so
-    // the new group inherits it. Read the source tabs before detaching them.
-    // The rule is shared with Desktop.dragDrop through SnapGeometry.realignment.
-    member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
+    // Realign each uniformly aligned edge when the setting is enabled.
+    // Horizontal strips follow the horizontal snap component, vertical strips
+    // the vertical component; corner snaps affect both axes. setAlignAll updates
+    // visible tabs for a group snap or persists alignment before detaching.
+    // Read the current group before detaching for the uniformity check.
+    // TabEdges.snapRealignTabs uses the edge supplied by edgeOf, sharing the
+    // alignment rule with Desktop.dragDrop and the top-only path.
+    member private this.applySnapRealignOn(tabHwnds: IntPtr list, edgeOf: IntPtr -> TabEdges.Edge, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
         if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
-            let alignments = tabHwnds |> List.map group.getTabAlign
-            match SnapGeometry.realignment true snapDirection alignments TopLeft TopRight with
-            | Some desired -> setAlignAll tabHwnds desired
-            | None -> ()
+            let toAlign a = if a = TopLeft then TabEdges.AlignStart else TabEdges.AlignEnd
+            let tabs = tabHwnds |> List.map (fun h -> h, edgeOf h, toAlign (group.getTabAlign h))
+            for (hwnds, desired) in TabEdges.snapRealignTabs true snapDirection tabs do
+                setAlignAll hwnds (if desired = TabEdges.AlignStart then TopLeft else TopRight)
 
-    // Realign the whole current group after an in-place snap or move.
+    // Tabs detached into a group of their own: they start on the new
+    // group's first edge (the top edge unless it is not allowed), and that
+    // edge decides, as Desktop.dragDrop has it.
+    member private this.applySnapRealign(tabHwnds: IntPtr list, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
+        let first = TabEdges.firstAllowed this.ts.allowedEdges
+        this.applySnapRealignOn(tabHwnds, (fun _ -> first), snapDirection, fun hwnds alignment ->
+            setAlignAll hwnds alignment
+            // Persist the edge that owns the newly computed alignment before arrival.
+            hwnds |> List.iter (fun h -> Services.program.setWindowAlignmentEdge(h, first)))
+
+    // Realign the whole current group after an in-place snap, each edge's
+    // tabs by themselves; a left strip's tabs answer a top or bottom snap
+    // and are left alone by a left or right one.
     // Bulk-align so the tabs keep their relative order.
     member private this.applyGroupSnapRealign(snapDirection: string) =
-        this.applySnapRealign(group.visualOrder.list, snapDirection, fun hs a -> group.setTabsAlign(hs, a))
+        this.applySnapRealignOn(group.visualOrder.list, (fun h -> this.ts.edgeOf(Tab h)), snapDirection, fun hs a -> group.setTabsAlign(hs, a))
 
     member private this.sizeWorkArea(sourceScreen: MonitorScreen, targetScreen: MonitorScreen) =
         let area = targetScreen.WorkingArea
@@ -1991,6 +2382,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         if window.isMinimized || window.isMaximized then
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
+        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true), bounds, window.bounds)
+
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin group=%X hwnd=%X before=%A amountTLRB=%A expandedSize=%A"
@@ -2004,7 +2397,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             snapDirection,
             screen.WorkingArea,
             snapWidth,
-            snapHeight)
+            snapHeight,
+            true)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         // Apply detected frame margin
@@ -2030,6 +2424,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let bounds = window.bounds
         let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
+
+        if not (this.useTopOnlySnap(true)) && (window.isMinimized || window.isMaximized) then
+            window.showWindow(ShowWindowCommands.SW_RESTORE)
+        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true), bounds, window.bounds)
 
         // Use group bounds (expanded by margin) for percentage calculation
         let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
@@ -2062,7 +2460,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             snapDirection,
             targetWorkArea,
             newWidth,
-            newHeight)
+            newHeight,
+            true)
 
         // DPI-aware window placement: move position first, wait for DPI change, then set size
         let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
@@ -2107,7 +2506,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
             snapDirection,
             percent,
-            screen.WorkingArea)
+            screen.WorkingArea,
+            true)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
@@ -2136,7 +2536,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
             snapDirection,
             percent,
-            targetWorkArea)
+            targetWorkArea,
+            true)
 
         let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
         window.setPositionOnly newX newY
@@ -2469,6 +2870,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                         WinUserApi.IsWindow(d.group.hwnd) && d.group.windows.contains(winHwnd)
                     with _ -> false))
 
+        let menuKey horizontal vertical = TabEdges.menuKey (this.ts.edgeOf (Tab(hwnd))) horizontal vertical
         let currentTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
 
         // Disabled header at the top of the menu showing which tab it targets
@@ -2486,7 +2888,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Item 1: "New tab : right of this tab" — launch and dock into the current tab group
         let newTabInGroupItem =
             CmiRegular({
-                text = TabNameHelper.format (Localization.getString("NewTabInGroup")) currentTabName
+                text = TabNameHelper.format (Localization.getString(menuKey "NewTabInGroup" "NewTabBelowInGroup")) currentTabName
                 flags = List2()
                 image = None
                 click = fun() ->
@@ -2570,10 +2972,49 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             })
 
         
+        let allTabsEdge = this.ts.edgeOf (Tab(hwnd))
+        let allTabsTargets = (this.ts.bandOf allTabsEdge).list |> List.map (fun (Tab h) -> h)
+        let allTabsEdgeName = Localization.getString(string allTabsEdge + "TabsInMenu")
+        let showEdgeActions = this.ts.visualOrder.list |> List.exists (fun tab -> this.ts.edgeOf tab <> allTabsEdge)
+
+        let tabDirectionSubMenu =
+            let buildTargets text targets enabled =
+                CmiPopUp({
+                    text = text
+                    image = None
+                    flags = if enabled then List2() else List2([MenuFlags.MF_GRAYED])
+                    items = List2(TabEdges.priority |> List.map (fun edge ->
+                        let current = targets |> List.forall (fun h -> this.ts.edgeOf(Tab h) = edge)
+                        CmiRegular({
+                            text = Localization.getString(string edge + "Tabs")
+                            image = None
+                            flags = if current || not (TabEdges.isAllowed this.ts.allowedEdges edge) then List2([MenuFlags.MF_GRAYED]) else List2()
+                            click = fun () ->
+                                let moving = targets |> List.filter (fun h -> this.ts.edgeOf(Tab h) <> edge)
+                                this.ts.moveTabsToEdgeFromMenu(moving |> List.map Tab, edge)
+                                this.updateTsPlacement()
+                        })))
+                })
+            let targets = this.actionTargets(hwnd)
+            let targetText =
+                if targets.Length > 1 then
+                    this.formatSelectedTabs(hwnd, targets, "MoveTabEdgeSelectedFormat")
+                else Localization.getString("MoveTabEdgeThis")
+            CmiPopUp({
+                text = Localization.getString("TabDirectionMenu")
+                image = None
+                flags = List2()
+                items = List2([
+                    buildTargets targetText targets true
+                    buildTargets (String.Format(Localization.getString("MoveTabEdgeCurrentFormat"), allTabsEdgeName)) allTabsTargets true
+                    buildTargets (Localization.getString("MoveTabEdgeAll")) (this.ts.visualOrder.list |> List.map (fun (Tab h) -> h)) showEdgeActions
+                ])
+            })
+
         let tabPositionSubMenu =
             let currentAlignment = group.getTabAlign(hwnd)
-            let allTopLeft = group.visualOrder.list |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
-            let allTopRight = group.visualOrder.list |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
+            let allTopLeft = allTabsTargets |> List.forall (fun h -> group.getTabAlign(h) = TopLeft)
+            let allTopRight = allTabsTargets |> List.forall (fun h -> group.getTabAlign(h) = TopRight)
             let shortTabName = TabNameHelper.truncate (this.ts.tabInfo(Tab(hwnd)).text)
             let alignTargets = this.actionTargets(hwnd)
             let isMultiSelect = alignTargets.Length > 1
@@ -2584,9 +3025,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let leftItemText =
                 if isMultiSelect then
-                    this.formatSelectedTabs(hwnd, alignTargets, "AlignSelectedTabsLeftFormat")
+                    this.formatSelectedTabs(hwnd, alignTargets, (menuKey "AlignSelectedTabsLeftFormat" "AlignSelectedTabsTopFormat"))
                 else
-                    TabNameHelper.format (Localization.getString("AlignThisTabLeft")) shortTabName
+                    TabNameHelper.format (Localization.getString(menuKey "AlignThisTabLeft" "AlignThisTabTop")) shortTabName
             let leftItemFlags =
                 let disable = if isMultiSelect then allTargetsLeft else currentAlignment = TopLeft
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -2600,9 +3041,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
             let rightItemText =
                 if isMultiSelect then
-                    this.formatSelectedTabs(hwnd, alignTargets, "AlignSelectedTabsRightFormat")
+                    this.formatSelectedTabs(hwnd, alignTargets, (menuKey "AlignSelectedTabsRightFormat" "AlignSelectedTabsBottomFormat"))
                 else
-                    TabNameHelper.format (Localization.getString("AlignThisTabRight")) shortTabName
+                    TabNameHelper.format (Localization.getString(menuKey "AlignThisTabRight" "AlignThisTabBottom")) shortTabName
             let rightItemFlags =
                 let disable = if isMultiSelect then allTargetsRight else currentAlignment = TopRight
                 if disable then List2([MenuFlags.MF_GRAYED]) else List2()
@@ -2618,23 +3059,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 text = Localization.getString("TabAlignMenu")
                 image = None
                 items = List2([
+                    leftItem
+                    rightItem
+                    CmiSeparator
                     CmiRegular({
-                        text = Localization.getString("AlignAllTopLeft")
+                        text = String.Format(Localization.getString(menuKey "AlignAllTopLeftFormat" "AlignAllToTopFormat"), allTabsEdgeName)
                         image = None
                         flags = if allTopLeft then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.setTabsAlign(group.visualOrder.list, TopLeft)
+                            group.setTabsAlign(allTabsTargets, TopLeft)
                     })
                     CmiRegular({
-                        text = Localization.getString("AlignAllTopRight")
+                        text = String.Format(Localization.getString(menuKey "AlignAllTopRightFormat" "AlignAllToBottomFormat"), allTabsEdgeName)
                         image = None
                         flags = if allTopRight then List2([MenuFlags.MF_GRAYED]) else List2()
                         click = fun() ->
-                            group.setTabsAlign(group.visualOrder.list, TopRight)
+                            group.setTabsAlign(allTabsTargets, TopRight)
                     })
-                    CmiSeparator
-                    leftItem
-                    rightItem
                 ])
                 flags = List2()
             })
@@ -2682,21 +3123,38 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     click = fun() -> pinTargets |> List.iter group.unpinTab
                 })
 
-            // "Pin all tabs" / "Unpin all tabs" — gated against the whole group.
-            let pinAllFlags = if group.allPinned then List2([MenuFlags.MF_GRAYED]) else List2()
+            // Edge actions include every tab on the clicked edge, independently of selection.
+            let pinEdgeFlags = if allTabsTargets |> List.forall group.isPinned then List2([MenuFlags.MF_GRAYED]) else List2()
+            let pinEdgeItem =
+                CmiRegular({
+                    text = String.Format(Localization.getString("PinEdgeTabsFormat"), allTabsEdgeName)
+                    image = None
+                    flags = pinEdgeFlags
+                    click = fun() -> group.pinAll(edge=allTabsEdge)
+                })
+            let unpinEdgeFlags = if allTabsTargets |> List.forall (fun h -> not (group.isPinned h)) then List2([MenuFlags.MF_GRAYED]) else List2()
+            let unpinEdgeItem =
+                CmiRegular({
+                    text = String.Format(Localization.getString("UnpinEdgeTabsFormat"), allTabsEdgeName)
+                    image = None
+                    flags = unpinEdgeFlags
+                    click = fun() -> group.unpinAll(edge=allTabsEdge)
+                })
+
+            // Group actions include all edges, including in top-only mode.
+            let groupPinTargets = this.ts.visualOrder.list |> List.map (fun (Tab h) -> h)
             let pinAllItem =
                 CmiRegular({
                     text = Localization.getString("PinAllTabs")
                     image = None
-                    flags = pinAllFlags
+                    flags = if groupPinTargets |> List.forall group.isPinned then List2([MenuFlags.MF_GRAYED]) else List2()
                     click = fun() -> group.pinAll()
                 })
-            let unpinAllFlags = if group.nonePinned then List2([MenuFlags.MF_GRAYED]) else List2()
             let unpinAllItem =
                 CmiRegular({
                     text = Localization.getString("UnpinAllTabs")
                     image = None
-                    flags = unpinAllFlags
+                    flags = if groupPinTargets |> List.forall (fun h -> not (group.isPinned h)) then List2([MenuFlags.MF_GRAYED]) else List2()
                     click = fun() -> group.unpinAll()
                 })
 
@@ -2707,6 +3165,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     pinItem
                     unpinItem
                     CmiSeparator
+                    if showEdgeActions then
+                        pinEdgeItem
+                        unpinEdgeItem
+                        CmiSeparator
                     pinAllItem
                     unpinAllItem
                 ])
@@ -3085,11 +3547,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let closeRightTabsItem =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+            let band = this.ts.bandOf (this.ts.edgeOf currentTab)
+            let tabIndex = band.tryFindIndex((=) currentTab)
             let rightTabCount =
-                tabIndex |> Option.map(fun index -> this.ts.visualOrder.count - index - 1) |> Option.defaultValue 0
+                tabIndex |> Option.map(fun index -> band.count - index - 1) |> Option.defaultValue 0
             let displayText =
-                let formatKey = "CloseTabsToTheRightFormat"
+                let formatKey = (menuKey "CloseTabsToTheRightFormat" "CloseTabsBelowFormat")
                 let formatString = Localization.getString(formatKey)
                 if formatString = null then
                     failwithf "Resource string '%s' not found" formatKey
@@ -3108,11 +3571,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let closeLeftTabsItem =
             let currentTab = Tab(hwnd)
-            let tabIndex = this.ts.visualOrder.tryFindIndex((=) currentTab)
+            let tabIndex = (this.ts.bandOf (this.ts.edgeOf currentTab)).tryFindIndex((=) currentTab)
             let leftTabCount =
                 tabIndex |> Option.defaultValue 0
             let displayText =
-                let formatKey = "CloseTabsToTheLeftFormat"
+                let formatKey = (menuKey "CloseTabsToTheLeftFormat" "CloseTabsAboveFormat")
                 let formatString = Localization.getString(formatKey)
                 if formatString = null then
                     failwithf "Resource string '%s' not found" formatKey
@@ -3144,16 +3607,30 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     flags = grayed(unselected.Length = 0)
                 })
             else
+                let otherCount = allTabsTargets.Length - 1
+                let caption =
+                    if showEdgeActions then
+                        String.Format(Localization.getString("CloseOtherEdgeTabsFormat"), allTabsEdgeName, otherCount)
+                    else
+                        String.Format(Localization.getString("CloseOtherTabsFormat"), otherCount)
                 CmiRegular({
-                    text = Localization.getString("CloseOtherTabs")
+                    text = caption
                     image = None
                     click = fun() -> this.onCloseOtherWindows hwnd
-                    flags = List2()
+                    flags = grayed(otherCount = 0)
                 })
+
+        let closeEdgeTabsItem =
+            CmiRegular({
+                text = String.Format(Localization.getString("CloseEdgeTabsFormat"), allTabsEdgeName, allTabsTargets.Length)
+                image = None
+                click = fun() -> this.onCloseAllWindows(edge=allTabsEdge)
+                flags = List2()
+            })
 
         let closeAllTabsItem =
             CmiRegular({
-                text = Localization.getString("CloseAllTabs")
+                text = String.Format(Localization.getString("CloseAllTabsFormat"), group.windows.items.count)
                 image = None
                 click = fun() -> this.onCloseAllWindows()
                 flags = List2()
@@ -3313,6 +3790,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     closeRightTabsItem
                     CmiSeparator
                     closeOtherTabsItem
+                    if showEdgeActions then closeEdgeTabsItem
                     closeAllTabsItem
                 ])
                 flags = List2()
@@ -3344,6 +3822,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 flags = List2()
             }))
             Some(tabPositionSubMenu)
+            if TabEdges.isSingleEdge this.ts.allowedEdges then None else Some(tabDirectionSubMenu)
             Some(tabPinSubMenu)
             Some(tabColorSubMenu)
             Some(tabNameSubMenu)
@@ -3357,6 +3836,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         // Create a cell that tracks whether tabs are shown inside
         let isWindowInside = Cell.create(false)
         let isMouseOver = Cell.import(group.isMouseOver)
+        let allowedEdges = Cell.import(this.ts.allowedEdgesOutput)
+        let hoveredEdge = Cell.import(this.ts.hoveredEdge)
+        let insideHideEdges = Cell.import(this.ts.insideHideEdges)
         let propCell(key,def) =
             let cell = Cell.create(group.bb.read(key, def))
             let update() = cell.value <- group.bb.read(key, def)
@@ -3374,64 +3856,157 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             with
             | _ -> 3000
         )
+        let recentEdges = Cell.create(Set.empty<TabEdges.Edge>)
+        let recentCallbacks = System.Collections.Generic.Dictionary<TabEdges.Edge, IDisposable>()
+        group.zorder.changed.Add <| fun () ->
+            for callback in recentCallbacks.Values do callback.Dispose()
+            recentCallbacks.Clear()
+            let edges = TabEdgeSettings.recentHideEdges allowedEdges.value edgeHideSettings.value
+            recentEdges.value <- Set.ofList edges
+            for edge in edges do
+                let delay = snd edgeHideSettings.value.[edge]
+                recentCallbacks.[edge] <- ThreadHelper.cancelablePostBack (TabBehaviorPolicy.hideTimerInterval delay) (fun () ->
+                    recentCallbacks.Remove edge |> ignore
+                    recentEdges.value <- Set.remove edge recentEdges.value)
+        group.exited.Add <| fun () ->
+            for callback in recentCallbacks.Values do callback.Dispose()
+            recentCallbacks.Clear()
         let isRecentlyChangedZorderCell =
             let cell = Cell.create(false)
             let cbRef = ref None
             group.zorder.changed.Add <| fun() ->
                 cell.value <- true
                 cbRef.Value.iter <| fun(d:IDisposable) -> d.Dispose()
-                cbRef := Some(ThreadHelper.cancelablePostBack hideDelayCell.value <| fun() ->
+                cbRef := Some(ThreadHelper.cancelablePostBack (TabBehaviorPolicy.hideTimerInterval hideDelayCell.value) <| fun() ->
                     cell.value <- false
                 )
             cell
+        // Each edge owns its pending delay. Changes on other edges must not
+        // restart it. Global interaction guards retain their existing scope.
+        let edgeCallbacks = System.Collections.Generic.Dictionary<TabEdges.Edge, int * IDisposable>()
+        let cancelEdge edge =
+            match edgeCallbacks.TryGetValue edge with
+            | true, (_, callback) ->
+                callback.Dispose()
+                edgeCallbacks.Remove edge |> ignore
+            | _ -> ()
+        group.exited.Add <| fun() ->
+            for edge in TabEdges.priority do cancelEdge edge
+        let updateEdges() =
+            for edge in TabEdges.priority do
+                let eligible = Set.contains edge insideHideEdges.value
+                let over = hoveredEdge.value = Some edge
+                let blocked = isDraggingCell.value || contextMenuVisibleCell.value || renamingTabCell.value
+                let recent = Set.contains edge recentEdges.value
+                let mode, delay = edgeHideSettings.value.[edge]
+                let shrunk = this.ts.isShrunkOn edge
+                if not eligible then
+                    cancelEdge edge
+                    edgeIconProtection.Remove edge |> ignore
+                    this.ts.setShrunkOn(edge, false)
+                elif mode = "doubleclick" then
+                    cancelEdge edge
+                    let protectedNow =
+                        match edgeIconProtection.TryGetValue edge with
+                        | true, until -> System.DateTime.Now <= until
+                        | _ -> false
+                    if shrunk && over && not isDraggingCell.value && not protectedNow then
+                        edgeIconProtection.Remove edge |> ignore
+                        this.ts.setShrunkOn(edge, false)
+                else
+                    edgeIconProtection.Remove edge |> ignore
+                    let shrink = (mode = "down")
+                                 && not over && not blocked && not recent
+                    if not shrink then
+                        cancelEdge edge
+                        this.ts.setShrunkOn(edge, false)
+                    elif not shrunk then
+                        let pendingDelay =
+                            match edgeCallbacks.TryGetValue edge with
+                            | true, (value, _) -> Some value
+                            | _ -> None
+                        if TabBehaviorPolicy.restartHideDelay shrink shrunk delay pendingDelay then
+                            cancelEdge edge
+                            let callback = ThreadHelper.cancelablePostBack (TabBehaviorPolicy.hideTimerInterval delay) <| fun() ->
+                                edgeCallbacks.Remove edge |> ignore
+                                if not (TabEdges.isTopOnly allowedEdges.value)
+                                   && Set.contains edge insideHideEdges.value
+                                   && hoveredEdge.value <> Some edge
+                                   && fst edgeHideSettings.value.[edge] = "down"
+                                   && not (isDraggingCell.value || contextMenuVisibleCell.value || renamingTabCell.value
+                                           || Set.contains edge recentEdges.value) then
+                                    this.ts.setShrunkOn(edge, true)
+                            edgeCallbacks.[edge] <- delay, callback
         // Create a function to handle the auto-hide logic
         let updateAutoHide() =
-            // Update isWindowInside based on current tab position
-            isWindowInside.value <- this.ts.showInside
-
-            // Handle icon-click-to-hide mode separately
-            if autoHideDoubleClickCell.value then
-
-                // Check if protection period has expired
-                let protectionExpired = System.DateTime.Now > !iconClickProtectUntil
-
-                // In icon-click mode, only show tabs when mouse is over and hidden
-                if this.ts.isShrunk && isMouseOver.value && not isDraggingCell.value then
-                    // Check if we should show tabs (protection period expired OR mouse left and returned)
-                    if not !hiddenByIconClick || protectionExpired then
-                        if protectionExpired && !hiddenByIconClick then
-                            hiddenByIconClick := false
-                        if not !hiddenByIconClick then
-                            this.ts.isShrunk <- false
-                // Clear the flag when mouse leaves
-                elif not isMouseOver.value then
-                    if !hiddenByIconClick && protectionExpired then
-                        hiddenByIconClick := false
-            else
-                // Normal auto-hide logic for other modes
-                let shrink =
-                    ((isWindowInside.value && autoHideCell.value) ||
-                     (group.isMaximized.value && autoHideMaximizedCell.value)) &&
-                    isMouseOver.value.not &&
-                    isDraggingCell.value.not &&
-                    contextMenuVisibleCell.value.not &&
-                    renamingTabCell.value.not &&
-                    isRecentlyChangedZorderCell.value.not
+            if not (TabEdges.isTopOnly allowedEdges.value) then
                 callbackRef.Value.iter <| fun(d:IDisposable) -> d.Dispose()
                 callbackRef := None
-                if shrink then
-                    callbackRef := Some(ThreadHelper.cancelablePostBack hideDelayCell.value <| fun() ->
-                        this.ts.isShrunk <- true
-                    )
+                if this.ts.isShrunk then this.ts.isShrunk <- false
+                updateEdges()
+            else
+                for edge in TabEdges.priority do
+                    cancelEdge edge
+                    this.ts.setShrunkOn(edge, false)
+                edgeIconProtection.Clear()
+                // Update isWindowInside based on current tab position: any strip
+                // inside the window, on any edge ("hide inside tabs", 5-3) - the
+                // top strip's direction alone while the top edge is the only one.
+                isWindowInside.value <- this.ts.anyInside
+
+                // Handle icon-click-to-hide mode separately
+                if autoHideDoubleClickCell.value then
+
+                    // Check if protection period has expired
+                    let protectionExpired = System.DateTime.Now > !iconClickProtectUntil
+
+                    // In icon-click mode, only show tabs when mouse is over and hidden
+                    if this.ts.isShrunk && isMouseOver.value && not isDraggingCell.value then
+                        // Check if we should show tabs (protection period expired OR mouse left and returned)
+                        if not !hiddenByIconClick || protectionExpired then
+                            if protectionExpired && !hiddenByIconClick then
+                                hiddenByIconClick := false
+                            if not !hiddenByIconClick then
+                                this.ts.isShrunk <- false
+                    // Clear the flag when mouse leaves
+                    elif not isMouseOver.value then
+                        if !hiddenByIconClick && protectionExpired then
+                            hiddenByIconClick := false
                 else
-                    this.ts.isShrunk <- false
+                    // Normal auto-hide logic for other modes
+                    let shrink =
+                        ((isWindowInside.value && autoHideCell.value) ||
+                         (group.isMaximized.value && autoHideMaximizedCell.value)) &&
+                        isMouseOver.value.not &&
+                        isDraggingCell.value.not &&
+                        contextMenuVisibleCell.value.not &&
+                        renamingTabCell.value.not &&
+                        isRecentlyChangedZorderCell.value.not
+                    callbackRef.Value.iter <| fun(d:IDisposable) -> d.Dispose()
+                    callbackRef := None
+                    if shrink then
+                        callbackRef := Some(ThreadHelper.cancelablePostBack (TabBehaviorPolicy.hideTimerInterval hideDelayCell.value) <| fun() ->
+                            this.ts.isShrunk <- true
+                        )
+                    else
+                        this.ts.isShrunk <- false
         
         // Listen for changes to trigger auto-hide update
         Cell.listen updateAutoHide
         
+        let refreshEdgeHide () =
+            group.invokeAsync <| fun () -> edgeHideSettings.value <- readHideSettings ()
+        let hideSubscription = TabEdgeSettings.changed.Publish.Subscribe(fun () -> refreshEdgeHide ())
+        group.exited.Add <| fun () -> hideSubscription.Dispose()
+        // WindowGroup's existing mode notification always writes this key.
+        // This group-owned subscription is released on exit.
+        let modeSubscription = group.bb.disposableSubscribe "autoHideDoubleClick" refreshEdgeHide
+        group.exited.Add <| fun () -> modeSubscription.Dispose()
+
         // When hideDelayCell value changes via notifyValue, restart timer if running
         Services.settings.notifyValue "hideTabsDelayMilliseconds" <| fun value ->
             group.invokeAsync <| fun() ->
+                edgeHideSettings.value <- readHideSettings ()
                 hideDelayCell.value <-
                     try
                         value :?> int
@@ -3441,11 +4016,487 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if callbackRef.Value.IsSome then
                     updateAutoHide()
 
+    // A dragged tab enters the strip of `edge` (the top strip's through this
+    // decorator, the others' through edgeDropTarget), `pt` along the strip.
+    member private this.dragEnterOn(edge: TabEdges.Edge, data: obj, pt: Pt) =
+        let accepted = this.invokeSync <| fun() ->
+            let dragInfo = data :?> TabDragInfo
+            let (Tab(hwnd)) = dragInfo.tab
+#if DEBUG
+            DragTrace.log (fun () -> sprintf "[dockDrag] enter edge=%A continuing=%b" edge dragInfoCell.value.IsSome)
+            group.traceDockDrag("enter-before", edge, hwnd)
+#endif
+            if dragInfoCell.value.IsSome && this.ts.tabs.contains(dragInfo.tab) then
+                // From another strip of this group: the tab - with the block
+                // dragged along with it - changes edge and stays in the
+                // group. Its place and alignment on the new strip are decided
+                // by the slide, as on any strip, and only when it is dropped.
+                let moving = dragInfo.tab :: (this.ts.dragGroup |> List.filter ((<>) dragInfo.tab))
+                this.ts.setTabsEdge(moving, edge)
+                dragPtCell.set(pt)
+                this.updateTsSlide()
+                // The top strip may just have emptied or filled: its corner
+                // and the top edge guard follow.
+                this.updateTsPlacement()
+#if DEBUG
+                group.traceDockDrag("enter-after", edge, hwnd)
+#endif
+                true
+            else
+                let returning = not (this.ts.tabs.contains dragInfo.tab)
+                let accepted = this.enterFromOutside(edge, dragInfo, pt)
+                if accepted then
+                    match ownDragBlock with
+                    | Some block ->
+                        if returning then restoreOwnRemainder()
+                        let moving = TabEdges.ownWindowBlock block this.ts.tabs.contains
+                        this.ts.dragGroup <- []
+                        if moving.Length > 1 then this.ts.prepareEdgeDragBlock(moving)
+                        this.ts.setTabsEdge(moving, edge)
+                        this.updateTsSlide()
+                        this.updateTsPlacement()
+                    | None -> ()
+#if DEBUG
+                group.traceDockDrag("enter-after", edge, hwnd)
+#endif
+                accepted
+        // The entry batch has now rendered the arriving tabs and all strips.
+        // Repair against their final native windows, only for a foreign visit.
+        if accepted then
+            this.invokeSync (fun () ->
+                if foreignDragFront.IsSome then group.repairStripZorder("group-preview-presented"))
+        accepted
+
+    // A dragged tab entering this group's strip from anywhere else - or the
+    // drag starting here. What dragEnter always did, and then the arriving
+    // tabs are put on the edge of the strip they arrive on.
+#if DEBUG
+    member private this.traceDragGroups(phase: string, info: TabDragInfo) =
+        DragTrace.log (fun () ->
+            let source = lock decorators (fun () ->
+                match decorators.TryGetValue info.sourceGroupHwnd with
+                | true, value -> Some value
+                | _ -> None)
+            let order = Win32Helper.GetWindowsInZOrder() |> Array.toList
+            let front members = order |> List.tryFind (fun h -> List.contains h members) |> Option.defaultValue IntPtr.Zero
+            let sourceFront = source |> Option.map (fun d -> front d.group.windowsThreadSafe.items.list) |> Option.defaultValue IntPtr.Zero
+            let targetFront = front group.windows.items.list
+            let above upper lower =
+                match List.tryFindIndex ((=) upper) order, List.tryFindIndex ((=) lower) order with
+                | Some a, Some b -> a < b
+                | _ -> false
+            let sourceStrips = source |> Option.map (fun d -> d.ts.hwnd :: d.ts.edgeHwndsThreadSafe) |> Option.defaultValue []
+            let targetStrips = this.ts.hwnd :: this.ts.edgeHwnds
+            let (Tab pivot) = info.tab
+            sprintf "[dockDrag] groups phase=%s source=%X target=%X drag=%X sourceFront=%X targetFront=%X targetAboveSource=%b sourceStripsAboveTarget=%A targetStripsAboveSource=%A"
+                phase (info.sourceGroupHwnd.ToInt64()) (this.ts.hwnd.ToInt64()) (pivot.ToInt64())
+                (sourceFront.ToInt64()) (targetFront.ToInt64()) (above targetFront sourceFront)
+                (sourceStrips |> List.map (fun h -> h, above h targetFront))
+                (targetStrips |> List.map (fun h -> h, above h sourceFront)))
+#endif
+
+    member private this.enterFromOutside(edge: TabEdges.Edge, dragInfo: TabDragInfo, pt: Pt) =
+            let (Tab(hwnd)) = dragInfo.tab
+            if dragInfo.sourceGroupHwnd <> this.ts.hwnd && not (List.isEmpty dragInfo.transferOrder) && foreignDragFront.IsNone then
+                foreignDragFront <- group.captureDragGroupFront(hwnd :: dragInfo.selectedHwnds)
+                pendingHoverRestore <- foreignDragFront |> Option.map (fun (front, predecessors) ->
+                    fun () -> this.invokeSync (fun () -> group.restoreDragGroupFront(front, predecessors)))
+            // Which of the tabs arrive in this group now, as opposed to being
+            // in it already (the drag starting here): only those are put on
+            // the strip they arrive on.
+            let arriving =
+                (if this.ts.tabs.contains(dragInfo.tab) then [] else [ dragInfo.tab ])
+                @ (dragInfo.selectedHwnds |> List.filter (fun h -> not (group.windows.contains h)) |> List.map Tab)
+            // No special case for a single-tab group: it used to return
+            // false here (= reject the strip as a drop target), which sent
+            // the drag straight into floating-window mode. Sliding the
+            // lone tab inside the strip is still useful — dropping it on
+            // the other half of the strip switches its left/right
+            // alignment — and dragging beyond the strip bounds still
+            // exits into floating-window mode as before.
+            dragPtCell.set(pt)
+            dragInfoCell.set(Some(dragInfo))
+            let alignment =
+                dragInfo.sourceTabAligns |> List.tryHead
+                |> Option.defaultWith (fun () -> this.ts.getTabAlign(dragInfo.tab))
+            this.ts.addTabWithState(dragInfo.tab, alignment,
+                Services.program.isWindowPinned(hwnd), None, edge=edge,
+                ?alignmentEdge=(dragInfo.sourceTabEdges |> Map.tryFind hwnd))
+            this.updateTsSlide()
+            this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
+            if TabEdges.isTopOnly this.ts.allowedEdges then group.addWindow(hwnd, false)
+            else group.addWindow(hwnd, false, edge=edge)
+
+            // Multi-select continuation: the source's dragExit
+            // already removed the selected tabs and hid them
+            // off-screen, so we just need to add + show them in
+            // this group. This single branch handles both
+            // drag-link (target group is different from source)
+            // and drag-cancel (target group IS the source).
+            if not (List.isEmpty dragInfo.selectedHwnds) then
+                // Drop the target's pre-existing multi-select —
+                // the dragged set wins.
+                group.clearSelected()
+                Services.program.suspendTabMonitoring()
+                try
+                    for i, selHwnd in List.indexed dragInfo.selectedHwnds do
+                        if not (group.windows.contains selHwnd) then
+                            let sourceEdge = dragInfo.sourceTabEdges |> Map.tryFind selHwnd
+                            if sourceEdge = Some edge then
+                                Services.program.setWindowAlignmentEdge(selHwnd, edge)
+                                group.addWindow(selHwnd, false, ?alignment=(dragInfo.sourceTabAligns |> List.tryItem (i + 1)), edge=edge)
+                            else
+                                let alignment = dragInfo.sourceTabAligns |> List.tryItem (i + 1) |> Option.defaultValue (this.ts.getTabAlign(Tab selHwnd))
+                                this.ts.addTabWithState(Tab selHwnd, alignment, Services.program.isWindowPinned(selHwnd), None,
+                                                       edge=edge, ?alignmentEdge=sourceEdge)
+                                group.addWindow(selHwnd, false, edge=edge)
+                        let selWindow = os.windowFromHwnd(selHwnd)
+                        selWindow.showWindow(if List.isEmpty dragInfo.transferOrder then ShowWindowCommands.SW_SHOW else ShowWindowCommands.SW_SHOWNOACTIVATE)
+                finally
+                    Services.program.resumeTabMonitoring()
+                // Re-establish the active + selected state at the
+                // destination: dragged is the active, prior
+                // selection becomes the new selected set.
+                if List.isEmpty dragInfo.transferOrder then group.tabActivate(dragInfo.tab, false, drag=true)
+                for selHwnd in dragInfo.selectedHwnds do
+                    group.setSelected(selHwnd, true)
+
+            // A tab arriving on a strip is on that strip's edge (1-4-2), not
+            // on the edge a joining window takes. Nothing to do while the top
+            // edge is the only one.
+            if not (TabEdges.isTopOnly this.ts.allowedEdges) && not (List.isEmpty arriving) then
+                this.ts.setTabsEdge(arriving, edge)
+                // Several tabs arriving from another group slide along the
+                // strip and land together, at the point they are dropped at,
+                // as a block dragged within its own group does. (The group
+                // the drag started in has its block from dragBegin.) With the
+                // top edge alone, today's drop, which places the dragged tab
+                // only, is left as it is.
+                if (!mouseDownTab).IsNone && arriving.Length > 1 then
+                    this.ts.prepareEdgeDragBlock(dragInfo.transferOrder |> List.filter (fun t -> List.contains t arriving))
+                this.updateTsPlacement()
+
+            this.updateTsSlide()
+            foreignDragFront |> Option.iter (fun (front, _) ->
+#if DEBUG
+                this.traceDragGroups("preview-before", dragInfo)
+#endif
+                group.previewDragGroupFront(hwnd, front)
+#if DEBUG
+                this.traceDragGroups("preview-after", dragInfo)
+#endif
+                )
+            true
+
+    // A drop on the strip of an edge other than the top: that strip's
+    // position and smart pin (TabStrip.dropOnEdge). None when the tab is
+    // not being slid along such a strip - always, while the top edge is the
+    // only one - and the top strip's drop runs as it always has.
+    member private this.dropOnSideStrip() : bool option =
+        match this.ts.slideEdge with
+        | Some(edge) when edge <> TabEdges.Edge.Top ->
+            match this.ts.dropOnEdge(edge) with
+            | Some(moved, newAlignment) ->
+                for (Tab h) in moved do
+                    Services.program.setWindowAlignment(h, Some(newAlignment))
+                Some(true)
+            | None -> Some(false)
+        | _ -> None
+
+    member private this.dragMoveOn(pt: Pt) = PerfTrace.time "drag.move" <| fun () ->
+        this.invokeSync <| fun() ->
+            dragPtCell.set(pt)
+            this.updateTsSlide()
+
+    member private this.finishDragHover(commit) =
+        match foreignDragFront with
+        | Some(front, _) ->
+            if not commit then group.keepDragGroupFront(front)
+#if DEBUG
+            DragTrace.log (fun () ->
+                sprintf "[dockDrag] group-%s group=%X front=%X"
+                    (if commit then "commit" else "keep") (this.ts.hwnd.ToInt64()) (front.ToInt64()))
+#endif
+        // Source hover raises only the dragged block. Its original front is
+        // restored by the source session on cancellation, never on edge exit.
+        | None -> ()
+        foreignDragFront <- None
+
+    member private this.dragExitOn() =
+        this.invokeSync <| fun() ->
+#if DEBUG
+            DragTrace.log (fun () -> sprintf "[dockDrag] exit edge=%A" this.ts.slideEdge)
+#endif
+            let leavingFront =
+                dragInfoCell.value |> Option.bind (fun info ->
+                    let (Tab pivot) = info.tab
+                    group.tryTopWindow |> Option.filter (fun h -> h = pivot || List.contains h info.selectedHwnds))
+            match dragInfoCell.value with
+            | Some(dragInfo) ->
+                let tab = dragInfo.tab
+                if this.ts.tabs.contains(tab) then
+                    this.ts.removeTab(tab)
+                    dragInfoCell.set(None)
+                    let (Tab(hwnd)) = tab
+                    // The departing body must not activate a sibling before
+                    // the source remainder is positioned with its bands.
+                    group.removeWindow(hwnd, activate=false)
+                    dragInfo.parkWindow(hwnd)
+
+                    // Multi-select: also detach the selected tabs from
+                    // this group so the source visibly reflects the loss
+                    // (= [A,B,C] when dragging E with D selected from
+                    // [A,B,C,D,E]). The dragEnter on the destination
+                    // (drag-link or drag-cancel) or Desktop.dragDrop
+                    // (drag-detach) will add them back.
+                    for selHwnd in dragInfo.selectedHwnds do
+                        let selTab = Tab(selHwnd)
+                        if this.ts.tabs.contains(selTab) then
+                            this.ts.removeTab(selTab)
+                        if group.windows.contains selHwnd then
+                            group.removeWindow(selHwnd, activate=false)
+                        dragInfo.parkWindow(selHwnd)
+                    // Retain G's previous Z slot without stealing focus or
+                    // raising it over applications that were already above it.
+                    if ownDragBlock.IsSome then
+                        leavingFront |> Option.iter (fun departed ->
+                            group.tryTopWindow |> Option.iter (fun front ->
+                                group.raiseDragWindow(front, departed, reason="source-remainder")))
+            | None -> ()
+            // Detach the carried block first, then bind the bands to B again.
+            // The drag owner retains the rollback; leaving is not cancellation.
+            this.finishDragHover(false)
+            this.updateTsSlide()
+
+    interface IDragHoverGroup with
+        member x.ownsHoverWindow hwnd = group.windowsThreadSafe.contains hwnd
+        member x.bodyDragTarget(pt, current) = this.invokeSync <| fun () ->
+            group.tryTopWindow |> Option.bind (fun hwnd ->
+                let bounds = os.windowFromHwnd(hwnd).bounds
+                TabEdges.ownWindowEdgeAt (Dpi.scaleForPoint pt) this.ts.allowedEdges
+                    (bounds.x, bounds.y, bounds.width, bounds.height) (pt.x, pt.y)
+                    (current |> Option.bind this.ts.edgeOfHwnd)
+                |> Option.map this.ts.hwndOf)
+        member x.hoverFront(data, valid) = this.invokeAsync <| fun () ->
+            if valid() then
+                match data with
+                | Some(:? TabDragInfo as info) when this.ts.tabs.contains info.tab ->
+                    let (Tab hwnd) = info.tab
+                    // Placement and DPI compensation have already settled.
+                    // Hover changes only Z order, with bands and bodies together.
+                    group.raiseDragWindow(hwnd, selected=info.selectedHwnds)
+                | None -> ()
+                | _ -> ()
+        member x.takeHoverRestore() = this.invokeSync <| fun () ->
+            let restore = pendingHoverRestore
+            pendingHoverRestore <- None
+            restore
+        member x.endHover commit = this.invokeAsync <| fun () ->
+            // Cancellation rollback has already completed on the drag thread.
+            foreignDragFront <- None
+            pendingHoverRestore <- None
+#if DEBUG
+            if commit then DragTrace.log (fun () -> sprintf "[dockDrag] group-commit group=%X" (this.ts.hwnd.ToInt64()))
+#endif
+        member x.completeDrop data = this.invokeAsync <| fun () ->
+            match data with
+            | :? TabDragInfo as info when this.ts.tabs.contains info.tab ->
+                TabEdges.completeDragDrop
+                    (fun tab -> group.tabActivate(tab, false, drag=true))
+                    (fun hwnd -> if group.windows.contains hwnd then group.setSelected(hwnd, true))
+                    info.tab info.selectedHwnds
+#if DEBUG
+                let (Tab hwnd) = info.tab
+                group.traceDockDrag("drop-complete", this.ts.edgeOf info.tab, hwnd)
+                this.traceDragGroups("drop-after", info)
+#endif
+            | _ -> ()
+
+    interface IOwnWindowDragSource with
+        member this.beginOwnWindowDrag(data, registered) = this.invokeSync <| fun () ->
+            if TabEdges.isSingleEdge this.ts.allowedEdges || not (data :? TabDragInfo) || group.tryTopWindow.IsNone then None
+            else
+                let dragInfo = data :?> TabDragInfo
+                let originalFront = group.topWindow
+                let mutable homeBounds = os.windowFromHwnd(originalFront).bounds
+                let originalOrder = this.ts.visualOrder.list
+                let placements =
+                    (dragInfo.tab :: (dragInfo.selectedHwnds |> List.map Tab))
+                    |> List.distinct
+                    |> List.map (fun (Tab h) ->
+                        let window = os.windowFromHwnd(h)
+                        h, window.pid.pid, window.tid, window.placement, window.bounds)
+                let mutable returned = false
+                let mutable leftSource = false
+                let restoreSourceWindows() =
+                    returned <- true
+                    // Restore only parked geometry during capture. In particular,
+                    // never activate a maximized app while moving across the band.
+                    dragInfo.restoreParked()
+                let completeSourceWindows() =
+                    if returned && leftSource then
+                        // Queued behind dragEnd, after capture release. A normal
+                        // window needs no placement write; maximize only windows
+                        // that actually returned to the source, not foreign drops.
+                        this.invokeAsync (fun () ->
+                            for h, pid, tid, placement, bounds in placements do
+                                let window = os.windowFromHwnd(h)
+                                if group.windows.contains h && window.isWindow &&
+                                   window.pid.pid = pid && window.tid = tid && not window.isMinimized && not window.isMaximized &&
+                                   placement.showCmd = ShowWindowCommands.SW_SHOWMAXIMIZED then
+                                    // Reuse the native no-activation path. It also
+                                    // establishes the saved normal restore rectangle.
+                                    Win32Helper.PlaceWorkspaceWindowNoActivate(h, placement.rcNormalPosition.RECT, true) |> ignore)
+                let originalState = originalOrder |> List.map (fun tab ->
+                    tab, this.ts.edgeOf tab, this.ts.explicitTabAlignThreadSafe tab, this.ts.isPinned tab,
+                    Services.program.getWindowAlignmentEdge(let (Tab h) = tab in h))
+                let block = this.contiguousSelectedFromTab(dragInfo.tab)
+                ownDragBlock <- Some block
+                if block.Length > 1 then this.ts.prepareEdgeDragBlock(block)
+                let restoreState predicate =
+                    this.ts.batch (fun () ->
+                        for (Tab h as tab), edge, alignment, pinned, alignmentEdge in originalState do
+                            if predicate tab && this.ts.tabs.contains tab then
+                                let changed = this.ts.edgeOf tab <> edge || this.ts.explicitTabAlignThreadSafe tab <> alignment
+                                if this.ts.edgeOf tab <> edge then this.ts.setTabEdge(tab, edge)
+                                if this.ts.isPinned tab <> pinned then
+                                    if pinned then this.ts.pinTab(tab) else this.ts.unpinTab(tab)
+                                    Services.program.setWindowPinned(h, pinned)
+                                if changed then
+                                    match alignment with
+                                    | Some value -> this.ts.setTabAlign(tab, value)
+                                    | None -> this.ts.clearTabAlign(tab)
+                                    Services.program.setWindowAlignment(h, alignment)
+                                    alignmentEdge |> Option.iter (fun e -> Services.program.setWindowAlignmentEdge(h, e))
+                        let present = this.ts.visualOrder.list
+                        let order = TabEdges.ownWindowRestoreOrder originalOrder predicate present
+                        if present <> order then this.ts.setVisualOrder(order))
+                // Detach still transfers all selected tabs. On return, the
+                // extra selections resume their old zones; only the original
+                // contiguous block follows the pointer.
+                restoreOwnRemainder <- fun () ->
+                    restoreState (fun (Tab h as tab) -> List.contains h dragInfo.selectedHwnds && not (List.contains tab block))
+                // A hidden zero-sized native sibling keeps the home's Z slot
+                // independently of parked windows visiting another group.
+                // It never paints, receives input, or activates an application.
+                let mutable anchor : IWindow option = None
+                let mutable lastCoveredHit : (IntPtr * bool * int64) option = None
+                let refreshHit() = lastCoveredHit <- None
+                let leaving() =
+                    leftSource <- true
+                    // Snapshot geometry and Z position together on EVERY exit.
+                    // Membership may have changed since the drag began.
+                    let (Tab pivot) = dragInfo.tab
+                    let canEmpty = group.windows.items.list |> List.forall (fun h -> h = pivot || List.contains h dragInfo.selectedHwnds)
+                    match group.tryTopWindow with
+                    | Some front when canEmpty ->
+                        homeBounds <- os.windowFromHwnd(front).bounds
+                        if anchor.IsNone then
+                            anchor <- Some(os.createWindow (fun msg -> msg.def()) WindowsStyles.WS_POPUP
+                                        (WindowsExtendedStyles.WS_EX_TOOLWINDOW ||| WindowsExtendedStyles.WS_EX_NOACTIVATE))
+                        anchor |> Option.iter (fun window -> os.windowFromHwnd(window.hwnd).insertAfter(front))
+                        refreshHit()
+                    | _ -> ()
+                let uncovered visible =
+                    let now = System.Diagnostics.Stopwatch.GetTimestamp()
+                    match lastCoveredHit with
+                    | Some(h, result, at) when h = visible && now - at < System.Diagnostics.Stopwatch.Frequency / 10L -> result
+                    | _ ->
+                        let result = anchor |> Option.exists (fun window ->
+                            TabEdges.ownWindowHomeUncovered TopEdgeGuardPlacement.above window.hwnd IntPtr.Zero visible)
+                        lastCoveredHit <- Some(visible, result, now)
+                        result
+                Some { new IOwnWindowDragSession with
+                    member x.targetAt(pt, visible, current) = this.invokeSync <| fun () ->
+                        let realStrip edge =
+                            let hwnd = this.ts.hwndOf edge
+                            if this.ts.edgeOfHwnd hwnd = Some edge && registered hwnd then Some hwnd else None
+                        let allowed = TabEdges.edgesOf this.ts.allowedEdges |> List.filter (realStrip >> Option.isSome) |> TabEdges.allowedOf
+                        let guard = TopEdgeGuardPlacement.isGuard visible
+                        let visible = if guard then TopEdgeGuardPlacement.ownerOf visible else visible
+                        let ownGuard = guard && (this.ts.ownsHwnd visible || group.windows.contains visible)
+                        let front = group.tryTopWindow
+                        let bounds =
+                            match front with
+                            | Some h ->
+                                let bounds = os.windowFromHwnd(h).bounds
+                                if bounds <> homeBounds then homeBounds <- bounds
+                                // The home follows a live source, but freezes
+                                // while empty, including visits to other groups.
+                                bounds
+                            | None -> homeBounds
+                        let currentEdge = current |> Option.bind this.ts.edgeOfHwnd
+                        let rect = bounds.x, bounds.y, bounds.width, bounds.height
+                        let scale = Dpi.scaleForPoint pt
+                        let bodyEdge =
+                            allowed |> Option.bind (fun edges ->
+                                TabEdges.ownWindowEdgeAt scale edges rect (pt.x, pt.y) currentEdge)
+                            |> Option.filter (realStrip >> Option.isSome)
+                        match this.ts.edgeOfHwnd visible with
+                        | Some edge when List.contains edge (TabEdges.edgesOf this.ts.allowedEdges) -> realStrip edge
+                        | _ ->
+                            let visibleBody =
+                                match front with
+                                | Some _ -> group.windows.contains visible || this.ts.ownsHwnd visible
+                                | None -> bodyEdge.IsSome && uncovered visible
+                            let nearCurrent() =
+                                current |> Option.filter (fun hwnd ->
+                                    let r = os.windowFromHwnd(hwnd).bounds
+                                    TabEdges.ownWindowStripContains false
+                                        (currentEdge |> Option.exists TabEdges.runsHorizontally) (Dpi.px (Dpi.scaleForRect r) 20)
+                                        (r.x, r.y, r.width, r.height) (pt.x, pt.y))
+                            if ownGuard then
+                                let px = max bounds.x (min (bounds.right - 1) pt.x)
+                                let py = max bounds.y (min (bounds.bottom - 1) pt.y)
+                                allowed |> Option.bind (fun edges ->
+                                    TabEdges.ownWindowEdgeAt scale edges rect (px, py) currentEdge)
+                                |> Option.bind realStrip
+                            elif visibleBody && bounds.containsPoint pt then
+                                nearCurrent() |> Option.orElseWith (fun () -> bodyEdge |> Option.bind realStrip)
+                            elif (visible = IntPtr.Zero ||
+                                  List.contains (os.windowFromHwnd(visible).className) ["Progman"; "WorkerW"] ||
+                                  (Mon.fromPoint(pt) |> Option.exists (fun mon -> not (mon.workRect.containsPoint pt)))) then
+                                // Keep the legacy screen-edge/taskbar tolerance.
+                                // Visible registered strips were already prioritized.
+                                current |> Option.filter (fun hwnd ->
+                                    let r = os.windowFromHwnd(hwnd).bounds
+                                    let gap = Dpi.px (Dpi.scaleForRect r) 20
+                                    let receiver = false
+                                    let horizontal = currentEdge |> Option.exists TabEdges.runsHorizontally
+                                    TabEdges.ownWindowStripContains receiver horizontal gap
+                                        (r.x, r.y, r.width, r.height) (pt.x, pt.y))
+                            else None
+                    member x.leaving() = this.invokeSync leaving
+                    member x.refreshHit() = this.invokeSync refreshHit
+                    member x.complete() = completeSourceWindows()
+                    member x.prepareReturn() = this.invokeSync restoreSourceWindows
+                    member x.cancel() = this.invokeSync <| fun () ->
+                        restoreSourceWindows()
+                        if not (this.ts.tabs.contains dragInfo.tab) then
+                            this.enterFromOutside(dragInfo.sourceTabEdges.[let (Tab h) = dragInfo.tab in h], dragInfo, Pt()) |> ignore
+                        this.cleanupEdgeDrag()
+                        restoreState (fun _ -> true)
+                        // Roll back G's front even after a body hover while its
+                        // original front was parked. Global application Z order
+                        // and keyboard focus are not a desktop-wide snapshot.
+                        group.raiseDragWindow(originalFront, reason="drag-cancel")
+                        this.updateTsPlacement()
+                  interface IDisposable with
+                    member x.Dispose() = this.invokeSync (fun () ->
+                        ownDragBlock <- None
+                        restoreOwnRemainder <- ignore
+                        anchor |> Option.iter (fun window -> (window :?> IDisposable).Dispose())) }
+
+
+    interface IGroupDragTarget with
+        member x.group = box this
+        member x.runsAcross = true
+
     interface ITabStripMonitor with
         member x.tabClick((btn, tab, part, action, pt)) =
             let (Tab(hwnd)) = tab
             mouseEvent.Trigger(hwnd, btn, part, action, pt)
-            let ptScreen = os.windowFromHwnd(this.ts.hwnd).ptToScreen(pt)
+            let ptScreen = this.ts.screenPointOf(tab, pt)
             match action with
             | MouseDown ->
                 group.flashTab(tab, false)
@@ -3466,7 +4517,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     let shiftHeld = (mods &&& System.Windows.Forms.Keys.Shift) = System.Windows.Forms.Keys.Shift
                     let ctrlHeld = (mods &&& System.Windows.Forms.Keys.Control) = System.Windows.Forms.Keys.Control
                     if shiftHeld && part <> TabClose && part <> TabPin then
-                        group.selectRange(hwnd)
+                        if this.ts.edgeOf tab <> this.ts.edgeOf (Tab(group.topWindow)) then
+                            group.clearSelected()
+                            group.tabActivate(tab, false)
+                        else
+                            group.selectRange(hwnd)
                     elif ctrlHeld && part <> TabClose && part <> TabPin then
                         // Ctrl+click on the active tab is a no-op per spec.
                         if hwnd <> group.topWindow then
@@ -3509,13 +4564,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             // Calculate scaled offset for preview image (always needed when dragging to different location)
                             // Keep PrintWindow behind the drag threshold: both offset
                             // calculations use the same geometry-only width snapshot.
-                            let previewWidth = tabInfo.previewSize().width
-                            let dragTabLoc = this.ts.dragTabLocation(tab, previewWidth)
+                            let previewSize = tabInfo.previewSize()
+                            let previewWidth = previewSize.width
                             DragTrace.log (fun () -> sprintf "press.geometry: hwnd=%X previewWidth=%d" (hwnd.ToInt64()) previewWidth)
-                            let originalWidth = this.ts.bounds.width
-                            let scaleRatio = float(previewWidth) / float(originalWidth)
-                            let scaledClickOffset = Pt(int(float(clickOffsetInTab.x) * scaleRatio), clickOffsetInTab.y)
-                            let imageOffset = dragTabLoc.add(scaledClickOffset)
+                            let imageOffset = this.ts.dragImageOffset(tab, previewSize, clickOffsetInTab)
 
                             // For tab reordering within same group, use unscaled click offset
                             let tabOffset = clickOffsetInTab
@@ -3530,8 +4582,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                             // is auto-destroyed (= "group-move" with no
                             // separate detach pass needed).
                             let selectedSnapshot =
-                                group.selectedTabs.items.list
-                                |> List.filter (fun h -> h <> hwnd)
+                                if TabEdges.isTopOnly this.ts.allowedEdges then
+                                    group.selectedTabs.items.list |> List.filter (fun h -> h <> hwnd)
+                                else
+                                    this.ts.visualOrder.list
+                                    |> List.choose (fun (Tab h) -> if h <> hwnd && group.selectedTabs.contains h then Some h else None)
                             let frameMargins =
                                 (hwnd :: selectedSnapshot)
                                 |> List.map (fun h -> h, group.capturePlacementMargin(h)) |> Map.ofList
@@ -3540,6 +4595,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                 box({ tab = tab
                                       tabOffset = tabOffset
                                       imageOffset = imageOffset
+                                      previewWindowOffset = this.ts.dragPreviewWindowOffset(tab, previewSize)
                                       tabInfo = tabInfo
                                       parkWindow = parking.park
                                       restoreParked = parking.restore
@@ -3547,14 +4603,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                       sourceGroupHwnd = group.hwnd
                                       selectedHwnds = selectedSnapshot
                                       sourceFrameMargins = frameMargins
+                                      transferOrder =
+                                          if TabEdges.isTopOnly this.ts.allowedEdges then []
+                                          else this.ts.visualOrder.list |> List.filter (fun (Tab h) -> h = hwnd || List.contains h selectedSnapshot)
                                       sourceRestoreSize =
                                           let window = os.windowFromHwnd(hwnd)
                                           let restored = FramePlacement.restoredBounds window
                                           (FramePlacement.read hwnd frameMargins.[hwnd] restored).size
                                       sourceSnapTabHeightMargin = group.snapTabHeightMargin
                                       sourceLockWindowPosition = group.lockWindowPosition
-                                      sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign })
-                            Services.dragDrop.beginDrag(this.ts.hwnd, dragImage, imageOffset, ptScreen, dragInfo)
+                                      sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign
+                                      sourceTabEdges = (hwnd :: selectedSnapshot) |> List.map (fun h -> h, group.tabEdge h) |> Map.ofList })
+                            // From the strip the tab is on.
+                            Services.dragDrop.beginDrag(this.ts.hwndOf(this.ts.edgeOf tab), dragImage, imageOffset, ptScreen, dragInfo)
                 | MouseMiddle ->
                     group.clearSelected()
                     group.tabActivate(tab, false)
@@ -3637,139 +4698,102 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     this.updateTsPlacement()
 
 
+    member private this.cleanupEdgeDrag() =
+        TabEdges.cleanupDrag [
+            (fun () -> this.ts.stopDragScroll(); this.ts.isReceiving <- false)
+            (fun () -> isDraggingCell.value <- false)
+            (fun () -> this.ts.transparent <- true)
+            (fun () -> this.ts.dragGroup <- [])
+            (fun () -> mouseDownTab := None; mouseDownOnSelected := false)
+            (fun () -> dragInfoCell.set(None))
+            (fun () -> this.ts.slide <- None)
+            (fun () -> this.updateTsSlide())
+            (fun () -> this.updateTsPlacement()) ]
+
     interface IDragDropTarget with
         member this.dragBegin() =
-            this.invokeAsync <| fun() ->
-                isDraggingCell.value <- true
-                group.repairStripZorder("drag-begin")
-                this.ts.transparent <- false
-                // Multi-select drag-reorder: if the drag origin tab is part
-                // of the multi-select set, compute the contiguous range and
-                // hand it to the strip so the slide rendering carries all
-                // members along with the pivot.
-                // Guard: dragBegin runs async (BeginInvoke), but for a
-                // single-tab group the synchronous dragEnter->dragExit that
-                // follows can detach the only tab and empty this group
-                // BEFORE this callback executes. In that case the origin tab
-                // is gone, so there is no group to build — computing it would
-                // call group.topWindow on an empty zorder and crash
-                // ("The input list was empty.").
-                match !mouseDownTab with
-                | Some originTab when this.ts.tabs.contains(originTab) ->
-                    let grp = this.contiguousSelectedFromTab(originTab)
-                    if grp.Length > 1 then
-                        this.ts.dragGroup <- grp
-                    else
-                        this.ts.dragGroup <- []
-                | _ ->
-                    this.ts.dragGroup <- []
-                
-        member this.dragEnter dragInfo pt =
-            this.invokeSync <| fun() ->
-                let dragInfo = dragInfo :?> TabDragInfo
-                let (Tab(hwnd)) = dragInfo.tab
-                // No special case for a single-tab group: it used to return
-                // false here (= reject the strip as a drop target), which sent
-                // the drag straight into floating-window mode. Sliding the
-                // lone tab inside the strip is still useful — dropping it on
-                // the other half of the strip switches its left/right
-                // alignment — and dragging beyond the strip bounds still
-                // exits into floating-window mode as before.
-                dragPtCell.set(pt)
-                dragInfoCell.set(Some(dragInfo))
-                let alignment =
-                    dragInfo.sourceTabAligns |> List.tryHead
-                    |> Option.defaultWith (fun () -> this.ts.getTabAlign(dragInfo.tab))
-                this.ts.addTabWithState(dragInfo.tab, alignment,
-                    Services.program.isWindowPinned(hwnd), None)
-                this.tabSlide |> Option.iter (fun slide -> this.ts.slide <- Some slide)
-                this.ts.setTabInfo(dragInfo.tab, dragInfo.tabInfo)
-                group.addWindow(hwnd, false)
+            let dispatch = if ownDragBlock.IsSome then this.invokeSync else this.invokeAsync
+            dispatch <| fun() ->
+                let beginDrag() =
+                    isDraggingCell.value <- true
+                    group.repairStripZorder("drag-begin")
+                    this.ts.transparent <- false
+                    // Every group shows a thin strip on each allowed edge it has
+                    // no tab on, for as long as the drag lasts (2-5). Never while
+                    // the top edge is the only one.
+                    if not (TabEdges.isTopOnly this.ts.allowedEdges) then
+                        this.ts.isReceiving <- true
+                    // Multi-select drag-reorder: if the drag origin tab is part
+                    // of the multi-select set, compute the contiguous range and
+                    // hand it to the strip so the slide rendering carries all
+                    // members along with the pivot.
+                    // Guard: dragBegin runs async (BeginInvoke), but for a
+                    // single-tab group the synchronous dragEnter->dragExit that
+                    // follows can detach the only tab and empty this group
+                    // BEFORE this callback executes. In that case the origin tab
+                    // is gone, so there is no group to build — computing it would
+                    // call group.topWindow on an empty zorder and crash
+                    // ("The input list was empty.").
+                    match !mouseDownTab with
+                    | Some originTab when this.ts.tabs.contains(originTab) ->
+                        let grp = ownDragBlock |> Option.defaultWith (fun () -> this.contiguousSelectedFromTab(originTab))
+                        if grp.Length > 1 then
+                            this.ts.dragGroup <- grp
+                        else
+                            this.ts.dragGroup <- []
+                    | _ ->
+                        if TabEdges.clearBlockOnBegin this.ts.allowedEdges dragInfoCell.value.IsSome then
+                            this.ts.dragGroup <- []
+                TabEdges.endDrag this.ts.allowedEdges beginDrag this.cleanupEdgeDrag
 
-                // Multi-select continuation: the source's dragExit
-                // already removed the selected tabs and hid them
-                // off-screen, so we just need to add + show them in
-                // this group. This single branch handles both
-                // drag-link (target group is different from source)
-                // and drag-cancel (target group IS the source).
-                if not (List.isEmpty dragInfo.selectedHwnds) then
-                    // Drop the target's pre-existing multi-select —
-                    // the dragged set wins.
-                    group.clearSelected()
-                    Services.program.suspendTabMonitoring()
-                    try
-                        for i, selHwnd in List.indexed dragInfo.selectedHwnds do
-                            if not (group.windows.contains selHwnd) then
-                                group.addWindow(selHwnd, false, ?alignment=(dragInfo.sourceTabAligns |> List.tryItem (i + 1)))
-                            let selWindow = os.windowFromHwnd(selHwnd)
-                            selWindow.showWindow(ShowWindowCommands.SW_SHOW)
-                    finally
-                        Services.program.resumeTabMonitoring()
-                    // Re-establish the active + selected state at the
-                    // destination: dragged is the active, prior
-                    // selection becomes the new selected set.
-                    group.tabActivate(dragInfo.tab, false)
-                    for selHwnd in dragInfo.selectedHwnds do
-                        group.setSelected(selHwnd, true)
+        member this.dragEnter dragInfo pt = this.dragEnterOn(TabEdges.Edge.Top, dragInfo, pt)
 
-                this.updateTsSlide()
-                true
+        member this.dragMove(pt) =
+            if ownDragBlock.IsSome then
+                let bounds = os.windowFromHwnd(this.ts.hwnd).bounds
+                this.dragMoveOn(Pt(max 0 (min (max 0 (bounds.width - 1)) pt.x), max 0 (min (max 0 (bounds.height - 1)) pt.y)))
+            else this.dragMoveOn(pt)
 
-        member this.dragMove(pt) = PerfTrace.time "drag.move" <| fun () ->
-            this.invokeSync <| fun() ->
-                dragPtCell.set(pt)
-                this.updateTsSlide()
-
-        member this.dragExit() =
-            this.invokeSync <| fun() ->
-                match dragInfoCell.value with
-                | Some(dragInfo) ->
-                    let tab = dragInfo.tab
-                    if this.ts.tabs.contains(tab) then
-                        this.ts.removeTab(tab)
-                        dragInfoCell.set(None)
-                        let (Tab(hwnd)) = tab
-                        group.removeWindow(hwnd)
-                        dragInfo.parkWindow(hwnd)
-
-                        // Multi-select: also detach the selected tabs from
-                        // this group so the source visibly reflects the loss
-                        // (= [A,B,C] when dragging E with D selected from
-                        // [A,B,C,D,E]). The dragEnter on the destination
-                        // (drag-link or drag-cancel) or Desktop.dragDrop
-                        // (drag-detach) will add them back.
-                        for selHwnd in dragInfo.selectedHwnds do
-                            let selTab = Tab(selHwnd)
-                            if this.ts.tabs.contains(selTab) then
-                                this.ts.removeTab(selTab)
-                            if group.windows.contains selHwnd then
-                                group.removeWindow(selHwnd)
-                            dragInfo.parkWindow(selHwnd)
-                | None -> ()
-                this.updateTsSlide()
+        member this.dragExit() = this.dragExitOn()
 
         member this.dragEnd() =
             this.invokeAsync <| fun() ->
+                let finish() =
+                    this.ts.stopDragScroll()
+                    this.ts.isReceiving <- false
+                    this.dragEndBody()
+                TabEdges.endDrag this.ts.allowedEdges finish this.cleanupEdgeDrag
+
+    // The end of a drag, on this group's thread (see dragEnd).
+    member private this.dragEndBody() =
+#if DEBUG
+                dragInfoCell.value |> Option.iter (fun info ->
+                    let (Tab hwnd) = info.tab
+                    group.traceDockDrag("end-before", this.ts.edgeOf info.tab, hwnd))
+#endif
                 isDraggingCell.value <- false
                 group.repairStripZorder("drag-end")
                 this.ts.transparent <- true
                 let didMove =
-                    match this.ts.movedTab with
-                    | Some(tab, index, newAlignment) ->
-                        // Multi-select drag-reorder: ts.dragGroup holds the
-                        // contiguous range; splice-move the whole group.
-                        let grp = this.ts.dragGroup
-                        if grp.Length > 1 then
-                            this.ts.moveTabs(grp, index, newAlignment)
-                            for movedTab in grp do
-                                let (Tab h) = movedTab
-                                Services.program.setWindowAlignment(h, Some(newAlignment))
-                        else
-                            this.ts.moveTab(tab, index, newAlignment)
-                            let (Tab hwnd) = tab
-                            Services.program.setWindowAlignment(hwnd, Some(newAlignment))
-                        true
-                    | None -> false
+                    match this.dropOnSideStrip() with
+                    | Some(moved) -> moved
+                    | None ->
+                        match this.ts.movedTab with
+                        | Some(tab, index, newAlignment) ->
+                            // Multi-select drag-reorder: ts.dragGroup holds the
+                            // contiguous range; splice-move the whole group.
+                            let grp = this.ts.dragGroup
+                            if grp.Length > 1 then
+                                this.ts.moveTabs(grp, index, newAlignment)
+                                for movedTab in grp do
+                                    let (Tab h) = movedTab
+                                    Services.program.setWindowAlignment(h, Some(newAlignment))
+                            else
+                                this.ts.moveTab(tab, index, newAlignment)
+                                let (Tab hwnd) = tab
+                                Services.program.setWindowAlignment(hwnd, Some(newAlignment))
+                            true
+                        | None -> false
                 this.ts.dragGroup <- []
                 mouseDownTab := None
 
@@ -3790,8 +4814,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                     group.clearSelected()
                 mouseDownOnSelected := false
 
+#if DEBUG
+                dragInfoCell.value |> Option.iter (fun info ->
+                    let (Tab hwnd) = info.tab
+                    group.traceDockDrag("end-after", this.ts.edgeOf info.tab, hwnd))
+#endif
                 dragInfoCell.set(None)
                 this.updateTsSlide()
+                // Tabs may have changed edge, and the thin strips have gone.
+                if not (TabEdges.isTopOnly this.ts.allowedEdges) then
+                    this.updateTsPlacement()
 
     interface IDisposable with
         member this.Dispose() =

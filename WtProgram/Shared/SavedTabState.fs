@@ -31,6 +31,16 @@ module SavedTabState =
         | AlignLeft
         | AlignRight
 
+    // Which edge of the window a tab is drawn on (TabEdges.Edge, repeated here
+    // for the same reason as SavedAlign; TabEdges converts between the two).
+    // A file written before tabs could leave the top edge holds no edge at
+    // all, and every tab in it is a top tab.
+    type SavedEdge =
+        | EdgeTop
+        | EdgeLeft
+        | EdgeRight
+        | EdgeBottom
+
     // Colours travel as their RRGGBBAA text. The conversion to and from
     // System.Drawing.Color is Program.fs's business; what matters here is that
     // the two ends agree on the byte order, so both halves live together.
@@ -64,6 +74,9 @@ module SavedTabState =
         underlineColor: string option
         borderColor: string option
         align: SavedAlign option
+        // The edge, and with it what `align` means: on a left or right edge
+        // AlignLeft is the top end of the strip and AlignRight the bottom end.
+        edge: SavedEdge
         // Set only on an entry that was written back while still waiting for
         // its window; a window that was running at save time has none and
         // starts its wait when it is next read.
@@ -88,12 +101,37 @@ module SavedTabState =
         underlineColor = None
         borderColor = None
         align = None
+        edge = EdgeTop
         seedSince = None
         closedByUser = false
         onAllDesktops = false
     }
 
     let formatAlign = function AlignLeft -> "TopLeft" | AlignRight -> "TopRight"
+
+    // The key, the same for the restart restore and, later, the workspaces.
+    [<Literal>]
+    let edgeKey = "tabEdge"
+
+    // Written with a capital, like the "TopLeft" of tabAlignment. The top edge
+    // is never written (see toJson), so "Top" is only ever read.
+    let formatEdge = function
+        | EdgeTop -> "Top"
+        | EdgeLeft -> "Left"
+        | EdgeRight -> "Right"
+        | EdgeBottom -> "Bottom"
+
+    // Read without regard to case, as the keys are. A value this version does
+    // not know puts THAT tab on the top edge - the edge a tab of an unchecked
+    // edge goes to first - and costs nothing else: its group and the rest of
+    // the file are read as usual.
+    let parseEdge (s: string) =
+        match (if isNull s then "" else s).ToLowerInvariant() with
+        | "top" -> Some(EdgeTop)
+        | "left" -> Some(EdgeLeft)
+        | "right" -> Some(EdgeRight)
+        | "bottom" -> Some(EdgeBottom)
+        | _ -> None
 
     // "Left" and "Right" are accepted as well: they are what a settings file
     // written by an older version holds.
@@ -158,6 +196,9 @@ module SavedTabState =
         t.underlineColor |> Option.iter (fun v -> put "tabUnderlineColor" (JValue(v)))
         t.borderColor |> Option.iter (fun v -> put "tabBorderColor" (JValue(v)))
         t.align |> Option.iter (fun a -> put "tabAlignment" (JValue(formatAlign a)))
+        // Only for an edge other than the top, so that a file in which every
+        // tab is on the top edge is written exactly as it was before edges.
+        if t.edge <> EdgeTop then put edgeKey (JValue(formatEdge t.edge))
         t.seedSince |> Option.iter (fun d -> put "seedSince" (JValue(d.ToString("o"))))
         if t.closedByUser then put "closedByUser" (JValue(true))
         if t.onAllDesktops then put "onAllDesktops" (JValue(true))
@@ -181,6 +222,7 @@ module SavedTabState =
                 underlineColor = stringOf o "tabUnderlineColor"
                 borderColor = stringOf o "tabBorderColor"
                 align = stringOf o "tabAlignment" |> Option.bind parseAlign
+                edge = stringOf o edgeKey |> Option.bind parseEdge |> Option.defaultValue EdgeTop
                 seedSince =
                     stringOf o "seedSince"
                     |> Option.bind (fun s ->

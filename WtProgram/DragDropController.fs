@@ -168,14 +168,25 @@ type DragCapturedStateInfo = {
 type DragCapturedState(info:DragCapturedStateInfo) as this =
     // Device pixels for the strip's monitor (see DragDetectingState).
     let dragOutDistance = Dpi.px (Dpi.scaleForRect info.targetWindow.bounds) 20
+    // A strip is left across its length: upwards or downwards for one that
+    // runs left to right, sideways for one down a side of the window.
+    let runsAcross =
+        match info.target with
+        | :? IGroupDragTarget as strip -> strip.runsAcross
+        | _ -> true
     interface IDragState with
         member this.mouseMove(ptScreen) =
-            let dragBounds = info.targetWindow.bounds.inflate(0, dragOutDistance)
+            let dragBounds =
+                match info.target with
+                | :? IReceiverDragTarget as receiver when receiver.isReceiver -> info.targetWindow.bounds
+                | _ when runsAcross -> info.targetWindow.bounds.inflate(0, dragOutDistance)
+                | _ -> info.targetWindow.bounds.inflate(dragOutDistance, 0)
             if dragBounds.containsPoint(ptScreen) then
                 info.target.dragMove(info.targetWindow.ptToClient(ptScreen))
             else
                 DragTrace.log (fun () -> sprintf "captured: out at %A, strip=%X bounds=%A" ptScreen (info.targetWindow.hwnd.ToInt64()) info.targetWindow.bounds)
-                info.target.dragExit()
+                // Leaving the target (dragExit) is decided by onDragOut: going
+                // on to another strip of the same group is not leaving it.
                 info.onDragOut(ptScreen)
         member this.dispose() = ()
 
@@ -217,7 +228,7 @@ type DragActionInfo = {
 
 type DragAction(info:DragActionInfo, dragId:int) as this =
     let os = OS()
-    let dragScale = 0.5
+    let dragScale = TabEdges.dragPreviewScale
     let Cell = CellScope(true, false)
     let ptScreenCell = Cell.create(info.initialPt)
     let dragStateCell = Cell.create(None:Option<IDragState>)
@@ -234,6 +245,140 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
 #if DEBUG
     let mutable traceForeground = IntPtr.Zero
 #endif
+
+    let hasSideTargets =
+        info.targets.values.any(fun target ->
+            match target with
+            | :? IGroupDragTarget as strip -> not strip.runsAcross
+            | _ -> false)
+    let mutable began = false
+    let mutable ownSession : IOwnWindowDragSession option = None
+    let mutable ownGroup : obj option = None
+    let mutable activeTarget : IntPtr option = None
+
+    let mutable hoverState : TabEdges.DragHoverState<IntPtr> option = None
+    let mutable hoverEpoch = 0L
+    let mutable hoverRestores : (unit -> unit) list = []
+    let mutable stripHitCache : (IntPtr * IntPtr * bool * int64) option = None
+    let hoverGroups =
+        info.targets.values.list
+        |> List.choose (fun target ->
+            match target with
+            | :? IGroupDragTarget as strip ->
+                match strip.group with
+                | :? IDragHoverGroup as hover -> Some(strip.group, hover)
+                | _ -> None
+            | _ -> None)
+        |> List.distinctBy fst
+
+    member private this.sameGroup(a, b) =
+        match info.targets.tryFind a, info.targets.tryFind b with
+        | Some(:? IGroupDragTarget as x), Some(:? IGroupDragTarget as y) -> obj.ReferenceEquals(x.group, y.group)
+        | _ -> false
+
+    member private this.exitTarget(hwnd) =
+        if this.isOwnTarget hwnd then ownSession |> Option.iter (fun session -> session.leaving())
+        info.targets.find(hwnd).dragExit()
+
+    member private this.foreignTargetAt(pt: Pt, visible: IntPtr) =
+        let visible = if TopEdgeGuardPlacement.isGuard visible then TopEdgeGuardPlacement.ownerOf visible else visible
+        match info.targets.tryFind visible with
+        | Some _ when not (this.isOwnTarget visible) -> Some visible
+        | _ ->
+            hoverGroups |> List.tryPick (fun (owner, hover) ->
+                if ownGroup |> Option.exists (fun source -> obj.ReferenceEquals(source, owner)) then None
+                elif hover.ownsHoverWindow visible then
+                    hover.bodyDragTarget(pt, activeTarget) |> Option.filter (fun h -> info.targets.tryFind(h).IsSome)
+                else None)
+
+    member private this.hoverTick(pt: Pt) =
+        if ownSession.IsSome && not hasEnded then
+            let visible = this.visibleRoot(pt)
+            let hoverWindow = if TopEdgeGuardPlacement.isGuard visible then TopEdgeGuardPlacement.ownerOf visible else visible
+            let stripGroup =
+                match info.targets.tryFind hoverWindow with
+                | Some(:? IGroupDragTarget as strip) ->
+                    match strip.group with
+                    | :? IDragHoverGroup as hover -> Some(hover, Some info.data)
+                    | _ -> None
+                | _ -> None
+            let candidate = stripGroup |> Option.orElseWith (fun () ->
+                hoverGroups |> List.tryPick (fun (_, hover) ->
+                    if hover.ownsHoverWindow hoverWindow then Some(hover, Some info.data) else None))
+            // Foreign receivers now preview immediately on entry, including
+            // their bodies. Retain the delayed hover only for the source.
+            let candidate = candidate |> Option.filter (fun (hover, _) ->
+                ownGroup |> Option.exists (fun owner -> obj.ReferenceEquals(owner, hover)) &&
+                (activeTarget |> Option.exists this.isOwnTarget))
+            let now = System.Diagnostics.Stopwatch.GetTimestamp() * 1000L / System.Diagnostics.Stopwatch.Frequency
+            let next, fire = TabEdges.dragHoverStep now (Dpi.px (Dpi.scaleForPoint pt) TabEdges.dragHoverSlop)
+                                (candidate |> Option.map (fun _ -> visible)) (pt.x, pt.y) hoverState
+            if next <> hoverState then hoverEpoch <- hoverEpoch + 1L
+            hoverState <- next
+            if fire then
+                let epoch = hoverEpoch
+                let captureHwnd, captureThread = this.captureWindow.hwnd, this.captureWindow.tid
+                let captureHeld() =
+                    let mutable gui = GUITHREADINFO()
+                    gui.cbSize <- Runtime.InteropServices.Marshal.SizeOf(gui)
+                    WinUserApi.GetGUIThreadInfo(captureThread, &gui) && gui.hwndCapture = captureHwnd
+                ownSession |> Option.iter (fun session -> session.refreshHit())
+                stripHitCache <- None
+                candidate |> Option.iter (fun (hover, data) ->
+                    hover.hoverFront(data, fun () ->
+                        let mutable cursor = POINT()
+                        if not (WinUserApi.GetCursorPos(&cursor)) then false
+                        else
+                            let current = cursor.ToPoint().Pt
+                            TabEdges.dragHoverRequestValid hasEnded hoverEpoch epoch (captureHeld())
+                                (isLeftMouseButtonDown()) (Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_ESCAPE))
+                                (Dpi.px (Dpi.scaleForPoint pt) TabEdges.dragHoverSlop)
+                                (pt.x, pt.y) (current.x, current.y)
+                                (this.visibleRoot(current) = visible && (activeTarget |> Option.exists this.isOwnTarget))))
+
+    // Transparent pixels may hit a window BELOW the current strip. Cache only
+    // the Z query, not membership or rectangles; release always refreshes it.
+    member private this.stripKeeps(hwnd, visible, pt: Pt) =
+        let stripWindow = os.windowFromHwnd(hwnd)
+        let bounds = stripWindow.bounds
+        let target = info.targets.find hwnd
+        let horizontal = match target with :? IGroupDragTarget as s -> s.runsAcross | _ -> true
+        let receiver = match target with :? IReceiverDragTarget as r -> r.isReceiver | _ -> false
+        let inStrip = bounds.containsPoint pt
+        let inMargin = TabEdges.ownWindowStripContains receiver horizontal (Dpi.px (Dpi.scaleForRect bounds) 20)
+                            (bounds.x,bounds.y,bounds.width,bounds.height) (pt.x,pt.y)
+        if not (inStrip || inMargin) then false
+        else
+            let foreign = info.targets.tryFind(visible).IsSome && not (this.sameGroup(hwnd,visible))
+            let below =
+                if not inStrip || foreign then false
+                elif hwnd = visible then true
+                else
+                    let now = Diagnostics.Stopwatch.GetTimestamp()
+                    match stripHitCache with
+                    | Some(s,h,result,at) when s=hwnd && h=visible && now-at < Diagnostics.Stopwatch.Frequency/10L -> result
+                    | _ ->
+                        let result = TabEdges.ownWindowHomeUncovered TopEdgeGuardPlacement.above hwnd IntPtr.Zero visible
+                        stripHitCache <- Some(hwnd,visible,result,now)
+                        result
+            let ownBody =
+                match target with
+                | :? IGroupDragTarget as s ->
+                    match s.group with :? IDragHoverGroup as h -> h.ownsHoverWindow visible | _ -> false
+                | _ -> false
+            let desktop = visible = IntPtr.Zero || List.contains (os.windowFromHwnd(visible).className) ["Progman"; "WorkerW"]
+            let outsideWork = Mon.fromPoint(pt) |> Option.exists (fun mon -> not (mon.workRect.containsPoint pt))
+            TabEdges.dragStripKeeps inStrip inMargin foreign below ownBody desktop outsideWork
+
+    member private this.isOwnTarget(hwnd) =
+        match ownGroup, info.targets.tryFind hwnd with
+        | Some owner, Some(:? IGroupDragTarget as target) -> obj.ReferenceEquals(owner, target.group)
+        | _ -> false
+
+    member private this.visibleRoot(pt) =
+        let hwnd = os.windowAtPt(pt).hwnd
+        let root = WinUserApi.GetAncestor(hwnd, GetAncestorConstants.GA_ROOT)
+        if root = IntPtr.Zero then hwnd else root
 
     member private this.traceActivation(phase) =
 #if DEBUG
@@ -262,7 +407,12 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
     // single-drag slot - is issued in exactly one place, exactly once.
     // dropAllowed is false when the drag is being abandoned rather than
     // completed: the teardown still runs, but no window is dropped.
-    member this.captureEnded(ptScreen) = this.finish(ptScreen, true)
+    member this.captureEnded(ptScreen) =
+        if not hasEnded && ownSession.IsSome then
+            ownSession |> Option.iter (fun session -> session.refreshHit())
+            stripHitCache <- None
+            this.moveDrag(ptScreen)
+        this.finish(ptScreen, true)
 
     // Abandon a drag that was left behind (see beginDrag). Releases the mouse
     // capture, the watchdog timer, the capture window and the animation window
@@ -271,9 +421,21 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         DragTrace.log (fun () -> sprintf "[d%d] abort: abandoning drag" dragId)
         this.finish(ptScreenCell.value, false)
 
+    // A replacement drag must release its caller thread before rollback can
+    // synchronously exit that caller's group. Resume there only after teardown.
+    member this.requiresOwnRollback =
+        not (List.isEmpty hoverRestores) ||
+        (ownSession.IsSome && (activeTarget |> Option.exists (this.isOwnTarget >> not)))
+
+    member this.abortThen(complete) =
+        invoker.asyncInvoke <| fun () ->
+            try this.finish(ptScreenCell.value, false)
+            finally complete()
+
     member private this.finish(ptScreen, dropAllowed) =
         if hasEnded.not then
             hasEnded <- true
+            hoverEpoch <- hoverEpoch + 1L
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: state=%s pt=%A drop=%b" dragId (match dragStateCell.value with Some s -> s.GetType().Name | None -> "none") ptScreen dropAllowed)
             let step name f =
                 try f() with ex -> DragTrace.log (fun () -> sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
@@ -282,7 +444,22 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 | :? TabDragInfo as data -> step "restoreParked" data.restoreParked
                 | _ -> ()
             let state = dragStateCell.value
-            if not dropAllowed then restoreParked()
+            if not dropAllowed then
+                ownSession |> Option.iter (fun session ->
+                    step "exitCancelledTarget" (fun () ->
+                        activeTarget |> Option.iter (fun hwnd ->
+                            if not (this.isOwnTarget hwnd) then this.exitTarget(hwnd)))
+                    // Undo receiver visits before restoring the source. A revisit
+                    // has its own snapshot, so repeated receivers unwind correctly.
+                    for restore in hoverRestores do step "restoreReceiver" restore
+                    hoverRestores <- []
+                    step "restoreSource" session.cancel)
+                restoreParked()
+            // Non-source-owned drags can also have a receiver preview.
+            if not dropAllowed then
+                for restore in hoverRestores do step "restoreReceiver" restore
+            hoverRestores <- []
+            hoverGroups |> List.iter (fun (_, hover) -> step "endHover" (fun () -> hover.endHover(dropAllowed)))
             this.traceActivation("beforeReleaseCapture")
             step "releaseCapture" <| fun() -> this.captureWindow.releaseCapture()
             this.traceActivation("afterReleaseCapture")
@@ -306,7 +483,10 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 // notifications.dragEnd is NOT called here because it pairs with
                 // notifications.dragBegin (only emitted from dragDetect.onBegin).
                 notifyTargets()
-                step "onCancel" info.onCancel
+                if hasSideTargets && began then
+                    notifyNotifications()
+                    step "onEnd" info.onEnd
+                else step "onCancel" info.onCancel
             | Some(:? DragCapturedState) ->
                 notifyTargets()
                 notifyNotifications()
@@ -322,8 +502,72 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 // No state yet (the watchdog timer can tick before dragDetect
                 // has set one): still hand the slot back.
                 notifyTargets()
-                step "onCancel" info.onCancel
+                if hasSideTargets && began then
+                    notifyNotifications()
+                    step "onEnd" info.onEnd
+                else step "onCancel" info.onCancel
+            ownSession |> Option.iter (fun session ->
+                step "completeOwnSession" session.complete
+                step "disposeOwnSession" session.Dispose)
+            // Queue behind dragEnd (and source placement restoration), only at
+            // the accepted destination. Neither cancellation nor floating drops
+            // use this path; desktop drops retain their existing behavior.
+            if dropAllowed && ownSession.IsSome then
+                match state, activeTarget |> Option.bind info.targets.tryFind with
+                | Some(:? DragCapturedState), Some(:? IGroupDragTarget as strip) ->
+                    match strip.group with
+                    | :? IDragHoverGroup as hover -> step "completeDrop" (fun () -> hover.completeDrop(info.data))
+                    | _ -> ()
+                | _ -> ()
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: done" dragId)
+
+    // Shared by native mouse delivery and noninteractive lifecycle checks.
+    member this.moveDrag(pt: Pt) =
+        this.hoverTick(pt)
+        let move() =
+            match ownSession with
+            | Some session ->
+                let hit = this.visibleRoot(pt)
+                let visible =
+                    activeTarget |> Option.filter (fun hwnd ->
+                        os.windowFromHwnd(hwnd).bounds.containsPoint pt && this.stripKeeps(hwnd, hit, pt))
+                    |> Option.defaultValue hit
+                let destination() = session.targetAt(pt, visible, activeTarget |> Option.filter this.isOwnTarget)
+                let foreign = this.foreignTargetAt(pt, visible)
+                let currentIsOwn = activeTarget |> Option.exists this.isOwnTarget
+                match TabEdges.ownWindowPointerRoute activeTarget currentIsOwn foreign destination with
+                | TabEdges.EnterForeign hwnd ->
+                    activeTarget |> Option.iter (fun previous ->
+                        if TabEdges.exitBeforeStripChange (fun a b -> this.sameGroup(a,b)) activeTarget hwnd then this.exitTarget(previous))
+                    this.dragEnter(hwnd, pt, false)
+                | TabEdges.MoveOwn hwnd ->
+                    info.targets.find(hwnd).dragMove(os.windowFromHwnd(hwnd).ptToClient(pt))
+                | TabEdges.EnterOwn hwnd ->
+                    activeTarget |> Option.iter (fun previous ->
+                        if not (this.isOwnTarget previous) then this.exitTarget(previous))
+                    if not currentIsOwn then session.prepareReturn()
+                    this.dragEnter(hwnd, pt, false)
+                | TabEdges.LeaveOwn ->
+                    // Body routing has exact bounds; strip exit hysteresis must
+                    // not hold a source tab over another visible application.
+                    activeTarget |> Option.iter this.exitTarget
+                    let afterExit = this.visibleRoot(pt)
+                    match this.foreignTargetAt(pt, afterExit) with
+                    | Some target -> this.dragEnter(target, pt, false)
+                    | None -> this.dragFloat()
+                | TabEdges.ContinueDrag when foreign.IsSome && foreign = activeTarget ->
+                    let hwnd = foreign.Value
+                    info.targets.find(hwnd).dragMove(os.windowFromHwnd(hwnd).ptToClient(pt))
+                | TabEdges.ContinueDrag ->
+                    match activeTarget with
+                    | Some hwnd when visible <> hwnd && not (this.stripKeeps(hwnd, visible, pt)) ->
+                        this.exitTarget(hwnd)
+                        this.dragFloat()
+                    | _ -> dragStateCell.value.Value.mouseMove(pt)
+            | None -> dragStateCell.value.Value.mouseMove(pt)
+        if hasSideTargets || ownSession.IsSome then
+            try move() with _ -> this.abort()
+        else move()
 
     member this.wndProc (msg:Win32Message) =
         DragTrace.windowMessage (fun () -> sprintf "[d%d] capture" dragId) msg
@@ -361,7 +605,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 DragTrace.log (fun () -> sprintf "[d%d] wndProc: button up during move" dragId)
                 this.captureEnded(ptScreen())
             else
-                dragStateCell.value.Value.mouseMove(ptScreen())
+                this.moveDrag(ptScreen())
         | WindowMessages.WM_MOUSELEAVE
         | WindowMessages.WM_LBUTTONUP when not hasEnded ->
             DragTrace.log (fun () -> sprintf "[d%d] wndProc: msg %d" dragId msg.msg)
@@ -370,6 +614,10 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         msg.def()
 
     member this.dragFloat() =
+        activeTarget <- None
+#if DEBUG
+        DragTrace.log (fun () -> "[dockDrag] float")
+#endif
         DragTrace.log (fun () -> sprintf "[d%d] dragFloat" dragId)
         this.setNextState <| DragFloatingState({
             targets = info.targets
@@ -384,17 +632,49 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         let targetWindow = os.windowFromHwnd(targetHwnd)
         let ptTarget = targetWindow.ptToClient(ptScreen)
         let accepted = target.dragEnter info.data ptTarget
+        match target with
+        | :? IGroupDragTarget as strip ->
+            match strip.group with
+            | :? IDragHoverGroup as hover ->
+                hover.takeHoverRestore() |> Option.iter (fun restore ->
+                    hoverRestores <- TabEdges.dragRecordRestore restore hoverRestores)
+            | _ -> ()
+        | _ -> ()
         DragTrace.log (fun () -> sprintf "[d%d] dragEnter: target=%X initial=%b accepted=%b" dragId (targetHwnd.ToInt64()) isInitial accepted)
+#if DEBUG
+        DragTrace.log (fun () -> sprintf "[dockDrag] captured accepted=%b capture=%b" accepted this.captureWindow.hasCapture)
+#endif
         if not hasEnded && accepted then
+            // Enter can replace the receiver geometry with the actual strip.
+            // Rebase against its final origin before the next mouse message.
+            if ownSession.IsSome || hasSideTargets then
+                target.dragMove(targetWindow.ptToClient(ptScreen))
+            activeTarget <- Some targetHwnd
             this.setNextState <| DragCapturedState({
                 target = target
                 targetHwnd = targetHwnd
                 targetWindow = targetWindow
-                onDragOut = fun(ptScreen) -> 
-                    let targetHwnd = os.windowAtPt(ptScreen).hwnd
-                    match info.targets.tryFind(targetHwnd) with
-                    | Some(target) -> this.dragEnter(targetHwnd, ptScreen, false)
-                    | None -> this.dragFloat()
+                onDragOut = fun(ptScreen) ->
+                    // Onto another strip of the same group: the dragged tab
+                    // changes strip and stays in its group, so the strip it
+                    // leaves is not told it has gone (that would take the
+                    // window out of the group and put it back).
+                    let nextHwnd = os.windowAtPt(ptScreen).hwnd
+                    let sameGroup =
+                        nextHwnd <> targetHwnd &&
+                        match target, info.targets.tryFind(nextHwnd) with
+                        | (:? IGroupDragTarget as here), Some(:? IGroupDragTarget as there) ->
+                            obj.ReferenceEquals(here.group, there.group)
+                        | _ -> false
+                    if sameGroup then
+                        DragTrace.log (fun () -> sprintf "[d%d] dragOut: to strip %X of the same group" dragId (nextHwnd.ToInt64()))
+                        this.dragEnter(nextHwnd, ptScreen, false)
+                    else
+                        target.dragExit()
+                        let targetHwnd = os.windowAtPt(ptScreen).hwnd
+                        match info.targets.tryFind(targetHwnd) with
+                        | Some(target) -> this.dragEnter(targetHwnd, ptScreen, false)
+                        | None -> this.dragFloat()
             })
         elif not hasEnded then
             if isInitial then target.dragExit()
@@ -404,6 +684,14 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         this.setNextState <| DragDetectingState({
             initialPt = info.initialPt
             onBegin = fun() ->
+                match info.targets.tryFind info.initialHwnd with
+                | Some(:? IGroupDragTarget as strip) ->
+                    match strip.group with
+                    | :? IOwnWindowDragSource as source ->
+                        ownSession <- source.beginOwnWindowDrag(info.data, fun h -> info.targets.tryFind(h).IsSome)
+                        if ownSession.IsSome then ownGroup <- Some strip.group
+                    | _ -> ()
+                | _ -> ()
                 let animationWindow = AnimationWindow(os)
                 // Publish before preview generation: it can pump messages and
                 // lose capture. finish must be able to dispose this window.
@@ -412,6 +700,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                 let image = try Some(info.image().scale(dragScale)) with _ -> None
                 if not hasEnded then
                     image |> Option.iter animationWindow.setImage
+                    if hasSideTargets then began <- true
                     info.targets.values.iter <| fun target ->
                         if not hasEnded then target.dragBegin()
                     info.notifications.items.iter <| fun n ->
@@ -458,15 +747,16 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
                         // mouse message; that message may never have arrived.
                         match dragStateCell.value with
                         | Some(:? DragDetectingState) -> ()
-                        | Some state -> state.mouseMove(pt)
-                        | None -> ()
+                        | Some state when ownSession.IsNone -> state.mouseMove(pt)
+                        | _ -> ()
                         this.captureEnded(pt)
                     elif this.captureWindow.hasCapture.not then
                         this.finish(pt, false)
                     elif moved then
                         // A non-foreground capture window may receive no moves.
                         // Keep detection, preview and target tracking alive too.
-                        dragStateCell.value.iter(fun state -> state.mouseMove(pt))
+                        this.moveDrag(pt)
+                    if not hasEnded && isLeftMouseButtonDown() && this.captureWindow.hasCapture then this.hoverTick(pt)
         timer.Start()
         this.dragDetect()
 
@@ -487,7 +777,7 @@ type DragDropController(parent:IDragDropParent) =
             targetsCell.map(fun targets -> targets.add hwnd target)
         member x.unregisterTarget(hwnd) = withLock <| fun() ->
             targetsCell.map(fun targets -> targets.remove hwnd)
-        member x.beginDrag((initialHwnd, image, imageOffset, initialPt, data)) = withLock <| fun() ->
+        member x.beginDrag((initialHwnd, image, imageOffset, initialPt, data) as request) = withLock <| fun() ->
             nextDragId <- nextDragId + 1
             let dragId = nextDragId
             DragTrace.log (fun () -> sprintf "[d%d] beginDrag: strip=%X pt=%A busy=%b" dragId (initialHwnd.ToInt64()) initialPt dragActionCell.value.IsSome)
@@ -499,12 +789,21 @@ type DragDropController(parent:IDragDropParent) =
             // alive and a later tick of its timer free to disturb this drag.
             // Without this, one stuck slot silently swallowed every later drag
             // for the rest of the session.
+            let mutable deferred = false
             match dragActionCell.value with
+            | Some(stale) when stale.requiresOwnRollback ->
+                deferred <- true
+                let caller = InvokerService.invoker
+                stale.abortThen(fun () -> caller.asyncInvoke(fun () -> withLock (fun () ->
+                    // Superseded or released requests must not restart a drag.
+                    if nextDragId = dragId && targetsCell.value.tryFind(initialHwnd).IsSome &&
+                       Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON) then
+                        (x :> IDragDrop).beginDrag(request))))
             | Some(stale) ->
                 (try stale.abort() with _ -> ())
                 dragActionCell.set(None)
             | None -> ()
-            if dragActionCell.value.IsNone then 
+            if not deferred && dragActionCell.value.IsNone then
                 let targets, notifications = targetsCell.value, notificationsCell.value
                 let sourceLease =
                     match data with

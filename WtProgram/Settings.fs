@@ -478,7 +478,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x3A70B1)
             tabActiveBorderColor = Color.FromRGB(0x3A70B1)
             tabFlashBorderColor = Color.FromRGB(0x3A70B1)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.darkModeTabAppearance =
@@ -510,7 +510,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x333333)
             tabActiveBorderColor = Color.FromRGB(0x333333)
             tabFlashBorderColor = Color.FromRGB(0x333333)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.darkModeBlueTabAppearance =
@@ -542,7 +542,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x374151)
             tabActiveBorderColor = Color.FromRGB(0x374151)
             tabFlashBorderColor = Color.FromRGB(0x374151)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.lightMonoTabAppearance =
@@ -574,7 +574,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x252525)
             tabActiveBorderColor = Color.FromRGB(0x252525)
             tabFlashBorderColor = Color.FromRGB(0x252525)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.darkMonoTabAppearance =
@@ -606,7 +606,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0xF2F2F2)
             tabActiveBorderColor = Color.FromRGB(0x6B6B6B)
             tabFlashBorderColor = Color.FromRGB(0x787878)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.darkMono2TabAppearance =
@@ -638,7 +638,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0x6B6B6B)
             tabActiveBorderColor = Color.FromRGB(0xF2F2F2)
             tabFlashBorderColor = Color.FromRGB(0x787878)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.darkRedFrameTabAppearance =
@@ -670,7 +670,7 @@ type Settings(isStandAlone) as this =
             tabMouseOverBorderColor = Color.FromRGB(0xFF6666)
             tabActiveBorderColor = Color.FromRGB(0xCC4444)
             tabFlashBorderColor = Color.FromRGB(0xB13A3A)
-            tabShape = TabShape.scurve
+            tabShape = TabShape.rounded
         }
 
     member this.update f = this.settings <- f(this.settings)
@@ -704,31 +704,19 @@ type Settings(isStandAlone) as this =
                         tabPinButton = settingsJson.getString("TabPinButton").def(TabButtonPolicy.activeOnly) |> TabButtonPolicy.normalize
                         tabPositionByDefault =
                             // Handle backward compatibility: convert old format to new TopXxx format
-                            // Note: "center"/"TopCenter" is deprecated and falls back to "TopLeft"
-                            match settingsJson.getString("TabPositionByDefault") with
-                            | Some("left") -> "TopLeft"
-                            | Some("center") -> "TopLeft"
-                            | Some("TopCenter") -> "TopLeft"
-                            | Some("right") -> "TopRight"
-                            | Some(v) -> v  // Already in TopXxx format or other valid value
-                            | None -> "TopRight"
+                            // (the conversion is shared with the four-edge settings migration)
+                            TabBehaviorPolicy.loadTabPosition (settingsJson.getString("TabPositionByDefault"))
                         tabVerticalDirection =
                             settingsJson.getString("TabVerticalDirection")
                             |> Option.map TabBehaviorPolicy.normalizeVerticalDirection
                             |> Option.defaultValue TabBehaviorPolicy.verticalAuto
                         hideTabsWhenDownByDefault =
-                            // Handle backward compatibility: convert old bool values to new string format
-                            // First try to get as string (new format)
-                            match settingsJson.getString("HideTabsWhenDownByDefault") with
-                            | Some(stringValue) -> stringValue
-                            | None ->
-                                // If not a string, try as bool (old format)
-                                try
-                                    match settingsJson.getBool("HideTabsWhenDownByDefault") with
-                                    | Some(boolValue) -> if boolValue then "down" else "never"
-                                    | None -> "never"
-                                with
-                                | _ -> "never"
+                            // Check the JSON type before reading legacy boolean values.
+                            // getString casts directly and would discard the entire load.
+                            match settingsJson.getValueCI("HideTabsWhenDownByDefault") with
+                            | Some(:? JValue as value) when value.Type = JTokenType.Boolean ->
+                                if unbox<bool> value.Value then "down" else "never"
+                            | _ -> settingsJson.getString("HideTabsWhenDownByDefault").def("never")
                         hideTabsDelayMilliseconds = settingsJson.getInt32("HideTabsDelayMilliseconds").def(3000)
                         hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
                         hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
