@@ -2,6 +2,18 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.25_next3
+
+- Tabs can be shown on any edge of the window: top, left, right and bottom.
+  - Each edge can be turned on or off, and has its own page in the settings.
+  - The tab menu changes a tab's alignment and its edge (direction).
+  - Tabs can be dragged to another edge of their own group.
+  - Left and right tabs can face the text either way.
+- The tab style setting no longer has a reset button; the default style is
+  now the rounded vertical line.
+- Fixed: a tab strip could stay hidden behind its window for a while,
+  for example after switching Excel books (#31, #33).
+
 ## version ss_2026.10.25_next2
 
 - "Combine taskbar buttons for tab groups" now has a note: it works only
