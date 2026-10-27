@@ -237,6 +237,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Launcher.fs" />
     <Compile Include="Workspace\WorkspaceModel.fs" />
     <Compile Include="Workspace\WorkspaceView.fs" />
+    <Compile Include="ManagerViewService\Views\EdgeSettingsPanel.fs" />
     <Compile Include="ManagerViewService\Views\AppearanceView.fs" />
     <Compile Include="ManagerViewService\Views\BehaviorView.fs" />
     <Compile Include="ManagerViewService\Views\ShortcutKeysView.fs" />

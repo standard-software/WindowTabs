@@ -81,120 +81,42 @@ type AppearanceView() as this =
     let save key value =
         if not suppressEvents then Services.settings.setValue(key, value)
 
-    let defaultTabPositionRadios =
-        UIHelper.settingsRadios placementRefreshers save "tabPositionByDefault"
+    let placementChoice key normalize options =
+        let combo = EdgeRows.choice (options |> List.map (snd >> Localization.getString))
+        let current () = Services.settings.getValue key |> unbox<string> |> normalize
+        let refresh () =
+            combo.SelectedIndex <- options |> List.findIndex (fun (value, _) -> value = current ())
+        refresh ()
+        placementRefreshers.Add refresh
+        combo.SelectedIndexChanged.Add(fun _ ->
+            if not suppressEvents && combo.SelectedIndex >= 0 then
+                let value = fst options.[combo.SelectedIndex]
+                // Re-notifying an unchanged alignment would reset every group.
+                if value <> current () then save key (box value))
+        combo :> Control
+
+    let defaultTabPositionCombo =
+        placementChoice "tabPositionByDefault"
             (fun mode -> if mode = "TopLeft" then "TopLeft" else "TopRight")
             ["TopLeft", "AlignTopLeft"; "TopRight", "AlignTopRight"]
 
-    let tabVerticalDirectionRadios =
-        UIHelper.settingsRadios placementRefreshers save "tabVerticalDirection"
+    let tabVerticalDirectionCombo =
+        placementChoice "tabVerticalDirection"
             TabBehaviorPolicy.normalizeVerticalDirection
             [TabBehaviorPolicy.verticalAuto, "TabVerticalAuto";
              TabBehaviorPolicy.verticalAlwaysDown, "TabVerticalAlwaysDown"]
 
-    let hideTabsDelay =
-        let textBox = new TextBox()
-        let defaultValue =
-            try
-                Services.settings.getValue("hideTabsDelayMilliseconds") :?> int
-            with
-            | _ -> 3000
-        textBox.Text <- defaultValue.ToString()
-
-        // Set initial enabled state based on current mode
-        let currentMode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
-        textBox.Enabled <- (currentMode = "down")
-
-        textBox.LostFocus.Add(fun _ ->
-            match System.Int32.TryParse(textBox.Text) with
-            | true, value when value >= 0 && value <= 10000 ->
-                save "hideTabsDelayMilliseconds" value
-            | false, _ | _, _ ->
-                // Reset to previous value if invalid
-                textBox.Text <-
-                    try
-                        (Services.settings.getValue("hideTabsDelayMilliseconds") :?> int).ToString()
-                    with
-                    | _ -> "3000"
-        )
-        placementRefreshers.Add(fun () ->
-            textBox.Text <- (unbox<int>(Services.settings.getValue("hideTabsDelayMilliseconds"))).ToString())
-        textBox
-
-    let hideTabsRadio =
-        // Use TableLayoutPanel to keep all RadioButtons in same container (for proper grouping)
-        // while allowing delay label and textbox next to radioDown
-        let table = UIHelper.settingsRadioGroup 3 3
-        // The last group has no following item that needs trailing space.
-        table.Padding <- Padding(0)
-
-        let currentMode =
-            let mode = Services.settings.getValue("hideTabsWhenDownByDefault") :?> string
-            // Use valid modes, default to "doubleclick" for invalid/unknown values
-            match mode with
-            | "never" | "down" | "doubleclick" -> mode
-            | _ ->
-                "doubleclick"
-
-        let radioNever = UIHelper.settingsRadio "HideTabsNever"
-        radioNever.Checked <- (currentMode = "never")
-        radioNever.CheckedChanged.Add(fun _ ->
-            if radioNever.Checked then
-                save "hideTabsWhenDownByDefault" "never"
-                hideTabsDelay.Enabled <- false
-        )
-
-        let radioDown = UIHelper.settingsRadio "HideTabsWhenDown"
-        radioDown.Checked <- (currentMode = "down")
-        radioDown.CheckedChanged.Add(fun _ ->
-            if radioDown.Checked then
-                save "hideTabsWhenDownByDefault" "down"
-                hideTabsDelay.Enabled <- true
-        )
-
-        let radioDoubleClick = UIHelper.settingsRadio "HideTabsOnClick"
-        radioDoubleClick.Checked <- (currentMode = "doubleclick")
-        radioDoubleClick.CheckedChanged.Add(fun _ ->
-            if radioDoubleClick.Checked then
-                save "hideTabsWhenDownByDefault" "doubleclick"
-                hideTabsDelay.Enabled <- false
-        )
-        placementRefreshers.Add(fun () ->
-            let mode = unbox<string>(Services.settings.getValue("hideTabsWhenDownByDefault"))
-            radioNever.Checked <- (mode = "never")
-            radioDown.Checked <- (mode = "down")
-            radioDoubleClick.Checked <- (mode <> "never" && mode <> "down")
-            hideTabsDelay.Enabled <- (mode = "down"))
-
-        let delayLabel = new Label()
-        delayLabel.Text <- Localization.getString("HideTabsDelayMilliseconds")
-        delayLabel.AutoSize <- true
-        // Centred in the radio row, like the radio itself.
-        delayLabel.Anchor <- AnchorStyles.Left
-        // The same box as the radio beside it, with the text in the middle
-        // of it, so the two captions sit on one line.
-        delayLabel.TextAlign <- ContentAlignment.MiddleLeft
-        delayLabel.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
-        // The radio beside it carries its own glyph, which puts its caption
-        // two pixels lower than a plain label of the same box.
-        delayLabel.Padding <- Padding(0, 2, 0, 0)
-        delayLabel.Margin <- Padding(10, 0, 3, 0)  // Left margin to separate from the radio
-
-        hideTabsDelay.Width <- 60
-        SettingsField.apply hideTabsDelay
-        hideTabsDelay.Anchor <- AnchorStyles.Left
-        hideTabsDelay.Margin <- Padding(0)
-
-        // Row 0: radioNever (spans all 3 columns conceptually, but just in column 0)
-        table.Controls.Add(radioNever, 0, 0)
-        // Row 1: radioDown + delayLabel + hideTabsDelay
-        table.Controls.Add(radioDown, 0, 1)
-        table.Controls.Add(delayLabel, 1, 1)
-        table.Controls.Add(hideTabsDelay, 2, 1)
-        // Row 2: radioDoubleClick
-        table.Controls.Add(radioDoubleClick, 0, 2)
-
-        table
+    let hideTabsRadio, refreshHideTabs =
+        EdgeRows.hideTabsControls
+            (fun () -> Services.settings.getValue("hideTabsWhenDownByDefault") :?> string,
+                       Services.settings.getValue("hideTabsDelayMilliseconds") :?> int)
+            (fun mode delay ->
+                if not suppressEvents then
+                    if mode <> (Services.settings.getValue("hideTabsWhenDownByDefault") :?> string) then
+                        save "hideTabsWhenDownByDefault" mode
+                    if delay <> (Services.settings.getValue("hideTabsDelayMilliseconds") :?> int) then
+                        save "hideTabsDelayMilliseconds" delay)
+    do placementRefreshers.Add refreshHideTabs
 
     // Read the unified "Dark Mode" toggle. Used by child dialogs (Save
     // Theme / Edit Theme) so they inherit the parent dialog's theme on
@@ -278,27 +200,35 @@ type AppearanceView() as this =
         page.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore
         page
 
-    let panel = createPage 2
+    let edgeChecks = TabEdges.priority |> List.map (fun edge ->
+        let check = new CheckBox(AutoSize = true, Anchor = AnchorStyles.Left,
+                                 Margin = Padding(0, EdgeRows.marginPx, 0, EdgeRows.marginPx))
+        check.Text <- Localization.getString("Use" + TabEdgeSettings.edgeName edge + "Tabs")
+        edge, check)
+    let topHeader, topCopyButton =
+        EdgeRows.pageHeader (edgeChecks |> List.find (fun (edge, _) -> edge = TabEdges.Edge.Top) |> snd)
+            "ApplySameSettingsToBottomEdge" (fun () -> this.copyToBottom())
+    let panel = createPage 1
+    let topEdgePanel = createPage 3
+    do
+        // Only the outer Appearance page scrolls; the tab grows to its content.
+        topEdgePanel.AutoScroll <- false
+        topEdgePanel.AutoSize <- true
+        topEdgePanel.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        topEdgePanel.Padding <- Padding(0)
+        topEdgePanel.Margin <- Padding(0)
     let placementPanel =
         let fields = List2([
-            ("TabPositionByDefault", defaultTabPositionRadios)
-            ("TabVerticalDirection", tabVerticalDirectionRadios)
+            ("TabPositionByDefault", defaultTabPositionCombo)
+            ("TabVerticalDirection", tabVerticalDirectionCombo)
             ("HideTabsWhenDownByDefault", hideTabsRadio :> Control)
         ])
         let grid = UIHelper.form fields
         grid.Dock <- DockStyle.Top
         grid.Margin <- Padding(0, UIHelper.settingsRowHeightPx / 2, 0, 0)
         grid.AutoScroll <- false
-        // This control already contains rows on the same 35-px grid as the
-        // outer form. Do not add another outer row margin around the group.
-        for group in [defaultTabPositionRadios; tabVerticalDirectionRadios; hideTabsRadio :> Control] do
-            group.Margin <- Padding(0)
-
-        let hideTabsRowIndex = 2
-
-        // Let the radio-group row auto-size based on content.
-        grid.RowStyles.[hideTabsRowIndex].SizeType <- SizeType.AutoSize
-
+        for combo in [defaultTabPositionCombo; tabVerticalDirectionCombo] do
+            combo.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         grid
     let colorPage =
         let page = createPage 2
@@ -358,8 +288,9 @@ type AppearanceView() as this =
 
     // Add sub-panels to main panel
     do
-        panel.Controls.Add(upperPanel, 0, 0)
-        panel.Controls.Add(placementPanel, 0, 1)
+        topEdgePanel.Controls.Add(topHeader, 0, 0)
+        topEdgePanel.Controls.Add(upperPanel, 0, 1)
+        topEdgePanel.Controls.Add(placementPanel, 0, 2)
         upperPanel.TabIndex <- 0
         placementPanel.TabIndex <- 1
         colorPage.Controls.Add(colorPanel, 0, 1)
@@ -458,105 +389,17 @@ type AppearanceView() as this =
                                   Margin = Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx),
                                   MinimumSize = Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx))
                 upperPanel.Controls.Add(label, 0, row)
-                let pair = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
-                                               Margin = Padding(0), ColumnCount = 6, RowCount = 1)
-                pair.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
-                pair.RowStyles.Add(RowStyle(SizeType.AutoSize)).ignore
-                for _ in 1..2 do
-                    pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
-                    pair.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 50.0f)).ignore
-                    pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore
+                let pair = EdgeRows.pairTable ()
                 pair.SuspendLayout()
                 let left = createIntEditorAt pair 0 (intConfig leftKey leftCaption) 0
                 let right = createIntEditorAt pair 3 (intConfig rightKey rightCaption) 0
-                // Auto-sized captions leave both fields equal space.
-                // A minimum field width lets the outer scroll panel handle narrow windows.
-                for column in [0; 3] do
-                    let caption = pair.GetControlFromPosition(column, 0)
-                    caption.Margin <- Padding((if column = 0 then 0 else 30), UIHelper.settingsRowMarginPx, 5, UIHelper.settingsRowMarginPx)
-                    pair.GetControlFromPosition(column + 1, 0).MinimumSize <- Size(50, SettingsField.heightPx)
+                EdgeRows.preparePair pair
                 upperPanel.Controls.Add(pair, 1, row)
                 upperPanel.SetColumnSpan(pair, 2)
-                // Follow the actual reset button in the outer panel, including
-                // its current DPI and translated caption width. Equal reset
-                // columns also keep the two distance rows aligned.
-                for column in [2; 5] do
-                    let reset = pair.GetControlFromPosition(column, 0)
-                    reset.AutoSize <- false
-                    reset.Dock <- DockStyle.Right
-                    pair.ColumnStyles.[column].SizeType <- SizeType.Absolute
                 pair.ResumeLayout(true)
                 pairs.Add(pair)
                 [left; right])
-        // Preserve the existing width unless a paired reset caption needs more room.
-        // Measure every pair so three-digit defaults do not clip and all rows align.
-        let referenceReset = upperPanel.GetControlFromPosition(2, 3)
-        let mutable syncingResetWidths = false
-        let syncResetWidths () =
-            if not syncingResetWidths then
-                syncingResetWidths <- true
-                try
-                    let captionWidth =
-                        pairs |> Seq.collect (fun pair ->
-                            [2; 5] |> Seq.map (fun column ->
-                                pair.GetControlFromPosition(column, 0).GetPreferredSize(Size.Empty).Width))
-                        |> Seq.max
-                    // A scaled reference button can exceed the pair's remaining space.
-                    // Reserve the shared captions and minimum numeric fields before sizing resets.
-                    let sharedCaptionWidth =
-                        [0; 3] |> List.sumBy (fun column ->
-                            pairs |> Seq.map (fun pair ->
-                                let caption = pair.GetControlFromPosition(column, 0)
-                                caption.GetPreferredSize(Size.Empty).Width + caption.Margin.Horizontal)
-                            |> Seq.max)
-                    let fittingWidth =
-                        pairs |> Seq.map (fun pair ->
-                            let fieldsWidth =
-                                [1; 4] |> List.sumBy (fun column ->
-                                    let field = pair.GetControlFromPosition(column, 0)
-                                    field.MinimumSize.Width + field.Margin.Horizontal)
-                            let resetMargins =
-                                [2; 5] |> List.sumBy (fun column -> pair.GetControlFromPosition(column, 0).Margin.Horizontal)
-                            (pair.ClientSize.Width - sharedCaptionWidth - fieldsWidth - resetMargins) / 2)
-                        |> Seq.min
-                    let requiredWidth = max captionWidth (min referenceReset.Width fittingWidth)
-                    for pair in pairs do
-                        pair.SuspendLayout()
-                        try
-                            for column in [2; 5] do
-                                let reset = pair.GetControlFromPosition(column, 0)
-                                // Dock right so a rounding pixel cannot widen the button.
-                                if reset.Width <> requiredWidth then reset.Width <- requiredWidth
-                                let width = float32 (requiredWidth + reset.Margin.Horizontal)
-                                if pair.ColumnStyles.[column].Width <> width then
-                                    pair.ColumnStyles.[column].Width <- width
-                        finally
-                            pair.ResumeLayout(true)
-                finally
-                    syncingResetWidths <- false
-        referenceReset.SizeChanged.Add(fun _ -> syncResetWidths ())
-        for pair in pairs do pair.Layout.Add(fun _ -> syncResetWidths ())
-        syncResetWidths ()
-        // Share caption widths across all paired rows, including after DPI changes.
-        let mutable syncingCaptionWidths = false
-        let syncCaptionWidths () =
-            if not syncingCaptionWidths then
-                syncingCaptionWidths <- true
-                try
-                    for column in [0; 3] do
-                        let width =
-                            pairs |> Seq.map (fun pair ->
-                                let caption = pair.GetControlFromPosition(column, 0)
-                                caption.GetPreferredSize(Size.Empty).Width + caption.Margin.Horizontal)
-                            |> Seq.max |> float32
-                        for pair in pairs do
-                            let style = pair.ColumnStyles.[column]
-                            style.SizeType <- SizeType.Absolute
-                            if style.Width <> width then style.Width <- width
-                finally
-                    syncingCaptionWidths <- false
-        for pair in pairs do pair.Layout.Add(fun _ -> syncCaptionWidths ())
-        syncCaptionWidths ()
+        EdgeRows.alignPairs (upperPanel.GetControlFromPosition(2, 3)) pairs
         List2(regular @ paired)
 
     // Custom pinned tab width row with radio buttons (row 2 in upperPanel).
@@ -644,6 +487,9 @@ type AppearanceView() as this =
         let btn = Button()
         let defaultWidth = unbox<int>(getDefaultValue "tabPinnedTabWidth")
         btn.Text <- sprintf "%s:%d" (Localization.getString("Reset")) defaultWidth
+        btn.AutoSize <- true
+        btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+        btn.MinimumSize <- Size(btn.Width, SettingsField.heightPx)
         btn.Dock <- DockStyle.Fill
         btn.TextAlign <- ContentAlignment.MiddleLeft
         btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
@@ -706,7 +552,7 @@ type AppearanceView() as this =
             member x.changed = changedEvent.Publish
         }
 
-    // Tab shape row: caption, drop-down and reset button, laid out like the
+    // Tab style row: caption and drop-down, laid out like the
     // int rows above it. Each item of the open list shows a picture of two
     // neighbouring tabs next to the shape's name, drawn from the same outline
     // the tab strip uses and with the Tab Overlap currently in the editor, so
@@ -836,6 +682,7 @@ type AppearanceView() as this =
         upperPanel.Controls.Add(combo)
         upperPanel.SetRow(combo, tabShapeRow)
         upperPanel.SetColumn(combo, 1)
+        upperPanel.SetColumnSpan(combo, 2)
         combo
 
     let tabShapeEditor : IPropEditor =
@@ -859,33 +706,6 @@ type AppearanceView() as this =
             member x.control = tabShapeCombo :> Control
             member x.changed = changedEvent.Publish
         }
-
-    let tabShapeResetBtn =
-        let btn = Button()
-        let defaultShape = TabShape.normalize(unbox<string>(getDefaultValue "tabShape"))
-        // Keep the caption short; the default is the first drop-down item.
-        // Let the existing autosized column accommodate translations such
-        // as German without clipping the caption.
-        btn.Text <- Localization.getString("Reset")
-        btn.AutoSize <- true
-        btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        btn.Padding <- Padding(3, 0, 3, 0)
-        btn.MinimumSize <- Size(0, SettingsField.heightPx)
-        btn.Dock <- DockStyle.Fill
-        btn.TextAlign <- ContentAlignment.MiddleLeft
-        btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
-        btn.Click.Add <| fun _ ->
-            let previous = suppressEvents
-            suppressEvents <- true
-            try
-                tabShapeEditor.value <- box defaultShape
-                this.applyAppearance()
-            finally
-                suppressEvents <- previous
-        upperPanel.Controls.Add(btn)
-        upperPanel.SetRow(btn, tabShapeRow)
-        upperPanel.SetColumn(btn, 2)
-        btn
 
     // Create color editors storage
     let mutable colorEditorsList : (string * IPropEditor) list = []
@@ -990,6 +810,133 @@ type AppearanceView() as this =
         colorPage.SetRow(checkbox, darkModeRow)
         colorPage.SetColumn(checkbox, 1)
         checkbox
+
+    // ---- "Tab position" and the edges' pages (8) ----
+
+    let edgeCaption (edge: TabEdges.Edge) =
+        Localization.getString(
+            match edge with
+            | TabEdges.Edge.Top -> "TopTabs"
+            | TabEdges.Edge.Left -> "LeftTabs"
+            | TabEdges.Edge.Right -> "RightTabs"
+            | TabEdges.Edge.Bottom -> "BottomTabs")
+
+    // The pages of the left, right and bottom edges; the top edge's page is
+    // topEdgePanel.
+    let edgePanels = Collections.Generic.Dictionary<TabEdges.Edge, EdgeSettingsPanel>()
+
+    let mutable refreshingEdges = false
+
+    // Each page keeps its enable toggle available while its settings are disabled.
+    let edgeTabs =
+        let tabs = new SettingsSurfaceTabControl()
+        tabs.Dock <- DockStyle.Top
+        tabs.Margin <- Padding(0)
+        for edge in TabEdges.priority do
+            let page = new TabPage(edgeCaption edge)
+            page.UseVisualStyleBackColor <- false
+            // Inherit the light form surface; DarkMode supplies its form surface.
+            page.BackColor <- SystemColors.Control
+            // The outer Appearance page scrolls when needed; this tab fits its content.
+            page.AutoScroll <- false
+            page.Padding <- UIHelper.settingsPagePadding
+            if edge = TabEdges.Edge.Top then
+                topEdgePanel.Dock <- DockStyle.Top
+                page.Controls.Add(topEdgePanel)
+            tabs.TabPages.Add(page)
+        tabs
+
+    do
+        // Each inner page includes the native tab border in the shared horizontal inset.
+        panel.Padding <- Padding(0, UIHelper.settingsPageMarginPx, 0, UIHelper.settingsPageMarginPx)
+        panel.Controls.Add(edgeTabs)
+        panel.SetRow(edgeTabs, 0)
+        panel.SetColumn(edgeTabs, 0)
+
+    let checkedEdges () = edgeChecks |> List.filter (fun (_, check) -> check.Checked) |> List.map fst
+
+    let alignEdgePageMargins () =
+        let margin = SettingsDpi.px UIHelper.settingsPageMarginPx
+        let display = edgeTabs.DisplayRectangle
+        let padding = Padding(max 0 (margin - display.Left), margin,
+                              max 0 (margin - (edgeTabs.ClientSize.Width - display.Right)), margin)
+        for page in edgeTabs.TabPages do
+            if page.Padding <> padding then page.Padding <- padding
+
+    let resizeEdgeTabs () =
+        alignEdgePageMargins ()
+        let page = edgeTabs.SelectedTab
+        if not (isNull page) && page.Controls.Count > 0 then
+            let content = page.Controls.[0]
+            let width = max 1 (edgeTabs.DisplayRectangle.Width - page.Padding.Horizontal)
+            let height = content.GetPreferredSize(Size(width, 0)).Height
+            let chrome = edgeTabs.Height - edgeTabs.DisplayRectangle.Height
+            let wanted = height + page.Padding.Vertical + max edgeTabs.ItemSize.Height chrome + 4
+            if edgeTabs.Height <> wanted then edgeTabs.Height <- wanted
+
+    do
+        // Build every page in design units before the form's first DPI snapshot.
+        // The form scales and themes the entire tree, including hidden pages.
+        for index, edge in List.indexed TabEdges.priority do
+            if edge <> TabEdges.Edge.Top then
+                let scale = SettingsDpi.current()
+                let p =
+                    SettingsDpi.setCurrent 1.0
+                    try EdgeSettingsPanel(edge, (edgeChecks |> List.find (fun (candidate, _) -> candidate = edge) |> snd), fun () -> this.refresh())
+                    finally SettingsDpi.setCurrent scale
+                edgePanels.Add(edge, p)
+                p.refresh()
+                p.control.Dock <- DockStyle.Top
+                edgeTabs.TabPages.[index].Controls.Add(p.control)
+                // Inherit the form font for both initial and later monitor scaling.
+                p.control.Font <- null
+                p.setEnabled(List.contains edge (checkedEdges ()))
+
+    let refreshEdgePage () =
+        let index = edgeTabs.SelectedIndex
+        if index > 0 then
+            edgePanels.[TabEdges.priority.[index]].refresh()
+        resizeEdgeTabs ()
+
+    let showEdgeState () =
+        let now = checkedEdges ()
+        for edge, check in edgeChecks do
+            check.Enabled <- not (check.Checked && now.Length = 1)
+            if edge = TabEdges.Edge.Top then
+                upperPanel.Enabled <- check.Checked
+                placementPanel.Enabled <- check.Checked
+                topCopyButton.Enabled <- check.Checked
+            else
+                edgePanels.[edge].setEnabled(check.Checked)
+
+    do
+        edgeTabs.SelectedIndexChanged.Add(fun _ -> refreshEdgePage ())
+        edgeTabs.SizeChanged.Add(fun _ -> resizeEdgeTabs ())
+        topEdgePanel.SizeChanged.Add(fun _ -> resizeEdgeTabs ())
+
+    do
+        for _, check in edgeChecks do
+            check.CheckedChanged.Add(fun _ ->
+                showEdgeState ()
+                let now = checkedEdges ()
+                if not suppressEvents && not refreshingEdges && not (List.isEmpty now) then
+                    let root = Services.settings.root
+                    TabEdgeSettings.writeListed root now
+                    Services.settings.root <- root
+                    TabEdgeSettings.changed.Trigger())
+
+    // The checks and the edges' pages as the settings file has them; writes
+    // nothing.
+    let showEdges () =
+        let previous = refreshingEdges
+        refreshingEdges <- true
+        try
+            let listed = try TabEdgeSettings.listedOf Services.settings.root with _ -> [ TabEdges.Edge.Top ]
+            for edge, check in edgeChecks do check.Checked <- List.contains edge listed
+            showEdgeState ()
+        finally refreshingEdges <- previous
+        for p in edgePanels.Values do p.refresh()
+        resizeEdgeTabs ()
 
     let setEditorValues appearance =
         allPropertyKeys |> List.iter (fun key ->
@@ -2109,6 +2056,7 @@ type AppearanceView() as this =
 
         // Initialize editor values and set up change handlers
         setEditorValues appearance
+        showEdges ()
         editors.items.map(snd).iter <| fun editor ->
             editor.changed.Add <| fun() ->
                 if not suppressEvents then
@@ -2134,9 +2082,39 @@ type AppearanceView() as this =
         for control in upperPanel.Controls do
             control.TabIndex <- upperPanel.GetRow(control) * upperPanel.ColumnCount + upperPanel.GetColumn(control)
         upperPanel.ResumeLayout(true)
+        topEdgePanel.ResumeLayout(true)
         colorPanel.ResumeLayout(true)
         colorPage.ResumeLayout(true)
         panel.ResumeLayout(true)
+
+    member private this.copyToBottom() =
+        let a = Services.program.tabAppearanceInfo
+        let layout = TabEdges.topLayoutOf {
+            tabPositionByDefault = Services.settings.getValue("tabPositionByDefault") :?> string
+            tabVerticalDirection = Services.settings.getValue("tabVerticalDirection") :?> string
+            tabIndentNormal = a.tabIndentNormal
+            tabIndentFlipped = a.tabIndentFlipped }
+        let top = { TabEdgeSettings.noValues with
+                        hideMode = Some(fst (TabEdgeSettings.hideSettings Services.settings.root TabEdges.Edge.Top))
+                        hideDelay = Some(snd (TabEdgeSettings.hideSettings Services.settings.root TabEdges.Edge.Top))
+                        tabHeight = Some a.tabHeight
+                        tabMaxWidth = Some a.tabMaxWidth
+                        tabPinnedTabWidth = Some a.tabPinnedTabWidth
+                        tabPinnedTabWidthIcon = Some a.tabPinnedTabWidthIcon
+                        tabOverlap = Some a.tabOverlap
+                        tabShape = Some a.tabShape
+                        align = Some layout.defaultAlign
+                        direction = Some layout.direction
+                        outsideStart = Some a.tabIndentNormal
+                        outsideEnd = Some a.tabIndentNormalRight
+                        insideStart = Some a.tabIndentFlipped
+                        insideEnd = Some a.tabIndentFlippedRight }
+        let root = Services.settings.root
+        let copied = TabEdgeSettings.copyOppositeValues root TabEdges.Edge.Top top
+        if not (JToken.DeepEquals(root, copied)) then
+            Services.settings.root <- copied
+            TabEdgeSettings.changed.Trigger()
+        edgePanels.[TabEdges.Edge.Bottom].refresh()
 
     member this.refresh() =
         let previous = suppressEvents
@@ -2148,6 +2126,7 @@ type AppearanceView() as this =
             customThemes <- loadCustomThemes()
             savedCustomColors <- loadSavedCustomColors()
             setEditorValues Services.program.tabAppearanceInfo
+            showEdges ()
             refreshComboBoxItems()
             let matchIndex = findMatchingTheme()
             if matchIndex >= 0 then
