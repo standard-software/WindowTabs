@@ -156,6 +156,12 @@ type WindowNode(window:Window) =
     inherit Node(window.text)
     let icon = DpiIcon(window.iconSmall)
     member this.Icon with get() = icon.image
+    member this.canEnableTabs = window.isWindow && Services.filter.getIsTabbingEnabledForProcess(window.pid.processPath)
+    member this.enableTabs
+        with get() = Services.filter.getIsTabbingEnabledForWindow(window.hwnd)
+        and set(value) =
+            if this.canEnableTabs then
+                Services.filter.setIsTabbingEnabledForWindows (List2([window.hwnd])) value
     interface INode with
         member x.showSettings = false
 
@@ -270,7 +276,7 @@ type ProgramView() as this=
                 if path <> null && path.LastNode <> null then
                     let node = path.LastNode :?> INode
                     // Check basic visibility (showSettings)
-                    let basicVisible = node.showSettings
+                    let basicVisible = node.showSettings || (propName = "enableTabs" && path.LastNode :? WindowNode)
                     // Check additional visibility condition if provided
                     let additionalVisible =
                         match visibilityCheck with
@@ -287,6 +293,15 @@ type ProgramView() as this=
             let checkboxSize = 13
             control.LeftMargin <- (colWidth - checkboxSize) / 2
             control.EditEnabled <- true
+            control.IsEditEnabledValueNeeded.Add <| fun e ->
+                let path = tree.GetPath(e.Node)
+                e.Value <-
+                    if path = null then false else
+                    match path.LastNode with
+                    | :? WindowNode as windowNode -> propName = "enableTabs" && windowNode.canEnableTabs
+                    | :? ExeNode -> true
+                    | _ -> false
+            control.CheckStateChanged.Add(fun _ -> tree.Invalidate())
             control.DataPropertyName <- propName
             tree.NodeControls.Add(control)
             control

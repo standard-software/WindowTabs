@@ -1271,7 +1271,7 @@ type Program() as this =
                         try
                             if w.isWindow && not (claimedWindows.value.Contains w.hwnd) &&
                                this.isAppWindowStyle(w) &&
-                               Services.filter.getIsTabbingEnabledForProcess(w.pid.processPath) &&
+                               Services.filter.getIsTabbingEnabledForWindow(w.hwnd) &&
                                ClosedTabClaim.sameIdentity identity (w.pid.processPath, normalizeClosedTabTitle w.text) then Some w.hwnd
                             else None
                         with _ -> None))
@@ -1841,7 +1841,7 @@ type Program() as this =
                 (monitors |> List.map (fun m -> toBox m.displayRect))
                 (monitors |> List.map (fun m -> toBox m.workRect))
                 (toBox window.bounds)) &&
-            Services.filter.getIsTabbingEnabledForProcess(window.pid.processPath) &&
+            Services.filter.getIsTabbingEnabledForWindow(hwnd) &&
             // Last: a call into the shell (see ensureWindowIsGrouped).
             this.isOnDesktopFromReader(hwnd)
         let parked =
@@ -2072,7 +2072,9 @@ type Program() as this =
                     (match window.cloakedValue with
                      | Some c -> c &&& 2 <> 0
                      | None -> false)
+                let excluded = Services.filter.isTabbingExcludedForWindow(hwnd)
                 let untabbable =
+                    excluded ||
                     VirtualDesktopGroups.pruneMember window.isWindow (fun () ->
                         this.isTabbableWindow(window).not &&
                         not (isRecentlyPlaced(hwnd)) &&
@@ -2097,7 +2099,7 @@ type Program() as this =
                         min s.right b.right > max s.left b.left &&
                         min s.bottom b.bottom > max s.top b.top))
                 let stranded =
-                    untabbable &&
+                    not excluded && untabbable &&
                     window.isWindow && window.isVisible && not window.isMinimized && not window.isCloaked &&
                     (let b = window.bounds in b.x <= -30000 || b.y <= -30000 || offEveryMonitor b) &&
                     (try Services.filter.getIsTabbingEnabledForProcess window.pid.processPath with _ -> false)
@@ -2126,6 +2128,8 @@ type Program() as this =
                     // still here and would remember it again, one place further
                     // left each time as the others go: only the first pass
                     // counts.
+                    elif excluded then
+                        windowLastGroup.map(fun m -> m.remove hwnd)
                     elif windowLastGroup.value.tryFind(hwnd).IsNone then
                         let now = DateTime.Now
                         let groupHwnd = (try gi.hwnd with _ -> IntPtr.Zero)
@@ -2484,6 +2488,9 @@ type Program() as this =
         | ShellEvent(hwnd, evt) ->
             match evt with
             | ShellEvent.HSHELL_WINDOWDESTROYED ->
+                // Shell removal can also mean a live window was hidden to tray.
+                if not (os.windowFromHwnd(hwnd).isWindow) then
+                    Services.filter.forgetWindowTabbing(hwnd)
                 isSubscribed.value.tryFind(hwnd).iter <| fun dispose -> dispose.Dispose()
                 // Direct removal + lightweight cleanup instead of expensive full window scan.
                 // EVENT_OBJECT_HIDE already handles tab removal via updateAppWindows(),
@@ -3470,7 +3477,7 @@ type Program() as this =
                     w.pid.isCurrentProcess.not &&
                     w.isWindow &&
                     this.isAppWindowStyle(w) &&
-                    Services.filter.getIsTabbingEnabledForProcess(w.pid.processPath))
+                    Services.filter.getIsTabbingEnabledForWindow(w.hwnd))
 
                 // The identity of every live window, for the two things a
                 // handle alone cannot do: reject a REUSED handle (after a
@@ -4186,8 +4193,9 @@ type Program() as this =
                                 (int64 token) rank (int64 hwnd) reason)
                     let valid = tabs |> List.indexed |> List.filter (fun (rank, tab) ->
                         let window = os.windowFromHwnd(tab.hwnd)
-                        let keep = VirtualDesktopGroups.keepOnReenable false window.isWindow false false
-                        if not keep then trace rank tab.hwnd "destroyed"
+                        let keep = VirtualDesktopGroups.keepOnReenable false window.isWindow false false &&
+                                   not (Services.filter.isTabbingExcludedForWindow(tab.hwnd))
+                        if not keep then trace rank tab.hwnd "destroyed-or-untabbed"
                         keep)
                     let allowed = try TabEdgeSettings.allowedOf Services.settings.root with _ -> TabEdges.topOnly
                     let valid = valid |> TabEdges.residentsFirst allowed (fun (_, tab) -> TabEdges.edgeOfSaved tab.edge)

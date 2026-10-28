@@ -4,6 +4,7 @@ open System
 type FilterService() as this =
     static let framelessApps = FramelessWindowSettings.load()
     let os = OS()
+    let mutable windowExclusions : Map<IntPtr, int * string> = Map.empty
     let blackListedExeNames = Set2(List2(["taskmgr.exe"]))
 
     member this.includedPaths 
@@ -17,7 +18,11 @@ type FilterService() as this =
     member this.isTabbingEnabledForAllProcessesByDefault 
         with get() = Services.settings.getValue("enableTabbingByDefault").cast<bool>()
         and set(value) = 
+            let apps = windowExclusions |> Map.toList |> List.map (fun (_, (_, app)) -> app) |> List.distinct
+            let before = apps |> List.map (fun app -> app, this.getIsTabbingEnabledForProcess(app))
             Services.settings.setValue("enableTabbingByDefault", box(value))
+            for app, wasEnabled in before do
+                windowExclusions <- WindowTabPolicy.resetApp app wasEnabled (this.getIsTabbingEnabledForProcess(app)) windowExclusions
             Services.program.refresh().ignore
             // The set of tabbed applications has changed wholesale; whatever
             // has dropped out of it leaves no closed tabs behind.
@@ -80,10 +85,25 @@ type FilterService() as this =
         else
             AppPath.containsApp this.includedPaths.items.list processPath
 
+    member this.isTabbingExcludedForWindow(hwnd) =
+        if not (Map.containsKey hwnd windowExclusions) then false else
+        let window = os.windowFromHwnd(hwnd)
+        if not window.isWindow then
+            windowExclusions <- WindowTabPolicy.forget hwnd windowExclusions
+            false
+        else
+            WindowTabPolicy.isExcluded hwnd window.pid.pid windowExclusions
+
+    member this.getIsTabbingEnabledForWindow(hwnd) =
+        let window = os.windowFromHwnd(hwnd)
+        window.isWindow &&
+        not (this.isTabbingExcludedForWindow(hwnd)) &&
+        this.getIsTabbingEnabledForProcess(window.pid.processPath)
+
     member this.isTabbableWindow(window:Window) = 
         // The window's own tests first: they turn most windows away without
         // looking up the process path.
-        this.isAppWindow(window) && this.getIsTabbingEnabledForProcess(window.pid.processPath)
+        this.isAppWindow(window) && this.getIsTabbingEnabledForWindow(window.hwnd)
 
     interface IFilterService with
         
@@ -106,7 +126,24 @@ type FilterService() as this =
             with get() = this.isTabbingEnabledForAllProcessesByDefault
             and set(value) = this.isTabbingEnabledForAllProcessesByDefault <- value
 
-        member x.setIsTabbingEnabledForProcess processPath enabled = 
+        member x.getIsTabbingEnabledForWindow(hwnd) = this.getIsTabbingEnabledForWindow(hwnd)
+
+        member x.isTabbingExcludedForWindow(hwnd) = this.isTabbingExcludedForWindow(hwnd)
+
+        member x.forgetWindowTabbing(hwnd) =
+            windowExclusions <- WindowTabPolicy.forget hwnd windowExclusions
+
+        member x.setIsTabbingEnabledForWindows hwnds enabled =
+            hwnds.iter <| fun hwnd ->
+                let window = os.windowFromHwnd(hwnd)
+                if window.isWindow then
+                    let app = AppPath.normalize window.pid.processPath
+                    windowExclusions <- WindowTabPolicy.setEnabled hwnd window.pid.pid app
+                                            (this.getIsTabbingEnabledForProcess(app)) enabled windowExclusions
+            Services.program.refresh().ignore
+
+        member x.setIsTabbingEnabledForProcess processPath enabled =
+            let wasEnabled = this.getIsTabbingEnabledForProcess(processPath)
             // add/remove work on the application, so setting a Store app
             // replaces the entry left by its previous version instead of
             // adding a second one beside it.
@@ -118,7 +155,8 @@ type FilterService() as this =
                 this.excludedPaths <- setTo this.excludedPaths (not enabled)
             else
                 this.includedPaths <- setTo this.includedPaths enabled
-                
+            windowExclusions <- WindowTabPolicy.resetApp (AppPath.normalize processPath) wasEnabled enabled windowExclusions
+
             Services.program.refresh().ignore
             // Switching an application off means it has no tabs, not that its
             // tabs were closed: its closed-tab records go with it.

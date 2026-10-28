@@ -82,6 +82,10 @@ type IFilterService =
     abstract member isTabbingEnabledForAllProcessesByDefault : bool with get, set
     abstract member setIsTabbingEnabledForProcess : string -> bool -> unit
     abstract member getIsTabbingEnabledForProcess : string -> bool
+    abstract member getIsTabbingEnabledForWindow : IntPtr -> bool
+    abstract member isTabbingExcludedForWindow : IntPtr -> bool
+    abstract member setIsTabbingEnabledForWindows : List2<IntPtr> -> bool -> unit
+    abstract member forgetWindowTabbing : IntPtr -> unit
 
 type SettingsViewType =
     | ProgramSettings
