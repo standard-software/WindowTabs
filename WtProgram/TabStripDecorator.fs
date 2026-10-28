@@ -2853,7 +2853,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         let processPath = pid.processPath
 
         // Start another window of this tab's program and report what cannot
-        // be started (a Store application, a failed start). All three
+        // be started (a Store application, a failed start). All
         // new-launch menu items go through here, and so does the "add a tab
         // to the right of the active tab" hot key (Program.runHotKey) - the
         // same NewWindowLaunch.start, so the menu and the key behave alike.
@@ -2887,12 +2887,29 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         // Item 1: "New tab : right of this tab" — launch and dock into the current tab group
         let newTabInGroupItem =
+            let caption = TabNameHelper.format (Localization.getString(menuKey "NewTabInGroup" "NewTabBelowInGroup")) currentTabName
+            let darkMode = defaultArg (Services.settings.root.getBool("EnableDarkMode")) false
+            let shortcut = Bemo.Win32.HotKeyControl.FormatMenuShortcut(Services.program.getHotKey(HotKeyPolicy.newTabRightKey), darkMode)
             CmiRegular({
-                text = TabNameHelper.format (Localization.getString(menuKey "NewTabInGroup" "NewTabBelowInGroup")) currentTabName
+                // Native menus align text after a tab in the shortcut column in both themes.
+                text = if String.IsNullOrEmpty(shortcut) then caption else caption + "\t" + shortcut
                 flags = List2()
                 image = None
                 click = fun() ->
                     handleLaunchError (fun path -> Services.program.launchNewWindow group.hwnd hwnd processPath)
+            })
+
+        let newTabAtEdgeEndItem =
+            CmiRegular({
+                text =
+                    if this.ts.edgesInUse |> List.exists ((<>) TabEdges.Edge.Top) then
+                        Localization.getString("NewTabAt" + string (this.ts.edgeOf (Tab(hwnd))) + "End")
+                    else Localization.getString("NewTabAtEnd")
+                flags = List2()
+                image = None
+                click = fun() ->
+                    let anchor = TabOrder.edgeEndAnchor hwnd (fun h -> this.ts.edgeOf (Tab h)) group.visualOrder.list
+                    handleLaunchError (fun _ -> Services.program.launchNewWindow group.hwnd anchor processPath)
             })
 
         // Item 2: "New window (position)" — launch as standalone then apply a position to the new group.
@@ -2966,7 +2983,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             CmiPopUp({
                 text = String.Format(Localization.getString("NewLaunchMenu"), exeName)
                 image = None
-                items = List2([newTabInGroupItem; CmiSeparator] @ newWindowPositionItems
+                items = List2([newTabInGroupItem; newTabAtEdgeEndItem; CmiSeparator] @ newWindowPositionItems
                               @ [CmiSeparator; newWindowLinkGroupItem])
                 flags = List2()
             })

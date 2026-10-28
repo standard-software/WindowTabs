@@ -49,6 +49,12 @@ module TabOrder =
             let before, rest = List.splitAt (tabs |> List.takeWhile (fun t -> zoneOfTab t <= zone) |> List.length) tabs
             before @ [tab] @ rest
 
+    // Resolve the clicked edge's end from display order at launch time.
+    let edgeEndAnchor fallback edgeOf tabs =
+        let edge = edgeOf fallback
+        tabs |> List.filter (fun tab -> edgeOf tab = edge)
+             |> List.tryLast |> Option.defaultValue fallback
+
     // A tab as the ordering sees it: the handle it has now, and the band it is
     // drawn in.
     type Placed = {

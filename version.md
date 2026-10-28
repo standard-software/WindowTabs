@@ -4,6 +4,10 @@
 
 ## version ss_2026.10.29_next1
 
+- The New tab menu can put the new tab at the far end of the clicked
+  tab's edge (rightmost on top and bottom, bottommost on left and right).
+- "Right of this tab" in the New tab menu shows its shortcut key.
+
 ## version ss_2026.10.29
 
 - Tabs can be shown on any edge of the window: top, left, right and bottom.

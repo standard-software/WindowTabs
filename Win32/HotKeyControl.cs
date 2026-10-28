@@ -117,6 +117,14 @@ namespace Bemo.Win32
             return text.Length == 0 ? NoneLabel : text.ToString();
         }
 
+        // Match the settings field while leaving unassigned menu shortcuts blank.
+        public static string FormatMenuShortcut(int packed, bool useManaged)
+        {
+            if ((packed & 0xFF) == 0)
+                return String.Empty;
+            return useManaged ? FormatHotKey(packed) : FormatNativeHotKey(packed);
+        }
+
         private string NativeDisplayText()
         {
             int packed = HotKey;
