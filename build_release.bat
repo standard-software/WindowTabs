@@ -42,13 +42,29 @@ echo.
 :: ----------------------------------------
 :: Build WtProgram (Rebuild for clean ILRepack)
 :: ----------------------------------------
-echo [1/4] Building WtProgram...
+:: A sync client or virus scanner can briefly lock a file under obj\
+:: ("Access to the path is denied"), so try the build up to 3 times.
+set RETRIED=
+set BUILD_TRY=0
+:build_wtprogram
+set /a BUILD_TRY+=1
+echo [1/4] Building WtProgram... (attempt %BUILD_TRY% of 3)
 %MSBUILD% WtProgram\WtProgram.fsproj /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU /v:minimal
-if errorlevel 1 (
-    echo ERROR: WtProgram build failed
-    exit /b 1
+if not errorlevel 1 goto build_wtprogram_ok
+if %BUILD_TRY% LSS 3 (
+    echo.
+    echo WARNING: WtProgram build failed on attempt %BUILD_TRY% of 3. Retrying in 5 seconds...
+    echo.
+    set RETRIED=1
+    timeout /t 5 /nobreak >nul
+    goto build_wtprogram
 )
+echo.
+echo ERROR: WtProgram build failed 3 times. See the messages above.
+exit /b 1
+:build_wtprogram_ok
 echo WtProgram build completed successfully.
+if %BUILD_TRY% GTR 1 echo   NOTE: it succeeded on attempt %BUILD_TRY% of 3, after a failure.
 echo.
 
 :: ----------------------------------------
@@ -172,15 +188,29 @@ echo.
 echo [3/4] Building MSI Installer...
 :: BuildProjectReferences=false prevents WtSetup from rebuilding WtProgram
 :: (already built in step 1), avoiding file lock conflicts
+set MSI_TRY=0
+:build_msi
+set /a MSI_TRY+=1
+if %MSI_TRY% GTR 1 echo [3/4] Building MSI Installer... (attempt %MSI_TRY% of 3)
 %MSBUILD% WtSetup\WtSetup.wixproj /p:Configuration=Release /p:Platform=x86 /p:BuildProjectReferences=false /v:minimal
-if errorlevel 1 (
-    echo ERROR: WtSetup build failed
+if not errorlevel 1 goto build_msi_ok
+if %MSI_TRY% LSS 3 (
     echo.
-    echo Make sure WiX Toolset is installed:
-    echo   1. Install WiX Toolset v3.11 or newer
-    echo   2. Or restore NuGet packages: nuget restore WindowTabs.sln
-    exit /b 1
+    echo WARNING: WtSetup build failed on attempt %MSI_TRY% of 3. Retrying in 5 seconds...
+    echo.
+    set RETRIED=1
+    timeout /t 5 /nobreak >nul
+    goto build_msi
 )
+echo.
+echo ERROR: WtSetup build failed 3 times. See the messages above.
+echo.
+echo Make sure WiX Toolset is installed:
+echo   1. Install WiX Toolset v3.11 or newer
+echo   2. Or restore NuGet packages: nuget restore WindowTabs.sln
+exit /b 1
+:build_msi_ok
+if %MSI_TRY% GTR 1 echo   NOTE: it succeeded on attempt %MSI_TRY% of 3, after a failure.
 
 :: Copy MSI to exe\installer
 if not exist exe\installer mkdir exe\installer
@@ -212,6 +242,11 @@ echo ========================================
 echo  Release Build Completed!
 echo ========================================
 echo.
+if defined RETRIED (
+    echo NOTE: a build step failed once or more and succeeded on a retry.
+    echo       Scroll up for the WARNING lines.
+    echo.
+)
 echo Output files:
 echo   ZIP: %ZIP_FILE%
 echo   MSI: exe\installer\WtSetup.msi
