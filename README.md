@@ -1,6 +1,6 @@
 <img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
 
-# WindowTabs version ss (Standard-Software edition)
+# WindowTabs <br>(Standard-Software edition)
 
 **Language:** [Japanese/日本語](README_Japanese.md)
 
@@ -36,7 +36,7 @@ Although the project fell through, I think its vision was wonderful.
 Using WindowTabs every day shows me just how comfortable switching windows can be, and how much it helps me work efficiently.
 WindowTabs provides an excellent tabbed interface for almost any window without being built into the OS itself.
 
-### About me (satoshi-yamamoto, the author of the ss_ version)
+### About me (satoshi-yamamoto, the author of the Standard-Software edition)
 
 I've been a paid user of WindowTabs since before it was open-sourced, and I've always loved its tabbed interface. I've long wanted more people to experience this way of working, and I've tried many similar tools over the years.
 
@@ -55,9 +55,11 @@ I (satoshi-yamamoto) am a software developer; in my day job I build web applicat
 
 I group multiple VSCode, Visual Studio, Terminal, WinMerge, file explorer, image viewer, Excel, and browser windows with WindowTabs, snapping them to the left and right of each display. Even apps with their own tabs can be managed at the window level, creating multiple levels of tab organization. Giving tabs from the same project matching colors lets me manage a great many windows with little effort.
 
-### What's enhanced in version ss_
+### What's enhanced in the Standard-Software edition
 
-In addition to tabbed window management, WindowTabs version ss_... lets you snap windows to any screen edge or move them to another display in one action. Its snapping features go beyond those built into Windows, letting you change window layouts without dragging and dropping. This is particularly useful with multiple displays.
+In addition to tabbed window management, the Standard-Software edition of WindowTabs lets you snap windows to any screen edge or move them to another display in one action. Its snapping features go beyond those built into Windows, letting you change window layouts without dragging and dropping. This is particularly useful with multiple displays.
+
+Tabs can sit not only on the top of a window but also on its left, right, or bottom edge. Each edge can have its own tab style and size.
 
 ### I'd be truly happy if you'd recommend it to people around you
 
@@ -115,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.25_next3**
+Latest version: **ss_2026.10.29**
 
 See [version.md](version.md) for details.
 
@@ -153,6 +155,12 @@ Download from the [releases](https://github.com/standard-software/WindowTabs/rel
 ### Tab Drag and Drop
 - Reorder within the same group (multi-select: the contiguous selected range moves together)
 - Split into a new window, or link to another group (multi-select: the whole selection travels together)
+
+### Tabs on Any Edge
+
+- Tabs can sit on the top, left, right, or bottom edge of a window. Choose which edges to use on each edge's page of the Tabs tab in the settings.
+- Use "Tab Direction" in the right-click menu to move tabs to another edge. You can also drag a tab to another edge over a window of its own group.
+- Each edge has its own settings for tab style, size, alignment, and so on. Tabs on the left and right edges show rotated text.
 
 ### Tab Context Menu
 
