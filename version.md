@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.29_next1
+
 ## version ss_2026.10.29
 
 - Tabs can be shown on any edge of the window: top, left, right and bottom.

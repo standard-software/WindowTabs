@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.10.29_next1
+
 ## version ss_2026.10.29
 
 - タブを、ウィンドウの上・左・右・下のどの辺にも置けるようにした。
