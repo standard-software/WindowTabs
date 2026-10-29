@@ -11,6 +11,9 @@
   from the Programs page (window rows).
 - The settings dialog is shown on every virtual desktop while it is open,
   and opens on the page it was closed on.
+- Translucent tabs (inactive groups, other virtual desktops) are frosted:
+  the windows behind them are blurred, so the tab text stays readable.
+  - Without it, the blurred wallpaper is used, then plain translucency.
 
 ## version ss_2026.10.29
 

@@ -116,7 +116,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // redraws the glass even if the strip itself has not changed.
     let mutable lastGlass = 0
     let mutable glassSubscription : IDisposable option = None
+    let mutable hostStripSubscription : IDisposable option = None
     let edgePresentations = System.Collections.Generic.Dictionary<TabEdges.Edge, byte[] * Rectangle list * Pt * Sz * byte * int>()
+    let edgePixelBuffers = System.Collections.Generic.Dictionary<TabEdges.Edge, byte[]>()
     let _os = OS()
     let taskbar = _os.getTaskbar()
     let tabMovedEvent = Event<_>()
@@ -361,9 +363,23 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             tabBorderColorSnapshot <- tabBorderColor.value
 
         let invoker = InvokerService.invoker
-        glassSubscription <- Some(TabGlass.changed.Subscribe(fun () ->
+        glassSubscription <- Some(TabGlass.subscribeChanged (fun () ->
             try
                 invoker.tryAsyncInvoke(fun () -> if not destroyed then this.update()) |> ignore
+            with _ -> ()))
+        hostStripSubscription <- Some(TabGlassHost.subscribeStrip invoker (fun hwnd ->
+            try
+                invoker.tryAsyncInvoke(fun () ->
+                    if not destroyed then
+                        if hwnd = this.hwnd then
+                            lastPresentation <- None
+                            this.update()
+                        else
+                            match edgeWindows |> Seq.tryFind (fun kv -> kv.Value.hwnd = hwnd) with
+                            | Some kv ->
+                                edgePresentations.Remove kv.Key |> ignore
+                                this.updateEdgeWindows()
+                            | None -> ()) |> ignore
             with _ -> ()))
         Cell.listen <| fun() ->
             this.update()
@@ -1409,6 +1425,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             this.processMouse(MouseClick(mousePt(), btn, MouseDblClick))
             msg.def()
 
+        if msg.msg = 0x0046 then TabGlassHost.changing msg.hwnd msg.lParam // WM_WINDOWPOSCHANGING
         //don't callback until the window has been created
         if layeredWindowCell.value.IsSome then
             monitor.windowMsg(msg)
@@ -1425,6 +1442,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | 0x007E -> // WM_DISPLAYCHANGE: monitors, and so their wallpapers, moved
             TabGlass.invalidate()
             systemAppearanceCell.set(systemAppearanceCell.value + 1)
+            msg.def()
+        | 0x0047 -> // WM_WINDOWPOSCHANGED: the glass backdrop stays directly below
+            TabGlassHost.follow msg.hwnd
             msg.def()
         | WindowMessages.WM_MOUSEACTIVATE ->
             MouseActivateReturnCodes.MA_NOACTIVATE
@@ -1453,6 +1473,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let mouse m =
             this.processMouseOn edge m
             msg.def()
+        if msg.msg = 0x0046 then TabGlassHost.changing msg.hwnd msg.lParam // WM_WINDOWPOSCHANGING
         if msg.msg = WindowMessages.WM_DPICHANGED && layeredWindowCell.value.IsSome then
             monitor.windowMsg(msg)
         // A strip written across scrolls by the wheel and by its buttons;
@@ -1460,6 +1481,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let button() = if this.isAcross edge then this.acrossButtonAt edge (mousePt()) else None
         match msg.msg with
         | WindowMessages.WM_MOUSEACTIVATE -> MouseActivateReturnCodes.MA_NOACTIVATE
+        | 0x0047 -> // WM_WINDOWPOSCHANGED: the glass backdrop stays directly below
+            TabGlassHost.follow msg.hwnd
+            msg.def()
         | WindowMessages.WM_MOUSEWHEEL when this.isAcross edge ->
             let delta = int (int16 ((int64 msg.wParam >>> 16) &&& 0xFFFFL))
             this.scrollAcross(edge, Some(delta), None)
@@ -1624,15 +1648,28 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         if not destroyed && edgeWindows.Count > 0 then this.updateEdgeWindows()
 
     // Shows an image in one of the strip's windows: as it is, or, while any
-    // of it is translucent, with frosted glass under the translucent tabs
-    // (TabGlass). `dimmed` gives the rectangles of the image that hold tabs
-    // drawn faded (another virtual desktop).
+    // of it is translucent, with frosted glass under the translucent tabs -
+    // Windows' blur in a backdrop window below it (TabGlassHost), else the
+    // blurred wallpaper mixed into the image (TabGlass). `dimmed` gives the
+    // rectangles of the image that hold tabs drawn faded (another virtual
+    // desktop).
     member private this.show(window: Window, image: Img, location: Pt, alpha: byte, dimmed: unit -> Rectangle list) =
-        match TabGlass.present image location alpha dimmed with
-        | Some glass ->
+        let mixed (glass: Img) =
             try window.update(glass, location, 255uy)
             finally glass.bitmap.Dispose()
-        | None -> window.update(image, location, alpha)
+        match TabGlass.choose window.hwnd image location alpha dimmed with
+        | TabGlass.Mixed glass -> mixed glass
+        | TabGlass.AsIs -> window.update(image, location, alpha)
+        | TabGlass.Host ->
+            (try window.update(image, location, alpha)
+             with _ ->
+                TabGlass.abandon window.hwnd
+                reraise())
+            // The backdrop goes where the strip now is, in this same step;
+            // where it cannot, the strip falls back at once.
+            match TabGlass.commit window.hwnd image location alpha dimmed with
+            | Some glass -> mixed glass
+            | None -> ()
 
     // Where the faded tabs of a strip laid out along it (renderBand, the
     // top strip's sprite) are drawn: each at its place, at its sprite's size.
@@ -1688,7 +1725,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                             // actual pixels so rotation, rows and cropping all
                             // share the same presentation reuse rule.
                             let bitmap = img.bitmap
-                            let pixels = Array.zeroCreate<byte> (img.width * img.height * 4)
+                            let length = img.width * img.height * 4
+                            let pixels =
+                                match edgePixelBuffers.TryGetValue edge with
+                                | true, buffer when buffer.Length = length -> buffer
+                                | _ -> Array.zeroCreate<byte> length
                             let data = bitmap.LockBits(Rectangle(0, 0, img.width, img.height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb)
                             try
                                 for y in 0 .. img.height - 1 do
@@ -1704,7 +1745,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                                 | _ -> false
                             if not unchanged then
                                 this.show(window, img, location, alpha, fun () -> rects)
+                                // Swap buffers only after comparison and presentation.
+                                match edgePresentations.TryGetValue edge with
+                                | true, (old, _, _, _, _, _) when old.Length = length -> edgePixelBuffers.[edge] <- old
+                                | _ -> edgePixelBuffers.Remove edge |> ignore
                                 edgePresentations.[edge] <- pixels, rects, location, img.size, alpha, generation
+                            else edgePixelBuffers.[edge] <- pixels
                         finally img.bitmap.Dispose())
                 elif List.contains edge receivers then
                     edgePresentations.Remove(edge) |> ignore
@@ -1755,6 +1801,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         Rect(Pt(x, y), Sz(w, h)), thin, appearance.tabActiveTabColor
 
     member private this.updateReceiver(window: Window, edge) =
+        // No tabs in the window now: nothing to blur under.
+        TabGlass.hideHost window.hwnd
         let hit, _, _ = this.receiverGeometry edge
         let img = Img(if hit.size.isEmptyArea then Sz(1, 1) else hit.size)
         let g = img.graphics
@@ -2747,6 +2795,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         and set(value) = alphaCell.set(value)
 
     member this.desktopNoticeTick with set(value: uint32 option) =
+        if layeredWindowCell.value.IsSome then
+            for strip in this.hwnd :: this.edgeHwnds do
+                TabGlassHost.cloakChanged strip
 #if DEBUG
         desktopNoticeTickValue <- value
 #else
@@ -2815,11 +2866,17 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         destroyed <- true
         glassSubscription |> Option.iter (fun subscription -> subscription.Dispose())
         glassSubscription <- None
+        hostStripSubscription |> Option.iter (fun subscription -> subscription.Dispose())
+        hostStripSubscription <- None
         edgePresentations.Clear()
+        edgePixelBuffers.Clear()
         renderCache.Clear()
         lastPresentation <- None
         (try destroyingEvent.Trigger() with _ -> ())
         eventHandlersCell.value.items.iter(fun d -> d.Dispose())
+        // Each window's glass backdrop goes with it.
+        for hwnd in this.hwnd :: [ for w in edgeWindows.Values -> w.hwnd ] do
+            try TabGlass.forget hwnd with _ -> ()
         // Every edge's window, whatever happens to any one of them.
         for w in List.ofSeq edgeWindows.Values do
             try (w :?> IDisposable).Dispose() with _ -> ()

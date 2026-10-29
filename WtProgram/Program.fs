@@ -4398,6 +4398,10 @@ type Program() as this =
         shutdownTimer.Dispose()
         ShutdownDeadline.setStage "manager view dispose"
         managerView.dispose()
+        // Every group's thread has ended, and its strips' glass backdrops
+        // with it: the thread they lived on lets go of the compositor.
+        ShutdownDeadline.setStage "tab glass host stop"
+        TabGlassHost.shutdown()
         ShutdownDeadline.setStage "main invoker dispose"
         (invoker :> IDisposable).Dispose()
         ShutdownDeadline.setStage "main COM release"

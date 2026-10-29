@@ -865,7 +865,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // them, each member's own state, and the desktop reading. While this is
     // unchanged a periodic refresh has nothing to do.
     member private this.stripStateSignature() : obj =
-        let order = Win32Helper.GetWindowsInZOrder()
+        let order = TabGlassBackdrops.without (Win32Helper.GetWindowsInZOrder())
         let members = this.windows.items.list
         let strips = this.ts.hwnd :: this.ts.edgeHwnds
         let placed = VirtualDesktopGroups.stripOrderSignature strips members order
@@ -983,7 +983,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member this.captureDragGroupFront(excluded: IntPtr list) =
         this.tryTopWindow |> Option.map (fun front ->
-            let order = Win32Helper.GetWindowsInZOrder() |> Array.toList
+            let order = TabGlassBackdrops.without (Win32Helper.GetWindowsInZOrder()) |> Array.toList
             let predecessors =
                 order |> List.takeWhile ((<>) front) |> List.rev
                 |> List.filter (fun h ->
@@ -2830,6 +2830,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 let handler = fun() ->
                     if evt = WinEvent.EVENT_OBJECT_CLOAKED || evt = WinEvent.EVENT_OBJECT_UNCLOAKED then
                         this.invokeAsync (fun () ->
+                            // Cloaking need not send WM_WINDOWPOSCHANGED to a strip.
+                            for strip in this.ts.hwnd :: this.ts.edgeHwnds do
+                                TabGlassHost.cloakNotice strip
                             stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
                             this.repairStripZorder(if evt = WinEvent.EVENT_OBJECT_UNCLOAKED then "uncloak" else "cloak"))
                     else this.main(hwnd, evt)

@@ -319,7 +319,7 @@ type OS() as this=
         this.windowFromHwnd(WinUserApi.WindowFromPoint(pt.POINT))
 
     member this.windowsInZorder = 
-        List2(List.ofArray (Win32Helper.GetWindowsInZOrder())).map(this.windowFromHwnd)
+        List2(List.ofArray (TabGlassBackdrops.without (Win32Helper.GetWindowsInZOrder()))).map(this.windowFromHwnd)
 
     member this.windowZorders =
         Map2(this.windowsInZorder.enumerate.map(fun(z, window) -> window.hwnd,z))
@@ -339,6 +339,8 @@ type OS() as this=
                 // ordering of the batch, and the restored-window-to-front
                 // ordering silently breaks.
         WinUserApi.EndDeferWindowPos(!hdswp).ignore
+        // A window may now lie between a strip and its glass backdrop.
+        TabGlassHost.reordered()
 
 
     // targetHwnd exposes the existing equality filter to the hub's index.
@@ -524,8 +526,11 @@ and
 
     member this.text = Win32Helper.GetWindowText(hwnd)
         
+    // A tab glass backdrop belongs to the strip directly above it and is
+    // passed over (TabGlassBackdrops).
     member this.prevZorder =
-        os.windowFromHwnd(WinUserApi.GetWindow(hwnd, GetWindowConstants.GW_HWNDPREV))
+        let previous h = WinUserApi.GetWindow(h, GetWindowConstants.GW_HWNDPREV)
+        os.windowFromHwnd(TabGlassBackdrops.skip previous (previous hwnd))
 
     member this.placement = 
         let wpStruct = Win32Helper.GetWindowPlacement(hwnd)
@@ -586,12 +591,16 @@ and
         WinUserApi.BringWindowToTop(hwnd).ignore
     
     member this.tryInsertAfter(hwndInsertAfter:IntPtr) =
-        WinUserApi.SetWindowPos(hwnd,
-            hwndInsertAfter, 0, 0, 0, 0,
-            SetWindowPosFlags.SWP_NOOWNERZORDER |||
-            SetWindowPosFlags.SWP_NOMOVE |||
-            SetWindowPosFlags.SWP_NOSIZE |||
-            SetWindowPosFlags.SWP_NOACTIVATE)
+        let placed =
+            WinUserApi.SetWindowPos(hwnd,
+                hwndInsertAfter, 0, 0, 0, 0,
+                SetWindowPosFlags.SWP_NOOWNERZORDER |||
+                SetWindowPosFlags.SWP_NOMOVE |||
+                SetWindowPosFlags.SWP_NOSIZE |||
+                SetWindowPosFlags.SWP_NOACTIVATE)
+        // A window may now lie between a strip and its glass backdrop.
+        TabGlassHost.reordered()
+        placed
 
     member this.insertAfter(hwndInsertAfter:IntPtr) =
         this.tryInsertAfter(hwndInsertAfter) |> ignore
@@ -625,6 +634,7 @@ and
             SetWindowPosFlags.SWP_NOMOVE |||
             SetWindowPosFlags.SWP_NOSIZE |||
             SetWindowPosFlags.SWP_NOACTIVATE) |> ignore
+        TabGlassHost.reordered()
 
     member this.parent = os.windowFromHwnd(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_HWNDPARENT))
 

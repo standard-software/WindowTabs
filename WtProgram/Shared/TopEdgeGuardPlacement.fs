@@ -84,7 +84,11 @@ module TopEdgeGuardPlacement =
 
     let visible hwnd = Native.IsWindowVisible hwnd
     let isTopMost hwnd = Native.GetWindowLongW(hwnd, -20) &&& 8 <> 0
-    let above hwnd = Native.GetWindow(hwnd, 3u)
+    // A tab glass backdrop belongs to the strip directly above it and is
+    // passed over in every walk here (TabGlassBackdrops).
+    let above hwnd =
+        let previous h = Native.GetWindow(h, 3u)
+        TabGlassBackdrops.skip previous (previous hwnd)
     let ownerOf hwnd = Native.GetWindow(hwnd, 4u)
     let rectOf hwnd : TopEdgeGuardPolicy.Band option =
         let mutable r = Native.RECT()
@@ -210,6 +214,8 @@ module TopEdgeGuardPlacement =
         let wasVisible = visible band
 #endif
         let ok = Native.SetWindowPos(band, anchor, x, y, width, height, flags)
+        // The guard may now lie between a strip and its glass backdrop.
+        TabGlassHost.reordered()
 #if DEBUG
         Bemo.Win32.ShellCallTrace.GuardVisibility(band, wasVisible, visible band)
 #endif
@@ -358,7 +364,8 @@ module TopEdgeGuardPlacement =
             else
                 let w : TopEdgeGuardPolicy.OwnedWindow =
                     { hwnd = hwnd; owner = ownerOf hwnd; topmost = isTopMost hwnd }
-                walk (Native.GetWindow(hwnd, 2u)) (remaining - 1) (Set.add hwnd seen) (w :: windows)
+                let windows = if TabGlassBackdrops.isBackdrop hwnd then windows else w :: windows
+                walk (Native.GetWindow(hwnd, 2u)) (remaining - 1) (Set.add hwnd seen) windows
         let complete, windows = walk (Native.GetTopWindow 0n) 4096 Set.empty []
         TopEdgeGuardPolicy.marginOrderAmong complete band strip others owner windows
 
@@ -470,7 +477,8 @@ module TopEdgeGuardPlacement =
     let canKeepShown band owner =
         let rec walk hwnd remaining =
             if hwnd = owner then true
-            elif hwnd = 0n || remaining = 0 || ownerOf hwnd <> owner then false
+            elif hwnd = 0n || remaining = 0 then false
+            elif ownerOf hwnd <> owner && not (TabGlassBackdrops.isBackdrop hwnd) then false
             else walk (Native.GetWindow(hwnd, 2u)) (remaining - 1)
         foregroundOwner owner && visible owner && visible band &&
         not (Native.IsIconic owner) && not (Native.IsZoomed owner) &&
