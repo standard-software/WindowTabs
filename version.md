@@ -14,6 +14,8 @@
 - Translucent tabs (inactive groups, other virtual desktops) are frosted:
   the windows behind them are blurred, so the tab text stays readable.
   - Without it, the blurred wallpaper is used, then plain translucency.
+- Snapped windows no longer leave a gap at the left, right and bottom:
+  their visible frame meets the screen edge or the tabs, as in Windows.
 
 ## version ss_2026.10.29
 

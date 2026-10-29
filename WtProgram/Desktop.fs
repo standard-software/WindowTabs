@@ -246,9 +246,9 @@ type Desktop(notify:IDesktopNotification) as this =
                     let (x, y, width, height) =
                         SnapGeometry.calculateSnapBoundsWithPercent snapDirection 50 (snapArea())
                     let baseBounds = Rect(Pt(x, y), Sz(width, height))
-                    FramePlacement.moveDetached window margin baseBounds
+                    FramePlacement.moveDetachedSnap window margin baseBounds
                     for selected in dragInfo.selectedHwnds do
-                        FramePlacement.prepare selected dragInfo.sourceFrameMargins.[selected] baseBounds
+                        FramePlacement.prepareSnap selected dragInfo.sourceFrameMargins.[selected] baseBounds
                     let realignEnabled =
                         try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
                         with _ -> false

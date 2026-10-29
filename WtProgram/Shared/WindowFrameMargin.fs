@@ -75,6 +75,17 @@ module WindowFrameMargin =
         { x = bounds.x - left; y = bounds.y - top
           width = bounds.width + left + right; height = bounds.height + top + bottom }
 
+    // DWM insets are physical pixels. Reject invalid samples instead of
+    // allowing stale or unrelated frame bounds to enlarge a snap.
+    let frameInsets (outer: Bounds) (visible: Bounds) =
+        let t = int64 visible.y - int64 outer.y
+        let l = int64 visible.x - int64 outer.x
+        let r = int64 outer.x + int64 outer.width - int64 visible.x - int64 visible.width
+        let b = int64 outer.y + int64 outer.height - int64 visible.y - int64 visible.height
+        if outer.width <= 0 || outer.height <= 0 || visible.width <= 0 || visible.height <= 0 ||
+           [t;l;r;b] |> List.exists (fun v -> v < 0L || v > 32L) then (0,0,0,0)
+        else int t, int l, int r, int b
+
     let usePreparedBase hasBase normal = not hasBase && normal
 
     // Render before entering the logger. Its thunk closes over a string only.

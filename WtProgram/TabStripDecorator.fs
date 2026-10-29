@@ -1692,15 +1692,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
     // callers go through the original single-tab detach helpers).
     member private this.detachTabsCommon(
             tabsInOrder: List<IntPtr>,
-            applyToSeedWindow: MonitorScreen -> Rect -> (Rect -> unit) -> unit
+            applyToSeedWindow: MonitorScreen -> Rect -> (Rect -> unit) -> unit,
+            ?snap: bool
         ) =
+        let snap = defaultArg snap false
         match tabsInOrder with
         | [] | [_] -> ()
         | firstHwnd :: remainingHwnds ->
             let window = os.windowFromHwnd(firstHwnd)
             let margins = tabsInOrder |> List.map (fun h -> h, group.capturePlacementMargin(h)) |> Map.ofList
             let margin = margins.[firstHwnd]
-            let bounds = FramePlacement.read firstHwnd margin (FramePlacement.restoredBounds window)
+            let bounds = (if snap then FramePlacement.readSnap else FramePlacement.read) firstHwnd margin (FramePlacement.restoredBounds window)
             let screen = this.getCurrentScreenForWindow(firstHwnd)
 
             // Step 1: detach seed tab from this group; place / snap window.
@@ -1714,7 +1716,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 if window.isMinimized || window.isMaximized then
                     window.showWindow(ShowWindowCommands.SW_RESTORE)
 
-                applyToSeedWindow screen bounds (FramePlacement.moveDetached window margin)
+                applyToSeedWindow screen bounds ((if snap then FramePlacement.moveDetachedSnap else FramePlacement.moveDetached) window margin)
 
                 notifyDetached(firstHwnd)
             finally
@@ -1781,21 +1783,21 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         | [] -> ()
         | [singleHwnd] -> this.detachTabToSnap(singleHwnd, snapDirection)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun screen bounds place ->
+            this.detachTabsCommon(tabsInOrder, (fun screen bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
                     snapDirection, screen.WorkingArea,
                     bounds.size.width, bounds.size.height)
-                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))), snap = true)
 
     member private this.detachTabsToSnapWithPercent(tabsInOrder: List<IntPtr>, snapDirection: string, percent: int) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToSnapWithPercent(singleHwnd, snapDirection, percent)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun screen _bounds place ->
+            this.detachTabsCommon(tabsInOrder, (fun screen _bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
                     snapDirection, percent, screen.WorkingArea)
-                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))), snap = true)
 
     member private this.detachTabsToScreen(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, position: Option<string>) =
         match tabsInOrder with
@@ -1827,7 +1829,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnap(singleHwnd, targetScreen, snapDirection)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun sourceScreen bounds place ->
+            this.detachTabsCommon(tabsInOrder, (fun sourceScreen bounds place ->
                 let sourceWorkArea = sourceScreen.WorkingArea
                 let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
                 let heightPercent = float(bounds.size.height) / float(sourceWorkArea.Height)
@@ -1836,17 +1838,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 let newHeight = int(float(targetWorkArea.Height) * heightPercent)
                 let (newX, newY, finalWidth, finalHeight) = this.calculateSnapBounds(
                     snapDirection, targetWorkArea, newWidth, newHeight)
-                place (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))))
+                place (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))), snap = true)
 
     member private this.detachTabsToScreenSnapWithPercent(tabsInOrder: List<IntPtr>, targetScreen: MonitorScreen, snapDirection: string, percent: int) =
         match tabsInOrder with
         | [] -> ()
         | [singleHwnd] -> this.detachTabToScreenSnapWithPercent(singleHwnd, targetScreen, snapDirection, percent)
         | _ ->
-            this.detachTabsCommon(tabsInOrder, fun _src _bounds place ->
+            this.detachTabsCommon(tabsInOrder, (fun _src _bounds place ->
                 let (newX, newY, newWidth, newHeight) = this.calculateSnapBoundsWithPercent(
                     snapDirection, percent, targetScreen.WorkingArea)
-                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight))))
+                place (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))), snap = true)
 
     // Resolve the action-target list for the detach menu and order it
     // by visualOrder so that the resulting tab strip matches the source
@@ -2007,7 +2009,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let window = os.windowFromHwnd(hwnd)
         let margin = group.capturePlacementMargin(hwnd)
-        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
+        let bounds = FramePlacement.readSnap hwnd margin (FramePlacement.restoredBounds window)
         let screen = this.getCurrentScreenForWindow(hwnd)
 
         let tab = Tab(hwnd)
@@ -2028,7 +2030,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 bounds.size.width,
                 bounds.size.height)
 
-            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetachedSnap window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -2042,7 +2044,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let window = os.windowFromHwnd(hwnd)
         let margin = group.capturePlacementMargin(hwnd)
-        let bounds = FramePlacement.read hwnd margin (FramePlacement.restoredBounds window)
+        let bounds = FramePlacement.readSnap hwnd margin (FramePlacement.restoredBounds window)
         let sourceScreen = this.getCurrentScreenForWindow(hwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
         let widthPercent = float(bounds.size.width) / float(sourceWorkArea.Width)
@@ -2087,7 +2089,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if currentDpi <> initialDpi then
                 System.Threading.Thread.Sleep(20)
 
-            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
+            FramePlacement.moveDetachedSnap window margin (Rect(Pt(newX, newY), Sz(finalWidth, finalHeight)))
 
             notifyDetached(hwnd)
 
@@ -2120,7 +2122,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                 percent,
                 screen.WorkingArea)
 
-            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetachedSnap window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -2166,7 +2168,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if currentDpi <> initialDpi then
                 System.Threading.Thread.Sleep(20)
 
-            FramePlacement.moveDetached window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
+            FramePlacement.moveDetachedSnap window margin (Rect(Pt(newX, newY), Sz(newWidth, newHeight)))
 
             notifyDetached(hwnd)
 
@@ -2368,6 +2370,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             if group.hasWindowMargin(activeHwnd) then
                 group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
+    member private this.writeGroupSnap(window: Window, bounds: Rect) =
+        if group.hasWindowMargin(window.hwnd) then
+            let wanted = group.applyWindowMarginForWrite(window.hwnd, bounds)
+            window.move(wanted)
+            wanted
+        else FramePlacement.moveSnap window (fun _ -> (0,0,0,0)) bounds
+
     member this.moveTabGroupToSnap(hwnd: IntPtr, snapDirection: string) =
         // Move the entire tab group to snap position (resize and position)
         let activeHwnd = group.topWindow
@@ -2390,8 +2399,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     (int64 group.hwnd) (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom)
                                     (bounds.width+mLeft+mRight, bounds.height+mTop+mBottom))
 #endif
-        let snapWidth = bounds.size.width + mLeft + mRight
-        let snapHeight = bounds.size.height + mTop + mBottom
+        let visible =
+            if group.hasWindowMargin(activeHwnd) then
+                Rect(bounds.location, Sz(bounds.width + mLeft + mRight, bounds.height + mTop + mBottom))
+            else FramePlacement.readSnap activeHwnd (fun _ -> (0,0,0,0)) bounds
+        let snapWidth = visible.width
+        let snapHeight = visible.height
 
         let (newX, newY, newWidth, newHeight) = this.calculateSnapBounds(
             snapDirection,
@@ -2402,14 +2415,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
         // Apply detected frame margin
-        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
+        let finalBounds = this.writeGroupSnap(window, snapBounds)
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
                                     (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds)
-        group.traceMarginGeometry("snap-before-write", None)
-#endif
-        window.move(finalBounds)
-#if DEBUG
         group.traceMarginGeometry("snap-after-write", None)
 #endif
         // Record shrunk size for tracking
@@ -2436,8 +2448,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
                                     (int64 group.hwnd) (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom)
                                     (bounds.width+mLeft+mRight, bounds.height+mTop+mBottom))
 #endif
-        let groupWidth = bounds.size.width + mLeft + mRight
-        let groupHeight = bounds.size.height + mTop + mBottom
+        let visible =
+            if group.hasWindowMargin(activeHwnd) then
+                Rect(bounds.location, Sz(bounds.width + mLeft + mRight, bounds.height + mTop + mBottom))
+            else FramePlacement.readSnap activeHwnd (fun _ -> (0,0,0,0)) bounds
+        let groupWidth = visible.width
+        let groupHeight = visible.height
 
         // Calculate size percentages for DPI-aware placement
         let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
@@ -2480,14 +2496,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
 
         let snapBounds = Rect(Pt(newX, newY), Sz(finalWidth, finalHeight))
         // Apply detected frame margin
-        let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
+        let finalBounds2 = this.writeGroupSnap(window, snapBounds)
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
                                     (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds2)
-        group.traceMarginGeometry("snap-before-write", None)
-#endif
-        window.move(finalBounds2)
-#if DEBUG
         group.traceMarginGeometry("snap-after-write", None)
 #endif
         if group.hasWindowMargin(activeHwnd) then
@@ -2510,14 +2525,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             true)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
-        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
+        let finalBounds = this.writeGroupSnap(window, snapBounds)
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
                                     (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds)
-        group.traceMarginGeometry("snap-before-write", None)
-#endif
-        window.move(finalBounds)
-#if DEBUG
         group.traceMarginGeometry("snap-after-write", None)
 #endif
         if group.hasWindowMargin(activeHwnd) then
@@ -2553,14 +2567,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             System.Threading.Thread.Sleep(20)
 
         let snapBounds = Rect(Pt(newX, newY), Sz(newWidth, newHeight))
-        let finalBounds2 = group.applyWindowMarginForWrite(activeHwnd, snapBounds)
+#if DEBUG
+        group.traceMarginGeometry("snap-before-write", None)
+#endif
+        let finalBounds2 = this.writeGroupSnap(window, snapBounds)
 #if DEBUG
         WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin group=%X hwnd=%X margin=%A base=%A target=%A"
                                     (int64 group.hwnd) (int64 activeHwnd) (group.getWindowMargin(activeHwnd, snapBounds)) snapBounds finalBounds2)
-        group.traceMarginGeometry("snap-before-write", None)
-#endif
-        window.move(finalBounds2)
-#if DEBUG
         group.traceMarginGeometry("snap-after-write", None)
 #endif
         if group.hasWindowMargin(activeHwnd) then

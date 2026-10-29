@@ -92,6 +92,55 @@ module FramePlacement =
                                     (int64 hwnd) bounds amount result)
 #endif
         result
+    // Snap-only geometry: ordinary moves and size menus keep their old base.
+    let private snapInsets hwnd (margin: MarginReader) bounds =
+        if margin (dpi bounds) <> (0,0,0,0) then (0,0,0,0)
+        else
+            try
+                let window = OS().windowFromHwnd(hwnd)
+                if window.isMinimized || window.isMaximized then (0,0,0,0)
+                else
+                    let outer = window.bounds
+                    let mutable frame = RECT()
+                    if DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                   &frame, 16) <> 0 then (0,0,0,0)
+                    else
+                        WindowFrameMargin.frameInsets
+                            { x=outer.x; y=outer.y; width=outer.width; height=outer.height }
+                            { x=frame.Left; y=frame.Top; width=frame.Right-frame.Left; height=frame.Bottom-frame.Top }
+            with _ -> (0,0,0,0)
+    let readSnap hwnd margin bounds =
+        let visible = convert WindowFrameMargin.inset (snapInsets hwnd margin bounds) bounds
+        read hwnd margin visible
+    let private snapBase hwnd margin bounds =
+        let amount = snapInsets hwnd margin bounds
+        convert WindowFrameMargin.outset amount bounds
+    let moveSnap (window: Window) margin (bounds: Rect) =
+        // Multi-tab detach also enters here without a position-first move.
+        // Wait for its destination DPI before sampling the non-client frame.
+        if Dpi.scaleForRect window.bounds <> Dpi.scaleForRect bounds then
+            let initialDpi = WinUserApi.GetDpiForWindow(window.hwnd)
+            window.setPositionOnly bounds.x bounds.y
+            let mutable elapsed = 0
+            while elapsed < 200 && WinUserApi.GetDpiForWindow(window.hwnd) = initialDpi do
+                Thread.Sleep(10)
+                elapsed <- elapsed + 10
+            if WinUserApi.GetDpiForWindow(window.hwnd) <> initialDpi then Thread.Sleep(20)
+        let beforeDpi = WinUserApi.GetDpiForWindow(window.hwnd)
+        let wanted = target window.hwnd margin (snapBase window.hwnd margin bounds)
+        window.move(wanted)
+        // A cross-monitor move can change the non-client frame. Measure the
+        // destination window, without assuming that insets scale linearly.
+        if WinUserApi.GetDpiForWindow(window.hwnd) <> beforeDpi then Thread.Sleep(20)
+        let settled = target window.hwnd margin (snapBase window.hwnd margin bounds)
+        if settled <> wanted then window.move(settled)
+#if DEBUG
+        let amount = bounds.top-settled.top, bounds.left-settled.left,
+                     settled.right-bounds.right, settled.bottom-bounds.bottom
+        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-invisible-frame amountTLRB=%A corrected=%b"
+                                    amount (settled <> wanted))
+#endif
+        settled
     let prepare hwnd margin bounds =
         // Drop abandoned placements whose native window identity has changed.
         for pair in pending.ToArray() do
@@ -112,6 +161,18 @@ module FramePlacement =
                                         (int64 window.hwnd) bounds wanted window.bounds)
 #endif
         with _ -> take window.hwnd |> ignore; reraise()
+
+    let prepareSnap hwnd margin bounds =
+        prepare hwnd margin (snapBase hwnd margin bounds)
+    let moveDetachedSnap (window: Window) margin bounds =
+        if margin (dpi bounds) <> (0,0,0,0) then moveDetached window margin bounds
+        else
+            try
+                let wanted = moveSnap window margin bounds
+                // Store the ordinary group base, so joining does not apply the
+                // snap compensation again or seed it as an external frame margin.
+                prepare window.hwnd margin (read window.hwnd margin wanted)
+            with _ -> take window.hwnd |> ignore; reraise()
 
 type WindowGroup(plugins:List2<IPlugin>) as this =
     let Cell = CellScope(true)
