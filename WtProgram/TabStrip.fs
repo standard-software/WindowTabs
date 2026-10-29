@@ -112,6 +112,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 #endif
     let systemAppearanceCell = Cell.create(0)
     let mutable lastPresentation : (Img * Pt * byte) option = None
+    // TabGlass.generation when the strip was last shown, so a new wallpaper
+    // redraws the glass even if the strip itself has not changed.
+    let mutable lastGlass = 0
+    let mutable glassSubscription : IDisposable option = None
+    let edgePresentations = System.Collections.Generic.Dictionary<TabEdges.Edge, byte[] * Rectangle list * Pt * Sz * byte * int>()
     let _os = OS()
     let taskbar = _os.getTaskbar()
     let tabMovedEvent = Event<_>()
@@ -355,6 +360,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         Cell.listen <| fun() ->
             tabBorderColorSnapshot <- tabBorderColor.value
 
+        let invoker = InvokerService.invoker
+        glassSubscription <- Some(TabGlass.changed.Subscribe(fun () ->
+            try
+                invoker.tryAsyncInvoke(fun () -> if not destroyed then this.update()) |> ignore
+            with _ -> ()))
         Cell.listen <| fun() ->
             this.update()
        
@@ -1407,6 +1417,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | WindowMessages.WM_SETTINGCHANGE
         | WindowMessages.WM_SYSCOLORCHANGE
         | WindowMessages.WM_THEMECHANGED ->
+            // A new wallpaper or transparency setting arrives as
+            // WM_SETTINGCHANGE; the redraw below picks it up.
+            TabGlass.invalidate()
+            systemAppearanceCell.set(systemAppearanceCell.value + 1)
+            msg.def()
+        | 0x007E -> // WM_DISPLAYCHANGE: monitors, and so their wallpapers, moved
+            TabGlass.invalidate()
             systemAppearanceCell.set(systemAppearanceCell.value + 1)
             msg.def()
         | WindowMessages.WM_MOUSEACTIVATE ->
@@ -1530,6 +1547,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.topShows = not this.topBandEmpty
 
     member private this.update() =
+        if not destroyed && this.visible && (this.alpha < 255uy || not this.effectiveDimmedTabs.items.list.IsEmpty) then
+            TabGlass.refresh()
+        let glassGeneration = TabGlass.generation()
         if destroyed then ()
         elif this.visible && not this.topBandEmpty then
             // Read the complete sprite input on every listener pass, even on a
@@ -1550,17 +1570,19 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     let edgeActive = if otherEdges then zorderCell.value.tryHead else None
                     let key = ts.renderKey @ [ "sliver", box shrunk; "system", box systemAppearanceCell.value;
                                               "edgeActive", box (otherEdges, edgeActive) ]
-                    Some(renderCache.Get(key, fun () -> this.render(ts, shrunk)))
+                    let image, redrawn = renderCache.Get(key, fun () -> this.render(ts, shrunk))
+                    Some(image, redrawn, ts, shrunk)
                 with _ ->
                     PerfTrace.count "stripRenderFailed"
                     None
             let location, alpha = this.location, this.alpha
             match rendered with
-            | Some(image, redrawn) ->
+            | Some(image, redrawn, ts, shrunk) ->
                 let unchanged =
                     match lastPresentation with
                     | Some(old, point, opacity) ->
-                        Object.ReferenceEquals(old, image) && point.record = location.record && opacity = alpha
+                        Object.ReferenceEquals(old, image) && point.record = location.record && opacity = alpha &&
+                        lastGlass = glassGeneration
                     | None -> false
                 if not unchanged then
 #if DEBUG
@@ -1569,7 +1591,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         | Some _ -> PerfTrace.count "stripMoveOnly"
                         | None -> PerfTrace.count "stripReuseShow"
 #endif
-                    this.window.update(image, location, alpha)
+                    this.show(this.window, image, location, alpha, fun () ->
+                        let rects = this.dimmedRects ts
+                        if shrunk then
+                            // render keeps the bottom sliver of the strip.
+                            let cut = ts.size.height - Dpi.px ts.scale 7
+                            rects |> List.map (fun r -> Rectangle(r.X, r.Y - cut, r.Width, r.Height))
+                        else rects)
+                    lastGlass <- glassGeneration
                     this.tracePaint("pixels")
 #if DEBUG
                     VirtualDesktopTrace.handover (fun () ->
@@ -1594,6 +1623,55 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             lastPresentation <- None
         if not destroyed && edgeWindows.Count > 0 then this.updateEdgeWindows()
 
+    // Shows an image in one of the strip's windows: as it is, or, while any
+    // of it is translucent, with frosted glass under the translucent tabs
+    // (TabGlass). `dimmed` gives the rectangles of the image that hold tabs
+    // drawn faded (another virtual desktop).
+    member private this.show(window: Window, image: Img, location: Pt, alpha: byte, dimmed: unit -> Rectangle list) =
+        match TabGlass.present image location alpha dimmed with
+        | Some glass ->
+            try window.update(glass, location, 255uy)
+            finally glass.bitmap.Dispose()
+        | None -> window.update(image, location, alpha)
+
+    // Where the faded tabs of a strip laid out along it (renderBand, the
+    // top strip's sprite) are drawn: each at its place, at its sprite's size.
+    member private this.dimmedRects (ts: TabStripSprite<Tab>) : Rectangle list =
+        ts.visualOrder.list
+        |> List.filter (fun t -> ts.dimmedTabs.contains t)
+        |> List.map (fun t ->
+            let at = ts.tabLocation t
+            let size = (ts.tabSpriteRec t).size
+            Rectangle(at.x, at.y, size.width, size.height))
+
+    // The same for an edge other than the top, in the image its window shows
+    // (presentEdge): turned for a side strip (renderSide), the rows of a strip
+    // written across inside its view (renderAcross), less the crop of a
+    // shrunk strip.
+    member private this.dimmedRectsOn (edge: TabEdges.Edge) (bounds: Rect) : Rectangle list =
+        let dimmed = this.effectiveDimmedTabs
+        if dimmed.items.list.IsEmpty then []
+        else
+            let rects =
+                if TabEdges.runsHorizontally edge then this.dimmedRects (this.tsOn edge)
+                elif this.isAcross edge then
+                    match this.acrossOf edge with
+                    | Some(layout) ->
+                        let view = Rectangle(0, layout.viewStart, layout.stripWidth, layout.viewLength)
+                        layout.placed
+                        |> List.filter (fun (t, _, _, _) -> dimmed.contains t)
+                        |> List.map (fun (_, x, y, sprite) ->
+                            Rectangle.Intersect(view, Rectangle(x, y, sprite.size.width, sprite.size.height)))
+                    | None -> []
+                else
+                    let ts = this.tsOn edge
+                    let clockwise = this.sideTextClockwise edge
+                    this.dimmedRects ts |> List.map (fun r ->
+                        let column = TabEdges.sideTabColumn clockwise ts.size.height r.Y r.Height
+                        Rectangle(column, r.X, r.Height, r.Width))
+            let crop, _ = this.edgePresentation(edge, bounds)
+            rects |> List.map (fun r -> Rectangle(r.X - crop.location.x, r.Y - crop.location.y, r.Width, r.Height))
+
     member private this.updateEdgeWindows() =
         let receivers = this.receiverEdges
         for kv in edgeWindows do
@@ -1603,12 +1681,40 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             | Some((bounds, _, _)) when this.visible && not bounds.size.isEmptyArea ->
                 if not (this.bandOf edge).isEmpty then
                     PerfTrace.time "stripRender" (fun () ->
+                        let generation = TabGlass.generation()
                         let img, location = this.presentEdge edge bounds
-                        window.update(img, location, this.alpha))
+                        try
+                            // Edge renderers return fresh images. Compare their
+                            // actual pixels so rotation, rows and cropping all
+                            // share the same presentation reuse rule.
+                            let bitmap = img.bitmap
+                            let pixels = Array.zeroCreate<byte> (img.width * img.height * 4)
+                            let data = bitmap.LockBits(Rectangle(0, 0, img.width, img.height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb)
+                            try
+                                for y in 0 .. img.height - 1 do
+                                    System.Runtime.InteropServices.Marshal.Copy(data.Scan0 + nativeint (y * data.Stride), pixels, y * img.width * 4, img.width * 4)
+                            finally bitmap.UnlockBits(data)
+                            let rects = this.dimmedRectsOn edge bounds
+                            let alpha = this.alpha
+                            let unchanged =
+                                match edgePresentations.TryGetValue(edge) with
+                                | true, (old, oldRects, point, size, opacity, glass) ->
+                                    old = pixels && oldRects = rects && point.record = location.record && opacity = alpha && glass = generation &&
+                                    size = img.size
+                                | _ -> false
+                            if not unchanged then
+                                this.show(window, img, location, alpha, fun () -> rects)
+                                edgePresentations.[edge] <- pixels, rects, location, img.size, alpha, generation
+                        finally img.bitmap.Dispose())
                 elif List.contains edge receivers then
+                    edgePresentations.Remove(edge) |> ignore
                     this.updateReceiver(window, edge)
-                else window.hide()
-            | _ -> window.hide()
+                else
+                    edgePresentations.Remove(edge) |> ignore
+                    window.hide()
+            | _ ->
+                edgePresentations.Remove(edge) |> ignore
+                window.hide()
 
     // The thin strip to drop on (2-5): along the side of the strip's place
     // that touches the window, eight pixels at 100%.
@@ -1676,8 +1782,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let img = this.renderEdge edge
         let crop, at = this.edgePresentation(edge, bounds)
         if crop.size = img.size then img, at
-        elif crop.size.isEmptyArea then Img(Sz(1,1)), at
-        else Img(img.bitmap.Clone(crop.Rectangle, PixelFormat.Format32bppArgb)), at
+        elif crop.size.isEmptyArea then
+            img.bitmap.Dispose()
+            Img(Sz(1,1)), at
+        else
+            try Img(img.bitmap.Clone(crop.Rectangle, PixelFormat.Format32bppArgb)), at
+            finally img.bitmap.Dispose()
 
     // Rotate each tab independently, preserving top-to-bottom strip order.
     // The right side can read downwards or retain its original upwards text.
@@ -2703,6 +2813,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         IconBitmapCache.clear()
         ScaledIcon.invalidate()
         destroyed <- true
+        glassSubscription |> Option.iter (fun subscription -> subscription.Dispose())
+        glassSubscription <- None
+        edgePresentations.Clear()
         renderCache.Clear()
         lastPresentation <- None
         (try destroyingEvent.Trigger() with _ -> ())
