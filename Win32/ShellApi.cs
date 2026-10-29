@@ -590,6 +590,34 @@ namespace Bemo
             }
         }
 
+        // Include native common dialogs and nested modal dialogs, but never
+        // unrelated windows on this thread or windows belonging to tab groups.
+        public static IntPtr[] GetOwnedDialogWindows(IntPtr root)
+        {
+            var result = new System.Collections.Generic.List<IntPtr>();
+            int processId;
+            int threadId = WinUserApi.GetWindowThreadProcessId(root, out processId);
+            if (root == IntPtr.Zero || processId != System.Diagnostics.Process.GetCurrentProcess().Id)
+                return result.ToArray();
+            result.Add(root);
+            WinUserApi.EnumThreadWindows(threadId, delegate(IntPtr hwnd, IntPtr unused)
+            {
+                if (hwnd != root && WinUserApi.IsWindowVisible(hwnd))
+                {
+                    var seen = new System.Collections.Generic.List<IntPtr>();
+                    IntPtr owner = WinUserApi.GetWindow(hwnd, 4); // GW_OWNER
+                    while (owner != IntPtr.Zero && !seen.Contains(owner))
+                    {
+                        seen.Add(owner);
+                        if (owner == root) { result.Add(hwnd); break; }
+                        owner = WinUserApi.GetWindow(owner, 4);
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+            return result.ToArray();
+        }
+
         private const string ExplorerDesktopsKey =
             @"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops";
 

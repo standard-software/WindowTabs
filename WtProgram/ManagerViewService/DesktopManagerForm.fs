@@ -7,6 +7,7 @@ open System.Threading
 open Bemo.Win32.Forms
 
 module DesktopManagerFormState =
+    let mutable selectedView = SettingsViewType.ProgramSettings
     let mutable currentForm : Form option = None
     let mutable mutex : Mutex option = None
     let log message =
@@ -236,7 +237,12 @@ type DesktopManagerForm() =
                         match view with
                         | :? SystemView as system -> system.refresh()
                         | _ -> ())
-        tabControl.SelectedIndexChanged.Add(fun _ -> refreshSystem())
+        tabControl.SelectedIndex <- tabs.findIndex(fun tab -> tab.key = DesktopManagerFormState.selectedView)
+        tabControl.SelectedIndexChanged.Add(fun _ ->
+            if not form.Disposing && not form.IsDisposed && not tabControl.Disposing then
+                tabs.iteri(fun index view ->
+                    if index = tabControl.SelectedIndex then DesktopManagerFormState.selectedView <- view.key)
+            refreshSystem())
         form.VisibleChanged.Add(fun _ -> refreshSystem())
         tabControl.Dock <- DockStyle.Fill
         form.Controls.Add(tabControl)
@@ -314,6 +320,8 @@ type DesktopManagerForm() =
         form.FormClosed.Add(fun _ -> releaseSession())
         form.Disposed.Add(fun _ -> releaseSession())
         form
+
+    let desktopPin = new SettingsDesktopPin(form, Action<string>(DesktopManagerFormState.log))
 
     // Acquire the single-instance mutex. If the named mutex already exists
     // (mutexCreated=false), DISPOSE the just-created non-owning handle
@@ -419,7 +427,6 @@ type DesktopManagerForm() =
             dialogSession <- Some session
             DesktopManagerFormState.currentForm <- Some(form)
             try
-                tabControl.SelectedIndex <- tabs.findIndex(fun tab -> tab.key = SettingsViewType.ProgramSettings)
                 showFormCommon()
                 DesktopManagerFormState.log(sprintf "show completed visible=%b opacity=%.2f" form.Visible form.Opacity)
             with ex ->

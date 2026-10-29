@@ -9,6 +9,8 @@
 - "Right of this tab" in the New tab menu shows its shortcut key.
 - A single window can go without tabs while its program keeps them:
   from the Programs page (window rows).
+- The settings dialog is shown on every virtual desktop while it is open,
+  and opens on the page it was closed on.
 
 ## version ss_2026.10.29
 
