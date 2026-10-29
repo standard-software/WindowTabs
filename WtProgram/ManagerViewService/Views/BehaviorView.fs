@@ -49,6 +49,24 @@ type InteractionView() =
                 (fun mode -> if mode = "nochange" then "nochange" else "change")
                 ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
 
+        let previewNumber key minimum maximum defaultValue =
+            let row = new TableLayoutPanel(AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, Margin = Padding(0))
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore
+            let number = SettingsNumericUpDown.Create()
+            number.Minimum <- decimal minimum
+            number.Maximum <- decimal maximum
+            number.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+            let refresh() = number.Value <- decimal (max minimum (min maximum (unbox<int>(Services.settings.getValue key))))
+            refresh()
+            refreshers.Add(refresh)
+            number.ValueChanged.Add(fun _ -> save key (box (int number.Value)))
+            let reset = new Button(AutoSize = true, Text = sprintf "%s:%d" (Localization.getString "Reset") defaultValue)
+            reset.Click.Add(fun _ -> number.Value <- decimal defaultValue)
+            row.Controls.Add(number, 0, 0)
+            row.Controls.Add(reset, 1, 0)
+            row :> Control
+
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let gap = new Panel()
         let fields = List2([
@@ -60,6 +78,8 @@ type InteractionView() =
             ("ChangeTabPositionOnSnap", snapChangeTabPositionRadios)
             ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
+            ("TabPreviewDelay", previewNumber "tabPreviewDelay" 0 5000 500)
+            ("TabPreviewSize", previewNumber "tabPreviewSize" 80 1000 320)
         ])
 
         let formPanel = UIHelper.form fields
@@ -146,6 +166,7 @@ type GeneralView() =
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
+            ("EnableTabPreview", settingsCheckbox "enableTabPreview")
         ])
         let panel = UIHelper.form fields
         panel.Padding <- UIHelper.settingsPagePadding

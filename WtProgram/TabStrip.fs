@@ -233,6 +233,18 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     let mutable wheelRemainders = Map.empty<TabEdges.Edge, int>
     let mutable dragScrollTarget : (TabEdges.Edge * Pt) option = None
     // Tooltip implementation
+    let preview = new TabPreview()
+    let previewTimer = new Timer()
+    let mutable previewTab: Tab option = None
+    let mutable previewReady = false
+    let mutable shownTooltipTab: Tab option = None
+    let mutable previewWarm = false
+    let dismissPreview() =
+        previewTimer.Stop()
+        preview.Dismiss()
+        previewTab <- None
+        previewWarm <- false
+        previewReady <- false
     let tooltipForm = new TabTooltipForm()
     let tooltipLabel = new Label()
     let tooltipTimer = new Timer(Interval = 500)
@@ -302,10 +314,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tooltipLabel.Dock <- DockStyle.Fill  // Fill the parent container
         tooltipLabel.Parent <- tooltipForm
         
-        // Custom paint for rounded corners
-        tooltipForm.Paint.Add(fun e ->
-            let g = e.Graphics
-            g.SmoothingMode <- SmoothingMode.AntiAlias
+        // Rounded corners. The region follows the size, not the paint: setting
+        // it inside Paint makes the window repaint again, and a paint could
+        // then leave the padding unfilled (black) around the label.
+        tooltipForm.SizeChanged.Add(fun _ ->
             let rect = new Rectangle(0, 0, tooltipForm.Width - 1, tooltipForm.Height - 1)
             use path = new GraphicsPath()
             let radius = Dpi.px scaleCell.value 4
@@ -314,9 +326,22 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             path.AddArc(rect.Right - radius * 2, rect.Bottom - radius * 2, radius * 2, radius * 2, 0.0f, 90.0f)
             path.AddArc(rect.X, rect.Bottom - radius * 2, radius * 2, radius * 2, 90.0f, 90.0f)
             path.CloseFigure()
+            let previous = tooltipForm.Region
             tooltipForm.Region <- new Region(path)
+            if not (isNull previous) then previous.Dispose()
+            tooltipForm.Invalidate(true)
         )
         
+        tooltipForm.VisibleChanged.Add(fun _ ->
+            if not tooltipForm.Visible then
+                shownTooltipTab <- None
+                dismissPreview())
+
+        previewTimer.Tick.Add(fun _ ->
+            previewTimer.Stop()
+            previewReady <- true
+            previewTab |> Option.iter this.showPreview)
+
         tooltipTimer.Tick.Add(fun _ ->
             tooltipTimer.Stop()
             match !pendingTooltipTab with
@@ -328,6 +353,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
         tooltipHideTimer.Tick.Add(fun _ ->
             PerfTrace.time "tooltipHideTick" (fun () ->
+                this.validatePreview()
                 this.tryHideTooltipIfCursorLeft()
                 this.validateHoverAgainstCursor()))
         tooltipHideTimer.Start()
@@ -1193,7 +1219,97 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | Some(_, _, scale) when edge <> TabEdges.Edge.Top -> scale
         | _ -> this.scale
 
+    member private this.previewEligible(tab: Tab) =
+        let (Tab hwnd) = tab
+        TabPreviewPolicy.eligible
+            (unbox<bool>(Services.settings.getValue "enableTabPreview"))
+            (unbox<bool>(Services.settings.getValue "enableHoverActivate"))
+            (this.isEmpty || this.top = tab)
+            (capturedCell.value.IsSome || slideCell.value.IsSome) visibleCell.value
+        && _os.windowFromHwnd(hwnd).isWindow
+
+    member private this.tracePreview(where: string, tab: Tab) =
+#if DEBUG
+        let (Tab hwnd) = tab
+        DragTrace.log (fun () ->
+            sprintf "[preview] %s tab=%X enabled=%b hover=%b active=%b dimmed=%b dragging=%b visible=%b edge=%A isWindow=%b hit=%b shown=%b"
+                where (int64 hwnd) (unbox<bool>(Services.settings.getValue "enableTabPreview"))
+                (unbox<bool>(Services.settings.getValue "enableHoverActivate"))
+                (this.isEmpty || this.top = tab) (dimmedTabsCell.value.contains tab)
+                (capturedCell.value.IsSome || slideCell.value.IsSome) visibleCell.value
+                (this.edgeOf tab) (_os.windowFromHwnd(hwnd).isWindow)
+                (this.hitForTooltipTab = Some tab) preview.Visible)
+#else
+        ignore where
+        ignore tab
+#endif
+
+    member private this.showPreview(tab: Tab) =
+        this.tracePreview("show", tab)
+        if previewReady && tooltipForm.Visible && shownTooltipTab = Some tab &&
+           this.previewEligible tab && this.hitForTooltipTab = Some tab then
+            let (Tab hwnd) = tab
+            let tabLoc: Pt = this.tabLocation tab
+            let tabEdge = this.edgeOf tab
+            let strip =
+                this.shownStripRects
+                |> List.tryFind (fun (edge, _, _) -> edge = tabEdge)
+                |> Option.map (fun (_, loc, sz) -> Rect(loc, sz))
+            strip |> Option.iter (fun bounds ->
+                let anchor =
+                    if TabEdges.runsHorizontally tabEdge then Pt(bounds.left + tabLoc.x, bounds.top)
+                    else Pt(bounds.left, bounds.top + tabLoc.x)
+                let edge = max 80 (min 1000 (unbox<int>(Services.settings.getValue "tabPreviewSize")))
+                preview.ShowPreview(hwnd, anchor, tabEdge, tooltipForm.Bounds, edge))
+            previewWarm <- preview.Visible
+#if DEBUG
+            DragTrace.log (fun () -> sprintf "[preview] shown visible=%b bounds=%A" preview.Visible preview.Bounds)
+#endif
+        else
+            preview.Dismiss()
+
+    member private this.validatePreview() =
+        if previewTab.IsSome || previewWarm then
+            let c = Cursor.Position
+            let inside = not (this.cursorOutsideStrips c)
+            if not inside || not visibleCell.value then dismissPreview()
+            elif previewTab |> Option.exists (this.previewEligible >> not) then
+                previewTimer.Stop()
+                preview.Dismiss()
+            elif preview.Visible && (not tooltipForm.Visible || shownTooltipTab <> previewTab || this.hitForTooltipTab <> previewTab) then
+                dismissPreview()
+            elif preview.Visible then
+                previewTab |> Option.iter (fun (Tab hwnd) -> preview.ValidateSource(hwnd))
+
+    member private this.movePreview(tab: Tab option) =
+        if tab <> previewTab then
+            previewTimer.Stop()
+            preview.Dismiss()
+            previewReady <- false
+            previewTab <- tab
+            tab |> Option.iter (fun t -> this.tracePreview("move", t))
+            match tab with
+            | Some tab when this.previewEligible tab ->
+                let delay = TabPreviewPolicy.delay previewWarm (unbox<int>(Services.settings.getValue "tabPreviewDelay"))
+                if delay = 0 then
+                    previewReady <- true
+                    this.showPreview tab
+                else
+                    previewTimer.Interval <- delay
+                    previewTimer.Start()
+            | None -> dismissPreview()
+            | _ -> ()
+
     member private this.updateTooltipForTab(tab: Tab) =
+        preview.Dismiss()
+        shownTooltipTab <- None
+        this.showTextTooltip tab
+        if tooltipForm.Visible then
+            shownTooltipTab <- Some tab
+            // Keep the tooltip delay unchanged even when the preview is ready first.
+            if previewTab = Some tab && previewReady then this.showPreview tab
+
+    member private this.showTextTooltip(tab: Tab) =
         let tabInfo = this.tabInfo(tab)
         if tabInfo.text <> "" then
             // Everything below is device pixels for the strip's OWN monitor.
@@ -1304,6 +1420,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             hoverCell.set(currentHit)
             // Update tooltip using overlap-midpoint hit test (ignores tab curves and z-order)
             let tooltipTab = this.hitForTooltipTab
+            this.movePreview tooltipTab
             match tooltipTab with
             | Some(tab) ->
                 if !lastToolTipTab <> Some(tab) then
@@ -1331,6 +1448,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 currentHit.iter <| fun(hitTab, hitPart) ->
                     monitor.tabActivate(hitTab)
         | MouseClick(pt, btn, action) ->
+            dismissPreview()
             this.setPt(Some(pt))
             // Hide tooltip when right-click to prevent conflict with context menu
             if btn = MouseRight then
@@ -1363,6 +1481,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 this.onMouse(action, this.logicalPt edge pt, btn, (hitTab, hitPart))
             hoverCell.set(this.hit)
         | MouseLeave ->
+            dismissPreview()
             // WM_MOUSELEAVE can fire while the cursor is still on a tab: a
             // tooltip/overlay pops up over a stationary cursor, or the layered
             // window repaints at a sub-pixel edge. Clearing the hover then makes
@@ -1458,6 +1577,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | WindowMessages.WM_RBUTTONUP -> mouseUp MouseRight
         | WindowMessages.WM_MBUTTONDOWN -> mouseDown MouseMiddle
         | WindowMessages.WM_MBUTTONUP -> mouseUp MouseMiddle
+        | WindowMessages.WM_MOUSEWHEEL
+        | 0x020E
+        | WindowMessages.WM_CONTEXTMENU ->
+            dismissPreview()
+            msg.def()
         | WindowMessages.WM_MOUSELEAVE ->
             this.processMouse(MouseLeave)
             msg.def()
@@ -1921,7 +2045,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.addTab tab = this.addTabSlide tab None
 
+    member this.hidePreview() = dismissPreview()
+
     member this.removeTab tab =
+        if previewTab = Some tab then dismissPreview()
         // The scaled-icon cache is keyed by source HICON, and Windows recycles
         // icon handles once the window that owned them is gone. Dropping the
         // cache whenever a tab leaves a strip is the cheap, coarse way to make
@@ -2806,7 +2933,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.visible 
         with get() = visibleCell.value
-        and set(value) = if visibleCell.value <> value then visibleCell.set(value)
+        and set(value) =
+            if not value then dismissPreview()
+            if visibleCell.value <> value then visibleCell.set(value)
             
     member this.transparent 
         with get() = transparentCell.value
@@ -2814,7 +2943,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.slide
         with get() : (Tab * int) option = slideCell.value
-        and set(value) = slideCell.set(value)
+        and set(value) =
+            if value.IsSome then dismissPreview()
+            slideCell.set(value)
 
     member this.dragGroup
         with get() : Tab list = dragGroupCell.value
@@ -2884,6 +3015,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         edgeHwndsSnapshot.publish([])
         layeredWindowCell.value.iter <| fun w -> (w :?> IDisposable).Dispose()
         dragScrollTimer.Dispose()
+        dismissPreview()
+        previewTimer.Dispose()
+        preview.Dispose()
         tooltipTimer.Dispose()
         tooltipHideTimer.Dispose()
         tooltipForm.Dispose()

@@ -38,6 +38,9 @@ type SettingsRec = {
     // the dialog; HotKeyPolicy.numberKeyMode settles a file that has both.
     enableAltNumberHotKey: bool
     enableHoverActivate: bool
+    enableTabPreview: bool
+    tabPreviewDelay: int
+    tabPreviewSize: int
     tabCloseButton: string
     tabPinButton: string
     tabPositionByDefault: string

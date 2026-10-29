@@ -1,4 +1,7 @@
 {
+  "EnableTabPreview": "Show window preview when hovering over a tab",
+  "TabPreviewDelay": "Preview delay (ms)",
+  "TabPreviewSize": "Preview size (long edge, px)",
   "CloseEdgeTabsFormat": "Close all {0} ({1})",
   "BottomTabsInMenu": "bottom tabs",
   "RightTabsInMenu": "right tabs",

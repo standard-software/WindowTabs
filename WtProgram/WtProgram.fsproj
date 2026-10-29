@@ -167,6 +167,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/TabBehaviorPolicy.fs" />
     <Compile Include="Shared/SnapGeometry.fs" />
     <Compile Include="Shared/TabEdges.fs" />
+    <Compile Include="Shared/TabPreviewPolicy.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
     <Compile Include="Shared/TaskbarAppIdPolicy.fs" />
     <Compile Include="Shared/LinkGroupLayout.fs" />
@@ -228,6 +229,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="HotKeyManager.fs" />
     <Compile Include="DragDropController.fs" />
     <Compile Include="TabStripSprite.fs" />
+    <Compile Include="TabPreview.fs" />
     <Compile Include="TabStrip.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="WindowDecorator.fs" />

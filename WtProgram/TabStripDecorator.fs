@@ -4745,6 +4745,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr -> unit) as thi
             let dispatch = if ownDragBlock.IsSome then this.invokeSync else this.invokeAsync
             dispatch <| fun() ->
                 let beginDrag() =
+                    this.ts.hidePreview()
                     isDraggingCell.value <- true
                     group.repairStripZorder("drag-begin")
                     this.ts.transparent <- false

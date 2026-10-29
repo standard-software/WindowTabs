@@ -700,6 +700,9 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
                         enableHoverActivate = settingsJson.getBool("EnableHoverActivate").def(false)
+                        enableTabPreview = settingsJson.getBool("EnableTabPreview").def(true)
+                        tabPreviewDelay = settingsJson.getInt32("TabPreviewDelay").def(500)
+                        tabPreviewSize = settingsJson.getInt32("TabPreviewSize").def(320)
                         tabCloseButton = settingsJson.getString("TabCloseButton").def(TabButtonPolicy.activeOnly) |> TabButtonPolicy.normalize
                         tabPinButton = settingsJson.getString("TabPinButton").def(TabButtonPolicy.activeOnly) |> TabButtonPolicy.normalize
                         tabPositionByDefault =
@@ -771,6 +774,9 @@ type Settings(isStandAlone) as this =
                         enableCtrlNumberHotKey = false
                         enableAltNumberHotKey = false
                         enableHoverActivate = false
+                        enableTabPreview = true
+                        tabPreviewDelay = 500
+                        tabPreviewSize = 320
                         tabCloseButton = TabButtonPolicy.activeOnly
                         tabPinButton = TabButtonPolicy.activeOnly
                         tabPositionByDefault = "TopRight"
@@ -814,6 +820,9 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
             settingsJson.setBool("EnableHoverActivate", settings.enableHoverActivate)
+            settingsJson.setBool("EnableTabPreview", settings.enableTabPreview)
+            settingsJson.setInt32("TabPreviewDelay", settings.tabPreviewDelay)
+            settingsJson.setInt32("TabPreviewSize", settings.tabPreviewSize)
             settingsJson.setString("TabCloseButton", TabButtonPolicy.normalize settings.tabCloseButton)
             settingsJson.setString("TabPinButton", TabButtonPolicy.normalize settings.tabPinButton)
             settingsJson.setString("TabPositionByDefault", settings.tabPositionByDefault)

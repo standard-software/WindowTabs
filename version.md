@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.29_next9
+## version ss_2026.10.29_next10
 
 - The New tab menu can put the new tab at the far end of the clicked
   tab's edge (rightmost on top and bottom, bottommost on left and right).
@@ -16,6 +16,9 @@
   - Without it, the blurred wallpaper is used, then plain translucency.
 - Snapped windows no longer leave a gap at the left, right and bottom:
   their visible frame meets the screen edge or the tabs, as in Windows.
+- Resting the mouse on a background tab shows a live thumbnail of its
+  window beside the tooltip, on every edge and for other virtual desktops.
+  - It can be turned off on the General page.
 
 ## version ss_2026.10.29
 
