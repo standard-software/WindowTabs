@@ -2,7 +2,7 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.10.29_next1
+## version ss_2026.10.29_next9
 
 - 新しいタブのメニューに「上タブの最も右」などを追加した。
   右クリックしたタブの辺の、いちばん端に新しいタブを入れる。

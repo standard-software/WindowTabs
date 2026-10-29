@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.29_next1
+## version ss_2026.10.29_next9
 
 - The New tab menu can put the new tab at the far end of the clicked
   tab's edge (rightmost on top and bottom, bottommost on left and right).
