@@ -219,7 +219,7 @@ type PendingRegroup = {
 }
 
 type Program() as this =
-    let version = "ss_2026.10.29_next10"
+    let version = "ss_2026.10.29_next11"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2118,6 +2118,11 @@ type Program() as this =
                     // instead, for the destroy that may follow.
                     if window.isWindow.not then
                         if closedRecorded.Add(hwnd) then this.recordClosedTab(hwnd, gi)
+                        windowFillColor.map(fun m -> m.remove hwnd)
+                        windowUnderlineColor.map(fun m -> m.remove hwnd)
+                        windowBorderColor.map(fun m -> m.remove hwnd)
+                        windowPinned.map(fun s -> s.remove hwnd)
+                        windowNameOverride.map(fun m -> m.remove hwnd)
                         windowAlignmentEdges.TryRemove(hwnd) |> ignore
                         windowEdges.map(fun m -> m.remove hwnd)
                         claimedWindows.map(ClosedTabClaim.forget hwnd)

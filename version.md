@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.29_next10
+## version ss_2026.10.29_next11
 
 - The New tab menu can put the new tab at the far end of the clicked
   tab's edge (rightmost on top and bottom, bottommost on left and right).
@@ -19,6 +19,8 @@
 - Resting the mouse on a background tab shows a live thumbnail of its
   window beside the tooltip, on every edge and for other virtual desktops.
   - It can be turned off on the General page.
+- A closed window's tab colours, pin and tab name are forgotten with it,
+  so a later window cannot pick them up.
 
 ## version ss_2026.10.29
 
