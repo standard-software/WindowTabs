@@ -4,6 +4,8 @@
 
 ## version ss_2026.10.29_next11
 
+- Translucent tabs (inactive groups, other virtual desktops) are frosted:
+  the windows behind them are blurred, so the tab text stays readable.
 - The New tab menu can put the new tab at the far end of the clicked
   tab's edge (rightmost on top and bottom, bottommost on left and right).
 - "Right of this tab" in the New tab menu shows its shortcut key.
@@ -11,16 +13,11 @@
   from the Programs page (window rows).
 - The settings dialog is shown on every virtual desktop while it is open,
   and opens on the page it was closed on.
-- Translucent tabs (inactive groups, other virtual desktops) are frosted:
-  the windows behind them are blurred, so the tab text stays readable.
-  - Without it, the blurred wallpaper is used, then plain translucency.
-- Snapped windows no longer leave a gap at the left, right and bottom:
-  their visible frame meets the screen edge or the tabs, as in Windows.
-- Resting the mouse on a background tab shows a live thumbnail of its
-  window beside the tooltip, on every edge and for other virtual desktops.
-  - It can be turned off on the General page.
-- A closed window's tab colours, pin and tab name are forgotten with it,
-  so a later window cannot pick them up.
+- Snap positions are adjusted.
+  - No gap is left at the left, right and bottom of the window.
+- An inactive tab's tooltip shows a thumbnail of its window below it.
+  - It can be turned off on the General page. It is on by default.
+- A closed window's tab colours, pin and tab name are cleared when it closes.
 
 ## version ss_2026.10.29
 
