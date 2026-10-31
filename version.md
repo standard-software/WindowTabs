@@ -9,10 +9,9 @@
 - The New tab menu can put the new tab at the far end of the clicked
   tab's edge (rightmost on top and bottom, bottommost on left and right).
 - "Right of this tab" in the New tab menu shows its shortcut key.
-- A single window can go without tabs while its program keeps them:
-  from the Programs page (window rows).
-- The settings dialog is shown on every virtual desktop while it is open,
-  and opens on the page it was closed on.
+- The Programs page can take the tabs off a single window.
+- The settings dialog is shown on every virtual desktop.
+- The settings dialog opens on the page it was closed on.
 - Snap positions are adjusted.
   - No gap is left at the left, right and bottom of the window.
 - An inactive tab's tooltip shows a thumbnail of its window below it.
