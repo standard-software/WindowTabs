@@ -2,40 +2,30 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.10.29_next13
+## version ss_2026.11.02
 
-- Left and right tabs written across are reworked.
-  - The settings choose the writing mode and the text side in two fields.
-  - The tabs take the top tab's height, corners, padding and overlap.
-  - The gaps before the icon and after the text match the top tab's.
-  - Line styles underline the text.
-  - The strip keeps its width whichever style is chosen.
-  - Bottom-aligned pinned tabs sit at the bottom, as with vertical text.
-  - The style list draws vertical shapes as top tabs and the rest as rows.
-
-## version ss_2026.10.29_next12
-
-- Linking and detaching keep the state of each tab.
-  - Linking from the menu keeps a tab's edge, alignment and pin.
-  - Detached tabs stay on their edge, one at a time or several together.
-  - Moving or snapping a detached window leaves room for the edges it keeps.
-- Fixed a tab of a detached group sometimes not being drawn.
-
-## version ss_2026.10.29_next11
-
+- Left and right tabs can be written horizontally.
+  - The settings choose vertical or horizontal text.
 - Translucent tabs (inactive groups, other virtual desktops) are frosted:
   the windows behind them are blurred, so the tab text stays readable.
-- The New tab menu can put the new tab at the far end of the clicked
-  tab's edge (rightmost on top and bottom, bottommost on left and right).
+- The New tab menu has items such as "Right end of top tabs".
 - "Right of this tab" in the New tab menu shows its shortcut key.
 - The Programs page can take the tabs off a single window.
-- The settings dialog is shown on every virtual desktop.
+- The settings dialog is now shown on every virtual desktop.
 - The settings dialog opens on the page it was closed on.
 - Snap positions are adjusted.
   - No gap is left at the left, right and bottom of the window.
 - An inactive tab's tooltip shows a thumbnail of its window below it.
   - It can be turned off on the General page. It is on by default.
 - A closed window's tab colours, pin and tab name are cleared when it closes.
+- Linking and detaching keep the state of each tab.
+  - Linking from the menu keeps a tab's edge, alignment and pin.
+  - Detached tabs stay on their edge, one at a time or several together.
+  - Moving or snapping a detached window leaves room for the edges it keeps.
+- Fixed a tab of a detached group sometimes not being drawn.
+
+- Dark Mono 3 and Night Horizon are added to the color themes.
+- The tab style names now say what each shape looks like.
 
 ## version ss_2026.10.29
 

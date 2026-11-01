@@ -73,7 +73,7 @@ If you have any feedback, I'd love to hear it on GitHub Issues.
 
 <br />
 
-This version (ss_yyyy.mm.dd) is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
+This Standard-Software edition is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
 
 <details>
 <summary>Read more about the project history and the lineage of forks</summary>
@@ -117,7 +117,7 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 ## Version
 
-Latest version: **ss_2026.10.29_next13**
+Latest version: **ss_2026.11.02**
 
 See [version.md](version.md) for details.
 
@@ -160,7 +160,7 @@ Download from the [releases](https://github.com/standard-software/WindowTabs/rel
 
 - Tabs can sit on the top, left, right, or bottom edge of a window. Choose which edges to use on each edge's page of the Tabs tab in the settings.
 - Use "Tab Direction" in the right-click menu to move tabs to another edge. You can also drag a tab to another edge over a window of its own group.
-- Each edge has its own settings for tab style, size, alignment, and so on. Tabs on the left and right edges show rotated text.
+- Each edge has its own settings for tab style, size, alignment, and so on. Tabs on the left and right edges can show their text vertically or horizontally.
 
 ### Tab Context Menu
 
@@ -412,7 +412,7 @@ Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray 
 - **Top tabs, Left tabs, Right tabs, Bottom tabs**: Each edge of the window has its own page.
 - **Use top tabs**, **Use left tabs**, **Use right tabs**, **Use bottom tabs**: The first row of each page turns that edge on or off. At least one edge must stay on.
 - **Apply the same settings to the bottom tabs**: Copies the top page settings to the bottom edge. Each page has a corresponding button for its opposite edge (top/bottom or left/right).
-- The left, right and bottom pages have the same settings as the top page: tab style, tab size (height and max width), pinned tab width, tab overlap, alignment, outer or inner tabs, the distances from the edge, and hiding inner tabs. Tabs on the left and right edges show rotated text. By default, right-tab text reads from top to bottom, with the bottom of the letters facing the window. Left and right tabs also offer inward- or outward-facing text bottoms, independently; both default to inward.
+- The left, right and bottom pages have the same settings as the top page: tab style, tab size (height and max width), pinned tab width, tab overlap, alignment, outer or inner tabs, the distances from the edge, and hiding inner tabs. Tabs on the left and right edges can show their text vertically or horizontally. By default, right-tab text reads from top to bottom, with the bottom of the letters facing the window. Left and right tabs also offer inward- or outward-facing text bottoms, independently; both default to inward.
 
 The top tabs page has these rows:
 
