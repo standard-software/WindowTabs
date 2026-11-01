@@ -1329,6 +1329,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             elif shellStripHold && (stable || stripClock.ElapsedMilliseconds >= shellStripHoldUntil) then
                 this.ts.releaseDesktopSwitch()
                 shellStripHold <- false
+                this.ts.batch (fun () ->
+                    this.ts.zorder <- zorderCell.value.map(Tab)
+                    this.ts.foreground <- this.foregroundTab)
 
     member private this.updateDimmedTabs(shown: bool) =
         this.syncShellContentHold()

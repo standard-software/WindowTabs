@@ -157,7 +157,8 @@ type GroupInfo() as this =
         member x.explicitTabAlign(hwnd) = _group.ts.explicitTabAlignThreadSafe(Tab(hwnd))
         member x.addWindowUnplaced(hwnd) =
             windowsCell.map <| fun l -> l.append hwnd
-            this.invokeGroup <| fun() -> _group.addWindowPlaced(hwnd, false, false)
+            let edge = Services.program.getWindowEdge(hwnd)
+            this.invokeGroup <| fun() -> _group.addWindowPlaced(hwnd, false, false, edge=edge)
         member x.unpinTab(hwnd) = this.invokeGroup <| fun() -> _group.unpinTab(hwnd)
         member x.tabEdgeThreadSafe(hwnd) = _group.tabEdgeThreadSafe(hwnd)
         member x.setTabEdge(hwnd, edge) = this.invokeGroup <| fun() -> _group.restoreTabEdge(hwnd, edge)
@@ -191,9 +192,9 @@ type Desktop(notify:IDesktopNotification) as this =
             let ig = group.cast<IGroup>()
             group.exited.Add <| fun _ -> exitedEvent.Trigger ig
             group.removed.Add <| fun _ -> removedEvent.Trigger ig
-            TabStripDecorator(group.group, fun hwnd ->
+            TabStripDecorator(group.group, fun (hwnd, edge) ->
                 invoker.asyncInvoke <| fun() ->
-                    notify.dragDrop(hwnd, None, None)
+                    notify.dragDrop(hwnd, None, Some edge)
                     notify.dragEnd()
             ).ignore
         group.cast<IGroup>() 

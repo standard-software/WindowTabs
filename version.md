@@ -2,6 +2,14 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.29_next12
+
+- Linking and detaching keep the state of each tab.
+  - Linking from the menu keeps a tab's edge, alignment and pin.
+  - Detached tabs stay on their edge, one at a time or several together.
+  - Moving or snapping a detached window leaves room for the edges it keeps.
+- Fixed a tab of a detached group sometimes not being drawn.
+
 ## version ss_2026.10.29_next11
 
 - Translucent tabs (inactive groups, other virtual desktops) are frosted:

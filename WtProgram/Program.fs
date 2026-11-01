@@ -219,7 +219,7 @@ type PendingRegroup = {
 }
 
 type Program() as this =
-    let version = "ss_2026.10.29_next11"
+    let version = "ss_2026.10.29_next12"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2364,6 +2364,7 @@ type Program() as this =
                     let alignment =
                         match returningState with
                         | Some info -> info.tabAlign
+                        | None when isDropped -> Services.program.getWindowAlignment(hwnd)
                         | None ->
                             savedAlign |> Option.orElseWith (fun () ->
                                 if isNewGroup then None

@@ -2313,7 +2313,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let before = zorderCell.value.tryHead
             let order =
                 match contentHold with
-                | Some(_, prepared, _) -> prepared.where(this.tabs.contains)
+                | Some(_, prepared, _) ->
+                    // A tab that arrives during a hold is not in the held order; losing
+                    // it here would leave it undrawn, since a strip draws its z-order.
+                    let held = prepared.where(this.tabs.contains)
+                    held.appendList(zorder.where(fun t -> this.tabs.contains t && not (held.any((=) t))))
                 | None -> zorder.where(this.tabs.contains)
             let _, ordered = this.frontOrder(order)
             let order = List2(ordered |> List.map Tab)
@@ -2606,6 +2610,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             | None -> this.defaultAlignOn (this.edgeOf tab)
         TabEdges.pinnedRowAlignment (this.isAcross (this.edgeOf tab))
             (pinnedTabsCell.value.contains(tab)) TopLeft alignment
+
+    // Transfers preserve the logical alignment, including pins displayed in a single row.
+    member this.getTabAlignmentForTransfer(tab) =
+        tabAlignmentCell.value.tryFind(tab) |> Option.defaultValue (this.defaultAlignOn (this.edgeOf tab))
 
     // The tab's own alignment, None when it simply follows the group's side:
     // the distinction the global per-window map keeps, for another group of
