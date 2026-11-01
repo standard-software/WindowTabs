@@ -641,6 +641,66 @@ type Settings(isStandAlone) as this =
             tabShape = TabShape.rounded
         }
 
+    member this.darkMono3TabAppearance =
+        {
+            tabHeight = -1
+            tabMaxWidth = -1
+            tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
+            tabOverlap = -1
+            tabHeightOffset = -1
+            tabIndentFlipped = -1
+            tabIndentFlippedRight = -1
+            tabIndentNormal = -1
+            tabIndentNormalRight = -1
+            tabInactiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabSelectedTextColor = Color.FromRGB(0xFFFFFF)
+            tabMouseOverTextColor = Color.FromRGB(0x111111)
+            tabActiveTextColor = Color.FromRGB(0xFFFFFF)
+            tabFlashTextColor = Color.FromRGB(0xFFFFFF)
+            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
+            tabSelectedTabColor = Color.FromRGB(0x4D4D4D)
+            tabMouseOverTabColor = Color.FromRGB(0xDDDDDD)
+            tabActiveTabColor = Color.FromRGB(0x777777)
+            tabFlashTabColor = Color.FromRGB(0x2C1818)
+            tabInactiveBorderColor = Color.FromRGB(0x787878)
+            tabSelectedBorderColor = Color.FromRGB(0x787878)
+            tabMouseOverBorderColor = Color.FromRGB(0xF2F2F2)
+            tabActiveBorderColor = Color.FromRGB(0x6B6B6B)
+            tabFlashBorderColor = Color.FromRGB(0x787878)
+            tabShape = TabShape.rounded
+        }
+
+    member this.nightHorizonTabAppearance =
+        {
+            tabHeight = -1
+            tabMaxWidth = -1
+            tabPinnedTabWidth = -1
+            tabPinnedTabWidthIcon = false
+            tabOverlap = -1
+            tabHeightOffset = -1
+            tabIndentFlipped = -1
+            tabIndentFlippedRight = -1
+            tabIndentNormal = -1
+            tabIndentNormalRight = -1
+            tabInactiveTextColor = Color.FromRGB(0xB4B4B4)
+            tabSelectedTextColor = Color.FromRGB(0xFFFFFF)
+            tabMouseOverTextColor = Color.FromRGB(0xFFFFFF)
+            tabActiveTextColor = Color.FromRGB(0xE297FF)
+            tabFlashTextColor = Color.FromRGB(0xFFFFFF)
+            tabInactiveTabColor = Color.FromRGB(0x0D0D0D)
+            tabSelectedTabColor = Color.FromRGB(0x151515)
+            tabMouseOverTabColor = Color.FromRGB(0x1E1E1E)
+            tabActiveTabColor = Color.FromRGB(0x201020)
+            tabFlashTabColor = Color.FromRGB(0x772222)
+            tabInactiveBorderColor = Color.FromRGB(0x333333)
+            tabSelectedBorderColor = Color.FromRGB(0x333333)
+            tabMouseOverBorderColor = Color.FromRGB(0x444444)
+            tabActiveBorderColor = Color.FromRGB(0x79008A)
+            tabFlashBorderColor = Color.FromRGB(0x333333)
+            tabShape = TabShape.rounded
+        }
+
     member this.darkRedFrameTabAppearance =
         let inactiveTab = Color.FromRGB(0x0D0D0D)
         let mouseOverTab = Color.FromRGB(0xB13A3A)

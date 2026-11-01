@@ -1009,7 +1009,7 @@ type AppearanceView() as this =
     let mutable customThemes = loadCustomThemes()
 
     // Preset themes (built-in)
-    let presetThemes = ["Light"; "Light Mono"; "Dark"; "Dark Blue"; "Dark Mono"; "Dark Mono 2"; "Dark Red Frame"]
+    let presetThemes = ["Light"; "Light Mono"; "Dark"; "Dark Blue"; "Dark Mono 1"; "Dark Mono 2"; "Dark Mono 3"; "Night Horizon"; "Dark Red Frame"]
 
     // Load saved Custom theme colors from settings
     let loadSavedCustomColors() : ColorThemeData option =
@@ -1103,6 +1103,12 @@ type AppearanceView() as this =
         combo.DrawMode <- DrawMode.OwnerDrawVariable
         combo.ItemHeight <- SettingsField.comboItemHeightPx
         combo.Margin <- Padding(0, 0, 3, 0)  // Remove left margin, small right margin
+        combo.IntegralHeight <- false
+        // Show every built-in theme without scrolling; a long custom list still scrolls.
+        combo.DropDown.Add(fun _ ->
+            let rows = min 16 combo.Items.Count
+            combo.DropDownHeight <-
+                ([0 .. rows - 1] |> List.sumBy combo.GetItemHeight) + SettingsDpi.px 4)
         combo
 
     // Save button, Edit button, and Up/Down buttons (created early so we can reference them)
@@ -1181,8 +1187,10 @@ type AppearanceView() as this =
             | "Light Mono" -> Services.program.lightMonoTabAppearanceInfo
             | "Dark" -> Services.program.darkModeTabAppearanceInfo
             | "Dark Blue" -> Services.program.darkModeBlueTabAppearanceInfo
-            | "Dark Mono" -> Services.program.darkMonoTabAppearanceInfo
+            | "Dark Mono 1" -> Services.program.darkMonoTabAppearanceInfo
             | "Dark Mono 2" -> Services.program.darkMono2TabAppearanceInfo
+            | "Dark Mono 3" -> Services.program.darkMono3TabAppearanceInfo
+            | "Night Horizon" -> Services.program.nightHorizonTabAppearanceInfo
             | "Dark Red Frame" -> Services.program.darkRedFrameTabAppearanceInfo
             | _ -> Services.program.defaultTabAppearanceInfo
         {
@@ -1415,10 +1423,14 @@ type AppearanceView() as this =
                         applyColorPreset(Services.program.darkModeTabAppearanceInfo)
                     | Preset "Dark Blue" ->
                         applyColorPreset(Services.program.darkModeBlueTabAppearanceInfo)
-                    | Preset "Dark Mono" ->
+                    | Preset "Dark Mono 1" ->
                         applyColorPreset(Services.program.darkMonoTabAppearanceInfo)
                     | Preset "Dark Mono 2" ->
                         applyColorPreset(Services.program.darkMono2TabAppearanceInfo)
+                    | Preset "Dark Mono 3" ->
+                        applyColorPreset(Services.program.darkMono3TabAppearanceInfo)
+                    | Preset "Night Horizon" ->
+                        applyColorPreset(Services.program.nightHorizonTabAppearanceInfo)
                     | Preset "Dark Red Frame" ->
                         applyColorPreset(Services.program.darkRedFrameTabAppearanceInfo)
                     | Preset _ -> ()

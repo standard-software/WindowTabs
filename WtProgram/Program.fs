@@ -4089,6 +4089,12 @@ type Program() as this =
         member x.darkMono2TabAppearanceInfo =
             settingsManager.darkMono2TabAppearance
 
+        member x.darkMono3TabAppearanceInfo =
+            settingsManager.darkMono3TabAppearance
+
+        member x.nightHorizonTabAppearanceInfo =
+            settingsManager.nightHorizonTabAppearance
+
         member x.darkRedFrameTabAppearanceInfo =
             settingsManager.darkRedFrameTabAppearance
             
