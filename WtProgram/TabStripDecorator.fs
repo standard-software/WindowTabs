@@ -172,6 +172,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     let readHideSettings () =
         let root = Services.settings.root
         TabEdges.priority |> List.map (fun edge -> edge, TabEdgeSettings.hideSettings root edge) |> Map.ofList
+    let mutable ordinaryFrameSample : ((IntPtr * int * bool) * (int * int * int * int)) option = None
     let edgeHideSettings = Cell.create(readHideSettings ())
     let isDraggingCell = Cell.create(false)
     let dragInfoCell = Cell.create(None)
@@ -596,7 +597,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     member private this.rememberDetachedTabs(hwnds: IntPtr list) =
         for hwnd in hwnds do
             let tab = Tab(hwnd)
-            Services.program.setWindowAlignment(hwnd, Some(this.ts.getTabAlignmentForTransfer(tab)))
+            Services.program.setWindowAlignment(hwnd, Some(this.ts.getTabAlign(tab)))
             Services.program.setWindowAlignmentEdge(hwnd, this.ts.edgeOf(tab))
             Services.program.setWindowPinned(hwnd, this.ts.isPinned(tab))
 
@@ -986,17 +987,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // Rendering and side placement must finish before repairing the stack.
         if not (TabEdges.isTopOnly this.ts.allowedEdges) then group.repairStripZorder("placement")
 
-    // The visible frame excludes invisible resize borders.
-    member private this.visibleFrame (hwnd: IntPtr) (windowBounds: Rect) : TabEdgeLayout.Box =
-        match group.visibleBodyBounds(hwnd) with
-        | Some body -> (body.x, body.y, body.width, body.height)
-        | None ->
-            let (insetLeft, insetTop, insetRight, insetBottom) = this.frameInsets
-            (windowBounds.location.x + insetLeft,
-             windowBounds.location.y + insetTop,
-             max 1 (windowBounds.size.width - insetLeft - insetRight),
-             max 1 (windowBounds.size.height - insetTop - insetBottom))
-
     // The scale of the display an edge's side of the frame is on.
     static member private sideScale (edge: TabEdges.Edge) ((fx, fy, fw, fh): TabEdgeLayout.Box) (fallback: float) =
         let side =
@@ -1020,10 +1010,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let outside, inside = TabEdgeSettings.scaledDistances scale layout
         let across = layout.text = Some(TabEdges.SideText.Horizontal)
         let px = Dpi.px scale
-        let textFont = Dpi.scaledFont SystemFonts.MenuFont scale
-        let rows = TabEdgeLayout.rowsOf px appearance.tabHeight appearance.tabOverlap textFont.Height
+        let margins = TabShape.sideMargins appearance.tabMaxWidth (px TabShape.edgeBand)
+        let rows = TabEdgeLayout.rowsWithMargins px appearance.tabHeight appearance.tabOverlap margins
         let iconOnly = TabEdgeLayout.iconOnlyRow px rows
-        let thickness = if across then appearance.tabMaxWidth else appearance.tabHeight
+        // Rows fill the strip, including the extra pixel beside the configured width.
+        let thickness = if across then appearance.tabMaxWidth + 1 else appearance.tabHeight
         let spec : TabEdgeLayout.EdgeSpec =
             { edge = edge
               direction = layout.direction
@@ -1046,6 +1037,60 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     member private this.edgeSpec (edge: TabEdges.Edge) (values: TabEdgeSettings.EdgeValues) (scale: float) =
         TabStripDecorator.edgeSpecOf(edge, values, group.tabAppearanceRaw, Services.program.defaultTabAppearanceInfo, scale)
 
+    member private this.frameInsets : int * int * int * int =
+        try
+            let hwnd = group.topWindow
+            let windowRect = os.windowFromHwnd(hwnd).bounds
+            let mutable frame = RECT()
+            let hr =
+                DwmApi.DwmGetWindowAttribute(
+                    hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                    System.Runtime.InteropServices.Marshal.SizeOf(typeof<RECT>))
+            if hr <> 0 then (0, 0, 0, 0)
+            else
+                let cap v = max 0 (min 32 v)
+                (cap (frame.Left - windowRect.left), cap (frame.Top - windowRect.top),
+                 cap (windowRect.right - frame.Right), cap (windowRect.bottom - frame.Bottom))
+        with _ -> (0, 0, 0, 0)
+
+    // The visible frame excludes invisible resize borders.
+    member private this.visibleFrame (hwnd: IntPtr) (windowBounds: Rect) : TabEdgeLayout.Box =
+        match group.visibleBodyBounds(hwnd) with
+        | Some body -> (body.x, body.y, body.width, body.height)
+        | None ->
+            let (insetLeft, insetTop, insetRight, insetBottom) = this.frameInsets
+            (windowBounds.location.x + insetLeft,
+             windowBounds.location.y + insetTop,
+             max 1 (windowBounds.size.width - insetLeft - insetRight),
+             max 1 (windowBounds.size.height - insetTop - insetBottom))
+
+    // An ordinary member supplies the shared invisible resize border.
+    member private this.ordinaryFrameInsets =
+        let source =
+            group.windows.items.list
+            |> List.map (fun hwnd -> hwnd, group.hasWindowMargin(hwnd))
+            |> TabEdgeLayout.ordinaryFrameSource
+            |> Option.map (fun hwnd ->
+                let window = os.windowFromHwnd(hwnd)
+                hwnd, int (WinUserApi.GetDpiForWindow(hwnd)), window.isMaximized)
+        let read (hwnd, _, _) =
+            try
+                let window = os.windowFromHwnd(hwnd)
+                if not window.isWindow || window.isMinimized then None
+                else
+                    let bounds = window.bounds
+                    let mutable frame = RECT()
+                    let hr = DwmApi.DwmGetWindowAttribute(
+                                hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                                System.Runtime.InteropServices.Marshal.SizeOf(typeof<RECT>))
+                    if hr <> 0 || frame.Right <= frame.Left || frame.Bottom <= frame.Top then None
+                    else
+                        Some(frame.Left - bounds.left, frame.Top - bounds.top,
+                             bounds.right - frame.Right, bounds.bottom - frame.Bottom)
+            with _ -> None
+        ordinaryFrameSample <- TabEdgeLayout.frameSample ordinaryFrameSample source read
+        source |> Option.map (fun _ -> ordinaryFrameSample |> Option.map snd |> Option.defaultValue (0,0,0,0))
+
     // The strips of the other edges, each where TabEdgeLayout.place puts it
     // for this frame and these displays: the bottom strip first, then the
     // left and right strips, which give the corners to the top and the
@@ -1055,8 +1100,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     member private this.updateSidePlacements(top: TabStripPlacment) =
         match group.bounds.value, group.tryTopWindow with
         | Some(windowBounds), Some(hwnd) ->
-            let frame = this.visibleFrame hwnd windowBounds
             let box (r: Rect) = r.x, r.y, r.width, r.height
+            // Use the ordinary member's frame when available; otherwise retain
+            // the foreground body and DWM fallback.
+            let frame =
+                match this.ordinaryFrameInsets with
+                | Some insets -> TabEdgeLayout.ordinaryFrame insets (box windowBounds)
+                | None -> this.visibleFrame hwnd windowBounds
             let monitors =
                 TabEdgeLayout.placementMonitors false
                     (Mon.fromHwnd(hwnd) |> Option.map (fun m -> box m.workRect))
@@ -1086,27 +1136,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // overlap and shape (edgeSpecOf).
     member private this.edgeAppearance (edge: TabEdges.Edge) (values: TabEdgeSettings.EdgeValues) (scale: float) =
         snd (this.edgeSpec edge values scale)
-
-    // The invisible resize borders of the window in front: (left, top, right,
-    // bottom) between GetWindowRect and the DWM extended frame. A side strip
-    // stands against the visible frame, or it would float a few pixels away
-    // from the window. Zero when DWM cannot say, and capped so that a bogus
-    // answer cannot fling the strip across the screen.
-    member private this.frameInsets : int * int * int * int =
-        try
-            let hwnd = group.topWindow
-            let windowRect = os.windowFromHwnd(hwnd).bounds
-            let mutable frame = RECT()
-            let hr =
-                DwmApi.DwmGetWindowAttribute(
-                    hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
-                    System.Runtime.InteropServices.Marshal.SizeOf(typeof<RECT>))
-            if hr <> 0 then (0, 0, 0, 0)
-            else
-                let cap v = max 0 (min 32 v)
-                (cap (frame.Left - windowRect.left), cap (frame.Top - windowRect.top),
-                 cap (windowRect.right - frame.Right), cap (windowRect.bottom - frame.Bottom))
-        with _ -> (0, 0, 0, 0)
 
     member private this.invokeAsync f = group.invokeAsync f
     member private this.invokeSync f = group.invokeSync f
@@ -1545,7 +1574,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         if targetGroup.hwnd <> group.hwnd then
             let tab = Tab(hwnd)
             let sourceEdge = this.ts.edgeOf tab
-            let alignment = this.ts.getTabAlignmentForTransfer(tab)
+            let alignment = this.ts.getTabAlign(tab)
             let pinned = this.ts.isPinned(tab)
             let window = os.windowFromHwnd(hwnd)
 
@@ -1713,7 +1742,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             let states =
                 tabsInOrder |> List.map (fun h ->
                     let tab = Tab(h)
-                    let alignment = Services.program.getWindowAlignment(h) |> Option.defaultValue (this.ts.getTabAlignmentForTransfer(tab))
+                    let alignment = Services.program.getWindowAlignment(h) |> Option.defaultValue (this.ts.getTabAlign(tab))
                     h, (this.ts.edgeOf(tab), alignment, this.ts.isPinned(tab))) |> Map.ofList
             let window = os.windowFromHwnd(firstHwnd)
             let margins = tabsInOrder |> List.map (fun h -> h, group.capturePlacementMargin(h)) |> Map.ofList

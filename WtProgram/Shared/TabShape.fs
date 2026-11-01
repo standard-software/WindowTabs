@@ -27,6 +27,8 @@ open System.Drawing.Drawing2D
 //  * Cut trapezoids combine a diagonal side with one inset vertical side.
 // `strong` and `angular` stand their middle upright on that same column.
 module TabShape =
+    let edgeBand = 18
+
     // Setting values (TabAppearanceInfo.tabShape).
     [<Literal>]
     let scurve = "S-curve"      // the original S-curve (default)
@@ -148,11 +150,11 @@ module TabShape =
                    PointF(edgeWidth, top))
         ]
 
+    let private cornerSize edgeWidth factor length height =
+        min (edgeWidth * factor) (min (length / 2.0f) (abs height / 2.0f))
+
     // Small rounded shoulders and outward feet, turning like the strong S.
-    let private roundedOutline (width: float32) (bottom: float32) (top: float32) (edgeWidth: float32) =
-        let left = max 0.0f (min (float32(boxInset (int edgeWidth))) (floor ((width - 1.0f) / 2.0f)))
-        let right = max left (width - 1.0f - left)
-        let radius = min (edgeWidth / 4.0f) (min ((right - left) / 2.0f) (abs (top - bottom) / 2.0f))
+    let private roundedEdges (left: float32) (right: float32) (bottom: float32) (top: float32) (radius: float32) =
         let dy = float32(Math.Sign(bottom - top)) * radius
         [ Bezier(PointF(left - radius, bottom), PointF(left - radius * (1.0f - kappa), bottom),
                  PointF(left, bottom - dy * (1.0f - kappa)), PointF(left, bottom - dy))
@@ -166,11 +168,23 @@ module TabShape =
           Bezier(PointF(right, bottom - dy), PointF(right, bottom - dy * (1.0f - kappa)),
                  PointF(right + radius * (1.0f - kappa), bottom), PointF(right + radius, bottom)) ]
 
-    // C-shaped corners turn inward at both ends, unlike the outward S feet.
-    let private rectangleOutline (width: float32) (bottom: float32) (top: float32) (edgeWidth: float32) radiusFactor beveled =
+    let private roundedOutline (width: float32) (bottom: float32) (top: float32) (edgeWidth: float32) =
         let left = max 0.0f (min (float32(boxInset (int edgeWidth))) (floor ((width - 1.0f) / 2.0f)))
         let right = max left (width - 1.0f - left)
-        let radius = min (edgeWidth * radiusFactor) (min ((right - left) / 2.0f) (abs (top - bottom) / 2.0f))
+        let radius = cornerSize edgeWidth 0.25f (right - left) (top - bottom)
+        roundedEdges left right bottom top radius
+
+    let private angularEdges (width: float32) (bottom: float32) (top: float32) middle chamfer =
+        let dy = float32(Math.Sign(top - bottom)) * chamfer
+        let left =
+            [ Line(PointF(middle - chamfer, bottom), PointF(middle, bottom + dy))
+              Line(PointF(middle, bottom + dy), PointF(middle, top - dy))
+              Line(PointF(middle, top - dy), PointF(middle + chamfer, top)) ]
+        left @ [ Line(PointF(middle + chamfer, top), PointF(width - middle - chamfer, top)) ] @ mirrored width left
+
+    // C-shaped corners turn inward at both ends, unlike the outward S feet.
+    let private rectangleEdges (left: float32) (right: float32) (bottom: float32) (top: float32) (edgeWidth: float32) radiusFactor beveled =
+        let radius = cornerSize edgeWidth radiusFactor (right - left) (top - bottom)
         let dy = float32(Math.Sign(bottom - top)) * radius
         let corner a b c d = if beveled || radius = 0.0f then Line(a,d) else Bezier(a,b,c,d)
         [ corner (PointF(left + radius,bottom)) (PointF(left + radius*(1.0f-kappa),bottom))
@@ -184,6 +198,14 @@ module TabShape =
           Line(PointF(right,top+dy),PointF(right,bottom-dy))
           corner (PointF(right,bottom-dy)) (PointF(right,bottom-dy*(1.0f-kappa)))
                  (PointF(right-radius*(1.0f-kappa),bottom)) (PointF(right-radius,bottom)) ]
+
+    let private rectangleInset width edgeWidth =
+        max 0.0f (min (float32(boxInset (int edgeWidth))) (floor ((width - 1.0f) / 2.0f)))
+
+    let private rectangleOutline width bottom top edgeWidth radiusFactor beveled =
+        let left = rectangleInset width edgeWidth
+        let right = max left (width - 1.0f - left)
+        rectangleEdges left right bottom top edgeWidth radiusFactor beveled
 
     /// The whole outline: left edge (bottom -> top), top line, right edge
     /// (top -> bottom). The figure is left open; FillPath closes it along
@@ -229,13 +251,8 @@ module TabShape =
             // Match the angular rectangle's corner length, including narrow tabs.
             let boxLeft = max 0.0f (min (float32(boxInset (int edgeWidth))) (floor ((width - 1.0f) / 2.0f)))
             let boxRight = max boxLeft (width - 1.0f - boxLeft)
-            let chamfer = min (edgeWidth / 4.0f) (min ((boxRight - boxLeft) / 2.0f) (abs (top - bottom) / 2.0f))
-            let dy = float32(Math.Sign(top - bottom)) * chamfer
-            let left =
-                [ Line(PointF(middle - chamfer, bottom), PointF(middle, bottom + dy))
-                  Line(PointF(middle, bottom + dy), PointF(middle, top - dy))
-                  Line(PointF(middle, top - dy), PointF(middle + chamfer, top)) ]
-            left @ [ Line(PointF(middle + chamfer, top), PointF(width - middle - chamfer, top)) ] @ mirrored width left
+            let chamfer = cornerSize edgeWidth 0.25f (boxRight - boxLeft) (top - bottom)
+            angularEdges width bottom top middle chamfer
         | "Strong rounded vertical line" ->
             let edgeWidth = min edgeWidth halfWidth
             let left = strongLeftEdge bottom top edgeWidth
@@ -253,3 +270,24 @@ module TabShape =
             match segment with
             | Line(a, b) -> path.AddLine(a, b)
             | Bezier(a, b, c, d) -> path.AddBezier(a, b, c, d)
+
+    /// Fixed end margins keep row allocation independent of the outline.
+    /// Shape-specific border extents remain inside the same image.
+    let sideMargins width edgeWidth =
+        let inset = int (rectangleInset (float32 width) (float32 edgeWidth))
+        inset, inset
+
+    /// Keep a full-height body between the original end margins. The same
+    /// corner generators put feet and shoulders in those margins, without
+    /// squeezing them into the text height or rotating the content bitmap.
+    let sideOutline shape width length standsOnRight edgeWidth =
+        let shape = normalize shape
+        // The window side stands one pixel past the image, as a top tab's
+        // base does, so the body fills the last column between the corners.
+        let bottom, top =
+            if standsOnRight then width, 0.0f else -1.0f, width - 1.0f
+        let turn (p: PointF) = PointF(p.Y, p.X)
+        outline shape length bottom top edgeWidth
+        |> List.map (function
+            | Line(a,b) -> Line(turn a, turn b)
+            | Bezier(a,b,c,d) -> Bezier(turn a, turn b, turn c, turn d))

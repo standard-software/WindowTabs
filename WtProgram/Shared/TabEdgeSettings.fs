@@ -183,7 +183,6 @@ module TabEdgeSettings =
               align = stringIn o "tabAlignment" |> Option.bind parseAlign
               direction = stringIn o "tabDirection" |> Option.bind parseDirection
               text = stringIn o "tabText" |> Option.bind parseText
-                     |> Option.filter (fun t -> runsHorizontally edge || offerSideHorizontalText || t <> SideText.Horizontal)
               outsideStart = distance "tabOutsideDistanceStart"
               outsideEnd = distance "tabOutsideDistanceEnd"
               insideStart = distance "tabInsideDistanceStart"

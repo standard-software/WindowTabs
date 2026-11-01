@@ -2,6 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.10.29_next13
+
+- Left and right tabs written across are reworked.
+  - The settings choose the writing mode and the text side in two fields.
+  - The tabs take the top tab's height, corners, padding and overlap.
+  - The gaps before the icon and after the text match the top tab's.
+  - Line styles underline the text.
+  - The strip keeps its width whichever style is chosen.
+  - Bottom-aligned pinned tabs sit at the bottom, as with vertical text.
+  - The style list draws vertical shapes as top tabs and the rest as rows.
+
 ## version ss_2026.10.29_next12
 
 - Linking and detaching keep the state of each tab.

@@ -274,48 +274,76 @@ module EdgeRows =
         | TabShape.angularRectangle -> "TabShapeAngularRectangle"
         | _ -> "TabShapeSCurve"
 
-    // `count` tabs standing on a base line, `height` px tall, at (x, y), in
-    // the proportions of the default strip (an 18 px edge band on a 24 px
-    // tab) and overlapping by `overlap` design pixels. Each tab is drawn over
-    // the one before it and the last one is tinted like the active tab, so
-    // the picture is the strip with its right-hand tab active. (In the strip
-    // the stacking follows the z-order - the active tab in front - not the
-    // position.) Returns the width used.
-    let drawTabShapePreview (g: Graphics) (shape: string) (x: int) (y: int) (height: int) (count: int) (overlap: int) (color: Color) (background: Color) =
+    /// The production outline in physical edge coordinates. Auto placement is
+    /// represented outside; this settings page has no target window or monitor.
+    let previewOutline edge orientation inside shape width height band =
+        let sideways = not (TabEdges.runsHorizontally edge)
+        if sideways && orientation = Some TabEdges.SideText.Horizontal then
+            TabShape.sideOutline shape width height ((edge = TabEdges.Edge.Left) <> inside) band
+        else
+            let pointsDown = if edge = TabEdges.Edge.Top then inside else not inside
+            let bottom, top = if pointsDown then -1.0f, height - 1.0f else height, 0.0f
+            TabShape.outline shape width bottom top band
+
+    /// Uniformly fit the physical strip into the item height. Do not stretch
+    /// its corners or reuse a rotated top outline for horizontal side tabs.
+    let drawTabShapePreview edge orientation inside (g: Graphics) (shape: string) (x: int) (y: int) (height: int) (count: int) (overlap: int) (color: Color) (background: Color) =
         let unit = float32 height / 24.0f
-        let edge = 18.0f * unit
-        let width = float32 height * 2.5f
-        // An overlap past the tab itself would stack the tabs on one another;
-        // the strip never looks like that in practice, so neither does this.
-        let step = width - (max (-width / 2.0f) (min (width / 2.0f) (float32 overlap * unit)))
-        use pen = new Pen(color, 1.0f)
+        let band = float32 TabShape.edgeBand * unit
+        let h = float32 height
+        let w = h * 2.5f
+        let sideways = not (TabEdges.runsHorizontally edge)
+        let across = sideways && orientation = Some TabEdges.SideText.Horizontal
+        let before, after = TabShape.sideMargins (int w) (int band)
+        let rowLength = h + float32 (before + after)
+        let physicalWidth, physicalHeight =
+            if across then w, rowLength
+            else w,h
+        let along = if sideways then physicalHeight else physicalWidth
+        let effectiveOverlap =
+            if across then min (rowLength - unit) (float32 overlap * unit)
+            else max (-along / 2.0f) (min (along / 2.0f) (float32 overlap * unit))
+        let step = along - effectiveOverlap
+        let total = float32 (count - 1) * step + along
+        let fit = if sideways then h / total else 1.0f
         let state = g.Save()
         g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
         g.TranslateTransform(float32 x, float32 y)
+        g.ScaleTransform(fit, fit)
+        use pen = new Pen(color, 1.0f / fit)
+        // A row written across reaches two screen pixels past each end of the
+        // baseline's row, so its body is not drawn smaller than it reads, and
+        // one more past the lower end, so it does not look raised.
+        let reach = if across then 2.0f / fit else 0.0f
+        let lowerReach = if across then 3.0f / fit else 0.0f
         for i in 0 .. count - 1 do
             use path = new Drawing2D.GraphicsPath()
-            TabShape.outline shape width (float32 height) 0.0f edge |> TabShape.addToPath path
+            previewOutline edge orientation inside shape w (if across then rowLength + reach + lowerReach else h) band |> TabShape.addToPath path
             use m = new Drawing2D.Matrix()
-            m.Translate(float32 i * step, 0.0f)
+            m.Translate((if sideways then 0.0f else float32 i * step), (if sideways then float32 i * step - reach else 0.0f))
             path.Transform(m)
             use cover = new SolidBrush(Color.FromArgb(255, background))
             use tint = new SolidBrush(Color.FromArgb((if i = count - 1 then 90 else 40), color))
             g.FillPath(cover, path)
             g.FillPath(tint, path)
             g.DrawPath(pen, path)
-        let total = float32 (count - 1) * step + width
-        g.DrawLine(pen, -2.0f, float32 height, total + 2.0f, float32 height)
+        if sideways then
+            let baseline = if (edge = TabEdges.Edge.Left) <> inside then physicalWidth else -1.0f
+            g.DrawLine(pen, baseline, -2.0f, baseline, total + 2.0f)
+        else
+            let pointsDown = if edge = TabEdges.Edge.Top then inside else not inside
+            let baseline = if pointsDown then -1.0f else h
+            g.DrawLine(pen, -2.0f, baseline, total + 2.0f, baseline)
         g.Restore(state)
-        int (ceil total) + 2
+        int (ceil ((if sideways then physicalWidth else total) * fit)) + 2
 
-    /// The tab shape drop-down. Each item of the open list shows a picture
-    /// of two neighbouring tabs next to the shape's name, drawn from the
-    /// same outline the tab strip uses and with the Tab Overlap currently in
-    /// the panel's editor (`overlap`), so the shapes can be told apart - and
-    /// how they meet - before one is chosen. `shapes` is what it lists now,
-    /// in the order of its items.
-    let shapeCombo (shapes: unit -> (TabEdges.SideText option * string) list) (overlap: unit -> int) =
+    /// Side pages written across show one tab in both the closed field and
+    /// the open list. Vertical side tabs are previewed as top tabs, and every
+    /// other list retains two neighbours to illustrate overlap.
+    /// Every preview uses the production outline and current editor values.
+    let shapeCombo edge (shapes: unit -> (TabEdges.SideText option * string) list) (overlap: unit -> int) =
         let combo = new DarkMode.PreviewComboBox()
+        let sideways = not (TabEdges.runsHorizontally edge)
         combo.DropDownStyle <- ComboBoxStyle.DropDownList
         // Variable owner-draw, as the color theme combo: the closed box keeps
         // the height of a plain drop-down, the open list gets items tall
@@ -329,14 +357,15 @@ module EdgeRows =
         combo.ItemHeight <- SettingsField.comboItemHeightPx
         // Outside Bounds, so Control.Scale never sees it (see the color
         // theme combo's MeasureItem).
-        combo.MeasureItem.Add <| fun e -> e.ItemHeight <- SettingsDpi.px 30
+        let listItemHeight () = SettingsDpi.px 30
+        combo.MeasureItem.Add <| fun e -> e.ItemHeight <- listItemHeight ()
         combo.IntegralHeight <- false
         let fitDropDown() =
             // Recalculate on every opening, including after a monitor DPI change.
             combo.MaxDropDownItems <- max 1 combo.Items.Count
             let rowsHeight =
                 [0 .. combo.Items.Count - 1]
-                |> List.sumBy (fun index -> max (SettingsDpi.px 30) (combo.GetItemHeight(index)))
+                |> List.sumBy (fun index -> max (listItemHeight ()) (combo.GetItemHeight(index)))
             combo.DropDownHeight <- rowsHeight + SettingsDpi.px 4
             let textWidth =
                 combo.Items |> Seq.cast<obj>
@@ -364,27 +393,20 @@ module EdgeRows =
                 let textColor = if darkOn then DarkMode.darkText else e.ForeColor
                 let pad = max 2 (e.Bounds.Height / 6)
                 let previewHeight = max 4 (e.Bounds.Height - 2 * pad - 1)
-                // The closed box is a plain drop-down's height: one small
-                // tab as a reminder. The open list: two tabs as they meet.
+                // Every list uses the top tab's item height. Rows written across
+                // show one tab per item; the other lists show two neighbours.
                 let isEdit = (e.State &&& DrawItemState.ComboBoxEdit) <> DrawItemState.None
                 let previewWidth =
                     let orientation, shape = listed.[e.Index]
-                    if orientation = Some TabEdges.SideText.Horizontal then
-                        let state = e.Graphics.Save()
-                        let width = previewHeight * 2
-                        let count = if isEdit then 1 else 2
-                        let tabWidth = float32 previewHeight * 2.5f
-                        let step = tabWidth - max (-tabWidth / 2.0f) (min (tabWidth / 2.0f) (float32 (overlap ()) * float32 previewHeight / 24.0f))
-                        let total = float32 (count - 1) * step + tabWidth + 4.0f
-                        e.Graphics.TranslateTransform(float32 (e.Bounds.Left + pad + 2 + width), float32 (e.Bounds.Top + pad))
-                        e.Graphics.ScaleTransform(float32 width / float32 previewHeight, float32 previewHeight / total)
-                        e.Graphics.RotateTransform(90.0f)
-                        drawTabShapePreview e.Graphics shape 2 0 previewHeight count (overlap ()) textColor background |> ignore
-                        e.Graphics.Restore(state)
-                        width
-                    else
-                        drawTabShapePreview e.Graphics shape (e.Bounds.Left + pad + 2) (e.Bounds.Top + pad) previewHeight
-                            (if isEdit then 1 else 2) (overlap ()) textColor background
+                    let across = sideways && orientation = Some TabEdges.SideText.Horizontal
+                    let asTop = sideways && not across
+                    // A row written across is shrunk to fit its end margins, so it
+                    // gets one more pixel above and below.
+                    let grow = if across then 1 else 0
+                    drawTabShapePreview (if asTop then TabEdges.Edge.Top else edge) orientation
+                        false e.Graphics shape
+                        (e.Bounds.Left + pad + 2) (e.Bounds.Top + pad - grow) (previewHeight + 2 * grow)
+                        (if isEdit || across then 1 else 2) (overlap ()) textColor background
                 let textBounds =
                     Rectangle(e.Bounds.Left + pad + 2 + previewWidth + pad * 2, e.Bounds.Top,
                               max 0 (e.Bounds.Width - previewWidth - pad * 4 - 2), e.Bounds.Height)
@@ -489,7 +511,7 @@ module EdgeRows =
 /// and writes nothing until
 /// the person changes it. The top edge's panel is AppearanceView's own.
 type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> unit) as this =
-    // Left and right edges offer both text orientations in the shape list.
+    // Left and right edges have a separate writing-mode picker.
     let sideways = not (TabEdges.runsHorizontally edge)
     let mutable refreshing = false
     let defaults () = Services.program.defaultTabAppearanceInfo
@@ -529,30 +551,42 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         reset |> Option.iter (fun b -> EdgeRows.place table b 2 r)
         r
 
-    let listedShapes =
-        if sideways then
-            [ for orientation in [TabEdges.SideText.Vertical; TabEdges.SideText.Horizontal] do
-                if orientation = TabEdges.SideText.Vertical || TabEdges.offerSideHorizontalText then
-                    for shape in TabEdgeSettings.shapesFor (Some orientation) do
-                        yield Some orientation, shape ]
-        else TabShape.all |> List.map (fun shape -> None, shape)
+    let mutable listedShapes = []
+    let mutable pinnedRow = -1
 
     let heightInput = EdgeRows.number ()
     let widthInput = EdgeRows.number ()
     let overlapInput = EdgeRows.number ()
     let pinned = EdgeRows.pinnedWidth ()
-    let shapeCombo, fitShapes = EdgeRows.shapeCombo (fun () -> listedShapes) (fun () -> int overlapInput.Value)
     let textBottomCombo = EdgeRows.choice [ text "SideTextBottomInside"; text "SideTextBottomOutside" ]
-    // A separate first row leaves room for a future writing-mode picker.
+    let textCombo = EdgeRows.choice [ text "SideTextVertical"; text "SideTextHorizontal" ]
+    // Keep the writing mode and baseline direction on the same row.
     let textOptions = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
-                                           Margin = Padding(0), ColumnCount = 1, RowCount = 1)
+                                           Margin = Padding(0), ColumnCount = 2, RowCount = 1)
     do
+        let textWidth =
+            [textCombo; textBottomCombo]
+            |> Seq.collect (fun combo ->
+                combo.Items |> Seq.cast<obj>
+                |> Seq.map (fun item -> TextRenderer.MeasureText(string item, combo.Font).Width))
+            |> Seq.max
+        let width = textWidth + SettingsDpi.px 28
+        let gap = SettingsDpi.px 8
+        for combo in [textCombo; textBottomCombo] do
+            combo.MinimumSize <- Size(width, 0)
+            combo.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+        textOptions.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32(width + gap))) |> ignore
         textOptions.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        textCombo.Margin <- Padding(0, EdgeRows.marginPx, gap, EdgeRows.marginPx)
         textOptions.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-        textOptions.Controls.Add(textBottomCombo, 0, 0)
+        textOptions.Controls.Add(textCombo, 0, 0)
+        textOptions.Controls.Add(textBottomCombo, 1, 0)
     let alignCombo =
         EdgeRows.choice (if sideways then [ text "AlignTop"; text "AlignBottom" ] else [ text "AlignTopLeft"; text "AlignTopRight" ])
     let directionCombo = EdgeRows.choice [ text "TabVerticalAuto"; text "TabVerticalAlwaysDown" ]
+    let shapeCombo, fitShapes =
+        EdgeRows.shapeCombo edge
+            (fun () -> listedShapes) (fun () -> int overlapInput.Value)
     let hideTabsRadio, refreshHideTabs =
         EdgeRows.hideTabsControls
             (fun () -> TabEdgeSettings.hideSettings Services.settings.root edge)
@@ -596,16 +630,20 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         let previous = refreshing
         refreshing <- true
         try
+            if sideways then textCombo.SelectedIndex <- if orientation = Some TabEdges.SideText.Horizontal then 1 else 0
+            listedShapes <- TabEdgeSettings.shapesFor orientation |> List.map (fun s -> orientation, s)
             shapeCombo.Items.Clear()
             for direction, s in listedShapes do
-                let caption = text (EdgeRows.shapeCaption (direction = Some TabEdges.SideText.Horizontal) s)
-                let label =
-                    match direction with
-                    | _ when not TabEdges.offerSideHorizontalText -> caption
-                    | Some TabEdges.SideText.Vertical -> text "SideTextVertical" + ": " + caption
-                    | Some TabEdges.SideText.Horizontal -> text "SideTextHorizontal" + ": " + caption
-                    | None -> caption
-                shapeCombo.Items.Add(label) |> ignore
+                shapeCombo.Items.Add(text (EdgeRows.shapeCaption (direction = Some TabEdges.SideText.Horizontal) s)) |> ignore
+            let horizontal = sideways && orientation = Some TabEdges.SideText.Horizontal
+            textBottomCombo.Visible <- not horizontal
+            if pinnedRow >= 0 then
+                table.SuspendLayout()
+                for column in 0 .. 2 do
+                    table.GetControlFromPosition(column, pinnedRow).Visible <- not horizontal
+                table.RowStyles.[pinnedRow].SizeType <- if horizontal then SizeType.Absolute else SizeType.AutoSize
+                table.RowStyles.[pinnedRow].Height <- 0.0f
+                table.ResumeLayout(true)
             let shown = orientation, TabEdgeSettings.shapeFor orientation shape
             shapeCombo.SelectedIndex <- List.findIndex ((=) shown) listedShapes
             fitShapes ()
@@ -637,7 +675,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         let pinnedReset =
             EdgeRows.resetButton (EdgeRows.resetText (string d.tabPinnedTabWidth)) (fun () ->
                 pinned.width.Value <- decimal d.tabPinnedTabWidth)
-        row "Pinned Tab Width" pinned.panel (Some(pinnedReset :> Control)) |> ignore
+        pinnedRow <- row "Pinned Tab Width" pinned.panel (Some(pinnedReset :> Control))
         numberRow "Tab Overlap" overlapInput d.tabOverlap
         // The distance rows carry their own reset buttons, across both columns.
         row "Indent Normal" outside.panel None |> ignore
@@ -647,9 +685,25 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         EdgeRows.preparePair outside.panel
         EdgeRows.preparePair inside.panel
         EdgeRows.alignPairs pinnedReset [sizePair; outside.panel; inside.panel]
+        if sideways then
+            // Split the pickers where the distance rows split: the writing mode
+            // ends with the first end's reset, the text side starts at the second end.
+            outside.panel.Layout.Add(fun _ ->
+                let secondCaption = outside.panel.GetControlFromPosition(3, 0)
+                let gap = secondCaption.Margin.Left
+                if textCombo.Margin.Right <> gap then
+                    textCombo.Margin <- Padding(0, EdgeRows.marginPx, gap, EdgeRows.marginPx)
+                let x = max (textCombo.MinimumSize.Width + gap) secondCaption.Left
+                if int textOptions.ColumnStyles.[0].Width <> x then
+                    textOptions.ColumnStyles.[0].Width <- float32 x)
 
         // Every change is written at once, as the rest of the dialog does.
         shapeCombo.SelectedIndexChanged.Add(fun _ -> saveShape ())
+        textCombo.SelectedIndexChanged.Add(fun _ ->
+            if not refreshing then
+                let orientation = Some(if textCombo.SelectedIndex = 1 then TabEdges.SideText.Horizontal else TabEdges.SideText.Vertical)
+                showShapes orientation (shownShape ())
+                saveShape ())
         textBottomCombo.SelectedIndexChanged.Add(fun _ ->
             write (fun root -> TabEdgeSettings.writeBool root edge "tabTextBottomInside" (textBottomCombo.SelectedIndex <> 1)))
         let numberKey (input: NumericUpDown) (key: string) =

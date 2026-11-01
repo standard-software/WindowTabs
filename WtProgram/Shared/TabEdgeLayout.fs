@@ -7,13 +7,36 @@ namespace Bemo
 // (TabEdgeLayout.Tests.fsx). The top strip keeps its own placement
 // (WindowDecorator), sharing the visibility decision here.
 //
-// Rectangles are (x, y, width, height). `frame` is the window's visible
-// frame (its rectangle less the invisible resize borders), `monitors` the
+// Rectangles are (x, y, width, height). `frame` is the group's normalized
+// reference rectangle inset by an ordinary member's invisible frame;
+// `monitors` contains the
 // work area of the window's display for four-edge placement.
 module TabEdgeLayout =
     open TabEdges
 
     type Box = int * int * int * int
+
+    /// Choose by stable membership, never by foreground or z-order.
+    let ordinaryFrameSource members =
+        members |> List.filter (fun (_, hasMargin) -> not hasMargin)
+        |> List.map fst |> List.sort |> List.tryHead
+
+    /// Retain a failed reading only for the same member, DPI and window state.
+    let frameSample previous source read =
+        source |> Option.bind (fun key ->
+            match read key with
+            | Some insets -> Some(key, insets)
+            | None -> previous |> Option.filter (fun (old, _) -> old = key))
+
+    /// Top placement stays on the group rectangle. Other edges share the
+    /// ordinary member's visible sides, even when a margin-bearing app is front.
+    let ordinaryFrame (left, top, right, bottom) ((x,y,w,h): Box) : Box =
+        let cap value = max 0 (min 32 value)
+        let left = min (max 0 (w-1)) (cap left)
+        let right = min (max 0 (w-left-1)) (cap right)
+        let top = min (max 0 (h-1)) (cap top)
+        let bottom = min (max 0 (h-top-1)) (cap bottom)
+        x+left,y+top,max 1 (w-left-right),max 1 (h-top-bottom)
 
     /// Four-edge placement belongs to the window's monitor, even at a seam.
     /// The caller resolves that monitor with MonitorFromWindow. Keep the
@@ -136,7 +159,7 @@ module TabEdgeLayout =
     /// strip less its hairline), never taller than the row. `px` turns
     /// design pixels into the display's.
     let rowIconSize (px: int -> int) (length: int) =
-        max 1 (min (min (max (px 16) (length - 1 - px 8)) (px 24)) (length - 2))
+        max 1 (min (min (max (px 16) (length - px 8)) (px 24)) (length - 2))
 
     // --------------------------------------------------------- placing --
 
@@ -235,50 +258,35 @@ module TabEdgeLayout =
         /// From one row's start to the next: height less effective overlap.
         member this.pitch = max 1 (this.length - this.overlap)
 
-    // The design pixels a row keeps clear around its icon and text, above
-    // and below together: the outline never comes nearer them than that.
-    let private rowClearance = 2
+    /// Horizontal rows use the top tab's height and corner band. Font metrics
+    /// do not change the outline. Keep a positive pixel pitch.
+    let rowsOf (px: int -> int) (tabHeight: int) (tabOverlap: int) =
+        let length = max 1 (tabHeight - 1)
+        let icon = rowIconSize px length
+        let overlap = max (length - System.Int32.MaxValue) (min (length - 1) tabOverlap)
+        { length = length; overlap = overlap; band = max 0 (px 18); icon = icon }
 
-    // The top strip's edge band, in design pixels: the band a row's outline
-    // turns its corners in whenever the row has room for it.
-    let private rowEdgeBand = 18
+    /// Add the top tab's end margins around a full-height horizontal body.
+    let rowsWithMargins px tabHeight tabOverlap (before, after) =
+        let bodyLength = max 1 (tabHeight - 1)
+        let rows = rowsOf px (tabHeight + before + after) tabOverlap
+        { rows with icon = rowIconSize px bodyLength }
 
-    /// The rows of a strip written across, from the tab height and the tab
-    /// overlap; `px` turns design pixels into the display's. This is the one
-    /// place their geometry is decided:
-    /// - the length is the tab height, and overlap reduces the pitch;
-    /// - the overlap is the tab overlap in pixels, kept to what leaves every
-    ///   row's icon and text clear of its neighbours' outlines and inside its
-    ///   own, whatever the setting (0, negative, or larger than a row);
-    /// - the band is the top strip's (18 at 100%), so that the seven shapes
-    ///   keep their corners, narrowed only where the outline would otherwise
-    ///   come nearer the icon than `rowClearance`.
-    let rowsOf (px: int -> int) (tabHeight: int) (tabOverlap: int) (textHeight: int) =
-        let length = max 1 tabHeight
-        let icon = max 1 (min (rowIconSize px length) (length - 1 - px rowClearance))
-        let content = max textHeight icon + px rowClearance
-        let edgeBand = max 0 (px rowEdgeBand)
-        // Protect centred content even from a neighbour's full rectangular
-        // bitmap, on either side and regardless of which tab is active.
-        let most = max 0 ((length - content) / 2)
-        // Negative overlap opens a gap, limited to one row's height.
-        // Buttons do not determine density; icons and text stay clear even
-        // when the active row covers a neighbour from the opposite side.
-        let overlap = max (-length) (min most tabOverlap)
-        let band = max 0 (min edgeBand (length - 1 - content))
-        { length = length; overlap = overlap; band = band; icon = icon }
-
-    /// Front to back: active first, then the strip's visual order.
-    let rowOrder active tabs =
-        (tabs |> List.filter (fun t -> Some t = active)) @
-        (tabs |> List.filter (fun t -> Some t <> active))
+    /// Front to back, using the same complete z-order and drag-group ordering
+    /// as the top strip, restricted to the tabs on this edge.
+    let rowOrder zorder tabs dragGroup =
+        let ordered = (zorder |> List.filter (fun t -> List.contains t tabs)) @
+                      (tabs |> List.filter (fun t -> not (List.contains t zorder)))
+        if List.isEmpty dragGroup then ordered
+        else (ordered |> List.filter (fun t -> not (List.contains t dragGroup))) @
+             (tabs |> List.filter (fun t -> List.contains t dragGroup))
 
     /// Along the strip, from the first row's start to the last row's end.
     let contentLength (rows: Rows) (count: int) =
         if count <= 0 then 0 else (count - 1) * rows.pitch + rows.length
 
-    /// A row's padding at each end across the strip (6 at 100%).
-    let rowPadding (px: int -> int) = px 6
+    /// The same content padding as a top tab (18 at 100%).
+    let rowPadding (px: int -> int) = px 18
 
     /// The narrowest a row is: its icon alone (iconOnlyWidth) - the width of
     /// a pinned row "icon only", and the least a strip narrows to (6-1).
@@ -371,18 +379,21 @@ module TabEdgeLayout =
             else scroll
         clampScroll rows count view s
 
-    /// The row a point `at` along the strip (content coordinates) is on: of
-    /// the rows that cover it, the one whose middle is nearest - the border
-    /// between two rows is the middle of their overlap, as between two tabs
-    /// of the top strip. The first of equals.
-    let rowAt (rows: Rows) (starts: ('id * int) list) (at: int) : 'id option =
-        starts
-        |> List.filter (fun (_, s) -> at >= s && at < s + rows.length)
-        |> function
-            | [] -> None
-            | covering ->
-                let distance (_, s) = abs (2 * at - (2 * s + rows.length))
-                covering |> List.minBy distance |> fst |> Some
+    /// Partition each aligned group at overlap midpoints, independently of
+    /// drawing order. End trims match the top strip's shape-specific bounds.
+    let rowAt (rows: Rows) (starts: ('id * int) list) (leading: float) (trailing: float) (at: int) : 'id option =
+        let sorted = starts |> List.sortBy snd |> List.toArray
+        sorted |> Array.mapi (fun i (id, start) ->
+            let previous = i > 0 && start - snd sorted.[i - 1] <= rows.pitch
+            let next = i + 1 < sorted.Length && snd sorted.[i + 1] - start <= rows.pitch
+            let first =
+                if previous then float(snd sorted.[i - 1] + rows.length + start) / 2.0
+                else float start + leading
+            let last =
+                if next then float(start + rows.length + snd sorted.[i + 1]) / 2.0
+                else float(start + rows.length) - trailing
+            if float at >= first && float at < last then Some id else None)
+        |> Array.tryPick id
 
     // ----------------------------------------------------------- snapping --
 

@@ -579,40 +579,6 @@ type AppearanceView() as this =
             | _ -> 12
         | None -> 12
 
-    // `count` tabs standing on a base line, `height` px tall, at (x, y), in
-    // the proportions of the default strip (an 18 px edge band on a 24 px
-    // tab) and overlapping by `overlap` design pixels. Each tab is drawn over
-    // the one before it and the last one is tinted like the active tab, so
-    // the picture is the strip with its right-hand tab active. (In the strip
-    // the stacking follows the z-order - the active tab in front - not the
-    // position.) Returns the width used.
-    let drawTabShapePreview (g: Graphics) (shape: string) (x: int) (y: int) (height: int) (count: int) (overlap: int) (color: Color) (background: Color) =
-        let unit = float32 height / 24.0f
-        let edge = 18.0f * unit
-        let width = float32 height * 2.5f
-        // An overlap past the tab itself would stack the tabs on one another;
-        // the strip never looks like that in practice, so neither does this.
-        let step = width - (max (-width / 2.0f) (min (width / 2.0f) (float32 overlap * unit)))
-        use pen = new Pen(color, 1.0f)
-        let state = g.Save()
-        g.SmoothingMode <- Drawing2D.SmoothingMode.AntiAlias
-        g.TranslateTransform(float32 x, float32 y)
-        for i in 0 .. count - 1 do
-            use path = new Drawing2D.GraphicsPath()
-            TabShape.outline shape width (float32 height) 0.0f edge |> TabShape.addToPath path
-            use m = new Drawing2D.Matrix()
-            m.Translate(float32 i * step, 0.0f)
-            path.Transform(m)
-            use cover = new SolidBrush(Color.FromArgb(255, background))
-            use tint = new SolidBrush(Color.FromArgb((if i = count - 1 then 90 else 40), color))
-            g.FillPath(cover, path)
-            g.FillPath(tint, path)
-            g.DrawPath(pen, path)
-        let total = float32 (count - 1) * step + width
-        g.DrawLine(pen, -2.0f, float32 height, total + 2.0f, float32 height)
-        g.Restore(state)
-        int (ceil total) + 2
-
     let tabShapeCombo =
         let combo = new DarkMode.PreviewComboBox()
         combo.DropDownStyle <- ComboBoxStyle.DropDownList
@@ -670,7 +636,8 @@ type AppearanceView() as this =
                 // tab as a reminder. The open list: two tabs as they meet.
                 let isEdit = (e.State &&& DrawItemState.ComboBoxEdit) <> DrawItemState.None
                 let previewWidth =
-                    drawTabShapePreview e.Graphics TabShape.all.[e.Index] (e.Bounds.Left + pad + 2) (e.Bounds.Top + pad) previewHeight
+                    EdgeRows.drawTabShapePreview TabEdges.Edge.Top None
+                        false e.Graphics TabShape.all.[e.Index] (e.Bounds.Left + pad + 2) (e.Bounds.Top + pad) previewHeight
                         (if isEdit then 1 else 2) (editedTabOverlap ()) textColor background
                 let textBounds =
                     Rectangle(e.Bounds.Left + pad + 2 + previewWidth + pad * 2, e.Bounds.Top,

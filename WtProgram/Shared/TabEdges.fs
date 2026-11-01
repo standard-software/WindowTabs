@@ -77,10 +77,6 @@ module TabEdges =
     let sideTabColumn clockwise thickness offset height =
         if clockwise then thickness - offset - height else offset
 
-    /// Horizontal side pins occupy start-aligned rows; other strips keep their alignment.
-    let pinnedRowAlignment across pinned start alignment =
-        if across && pinned then start else alignment
-
     // ------------------------------------------------------------ aligns --
 
     /// Which end of its strip a tab is drawn against: the left end of a top or
@@ -769,10 +765,6 @@ module TabEdges =
     type SideText =
         | Horizontal
         | Vertical
-
-    /// Enable horizontal side text in the picker, saved settings and defaults.
-    [<Literal>]
-    let offerSideHorizontalText = false
 
     /// An edge's panel, less the tab appearance: the alignment a tab newly on
     /// the edge takes, the direction, the distances as (start, end) -

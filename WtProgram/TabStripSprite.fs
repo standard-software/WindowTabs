@@ -274,7 +274,7 @@ type TabSprite<'id> = {
 
     // Width of the band at each end of the tab that the neighbour overlaps
     // into. The outline (TabShape) climbs across it or stands a side in it.
-    member private this.edgeWidth = this.px 18
+    member private this.edgeWidth = this.px TabShape.edgeBand
 
     // Color resolution priority for non-active, non-flashing tabs:
     //   MouseOver (hover/capture)  >  Selected  >  Inactive
@@ -1182,9 +1182,8 @@ type TabStripSprite<'id> when 'id : equality = {
 // name runs left to right as on a top tab - icon, name, close or pin button -
 // and the outline is the tab shape turned a quarter, standing on the side
 // that faces the window: its sides are the row's upper and lower ends, and
-// it climbs in an edge band of its own (TabEdgeLayout.rowsOf) instead of the
-// top tab's 18 pixels, which would leave a row of the tab height no body.
-// The top strip's sprites are not touched by any of this.
+// it uses the top tab's corner band, limited only by the available geometry.
+// Transparent margins stay on the horizontal axis as on the top tab.
 type AcrossTabSprite<'id> = {
     id: 'id
     isTop: bool
@@ -1194,7 +1193,6 @@ type AcrossTabSprite<'id> = {
     displayInfo: TabDisplayInfo
     // (width across the strip, length along it)
     size: Sz
-    onlyIcon: bool
     isPinned: bool
     // The side the row stands on: the right for a left strip, the left for
     // a right one - the side of the window.
@@ -1208,20 +1206,30 @@ type AcrossTabSprite<'id> = {
 
     member private this.px value = Dpi.px this.scale value
 
-    member this.padding = TabEdgeLayout.rowPadding this.px
+    // A top tab's icon starts an edge band in, from a body that starts half a
+    // band in (TabShape.boxInset). A row's body spans its whole width, so the
+    // icon and the right end keep only that visible gap.
+    member this.padding =
+        let band = this.px TabShape.edgeBand
+        band - TabShape.boxInset band
+
+    member this.bodyHeight = max 1 (this.appearance.tabHeight - 1)
+
+    member this.bodyOffset =
+        TabShape.sideMargins this.appearance.tabMaxWidth this.band |> fst
 
     member this.iconSize =
         let s = this.iconSide
         Sz(s, s)
 
-    member this.iconLocation = Pt(this.padding, (this.size.height - this.iconSize.height) / 2)
+    member this.iconLocation = Pt(this.padding, this.bodyOffset + (this.bodyHeight - this.iconSize.height) / 2)
 
     member private this.buttonSize =
-        let s = max 1 (min (this.px 18) (this.size.height - 2))
+        let s = max 1 (min (this.px 18) (this.bodyHeight - 2))
         Sz(s, s)
 
     member this.closeButtonLocation =
-        Pt(this.size.width - this.padding - this.buttonSize.width + this.px 3, (this.size.height - this.buttonSize.height) / 2)
+        Pt(this.size.width - this.padding - this.buttonSize.width + this.px 3, this.bodyOffset + (this.bodyHeight - this.buttonSize.height) / 2)
 
     member private this.iconRight = this.iconLocation.x + this.iconSize.width
 
@@ -1229,17 +1237,17 @@ type AcrossTabSprite<'id> = {
 
     member private this.buttonDecision hover : TabButtonPolicy.Decision =
         let closeMode, pinMode = this.buttonModes
-        TabButtonPolicy.decide closeMode pinMode this.isTop hover this.isPinned this.onlyIcon
+        TabButtonPolicy.decide closeMode pinMode this.isTop hover this.isPinned false
             this.canShowButton this.canShowButton
 
-    member this.textLocation = Pt(this.iconRight + this.px 5, 0)
+    member this.textLocation = Pt(this.iconRight + this.px 5, this.bodyOffset)
 
     member this.textSize =
         let buttons = this.buttonDecision(this.hover.IsSome || this.captured.IsSome)
         let right =
             if buttons.showPin || buttons.showClose then this.closeButtonLocation.x
             else this.size.width - this.padding
-        Sz(max 0 (right - this.textLocation.x), this.size.height)
+        Sz(max 0 (right - this.textLocation.x), this.bodyHeight)
 
     member private this.state =
         match this.displayInfo.bgColor with
@@ -1279,33 +1287,53 @@ type AcrossTabSprite<'id> = {
         | 3 -> a.tabSelectedTextColor
         | _ -> a.tabInactiveTextColor
 
-    // The outline as TabShape draws a top tab as long as this row is high
-    // and as tall as it is wide, standing on the window's side - the base
-    // one pixel outside the bitmap, as a top tab's is - with x and y swapped.
     member this.borderPath =
         let path = new GraphicsPath()
-        let width = float32 this.size.width
-        let bottom, top = if this.standsOnRight then width, 0.0f else -1.0f, width - 1.0f
-        let turn (p: PointF) = PointF(p.Y, p.X)
-        for segment in TabShape.outline this.appearance.tabShape (float32 this.size.height) bottom top (float32 this.band) do
-            match segment with
-            | TabShape.Line(a, b) -> path.AddLine(turn a, turn b)
-            | TabShape.Bezier(a, b, c, d) -> path.AddBezier(turn a, turn b, turn c, turn d)
+        TabShape.sideOutline this.appearance.tabShape (float32 this.size.width)
+            (float32 this.size.height) this.standsOnRight (float32 this.band)
+        |> TabShape.addToPath path
         path
 
-    // The band a colour underline or border takes: along the side the row
-    // stands on, fading from the row's upper end downwards.
+    member this.containsOutline (local: Pt, includeBorder: bool) =
+        if local.x < 0 || local.x >= this.size.width || local.y < 0 || local.y >= this.size.height then false
+        else
+            use path = this.borderPath
+            use pen = new Pen(Color.Black, 2.0f)
+            path.IsVisible(float32 local.x, float32 local.y) ||
+                (includeBorder && path.IsOutlineVisible(float32 local.x, float32 local.y, pen))
+
+    // Every horizontal row underlines its text along the bottom of the body.
     member private this.baseBand (color: Color) (g: Graphics) =
         let thickness = this.px 3
-        let x = if this.standsOnRight then this.size.width - thickness else 0
-        let rect = Rectangle(x, 0, thickness, this.size.height)
+        let y = this.bodyOffset + this.bodyHeight - thickness
+        let rect = Rectangle(0, y, this.size.width, thickness)
+        let gradient = Rectangle(0, y, this.size.width + 1, thickness)
+        let direction = LinearGradientMode.Horizontal
         let rightColor = Color.FromArgb(int (255.0f * 0.2f), int color.R, int color.G, int color.B)
-        use brush = new LinearGradientBrush(Rectangle(x, 0, thickness, this.size.height + 1), color, rightColor, LinearGradientMode.Vertical)
+        use brush = new LinearGradientBrush(gradient, color, rightColor, direction)
         let blend = new ColorBlend(3)
         blend.Positions <- [| 0.0f; 0.6f; 1.0f |]
         blend.Colors <- [| color; color; rightColor |]
         brush.InterpolationColors <- blend
         g.FillRectangle(brush, rect)
+
+    // Rasterize only the outline in the same axes as the top tab. GDI+'s
+    // antialiasing is axis-dependent; rotating this shape-only layer preserves
+    // the foot pixels. Text, icons and buttons are drawn in physical axes.
+    member private this.drawOutline (target: Graphics) paint =
+        use layer = new Bitmap(this.size.height, this.size.width, Imaging.PixelFormat.Format32bppArgb)
+        layer.SetResolution(96.0f, 96.0f)
+        use path = this.borderPath
+        use transform =
+            if this.standsOnRight then new Matrix(0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f)
+            else new Matrix(0.0f, -1.0f, 1.0f, 0.0f, 0.0f, float32(this.size.width - 1))
+        path.Transform(transform)
+        do
+            use graphics = Graphics.FromImage(layer)
+            graphics.SmoothingMode <- SmoothingMode.AntiAlias
+            paint graphics path
+        layer.RotateFlip(if this.standsOnRight then RotateFlipType.Rotate90FlipX else RotateFlipType.Rotate90FlipNone)
+        target.DrawImageUnscaled(layer, 0, 0)
 
     member this.image =
         let img = Img(Sz(max 1 this.size.width, max 1 this.size.height))
@@ -1313,14 +1341,14 @@ type AcrossTabSprite<'id> = {
         g.Clear(Color.FromArgb(1, 0, 0, 0))
         use path = this.borderPath
         use bg = new SolidBrush(this.tabBgColor)
-        g.FillPath(bg, path)
+        this.drawOutline g (fun graphics outline -> graphics.FillPath(bg, outline))
         this.displayInfo.fillColor |> Option.iter (fun fill ->
             let state = g.Save()
             g.SetClip(path)
             use brush = new SolidBrush(fill)
             g.FillRectangle(brush, Rectangle(0, 0, this.size.width, this.size.height))
             g.Restore(state))
-        if not this.onlyIcon && this.textSize.width > 0 then
+        if this.textSize.width > 0 then
             let text = this.displayInfo.text
             let font = this.displayInfo.textFont
             use brush = new SolidBrush(this.textColor)
@@ -1345,14 +1373,14 @@ type AcrossTabSprite<'id> = {
                                 int (float fc.G * a + float b.G * (1.0 - a)),
                                 int (float fc.B * a + float b.B * (1.0 - a)))
                         | None -> this.tabBgColor
-                    let fadeRect = Rectangle(this.textLocation.x + this.textSize.width - fadeWidth, 0, fadeWidth + 1, this.size.height)
+                    let fadeRect = Rectangle(this.textLocation.x + this.textSize.width - fadeWidth, this.bodyOffset, fadeWidth + 1, this.bodyHeight)
                     let state = g.Save()
                     g.SetClip(path)
                     use fade = new LinearGradientBrush(fadeRect, Color.FromArgb(0, int bgColor.R, int bgColor.G, int bgColor.B), bgColor, LinearGradientMode.Horizontal)
                     g.FillRectangle(fade, fadeRect)
                     g.Restore(state)
         use pen = new Pen(this.borderColor, 1.0f)
-        g.DrawPath(pen, path)
+        this.drawOutline g (fun graphics outline -> graphics.DrawPath(pen, outline))
         this.displayInfo.underlineColor |> Option.iter (fun color ->
             let state = g.Save()
             g.SetClip(path)
@@ -1361,7 +1389,7 @@ type AcrossTabSprite<'id> = {
         this.displayInfo.borderColor |> Option.iter (fun color ->
             let state = g.Save()
             use shapePen = new Pen(color, 1.0f)
-            g.DrawPath(shapePen, path)
+            this.drawOutline g (fun graphics outline -> graphics.DrawPath(shapePen, outline))
             g.SetClip(path)
             this.baseBand color g
             g.Restore(state))

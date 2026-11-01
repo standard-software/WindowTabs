@@ -92,6 +92,44 @@ type AcrossLayout = {
     member this.rowOf (tab: Tab) =
         this.placed |> List.tryPick (fun (t, x, y, s) -> if t = tab then Some(x, y, s) else None)
 
+    member this.tryHit (pt: Pt) : (Tab * int * int * AcrossTabSprite<Tab>) option =
+        if pt.x < 0 || pt.x >= this.stripWidth ||
+           pt.y < this.viewStart || pt.y >= this.viewStart + this.viewLength then None
+        else
+            // As on the top strip, overlap midpoints own rectangular regions.
+            // Drawing order only resolves visible controls after ownership.
+            let starts = this.placed |> List.map (fun (tab, _, y, _) -> tab, y)
+            match this.placed with
+            | [] -> None
+            | (_, _, _, sprite) :: _ ->
+                let isBox = TabShape.isBox sprite.appearance.tabShape
+                let inset = float(TabShape.boxInset sprite.band)
+                let leading = if isBox then inset else 0.0
+                let trailing = if isBox then inset else max 0.0 (float this.rows.overlap / 2.0)
+                let hit = TabEdgeLayout.rowAt this.rows starts leading trailing pt.y
+                let owned = hit |> Option.bind (fun tab -> this.placed |> List.tryFind (fun (t, _, _, _) -> t = tab))
+                match owned with
+                | None when TabShape.normalize sprite.appearance.tabShape = TabShape.rounded ->
+                    // Rounded feet at group ends follow the top strip's fallback.
+                    this.placed |> List.tryFind (fun (_, x, y, row) ->
+                        let hasBefore = starts |> List.exists (fun (_, s) -> s < y && y - s <= this.rows.pitch)
+                        let hasAfter = starts |> List.exists (fun (_, s) -> s > y && s - y <= this.rows.pitch)
+                        (not hasBefore || not hasAfter) && row.containsOutline(Pt(pt.x - x, pt.y - y), true))
+                | _ -> owned
+
+    member this.partAt (pt: Pt) =
+        this.tryHit pt |> Option.map (fun (tab, x, y, sprite) ->
+            let part = sprite.partAt(Pt(pt.x - x, pt.y - y))
+            let resolved =
+                if TabShape.needsOutlineHit sprite.appearance.tabShape && part <> TabBackground then
+                    let visible =
+                        this.placed |> List.tryFind (fun (other, ox, oy, row) ->
+                            row.containsOutline(Pt(pt.x - ox, pt.y - oy), other <> tab))
+                    if (visible |> Option.map (fun (other, _, _, _) -> other)) = Some tab then part
+                    else TabBackground
+                else part
+            tab, resolved)
+
 type TabStrip(monitor:ITabStripMonitor) as this =
     let Cell = CellScope(false, true)
     let renderCache = new StripRenderCache()
@@ -542,7 +580,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.moveTabsToEdgeFromMenu(tabs: Tab list, edge: TabEdges.Edge) =
         if not (TabEdges.isTopOnly allowedEdgesCell.value) && TabEdges.isAllowed allowedEdgesCell.value edge then
-            // Preserve the stored alignment even when across-strip pins display at the start.
+            // Moves keep each tab's stored alignment.
             let before =
                 this.placedTabs |> List.map (fun (p: TabEdges.Placed<Tab>) ->
                     let alignment = tabAlignmentCell.value.tryFind(p.id) |> Option.defaultValue (this.defaultAlignOn p.edge)
@@ -857,7 +895,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | Some((bounds, a, scale)) when this.isAcross edge ->
             let px = Dpi.px scale
             let textFont = Dpi.scaledFont SystemFonts.MenuFont scale
-            let rows = TabEdgeLayout.rowsOf px a.tabHeight a.tabOverlap textFont.Height
+            let margins = TabShape.sideMargins a.tabMaxWidth (px TabShape.edgeBand)
+            let rows = TabEdgeLayout.rowsWithMargins px a.tabHeight a.tabOverlap margins
             let band = (this.bandOf edge).list
             let count = band.Length
             let button = px 14
@@ -892,16 +931,11 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     resting @ (moving |> List.mapi (fun i t -> t, pivotStart + (i - pivotIndex) * pitch))
                 | _ -> TabEdges.tabStartsAt lengths strip
             let standsOnRight = (edge = TabEdges.Edge.Left) <> (this.edgeDraw edge).inside
-            let column = max 1 (bounds.size.width - 1)
-            let iconOnly = TabEdgeLayout.iconOnlyRow px rows
-            let widthOf t =
-                if pinned t then
-                    if a.tabPinnedTabWidthIcon then min column iconOnly
-                    else min column (max iconOnly a.tabPinnedTabWidth)
-                else column
-            let xOf t = if standsOnRight then column - widthOf t else 1
+            let column = max 1 bounds.size.width
+            // Horizontal rows keep the same width when pinned; pin state is shown by the button.
+            let x = 0
             let top = zorderCell.value.tryHead
-            let order = TabEdgeLayout.rowOrder top band
+            let order = TabEdgeLayout.rowOrder zorderCell.value.list band dragGroup
             let startOf t = starts |> List.tryPick (fun (u, s) -> if u = t then Some(s) else None)
             let placed =
                 order |> List.choose (fun t ->
@@ -913,8 +947,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                               appearance = a
                               buttonModes = buttonModesCell.value
                               displayInfo = this.acrossInfo scale t textFont
-                              size = Sz(widthOf t, rows.length)
-                              onlyIcon = pinned t && a.tabPinnedTabWidthIcon
+                              size = Sz(column, rows.length)
                               isPinned = pinned t
                               standsOnRight = standsOnRight
                               band = rows.band
@@ -922,23 +955,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                               hover = (match hoverCell.value with Some(h, part) when h = t -> Some(part) | _ -> None)
                               captured = (match capturedCell.value with Some(h, part) when h = t -> Some(part) | _ -> None)
                               scale = scale }
-                        t, xOf t, viewStart + start - scroll, sprite))
+                        t, x, viewStart + start - scroll, sprite))
             let before, after = TabEdgeLayout.hiddenRows rows count viewLength scroll
             Some({ rows = rows; viewStart = viewStart; viewLength = viewLength; scroll = scroll; button = button
                    count = count; stripWidth = bounds.size.width; stripLength = stripLength; layoutLength = layoutLength
                    placed = placed; hiddenBefore = before; hiddenAfter = after })
         | _ -> None
-
-    // The row under a point of a strip written across (the strip window's
-    // coordinates): rows only inside the view, and only across their own
-    // width.
-    member private this.acrossHit (layout: AcrossLayout) (pt: Pt) : (Tab * int * int * AcrossTabSprite<Tab>) option =
-        if pt.y < layout.viewStart || pt.y >= layout.viewStart + layout.viewLength then None
-        else
-            let starts = layout.placed |> List.map (fun (t, _, y, _) -> t, y)
-            TabEdgeLayout.rowAt layout.rows starts pt.y
-            |> Option.bind (fun tab ->
-                layout.placed |> List.tryFind (fun (t, x, _, s) -> t = tab && pt.x >= x && pt.x < x + s.size.width))
 
     /// A scroll button under a point of a strip written across: Some(true)
     /// for the one towards the first row.
@@ -1077,8 +1099,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             if layout.viewStart > 0 then
                 let a = match edgePlacementCell.value.TryFind(edge) with Some((_, a, _)) -> a | None -> this.appearance
                 let scale = match edgePlacementCell.value.TryFind(edge) with Some((_, _, s)) -> s | None -> this.scale
-                let column = max 1 (layout.stripWidth - 1)
-                let x = if (edge = TabEdges.Edge.Left) <> (this.edgeDraw edge).inside then 0 else 1
+                let column = max 1 layout.stripWidth
+                let x = 0
                 let drawButton (y: int) (towardsFirst: bool) (hidden: int) =
                     let rect = Rectangle(x, y, column - 1, max 1 (layout.button - 1))
                     use fill = new SolidBrush(a.tabInactiveTabColor)
@@ -1110,9 +1132,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         let pt = this.presentedPoint edge pt
         if TabEdges.runsHorizontally edge then (this.tsOn edge).tryHit(pt)
         elif this.isAcross edge then
-            this.acrossOf edge
-            |> Option.bind (fun layout -> this.acrossHit layout pt)
-            |> Option.map (fun (tab, x, y, sprite) -> tab, sprite.partAt(Pt(pt.x - x, pt.y - y)))
+            this.acrossOf edge |> Option.bind (fun layout -> layout.partAt pt)
         else
             let ts = this.tsOn edge
             let clockwise = this.sideTextClockwise edge
@@ -1132,7 +1152,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.tooltipHitOn (edge: TabEdges.Edge) (pt: Pt) : Option<Tab> =
         let pt = this.presentedPoint edge pt
         if this.isAcross edge then
-            this.acrossOf edge |> Option.bind (fun layout -> this.acrossHit layout pt) |> Option.map (fun (tab, _, _, _) -> tab)
+            this.acrossOf edge |> Option.bind (fun layout -> layout.tryHit pt) |> Option.map (fun (tab, _, _, _) -> tab)
         else
             let ts = this.tsOn edge
             let logical =
@@ -2604,16 +2624,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         TabEdges.defaultAlignment edge defaultAlignmentCell.value edgeDefaultAlignments.value
 
     member this.getTabAlign(tab) =
-        let alignment =
-            match tabAlignmentCell.value.tryFind(tab) with
-            | Some(a) -> a
-            | None -> this.defaultAlignOn (this.edgeOf tab)
-        TabEdges.pinnedRowAlignment (this.isAcross (this.edgeOf tab))
-            (pinnedTabsCell.value.contains(tab)) TopLeft alignment
-
-    // Transfers preserve the logical alignment, including pins displayed in a single row.
-    member this.getTabAlignmentForTransfer(tab) =
-        tabAlignmentCell.value.tryFind(tab) |> Option.defaultValue (this.defaultAlignOn (this.edgeOf tab))
+        match tabAlignmentCell.value.tryFind(tab) with
+        | Some(a) -> a
+        | None -> this.defaultAlignOn (this.edgeOf tab)
 
     // The tab's own alignment, None when it simply follows the group's side:
     // the distinction the global per-window map keeps, for another group of
