@@ -416,7 +416,7 @@ Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray 
 
 The top tabs page has these rows:
 
-- **Tab style**: Choose from eleven shapes - S-curve, rounded vertical line, strong rounded vertical line, angular vertical line, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, strong rounded rectangle and angular rectangle. The tabs change at once, without restarting. The default is the rounded vertical line.
+- **Tab style**: Choose from eleven shapes - S-curve, rounded tab, extra rounded tab, cut-corner tab, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, extra rounded rectangle and cut-corner rectangle. The tabs change at once, without restarting. The default is the rounded tab.
 - **Tab size**: Set height and maximum width side by side, each with its own reset button.
 - **Pinned Tab Width**, **Tab Overlap**, **Distance from edge for outer tabs** and **Distance from edge for inner tabs** (left and right): Set as numbers. The button to the right of each puts back its default.
 - **Tab alignment**: Choose the default left or right alignment.

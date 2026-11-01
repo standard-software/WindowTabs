@@ -258,14 +258,13 @@ module EdgeRows =
     let setNumber (n: NumericUpDown) (value: int) =
         n.Value <- decimal (max (int n.Minimum) (min (int n.Maximum) value))
 
-    /// Caption key of each tab shape. The three lines are named across on a
-    /// left or right strip written across (8), where they lie across it.
-    let shapeCaption (across: bool) (shape: string) =
+    /// Caption key of each tab shape, independent of text orientation.
+    let shapeCaption (shape: string) =
         match TabShape.normalize shape with
-        | TabShape.strong -> if across then "TabShapeStrongHorizontal" else "TabShapeStrong"
+        | TabShape.strong -> "TabShapeStrong"
         | TabShape.slant -> "TabShapeSlant"
-        | TabShape.rounded -> if across then "TabShapeRoundedHorizontal" else "TabShapeRounded"
-        | TabShape.angular -> if across then "TabShapeAngularHorizontal" else "TabShapeAngular"
+        | TabShape.rounded -> "TabShapeRounded"
+        | TabShape.angular -> "TabShapeAngular"
         | TabShape.cutLeft -> "TabShapeCutLeft"
         | TabShape.cutRight -> "TabShapeCutRight"
         | TabShape.rectangle -> "TabShapeRectangle"
@@ -633,8 +632,8 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             if sideways then textCombo.SelectedIndex <- if orientation = Some TabEdges.SideText.Horizontal then 1 else 0
             listedShapes <- TabEdgeSettings.shapesFor orientation |> List.map (fun s -> orientation, s)
             shapeCombo.Items.Clear()
-            for direction, s in listedShapes do
-                shapeCombo.Items.Add(text (EdgeRows.shapeCaption (direction = Some TabEdges.SideText.Horizontal) s)) |> ignore
+            for _, s in listedShapes do
+                shapeCombo.Items.Add(text (EdgeRows.shapeCaption s)) |> ignore
             let horizontal = sideways && orientation = Some TabEdges.SideText.Horizontal
             textBottomCombo.Visible <- not horizontal
             if pinnedRow >= 0 then
