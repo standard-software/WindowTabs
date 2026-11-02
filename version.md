@@ -23,7 +23,6 @@
   - Detached tabs stay on their edge, one at a time or several together.
   - Moving or snapping a detached window leaves room for the edges it keeps.
 - Fixed a tab of a detached group sometimes not being drawn.
-
 - Dark Mono 3 and Night Horizon are added to the color themes.
 - The tab style names now say what each shape looks like.
 

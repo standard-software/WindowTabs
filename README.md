@@ -1,17 +1,15 @@
-<img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />
-
-# WindowTabs <br>(Standard-Software edition)
+# <img src="README_Image/LargeIcon.png" width="60" height="60" alt="icon" align="left" />WindowTabs <br>(Standard-Software edition)
 
 **Language:** [Japanese/日本語](README_Japanese.md)
 
-
 ![Tabs](README_Image/Tabs.png)
 
+https://github.com/user-attachments/assets/ecd3a032-ba45-427c-9eef-5b80f7664a28
 
-WindowTabs is a tool that extends Windows productivity by letting you manage any window through a tabbed user interface (UI).
+WindowTabs brings windows from different apps together in a tabbed interface on Windows.
 
 <details>
-<summary>Read more about WindowTabs</summary>
+<summary>Read more about WindowTabs and the goals behind its development</summary>
 
 ### I'd like WindowTabs to greatly enhance how you use Windows
 
@@ -27,22 +25,29 @@ As you can feel from using a browser every day, a tabbed interface is intuitive 
 
 WindowTabs brings that same ease of use to windows across your desktop. Once you try it, I think you'll appreciate how much it helps you get work done. Switching between windows takes less effort, leaving you free to focus on the task at hand.
 
-### Microsoft once prototyped this, but the project was abandoned
+### Microsoft once prototyped a Windows-wide tab UI, but the project was abandoned
 
 Microsoft once aimed to bring tabbed management to all windows through an experimental Windows feature called **Sets**.
-It was discontinued. I don't know the exact reason, but my guess is that integrating it into the OS while preserving backward compatibility proved too difficult, and the benefits were judged too small for the complexity.
+It was discontinued. Perhaps integrating it into the OS while preserving backward compatibility proved too difficult, causing errors and bugs, and the benefits were judged too small for the complexity.
 
 Although the project fell through, I think its vision was wonderful.
-Using WindowTabs every day shows me just how comfortable switching windows can be, and how much it helps me work efficiently.
 WindowTabs provides an excellent tabbed interface for almost any window without being built into the OS itself.
+Using WindowTabs every day shows me just how comfortable switching and managing windows can be, and how much it helps me work efficiently.
+
+### What's enhanced in the Standard-Software edition
+
+In addition to managing windows with tabs on their top, bottom, left, and right edges, the Standard-Software edition of WindowTabs lets you snap windows to any screen edge or move them to another display in one action. Its snapping features go beyond those built into Windows. There is no need for long-distance dragging and dropping, which is particularly useful with multiple displays.
 
 ### About me (satoshi-yamamoto, the author of the Standard-Software edition)
 
-I've been a paid user of WindowTabs since before it was open-sourced, and I've always loved its tabbed interface. I've long wanted more people to experience this way of working, and I've tried many similar tools over the years.
+I've been a paid user of WindowTabs since before it was open-sourced, and I've always loved its tabbed interface. Having used many similar tools, I know this way of working thoroughly, and I think I know tabbed interfaces very well.
 
-So I'm delighted to have the opportunity to improve WindowTabs as open source and share it with others.
+I've long hoped this way of working would reach more people and help everyone work more efficiently.
+So I'm delighted to have the opportunity to improve WindowTabs as open source and share my ideas about how it should work and feel with others.
 
 I keep improving WindowTabs little by little, asking myself: "How can I make working with windows more efficient for more people — in other words, how can I help more people get their work done faster?"
+
+So far, I'm happy to have built and shared something with a wide range of features that work reliably.
 
 ### How to use it
 
@@ -53,13 +58,7 @@ Everyone uses Windows differently, so I imagine each person will find their own 
 
 I (satoshi-yamamoto) am a software developer; in my day job I build web applications. I've built things like a browser-based drawing tool, an in-browser car navigation app, and business chat tools.
 
-I group multiple VSCode, Visual Studio, Terminal, WinMerge, file explorer, image viewer, Excel, and browser windows with WindowTabs, snapping them to the left and right of each display. Even apps with their own tabs can be managed at the window level, creating multiple levels of tab organization. Giving tabs from the same project matching colors lets me manage a great many windows with little effort.
-
-### What's enhanced in the Standard-Software edition
-
-In addition to tabbed window management, the Standard-Software edition of WindowTabs lets you snap windows to any screen edge or move them to another display in one action. Its snapping features go beyond those built into Windows, letting you change window layouts without dragging and dropping. This is particularly useful with multiple displays.
-
-Tabs can sit not only on the top of a window but also on its left, right, or bottom edge. Each edge can have its own tab style and size.
+I group multiple VSCode, Visual Studio, Terminal, WinMerge, file explorer, image viewer, Excel, and browser windows with WindowTabs, snapping them to the left and right of each display. Even apps with their own tabs can be managed at the window level, creating multiple levels of tab organization. This lets me manage a great many windows with little effort.
 
 ### I'd be truly happy if you'd recommend it to people around you
 
@@ -71,98 +70,168 @@ If you have any feedback, I'd love to hear it on GitHub Issues.
 
 </details>
 
-<br />
-
-This Standard-Software edition is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
-
-<details>
-<summary>Read more about the project history and the lineage of forks</summary>
-
-WindowTabs was originally developed by Maurice Flanagan in 2009 and was offered as both free and paid editions at the time. The original author has since open-sourced it.
-
-- https://github.com/mauricef/WindowTabs (404 Not Found)
-
-Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
-
-- https://github.com/redgis/WindowTabs
-
-Mr./Ms. medlir hosts the source code.
-- https://github.com/medlir/WindowTabs
-
-Looking at the commit log, Mossy Flanagan made the early commits.
-- https://github.com/mossy-xyz
-
-Mr./Ms. payaneco forked medlir/WindowTabs's source code.
-- https://github.com/payaneco/WindowTabs
-- https://github.com/payaneco/WindowTabs/network/members
-- https://ja.stackoverflow.com/a/53822
-
-Mr./Ms. leafOfTree also created a fork with various improvements:
-- https://github.com/leafOfTree/WindowTabs
-- https://github.com/leafOfTree/WindowTabs/network/members
-
-</details>
-
-## Index
-- [Version](#version)
-- [Download](#download)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Features](#features)
-- [Settings](#settings)
-- [Building from Source](#building-from-source)
-- [Links](#links)
-- [License](#license)
-- [Comments](#comments)
-
-## Version
-
-Latest version: **ss_2026.11.02**
-
-See [version.md](version.md) for details.
-
-
 ## Download
 
-**Supported OS:** Windows 10, Windows 11
+Supported: Windows 10 / Windows 11  
+Latest version: ss_2026.11.02 · [Release notes version.md](version.md)
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 
-Download from the [releases](https://github.com/standard-software/WindowTabs/releases) page.
+[Download a release](https://github.com/standard-software/WindowTabs/releases)
 
-## Installation
+- **WtSetup.msi**: follow the installer (default: `Program Files\WindowTabs`).
+- **WindowTabs.zip**: extract and run `WindowTabs.exe`. For settings you can carry with you, see [Settings files and portable use](#settings-files-and-portable-use).
 
-- **WtSetup.msi** - installer. Run it and follow the wizard (default: `Program Files\WindowTabs`)
-- **WindowTabs.zip** - portable. Extract it anywhere and run `WindowTabs.exe`
+## Getting started
 
+Right-click the tray icon → Settings → Programs to choose which apps get tabs. Right-click a tab for its commands.
 
-## Usage
+Auto Grouping brings windows of the same app together; shared categories (1–10) group different apps. Enabling either also groups open windows; tabs you detach afterwards stay separate.
 
-- Right-click the tray icon, open "Settings", and choose the programs to tab in the "Programs" tab.
-- Drag and drop tabs to group them, and right-click for further actions.
+## Working with tabs
 
-![Task Tray Menu](README_Image/TaskTrayMenuImage.png)
+### Select and move several tabs
 
-![Settings Programs](README_Image/SettingsPrograms.png)
+https://github.com/user-attachments/assets/104a1a80-aa9f-4d5a-aaaa-2410aa078754
 
-## Features
+Ctrl-click to select or deselect; Shift-click to select a range. Menu commands also apply to the selection.
 
-### Multi-Select Tabs
+### Detach and arrange tabs
 
-- Ctrl + click to add to / remove from the selection, Shift + click to select the range from the active tab.
-- While tabs are selected, the context menu and drag operations act on the whole selection.
+| Before | After |
+| --- | --- |
+| ![One group before detaching](README_Image/ShotDetachBefore.png) | ![A second group detached to the bottom right](README_Image/ShotDetachAfter.png) |
 
-### Tab Drag and Drop
-- Reorder within the same group (multi-select: the contiguous selected range moves together)
-- Split into a new window, or link to another group (multi-select: the whole selection travels together)
+Detach selected tabs and place them at a chosen position. Drag tabs to reorder, detach, or join another group.
 
-### Tabs on Any Edge
+### Switch between tabs on all four edges
 
-- Tabs can sit on the top, left, right, or bottom edge of a window. Choose which edges to use on each edge's page of the Tabs tab in the settings.
-- Use "Tab Direction" in the right-click menu to move tabs to another edge. You can also drag a tab to another edge over a window of its own group.
-- Each edge has its own settings for tab style, size, alignment, and so on. Tabs on the left and right edges can show their text vertically or horizontally.
+https://github.com/user-attachments/assets/226afe92-2378-4ce3-b3ba-4b6ee5ac2e68
 
-### Tab Context Menu
+Switch apps using tabs on any of the four edges. Choose which edges to use in Settings → Tabs.
+
+### Snap windows into position
+
+| Choose from the menu | Result |
+| --- | --- |
+| ![Snap size and position menu](README_Image/ShotSnapMenu.png) | ![Window snapped to the left half](README_Image/ShotSnapResult.png) |
+
+Place windows at screen edges or corners, choose a percentage size, or move them to another display. Ordinary snaps preserve size; percentage snaps resize relative to the display.
+
+### Join tab groups
+
+| Before | After |
+| --- | --- |
+| ![Two groups before joining](README_Image/ShotLinkBefore.png) | ![The groups joined into one](README_Image/ShotLinkAfter.png) |
+
+Join an entire group to another group, including one on another virtual desktop.
+
+### Align tabs
+
+https://github.com/user-attachments/assets/83a64add-0c83-43a0-8b7e-147f94d6adfd
+
+Align individual tabs, selected tabs, or all tabs on an edge. Left and right edges use top and bottom alignment.
+
+### Move tabs to another edge
+
+https://github.com/user-attachments/assets/be889145-0cd2-4b72-9f8a-114b7576691a
+
+Move individual tabs, selected tabs, all tabs on an edge, or a whole group to an enabled edge. Alignment and pinning are preserved.
+
+### Identify tabs by color
+
+https://github.com/user-attachments/assets/2747a475-5491-42fb-9320-fb13019aeac0
+
+![Tab color menu](README_Image/PinnedColorTab.png)
+
+Color-code tabs with backgrounds, underlines, or borders.
+
+### More tab commands
+
+Pin tabs to show just an icon or use a fixed width. Right-click to rename tabs, launch another instance of the same app, or close tabs on an edge or throughout the group.
+
+## Customize appearance and controls
+
+### Style and size for each edge
+
+https://github.com/user-attachments/assets/e99d4296-6372-4878-aace-21b669d541ff
+
+Set styles, sizes, and alignment separately for each edge. Side tabs support vertical or horizontal text, and changes apply without restarting.
+
+### Dark mode and color themes
+
+![Color settings](README_Image/SettingsColor.png)
+
+Edit and save themes, and share them through the clipboard. You can also submit themes through [Issues](https://github.com/standard-software/WindowTabs/issues).
+
+### Buttons and movement
+
+![Interaction settings](README_Image/SettingsInteraction.png)
+
+The movement lock blocks title-bar dragging and resizing from the top; resizing from the sides and bottom remains available.
+
+### Startup and tab visibility
+
+![General settings](README_Image/SettingsGeneral.png)
+
+Fade inactive groups, or hide tabs while a window is fullscreen or being moved.
+
+### Keyboard shortcuts
+
+![Shortcut key settings](README_Image/SettingsShortcutKeys.png)
+
+Numbered tab shortcuts are active only while working in a target window.
+
+## Saving and restoring
+
+Tab groups are saved every 10 seconds and restored after WindowTabs or Windows restarts. Workspaces let you save and recall layouts, decorations, pins, names, and alignment.
+
+<details>
+<summary>Restore behavior and virtual desktops</summary>
+
+- Reopened windows are matched by app and title. If a title is not yet final, restoration waits for it. Records are kept for 30 days for unopened windows and 8 days for manually closed tabs.
+- A group spans virtual desktops. Tabs on another desktop are dimmed; clicking one switches desktops. Groups with no windows on the current desktop are hidden.
+- New workspaces can save tabs on the current desktop or all desktops. Restoring does not move windows between desktops. Joining groups does not switch desktops either.
+- If WindowTabs becomes unresponsive, Watchdog restarts it and restores tab groups.
+
+</details>
+
+## Settings files and portable use
+
+![System settings](README_Image/SettingsSystem.png)
+
+Settings are saved in `%APPDATA%\WindowTabs\WindowTabsSettings.json`. If absent, WindowTabs uses `WindowTabsSettings.json` beside the exe. The System tab shows the active file and lets you copy or move it to the exe folder, or return it to APPDATA.
+
+<details>
+<summary>Backups, overrides, and migration</summary>
+
+- The latest 10 backups are kept in `%APPDATA%\WindowTabs\`, including backups of portable settings.
+- Bundled `Settings\` files are overwritten on updates. Place same-named files in `%APPDATA%\WindowTabs\Settings\` for per-key overrides.
+- `VersionFolder.json`: for listed executables, ignores path folders containing only digits and dots so updates retain app settings. Store apps are handled automatically.
+- `FramelessWindow.json`: include apps with custom frames using `"example.exe": true`. Specify invisible margins as `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` (pixels at 100% scaling).
+- Override translations by putting only changed keys in same-named files under `Settings\Language\`. To add a language, provide its file and `FileList.json`. `FileList.json` replaces the entire language list.
+- Old `WindowTabsSettings.txt` files are copied to JSON on first launch. The old file remains but receives no later changes. Move edits from the old `Language\` folder to the user override folder above.
+- Old `Window_Margin.json` / `WindowMargin.json` files are no longer needed. MSI removes old files beside the exe; ZIP leaves them. Files in APPDATA remain. Leftover files are harmless.
+
+</details>
+
+## Compatibility and everyday controls
+
+- Supports multiple displays with different scaling levels. UWP apps are treated together as one executable for tabs and auto grouping.
+- Use the tray menu to change language, temporarily disable tabs, or check for updates. Language changes need no restart.
+- Updates are checked only when requested. Updating launches the MSI installer or replaces the ZIP executable and restarts it.
+
+<details>
+<summary>Supported languages</summary>
+
+English, Japanese (including Kansai and Tohoku dialect files), Chinese (Simplified and Traditional), Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian.
+
+</details>
+
+## Tab Context Menu
+
+<details>
+<summary>Details</summary>
 
 ```
 Target tab : (tab name) : (N)-tab group — a display-only caption showing which tab the menu acts on and the size of its tab group (not selectable)
@@ -253,230 +322,46 @@ System
 Settings...
 ```
 
-The close-other command affects only the clicked edge and shows the number of tabs to close; it is disabled at zero. When all tabs share one edge, its caption omits the edge name. The edge and group close-all commands also show their target counts. The edge-specific close command appears before "Close all tabs" and closes only tabs on the clicked edge, using the same close handling. It is hidden when all tabs are on that edge. Edge-specific pin commands follow the same rule. Bulk alignment and edge-specific direction commands remain visible; the group-wide direction command is disabled when all tabs share one edge.
+In multi-select, per-tab items show "Selected {N} tabs...". When the tab you right-clicked is not in the selection, they read "Selected {N} tabs + target tab...".
 
-In multi-select, per-tab items show "Selected {N} tabs..." and operate on the active tab plus the selected tabs. When the tab you right-clicked is not in the selection they read "Selected {N} tabs + target tab...", and the close-other command becomes "Close {N} unselected tabs". Items that require a single target tab are disabled.
+</details>
 
-### New Tab (New Launch)
+## Acknowledgments
 
-- Launch the same exe, placing it to the right of the tab, in a new window at a chosen position, or in another tab group.
+This Standard-Software edition is forked from payaneco's repository and incorporates some code implementations from leafOfTree's version. Maintained by [Satoshi Yamamoto (@standard-software)](https://github.com/standard-software).
 
-![Popup Menu](README_Image/PopupMenu.png)
+<details>
+<summary>Read more about the project history and the lineage of forks</summary>
 
-### Position Move
+WindowTabs was originally developed by Maurice Flanagan in 2009 and was offered as both free and paid editions at the time. The original author has since open-sourced it.
 
-- Snap moves the group to a screen edge keeping its width / height; percentage snaps resize it relative to the display. Moves to edges and corners, and maximizing across a display or the desktop, are there too.
-- Size selects a common resolution in physical pixels for the group's visible window frame; sizes larger than the available work area are disabled.
-- On multi-monitor setups the position menus appear once per display, e.g. "Position Move Display Left". The display the window sits on is marked "(here)"; the others start with a "Same position on this display" item.
+- https://github.com/mauricef/WindowTabs (404 Not Found)
 
-![Popup Menu Move Other](README_Image/PopupMenuMoveOther.png)
+Mr./Ms. redgis forked it and migrated to VS2017 / .NET 4.0.
 
-### Link this group to another tab group
+- https://github.com/redgis/WindowTabs
 
-- Move all tabs of the current group into another tab group.
-- The tab groups are listed left to right by position, each with its display's name and number of tabs.
-- Tab groups on other virtual desktops can be chosen too, under an item per desktop ([Virtual Desktop Support](#virtual-desktop-support))
+Mr./Ms. medlir hosts the source code.
+- https://github.com/medlir/WindowTabs
 
-![Link this group to another tab group](README_Image/MoveTabGroupToGroup.png)
+Looking at the commit log, Mossy Flanagan made the early commits.
+- https://github.com/mossy-xyz
 
-### Detach Tab
+Mr./Ms. payaneco forked medlir/WindowTabs's source code.
+- https://github.com/payaneco/WindowTabs
+- https://github.com/payaneco/WindowTabs/network/members
+- https://ja.stackoverflow.com/a/53822
 
-- Move a detached tab to a chosen position, or link it to another tab group.
-- To detach several at once, use [Multi-Select Tabs](#multi-select-tabs) first, then "Detach {N} selected tabs".
+Mr./Ms. leafOfTree also created a fork with various improvements:
+- https://github.com/leafOfTree/WindowTabs
+- https://github.com/leafOfTree/WindowTabs/network/members
 
-### Close Tab
-
-![Popup Menu Close Tab](README_Image/PopupMenuCloseTab.png)
-
-### Tab Alignment
-
-- Align tabs left / right individually, as a selection, or all at once on the clicked edge. The bulk commands name the clicked edge, such as top tabs or left tabs. On left and right edges, alignment is top / bottom.
-- Dragging a tab changes its alignment too.
-- With the "Tab alignment on snap and move" setting, tabs aligned alike on each edge realign along that edge when snapped or moved: top/bottom tabs follow left/right, and left/right tabs follow top/bottom, including corners.
-
-### Tab Direction
-
-- Move this tab / selected tabs, all tabs on the clicked edge, or all tabs in the group to another enabled edge. When all tabs share one edge, the group-wide command is disabled.
-- The menu is hidden when only one edge is enabled. All four destinations remain listed; disabled edges and destinations already containing every target tab are grayed out.
-- Moving between edges preserves alignment and pin state: left alignment maps to top, and right alignment maps to bottom, and vice versa. Within each alignment/pin zone, moved tabs keep their relative order and follow existing destination tabs.
-
-### Pinned Tabs
-
-- Display pinned tabs as icons only, or at a specified width with a pin button.
-- Pin or unpin this tab / selected tabs, all tabs on the named edge, or all tabs in the group. When every tab is on the same edge, the duplicate edge commands are hidden. Commands that would change nothing are disabled.
-- Multi-select keeps the existing active, selected, and right-clicked targets. Its label shows the selected count, with the target tab listed separately when added.
-- On every edge, pinned tabs come first within each alignment zone, followed by unpinned tabs; existing ordering rules are preserved.
-
-![Pinned Tabs Icon](README_Image/PinnedTabIcon.png)
-![Pinned Tabs Width](README_Image/PinnedTabWidth.png)
-
-### Tab Color
-
-- Color-code tabs with backgrounds, underlines, or borders.
-
-![Pinned Tab Color Tab](README_Image/PinnedColorTab.png)
-
-### Dark Mode / Light Mode
-
-- The tab and tray-icon context menus, and the settings dialog, can be switched to dark mode.
-
-### Multi-Display and DPI Support
-
-- Tabs, settings and confirmation dialogs adapt when moved between displays with different DPI scales. Sharp rendering at 125% / 150% / 175% and other scales, with hover and click positions matching what is drawn
-- A window dropped on a display is kept from growing past it
-
-### Virtual Desktop Support
-
-- A tab group is one group across virtual desktops. The tab of a window on another desktop is drawn at half opacity
-- Clicking such a tab switches to its desktop
-- A tab group with no window on the current desktop is not shown
-- The "Link to another tab group" menus also list the tab groups of other desktops, per desktop. Linking does not switch desktops
-- Tab group state is restored across all virtual desktops on WindowTabs restart
-
-### UWP Application Support
-
-- UWP (Universal Windows Platform) applications are collectively treated as a single exe, supporting tabbing and auto-grouping
-
-### Multi-Language Support
-
-- English, Japanese, Chinese Simplified, Chinese Traditional, Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese and Indonesian. Japanese Kansai and Tohoku dialect files are included
-- Switch languages from the tray menu without restarting
-
-### Settings Files
-
-- Your settings are saved in `WindowTabsSettings.json`
-    - WindowTabs uses `%APPDATA%\WindowTabs\WindowTabsSettings.json`. When there is none, it uses `WindowTabsSettings.json` beside `WindowTabs.exe`, so the exe folder alone can be carried around as a portable copy
-    - The System page of the settings dialog shows the file in use, and copies or moves it to the exe folder, or moves it back to APPDATA
-    - Backups are kept in `%APPDATA%\WindowTabs\` as `WindowTabsSettings.json.bak.<date>_<time>`, the newest 10. The backups of a settings file in the exe folder are kept there too, as `WindowTabsSettings.portable-<id>.json.bak.<date>_<time>`, so the exe folder holds only the settings file itself
-- `Settings\` beside `WindowTabs.exe` holds the defaults
-    - `Settings\VersionFolder.json` - treats an application whose folder name changes with every update as one application
-        - Per-application settings are stored against the path of the exe, so an application with a version-number folder in its path loses them every time it is updated.
-        - To deal with that, name the exe here, and folders made only of digits and dots are ignored for it
-        - Store applications carry the version in their folder name too, but are recognised as one application without being listed here
-    - `Settings\FramelessWindow.json` - gives tabs to the windows of applications that draw their own title bar and frame
-        - Applications such as those built with GTK 3 draw the title bar, the frame and the minimize and maximize buttons themselves. To Windows such a window has no decoration at all and cannot be told from a splash screen or a popup, so it normally gets no tab
-        - Only the applications whose exe name is written here get tabs on such windows. Write `"example.exe": true`
-        - These applications may also draw their shadow inside the window, which leaves the tab apart from the visible window. Write the size of that invisible margin as `"example.exe": { "left": 26, "top": 23, "right": 26, "bottom": 29 }` and the tab and the positions within a tab group follow the visible window. The values are pixels at 100% scale
-    - `Settings\Language\FileList.json` and `Settings\Language\<language>.json` - the language files
-- Those files are replaced by every upgrade. To change a translation yourself, put a file of the same name under `%APPDATA%\WindowTabs\Settings\`; it is laid over the shipped one entry by entry
-- To add a language, put `MyLanguage.json` and a `FileList.json` that lists it under `%APPDATA%\WindowTabs\Settings\Language`
-  - To correct a shipped string, put a file of the same name there holding only the keys to change; every other string stays as shipped, and strings added by a later version still arrive
-  - `FileList.json` replaces the shipped list whole, so it can also hide languages from the tray menu
-
-### Settings files that are no longer read
-
-- `WindowTabsSettings.txt` (up to ss_2026.10.17): on the first start of a newer version, its settings are copied into `WindowTabsSettings.json`. The `.txt` is left as it was, so an older version still starts with it, but changes made after the copy do not reach it
-- Language files: up to ss_2026.09.02 they sat in `Language\`, not `Settings\Language\`, and were edited in place. If you edited them, move your copies to `%APPDATA%\WindowTabs\Settings\Language\`
-- Margins: WindowTabs now finds the frame windows an application draws around its own window, so nothing has to be set. These files are no longer read
-    - `Settings\Window_Margin.json` (up to ss_2026.09.02)
-    - `Settings\WindowMargin.json` and `%APPDATA%\WindowTabs\Settings\WindowMargin.json` (up to ss_2026.10.03)
-- Old files next to `WindowTabs.exe` are removed by the MSI and left in place by the zip. Files you put under `%APPDATA%` stay. Either way they do no harm
-
-### Check for Updates
-
-- "Check for Updates" in the tray menu checks the latest GitHub release. It runs only when you click it; WindowTabs never checks by itself.
-- If a newer version exists, it can be installed on the spot: the MSI install runs the installer, the zip install replaces the executable and restarts.
-
-### Disable Feature
-
-- All tab functionality can be temporarily disabled without quitting WindowTabs. Useful when using an app in full-screen mode.
-
-### Tab Group Persistence
-
-- Tab group configuration is saved every 10 seconds, and survives a restart, being disabled, and a force-quit.
-- Groups come back after a Windows restart or a logoff too. Even with new window handles, windows are recognised again by their application and their title.
-- A tab's name, pin, colours, left/right alignment and its place in the group come back with its window. A window whose title has not settled yet - Excel before a workbook has loaded, say - takes its place once its real title appears.
-- What was saved for a window that has not been reopened is kept for thirty days; for a tab closed by hand, eight.
-
-### Watchdog Auto-Restart
-
-- If WindowTabs ever becomes unresponsive, a watchdog detects the frozen state and restarts it; tab groups are preserved and restored.
-- Earlier versions froze when the display configuration changed or the machine woke from sleep, which is what made this matter. Those are fixed, so the watchdog now remains only as a safety net.
-
-## Settings
-
-Right-click the tray icon, or right-click a tab, and choose "Settings...". Tray actions are disabled while a dialog is open, to prevent overlapping operations.
-
-### Programs Tab
-
-- **Tabs**: Enable/disable tabbing for each program
-- **Auto Grouping**: windows of the same program are automatically grouped into the same tab group
-- **Category 1-10**: programs in the same category are grouped together even across different applications. Put Word, Excel and PowerPoint in one category to gather the Office apps (the columns are only visible where Auto Grouping is on)
-- Switching Auto Grouping or a Category **on** also gathers the windows that are already open, as though each of them had just been opened. A tab pulled out by hand while the setting was already on stays out.
-- **Show all settings**: also shows settings for programs that are not running. **[x]** removes one
-
-![Settings Programs](README_Image/SettingsPrograms.png)
-
-### Tabs Tab
-
-- **Top tabs, Left tabs, Right tabs, Bottom tabs**: Each edge of the window has its own page.
-- **Use top tabs**, **Use left tabs**, **Use right tabs**, **Use bottom tabs**: The first row of each page turns that edge on or off. At least one edge must stay on.
-- **Apply the same settings to the bottom tabs**: Copies the top page settings to the bottom edge. Each page has a corresponding button for its opposite edge (top/bottom or left/right).
-- The left, right and bottom pages have the same settings as the top page: tab style, tab size (height and max width), pinned tab width, tab overlap, alignment, outer or inner tabs, the distances from the edge, and hiding inner tabs. Tabs on the left and right edges can show their text vertically or horizontally. By default, right-tab text reads from top to bottom, with the bottom of the letters facing the window. Left and right tabs also offer inward- or outward-facing text bottoms, independently; both default to inward.
-
-The top tabs page has these rows:
-
-- **Tab style**: Choose from eleven shapes - S-curve, rounded tab, extra rounded tab, cut-corner tab, trapezoid, right-cut trapezoid, left-cut trapezoid, rectangle, rounded rectangle, extra rounded rectangle and cut-corner rectangle. The tabs change at once, without restarting. The default is the rounded tab.
-- **Tab size**: Set height and maximum width side by side, each with its own reset button.
-- **Pinned Tab Width**, **Tab Overlap**, **Distance from edge for outer tabs** and **Distance from edge for inner tabs** (left and right): Set as numbers. The button to the right of each puts back its default.
-- **Tab alignment**: Choose the default left or right alignment.
-- **Outer or inner tabs**: choose "Outer, or inner when it would go off the display" (default) or "Always inner".
-- **Hide inner tabs**: Each edge page independently configures how to hide inner tabs and the hiding delay. Left, right and bottom tabs follow the current top-tab value for each of these settings until they have their own saved value.
-
-![Settings Appearance](README_Image/SettingsAppearance.png)
-![Settings Appearance Tab Shape](README_Image/SettingsAppearanceTabShape.png)
-
-### Color Tab
-
-- **Dark mode**: Switches the menus and the settings dialog to dark mode.
-- **Tab color theme**: Pick a preset, or edit the colors and save them under a name. The clipboard menu writes a theme out as text and reads one in.
-
-If you create a nice color theme, please share it at [GitHub Issues](https://github.com/standard-software/WindowTabs/issues). Your theme may be included as a preset theme.
-
-![Settings Color](README_Image/SettingsColor.png)
-![Settings AppearanceColorTheme](README_Image/SettingsAppearanceColorTheme.png)
-![Settings AppearanceColorThemeClipboard](README_Image/SettingsAppearanceColorThemeClipboard.png)
-
-### Interaction Tab
-
-- **Close button on tabs**: "Shown on the active tab only" (default), "Shown on all tabs", or "Hidden". Close buttons appear only on hover.
-- **Pin button on pinned tabs**: "Button on the active tab only, icon on the others" (default), "Button on all tabs", or "Icon only". An icon indicates a pinned tab and cannot be clicked.
-- Configure activation on mouse-over.
-- **Prevent moving windows and resizing them from the top**: stops a title-bar drag from moving the window, and the top edge from resizing it. The left, right and bottom edges resize as before. Changing this applies to every tab group.
-- **Tab alignment on snap and move**: snapping or moving realigns each uniformly aligned edge: top/bottom tabs follow the horizontal component, and left/right tabs follow the vertical component, including corners and x% snaps. "Don't change" is also available.
-- Choose whether snapping or moving leaves room for tabs. Moves reserve room on the occupied outside edges, including when the position is constrained by the work area. Inside-only edges reserve no room; a group with only top tabs keeps its usual top margin. Moves within the same display preserve the group size; moves to another display preserve its size relative to the work area. You can also choose whether detached tabs snap at the drop position.
-
-![Settings Interaction](README_Image/SettingsInteraction.png)
-
-### General Tab
-
-- Choose whether to run at startup and enable tabs for all programs by default.
-- **Combine taskbar buttons for tab groups**: each tab group gets one taskbar button instead of one per window (off by default). Windows shown on every desktop join the button of the desktop in view.
-- **Fade out tabs on inactive windows**: the tabs of a tab group you are not working in are drawn 50% transparent, and return to full strength while the mouse is over them. The tab of a window on another virtual desktop is 50% transparent as well, so a tab where both apply is fainter still (75% transparent).
-- Choose whether to hide tabs for full-screen windows and while a window is moving.
-
-![Settings General](README_Image/SettingsGeneral.png)
-
-### Shortcut Keys Tab
-
-- Configure keys for selecting tabs 1–9, switching to the next / previous tab, and adding a new tab. Numbered tabs use Ctrl+1–9, Alt+1–9 or individual assignments, and are active only while working in a target window.
-
-![Settings Shortcut Keys](README_Image/SettingsShortcutKeys.png)
-
-### Workspace Tab
-
-- Save and restore tab group layouts, including tab decorations, pins, names, and alignment.
-- [New] saves the tab groups and tabs on the current desktop. With several virtual desktops it offers "Tabs on the current desktop" and "Tabs on all desktops"
-- [Restore] brings back the tab groups and their positions. It does not move a window to another virtual desktop: each window joins its tab group on the desktop it is on now, and one that is on another desktop becomes a dimmed tab
-
-### System Tab
-
-- Shows the APPDATA folder, the exe folder and the settings file in use. [Open] opens a folder.
-- **Settings file operations**: [Copy to Exe folder], [Move to Exe folder] and [Return to APPDATA] make or undo a portable copy that runs from the exe folder alone. See [Settings Files](#settings-files).
-
-![Settings System](README_Image/SettingsSystem.png)
+</details>
 
 ## Building from Source
+
+<details>
+<summary>Details</summary>
 
 ### Prerequisites
 
@@ -489,7 +374,12 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 - Output: `exe\installer\WtSetup.msi`, `exe\zip\WindowTabs.zip`
 
+</details>
+
 ## Links
+
+<details>
+<summary>Details</summary>
 
 ### English Resources
 
@@ -515,6 +405,8 @@ If you create a nice color theme, please share it at [GitHub Issues](https://git
 
 - 全Windowタブ化。Setsで頓挫した夢の操作性をオープンソースのWindowTabsで再現する。 #Windows - Qiita  
   https://qiita.com/standard-software/items/dd25270fa3895365fced
+
+</details>
 
 ## License
 
