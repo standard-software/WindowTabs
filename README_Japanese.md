@@ -73,7 +73,7 @@ WindowTabs Standard-Software edition では、ウィンドウの上下左右に�
 ## ダウンロード
 
 対応: Windows 10 / Windows 11  
-最新バージョン: ss_2026.11.02 · [変更履歴 version_Japanese.md](version_Japanese.md)
+最新バージョン: ss_2026.11.02_next1 · [変更履歴 version_Japanese.md](version_Japanese.md)
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 

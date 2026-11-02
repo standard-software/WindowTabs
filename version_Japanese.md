@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.02_next1
+
 ## version ss_2026.11.02
 
 - 左右タブに横書きを追加
