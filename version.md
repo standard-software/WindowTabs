@@ -4,6 +4,9 @@
 
 ## version ss_2026.11.02_next1
 
+- Fixed an older window coming to the front instead of a new window
+  that was linked into a minimized group (#34).
+
 ## version ss_2026.11.02
 
 - Left and right tabs can be written horizontally.
