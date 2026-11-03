@@ -1965,7 +1965,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // generation left behind.
     /// Multi-edge keep-size snaps use the restored frame; top-only keeps its legacy input.
     static member snapSourceBounds(topOnly: bool, before: Rect, restored: Rect) =
-        if topOnly then before else restored
+        SnapGeometry.placementSourceBounds (SnapGeometry.GroupKeepSizeSnap topOnly) before restored
 
     member private this.getTabHeightForSnap() =
         try
@@ -2275,7 +2275,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // Always use the active window (topWindow) as the reference point
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
-        let bounds = window.bounds
+        let before = window.bounds
+        let bounds = SnapGeometry.placementSourceBounds SnapGeometry.GroupScreenMove before before
         let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
 
@@ -2398,12 +2399,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let x, y, width, height = reserved
         System.Drawing.Rectangle(x, y, width, height)
 
-    member private this.resizeTabGroup(targetScreen: MonitorScreen, width: int, height: int) =
-        let activeHwnd = group.topWindow
-        let window = os.windowFromHwnd(activeHwnd)
-        let margin = group.capturePlacementMargin(activeHwnd)
-        let bounds = FramePlacement.read activeHwnd margin (FramePlacement.restoredBounds window)
-        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
+    member private this.sizePlacementBounds(sourceScreen: MonitorScreen, targetScreen: MonitorScreen,
+                                             bounds: Rect, width: int, height: int) =
         let sameScreen = targetScreen.Equals(sourceScreen)
         let sourceArea = sourceScreen.WorkingArea
         let targetArea = targetScreen.WorkingArea
@@ -2412,8 +2409,61 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                            (targetArea.X, targetArea.Y, targetArea.Width, targetArea.Height)
                            (bounds.x, bounds.y)
         let area = this.sizeWorkArea(sourceScreen, targetScreen)
-        match SnapGeometry.sizeBounds (area.X, area.Y, area.Width, area.Height)
-                  position (width, height) with
+        SnapGeometry.sizeBounds (area.X, area.Y, area.Width, area.Height)
+                  position (width, height)
+
+    member private this.sizePlacementPreview(targetScreen: MonitorScreen, width: int, height: int) =
+        let seed = group.topWindow
+        let window = os.windowFromHwnd(seed)
+        let margin = group.snapshotPlacementMargin(seed)
+        let bounds = FramePlacement.read seed margin (FramePlacement.restoredBounds window)
+        this.sizePlacementBounds(this.getCurrentScreenForWindow(seed), targetScreen, bounds, width, height)
+        |> Option.map (fun (x, y, w, h) ->
+            FramePlacement.previewVisible seed margin false (Rect(Pt(x, y), Sz(w, h))))
+
+    // Native reads only: no restoration, placement, or cross-thread invocation.
+    member private this.currentPreviewFrame() =
+        match group.tryTopWindowThreadSafe with
+        | None -> None
+        | Some seed ->
+            let window = os.windowFromHwnd(seed)
+            if not window.isWindow || window.isMinimized || not window.isVisibleOnScreen ||
+               window.onCurrentVirtualDesktopOrNone = Some false || not group.isDesktopShownThreadSafe then None
+            else
+                let bounds = window.bounds
+                // The immutable settings snapshot is safe across group threads;
+                // visibleBodyBounds would populate the other group's mutable cache.
+                let insets =
+                    if FramelessWindowSettings.hasInsets() then FramelessWindowSettings.insetsForName window.pid.exeName
+                    else FramelessWindow.zeroInsets
+                let frame =
+                    if insets <> FramelessWindow.zeroInsets then
+                        let hidden = FramelessWindow.scaledInsets (int (WinUserApi.GetDpiForWindow(seed))) window.isMaximized insets
+                                     |> FramelessWindow.usableInsets bounds.width bounds.height
+                        let body = WindowFrameMargin.inset hidden
+                                       { x=bounds.x; y=bounds.y; width=bounds.width; height=bounds.height }
+                        Rect(Pt(body.x, body.y), Sz(body.width, body.height))
+                    else
+                        let mutable nativeFrame = RECT()
+                        if DwmApi.DwmGetWindowAttribute(seed, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                       &nativeFrame, 16) = 0 then
+                            Rect(Pt(nativeFrame.Left, nativeFrame.Top),
+                                 Sz(nativeFrame.Right - nativeFrame.Left, nativeFrame.Bottom - nativeFrame.Top))
+                        else bounds
+                let x, y, width, height = frame.x, frame.y, frame.width, frame.height
+                if width <= 0 || height <= 0 then None
+                elif this.getAllScreensSorted() |> Array.exists (fun screen ->
+                    screen.Bounds.IntersectsWith(System.Drawing.Rectangle(x, y, width, height))) then Some frame
+                else None
+
+    member private this.resizeTabGroup(targetScreen: MonitorScreen, width: int, height: int) =
+        let activeHwnd = group.topWindow
+        let window = os.windowFromHwnd(activeHwnd)
+        let margin = group.capturePlacementMargin(activeHwnd)
+        let bounds = FramePlacement.read activeHwnd margin (FramePlacement.restoredBounds window)
+        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
+        let sameScreen = targetScreen.Equals(sourceScreen)
+        match this.sizePlacementBounds(sourceScreen, targetScreen, bounds, width, height) with
         | None -> ()
         | Some(x, y, w, h) ->
             if window.isMinimized || window.isMaximized then
@@ -2644,6 +2694,65 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             group.recordMarginApplied(activeHwnd, finalBounds2.width, finalBounds2.height)
         this.applyGroupSnapRealign(snapDirection)
 
+    // Resolve geometry without restoring, detaching, or moving any window.
+    member private this.menuPlacementPreview(hwnd: IntPtr, detached: bool, target: MonitorScreen option,
+                                             position: string option, direction: string option, percent: int option) : Rect =
+        let targets = if detached then this.actionTargetsInVisualOrder(hwnd) else []
+        let seed = if detached then targets |> List.tryHead |> Option.defaultValue hwnd else group.topWindow
+        let edges = if detached then Some(targets |> List.map (fun h -> this.ts.edgeOf(Tab h))) else None
+        let window = os.windowFromHwnd(seed)
+        let source = this.getCurrentScreenForWindow(seed)
+        let area = (defaultArg target source).WorkingArea
+        let margin = group.snapshotPlacementMargin(seed)
+        let before = window.bounds
+        let restored = FramePlacement.restoredBounds window
+        let sourceKind = SnapGeometry.menuPlacementSource detached target.IsSome direction.IsSome percent.IsSome (this.useTopOnlySnap(true))
+        let raw = SnapGeometry.placementSourceBounds sourceKind before restored
+        let bounds =
+            if detached || direction.IsNone && target.IsNone then
+                (if direction.IsSome then FramePlacement.readSnap else FramePlacement.read) seed margin raw
+            else
+                // Same-screen keep-size snaps read margins before restoring;
+                // screen snaps read them after choosing their source bounds.
+                let top, left, right, bottom =
+                    match sourceKind with
+                    | SnapGeometry.GroupScreenMove -> group.snapshotWindowMargin(seed, before)
+                    | SnapGeometry.GroupKeepSizeSnap topOnly when target.IsNone || topOnly ->
+                        group.snapshotWindowMargin(seed, before)
+                    | _ when window.isMinimized || window.isMaximized ->
+                        margin (max 96 (int (Math.Round(Dpi.scaleForRect raw * 96.0))))
+                    | _ -> group.snapshotWindowMargin(seed, raw)
+                if direction.IsSome && not (group.hasWindowMarginSnapshot(seed)) then
+                    FramePlacement.readSnap seed (fun _ -> (0,0,0,0)) raw
+                else
+                    Rect((if direction.IsSome then raw.location else Pt(raw.x-left, raw.y-top)),
+                         Sz(raw.width+left+right, raw.height+top+bottom))
+        let width, height, x, y =
+            if target.IsNone then bounds.width, bounds.height, bounds.x, bounds.y
+            else
+                let original = source.WorkingArea
+                int(float area.Width * (float bounds.width / float original.Width)),
+                int(float area.Height * (float bounds.height / float original.Height)),
+                area.X + int(float area.Width * (float(bounds.x-original.X) / float original.Width)),
+                area.Y + int(float area.Height * (float(bounds.y-original.Y) / float original.Height))
+        let result =
+            match direction, percent with
+            | Some dir, Some pct ->
+                this.calculateSnapBoundsWithPercent(dir, pct, area, ofGroup = not detached, ?detachedEdges = edges)
+            | Some dir, None ->
+                this.calculateSnapBounds(dir, area, width, height, ofGroup = not detached, ?detachedEdges = edges)
+            | None, _ ->
+                let x, y = this.calculatePositionInWorkArea(position, area, x, y, width, height,
+                                                          ofGroup = not detached, ?detachedEdges = edges)
+                let x, y =
+                    if target.IsSome && (not detached || targets.Length <= 1) then
+                        this.clampPositionInWorkArea(position, area, x, y, width, height,
+                                                     ofGroup = not detached, ?detachedEdges = edges)
+                    else x, y
+                x, y, width, height
+        let x, y, width, height = result
+        FramePlacement.previewVisible seed margin direction.IsSome (Rect(Pt(x, y), Sz(width, height)))
+
     // `menuScale` is the DPI scale of the monitor the menu is anchored on,
     // decided once by the caller and used for every picture in the menu:
     // the per-group application icons and the hand-painted colour swatches.
@@ -2739,8 +2848,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 #if DEBUG
                         listedGroups <- listedGroups.Add info.hwnd
 #endif
-                        CmiRegular({ text = text; image = groupMenuIcon { info with firstTabIcon = big; firstTabIconSmall = small }
-                                     click = (fun () -> click decorator); flags = List2() }))
+                        CmiPreviewFrom({ text = text; image = groupMenuIcon { info with firstTabIcon = big; firstTabIconSmall = small }
+                                         click = (fun () -> click decorator); flags = List2() },
+                                       (fun () -> decorator.currentPreviewFrame()),
+                                       (fun () -> this.currentPreviewFrame())))
                 with _ -> None
             let views = infos |> List.map (fun info ->
                 let tabs = List.zip info.tabHwnds info.tabNames
@@ -2786,45 +2897,53 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 #endif
             hereItems @ (if parents.IsEmpty then [] else CmiSeparator :: parents)
 
+        let withPlacementPreview calculate item =
+            match item with
+            | CmiRegular regular -> CmiPreviewFrom(regular, calculate, fun () -> this.currentPreviewFrame())
+            | _ -> item
+        let preview detached target position direction percent () =
+            Some(this.menuPlacementPreview(hwnd, detached, target, position, direction, percent))
+        let noPreview _ _ _ _ () = None
+
         // Build the "Snap Percent" submenu (e.g. "Snap 90%") containing Left/Right/Top/Bottom,
         // corner variants, and Center options at the given percent.
-        let buildSnapPercentSubMenu (snapPercentFn: string -> int -> unit) (pct: int) =
+        let buildSnapPercentSubMenu preview (snapPercentFn: string -> int -> unit) (pct: int) =
             CmiPopUp({
                 text = String.Format(Localization.getString("SnapPercent"), pct)
                 image = None
                 items = List2([
-                    CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() })
+                    (CmiRegular({ text = Localization.getString("SnapLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapleft" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapleft") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapRightPercent"); image = None; click = (fun() -> snapPercentFn "snapright" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapright") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapTopPercent"); image = None; click = (fun() -> snapPercentFn "snaptop" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snaptop") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapBottomPercent"); image = None; click = (fun() -> snapPercentFn "snapbottom" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapbottom") (Some pct)))
                     CmiSeparator
-                    CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() })
+                    (CmiRegular({ text = Localization.getString("SnapTopLeftPercent"); image = None; click = (fun() -> snapPercentFn "snaptopleft" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snaptopleft") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapTopRightPercent"); image = None; click = (fun() -> snapPercentFn "snaptopright" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snaptopright") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapBottomLeftPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomleft" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapbottomleft") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapBottomRightPercent"); image = None; click = (fun() -> snapPercentFn "snapbottomright" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapbottomright") (Some pct)))
                     CmiSeparator
-                    CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> snapPercentFn "snapcenter" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> snapPercentFn "snapcenterhorizontal" pct); flags = List2() })
-                    CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> snapPercentFn "snapcentervertical" pct); flags = List2() })
+                    (CmiRegular({ text = Localization.getString("SnapCenter"); image = None; click = (fun() -> snapPercentFn "snapcenter" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapcenter") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapCenterHorizontal"); image = None; click = (fun() -> snapPercentFn "snapcenterhorizontal" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapcenterhorizontal") (Some pct)))
+                    (CmiRegular({ text = Localization.getString("SnapCenterVertical"); image = None; click = (fun() -> snapPercentFn "snapcentervertical" pct); flags = List2() }) |> withPlacementPreview (preview None (Some "snapcentervertical") (Some pct)))
                 ])
                 flags = List2()
             })
 
         // Build the "Move" submenu (edge + corner moves that keep the current size).
-        let buildMoveEdgeSubMenu (moveFn: string option -> unit) =
+        let buildMoveEdgeSubMenu preview (moveFn: string option -> unit) =
             CmiPopUp({
                 text = Localization.getString("MoveEdgeMenu")
                 image = None
                 items = List2([
-                    CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() })
+                    (CmiRegular({ text = Localization.getString("MoveEdgeLeft"); image = None; click = (fun() -> moveFn(Some "left")); flags = List2() }) |> withPlacementPreview (preview (Some "left") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeRight"); image = None; click = (fun() -> moveFn(Some "right")); flags = List2() }) |> withPlacementPreview (preview (Some "right") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeTop"); image = None; click = (fun() -> moveFn(Some "top")); flags = List2() }) |> withPlacementPreview (preview (Some "top") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeBottom"); image = None; click = (fun() -> moveFn(Some "bottom")); flags = List2() }) |> withPlacementPreview (preview (Some "bottom") None None))
                     CmiSeparator
-                    CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() })
-                    CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() })
+                    (CmiRegular({ text = Localization.getString("MoveEdgeTopLeft"); image = None; click = (fun() -> moveFn(Some "topleft")); flags = List2() }) |> withPlacementPreview (preview (Some "topleft") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeTopRight"); image = None; click = (fun() -> moveFn(Some "topright")); flags = List2() }) |> withPlacementPreview (preview (Some "topright") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeBottomLeft"); image = None; click = (fun() -> moveFn(Some "bottomleft")); flags = List2() }) |> withPlacementPreview (preview (Some "bottomleft") None None))
+                    (CmiRegular({ text = Localization.getString("MoveEdgeBottomRight"); image = None; click = (fun() -> moveFn(Some "bottomright")); flags = List2() }) |> withPlacementPreview (preview (Some "bottomright") None None))
                 ])
                 flags = List2()
             })
@@ -2839,7 +2958,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                                    (area.X, area.Y) (width, height) |> Option.isSome
                     CmiRegular({ text = label; image = None
                                  click = (fun () -> this.resizeTabGroup(screen, width, height))
-                                 flags = List2(if fits then [] else [MenuFlags.MF_GRAYED]) })))
+                                 flags = List2(if fits then [] else [MenuFlags.MF_GRAYED]) })
+                    |> withPlacementPreview (fun () -> this.sizePlacementPreview(screen, width, height))))
                 flags = List2()
             })
 
@@ -2849,29 +2969,29 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // multi-monitor when includeSnapDesktop), then the Move edge submenu,
         // each block separated by a divider.
         // Display submenus are appended separately by the caller when needed.
-        let buildPositionMoveInnerItems (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
+        let buildPositionMoveInnerItems preview (includeSnapDesktop: bool) (moveFn: string option -> unit) (snapFn: string -> unit) (snapPercentFn: string -> int -> unit) =
             let desktopSnap =
                 if includeSnapDesktop && Mon.all.length > 1 then
-                    [CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() })]
+                    [(CmiRegular({ text = Localization.getString("SnapMaximizeDesktop"); image = None; click = (fun() -> snapPercentFn "snapmaximizedesktop" 100); flags = List2() }) |> withPlacementPreview (preview None (Some "snapmaximizedesktop") (Some 100)))]
                 else []
             [
-                CmiRegular({ text = Localization.getString("SnapLeft");   image = None; click = (fun() -> snapFn("snapleft"));   flags = List2() })
-                CmiRegular({ text = Localization.getString("SnapRight");  image = None; click = (fun() -> snapFn("snapright"));  flags = List2() })
+                (CmiRegular({ text = Localization.getString("SnapLeft");   image = None; click = (fun() -> snapFn("snapleft"));   flags = List2() }) |> withPlacementPreview (preview None (Some "snapleft") None))
+                (CmiRegular({ text = Localization.getString("SnapRight");  image = None; click = (fun() -> snapFn("snapright"));  flags = List2() }) |> withPlacementPreview (preview None (Some "snapright") None))
                 CmiSeparator
-                CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() })
-                CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() })
+                (CmiRegular({ text = Localization.getString("SnapTop");    image = None; click = (fun() -> snapFn("snaptop"));    flags = List2() }) |> withPlacementPreview (preview None (Some "snaptop") None))
+                (CmiRegular({ text = Localization.getString("SnapBottom"); image = None; click = (fun() -> snapFn("snapbottom")); flags = List2() }) |> withPlacementPreview (preview None (Some "snapbottom") None))
                 CmiSeparator
-                buildSnapPercentSubMenu snapPercentFn 90
-                buildSnapPercentSubMenu snapPercentFn 70
-                buildSnapPercentSubMenu snapPercentFn 50
-                buildSnapPercentSubMenu snapPercentFn 30
+                buildSnapPercentSubMenu preview snapPercentFn 90
+                buildSnapPercentSubMenu preview snapPercentFn 70
+                buildSnapPercentSubMenu preview snapPercentFn 50
+                buildSnapPercentSubMenu preview snapPercentFn 30
                 CmiSeparator
-                CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() })
+                (CmiRegular({ text = Localization.getString("SnapMaximizeDisplay"); image = None; click = (fun() -> snapPercentFn "snapmaximizedisplay" 100); flags = List2() }) |> withPlacementPreview (preview None (Some "snapmaximizedisplay") (Some 100)))
             ]
             @ desktopSnap
             @ [
                 CmiSeparator
-                buildMoveEdgeSubMenu moveFn
+                buildMoveEdgeSubMenu preview moveFn
             ]
 
         // One "<menuTextPrefix> <display>" submenu per attached monitor, used
@@ -2885,7 +3005,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // (keeps the "Same position" entry that the new-window and detach menus
         // show). The submenus are meant to be spliced into the parent menu in
         // place of the old single "<menuTextPrefix>" item.
-        let buildPerDisplayPositionItems
+        let buildPerDisplayPositionItems preview
                 (includeSize: bool)
                 (contextHwnd: IntPtr)
                 (menuTextPrefix: string)
@@ -2906,13 +3026,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 let items =
                     if isCurrentScreen then
                         currentScreenExtraItems @
-                        buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
+                        buildPositionMoveInnerItems (preview None) true moveFn snapFn snapPercentFn
                     else
                         [
-                            CmiRegular({ text = Localization.getString("SamePositionThisDisplay"); image = None; click = (fun() -> screenMoveFn screen None); flags = List2() })
+                            (CmiRegular({ text = Localization.getString("SamePositionThisDisplay"); image = None; click = (fun() -> screenMoveFn screen None); flags = List2() }) |> withPlacementPreview (preview (Some screen) None None None))
                             CmiSeparator
                         ] @
-                        buildPositionMoveInnerItems false
+                        buildPositionMoveInnerItems (preview (Some screen)) false
                             (fun pos -> screenMoveFn screen pos)
                             (fun dir -> screenSnapFn screen dir)
                             (fun dir pct -> screenSnapPercentFn screen dir pct)
@@ -3028,7 +3148,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             let snapPercentFn = (fun dir pct -> launchStandaloneThen (fun d h -> d.moveTabGroupToSnapWithPercent(h, dir, pct)))
             if this.getAllScreensSorted().Length > 1 then
                 // Multi-monitor: flattened "New window (position) <display>" items
-                buildPerDisplayPositionItems false hwnd (Localization.getString("NewWindowPositionMenu")) currentScreenExtraItems
+                buildPerDisplayPositionItems noPreview false hwnd (Localization.getString("NewWindowPositionMenu")) currentScreenExtraItems
                     moveFn snapFn snapPercentFn
                     (fun s pos -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreen(h, s, pos)))
                     (fun s dir -> launchStandaloneThen (fun d h -> d.moveTabGroupToScreenSnap(h, s, dir)))
@@ -3038,7 +3158,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 [ CmiPopUp({
                     text = Localization.getString("NewWindowPositionMenu")
                     image = None
-                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems (noPreview None) true moveFn snapFn snapPercentFn)
                     flags = List2()
                 }) ]
 
@@ -3749,7 +3869,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             // group (similar shape to Split Right/Left). detachOrSplitToPosition
             // handles both cases (single-tab fallback when no selection).
             let currentScreenExtraItems = [
-                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachOrSplitToPosition(hwnd, None)); flags = List2() })
+                CmiRegular({ text = Localization.getString("DetachTabSamePosition"); image = None; click = (fun() -> this.detachOrSplitToPosition(hwnd, None)); flags = List2() }) |> withPlacementPreview (preview true None None None None)
                 CmiSeparator
             ]
             let moveFn = (fun pos -> this.detachOrSplitToPosition(hwnd, pos))
@@ -3765,12 +3885,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 [ CmiPopUp({
                     text = detachMoveText
                     image = None
-                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems ((preview true) None) true moveFn snapFn snapPercentFn)
                     flags = List2([MenuFlags.MF_GRAYED])
                 }) ]
             elif this.getAllScreensSorted().Length > 1 then
                 // Multi-monitor: flattened "<detach position move> <display>" items
-                buildPerDisplayPositionItems false hwnd detachMoveText currentScreenExtraItems
+                buildPerDisplayPositionItems (preview true) false hwnd detachMoveText currentScreenExtraItems
                     moveFn snapFn snapPercentFn
                     (fun s pos -> this.detachOrSplitToScreen(hwnd, s, pos))
                     (fun s dir -> this.detachOrSplitToScreenSnap(hwnd, s, dir))
@@ -3780,7 +3900,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 [ CmiPopUp({
                     text = detachMoveText
                     image = None
-                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems true moveFn snapFn snapPercentFn)
+                    items = List2(currentScreenExtraItems @ buildPositionMoveInnerItems ((preview true) None) true moveFn snapFn snapPercentFn)
                     flags = List2()
                 }) ]
 
@@ -3794,7 +3914,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             let snapFn = (fun dir -> this.moveTabGroupToSnap(hwnd, dir))
             let snapPercentFn = (fun dir pct -> this.moveTabGroupToSnapWithPercent(hwnd, dir, pct))
             if this.getAllScreensSorted().Length > 1 then
-                buildPerDisplayPositionItems true hwnd (Localization.getString("PositionMoveMenu")) []
+                buildPerDisplayPositionItems (preview false) true hwnd (Localization.getString("PositionMoveMenu")) []
                     moveFn snapFn snapPercentFn
                     (fun s pos -> this.moveTabGroupToScreen(hwnd, s, pos))
                     (fun s dir -> this.moveTabGroupToScreenSnap(hwnd, s, dir))
@@ -3803,7 +3923,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 [ CmiPopUp({
                     text = Localization.getString("PositionMoveMenu")
                     image = None
-                    items = List2(buildPositionMoveInnerItems true moveFn snapFn snapPercentFn
+                    items = List2(buildPositionMoveInnerItems ((preview false) None) true moveFn snapFn snapPercentFn
                                   @ [buildSizeSubMenu (this.getCurrentScreenForWindow(group.topWindow))])
                     flags = List2()
                 }) ]

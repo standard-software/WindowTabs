@@ -8,6 +8,24 @@ namespace Bemo
 // Rectangles are (x, y, width, height) tuples in device pixels, the same
 // values System.Drawing.Rectangle carries at the call sites.
 module SnapGeometry =
+    type PlacementSource =
+        | RestoredPlacement
+        | GroupScreenMove
+        | GroupKeepSizeSnap of topOnly: bool
+
+    // Preserve the execution path's choice of pre-restore or restored geometry.
+    let placementSourceBounds source before restored =
+        match source with
+        | GroupScreenMove | GroupKeepSizeSnap true -> before
+        | RestoredPlacement | GroupKeepSizeSnap false -> restored
+
+    let menuPlacementSource detached otherScreen snap percentage topOnly =
+        if detached then RestoredPlacement
+        elif snap then
+            if percentage then RestoredPlacement else GroupKeepSizeSnap topOnly
+        elif otherScreen then GroupScreenMove
+        else RestoredPlacement
+
     [<Literal>]
     let snapLeft = "snapleft"
 
@@ -201,3 +219,34 @@ module SnapGeometry =
         let scale = if sameScreen then currentScale else targetScale
         let margin = if enabled then tabHeightAt scale - 1 else 0
         reserveTabHeight margin area
+
+    // The pointer uses the full work area; reserved tab margins affect only
+    // the destination rectangle. Shared by the drag guide and final drop.
+    let dropBounds workArea reservedArea point =
+        calculateSnapBoundsWithPercent (directionForPoint workArea point) 50 reservedArea
+
+    // Drawing-only inset: shared boundaries inside the work area stay aligned.
+    let previewInset gap (workX, workY, workWidth, workHeight) (x, y, width, height) =
+        let gap = max 0 gap
+        let left = if x = workX then gap else 0
+        let top = if y = workY then gap else 0
+        let right = if int64 x + int64 width = int64 workX + int64 workWidth then gap else 0
+        let bottom = if int64 y + int64 height = int64 workY + int64 workHeight then gap else 0
+        if width <= left + right || height <= top + bottom then x, y, width, height
+        else x + left, y + top, width - left - right, height - top - bottom
+
+    // One progress value moves all four edges together.
+    let previewEase progress =
+        let u = max 0.0 (min 1.0 progress)
+        1.0 - (1.0 - u) ** 3.0
+
+    let previewInterpolate (x, y, width, height) (tx, ty, tw, th) progress =
+        let p = previewEase progress
+        let lerp a b = int (System.Math.Round(float a + (float b - float a) * p))
+        let left, top = lerp x tx, lerp y ty
+        let right, bottom = lerp (x + width) (tx + tw), lerp (y + height) (ty + th)
+        left, top, max 1 (right - left), max 1 (bottom - top)
+
+    let previewCentered scale (x, y, width, height) =
+        let w, h = max 1 (int (float width * scale)), max 1 (int (float height * scale))
+        x + (width - w) / 2, y + (height - h) / 2, w, h

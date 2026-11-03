@@ -174,6 +174,11 @@ type Desktop(notify:IDesktopNotification) as this =
     let isDraggingCell = Cell.create(false)
     let invoker = InvokerService.invoker
     let mutable pendingSnapDrops = 0
+    let mutable snapPreview : SnapPreview option = None
+    let mutable previewPlan : (IntPtr * string * Rect * Rect) option = None
+    let mutable previewSettings : Newtonsoft.Json.Linq.JObject option = None
+    let mutable previewDark = false
+    let mutable previewFailed = false
     let exitedEvent = Event<_>()
     let removedEvent = Event<_>()
     let _dd = DragDropController(this :> IDragDropParent) :> IDragDrop
@@ -210,16 +215,12 @@ type Desktop(notify:IDesktopNotification) as this =
         | Some(g) -> Some(g)
         | None -> groups.tryFind(fun g -> g.windows.contains((=)hwnd))
 
-    // Variant B uses the menu's 50-percent geometry. Group creation continues
-    // only after the position-first DPI transition, without blocking the UI.
-    member private this.snapDroppedWindow(window: Window, mon: Mon, pt: Pt, dragInfo: TabDragInfo, edges: Map<IntPtr, TabEdges.Edge>, complete: unit -> unit) =
-        let hwnd = window.hwnd
-        let margin = dragInfo.sourceFrameMargins.[hwnd]
+    member private this.dropSnapArea(mon: Mon, pt: Pt, dragInfo: TabDragInfo, edges: Map<IntPtr, TabEdges.Edge>, ?previewRoot: Newtonsoft.Json.Linq.JObject) =
         let work = mon.workRect
         let workArea = (work.x, work.y, work.width, work.height)
         let snapDirection = SnapGeometry.directionForPoint workArea (pt.x, pt.y)
         // Use the same destination edges for margins, alignment and insertion.
-        let snapArea() =
+        let area =
             let inUse = edges |> Map.toList |> List.map snd |> List.distinct
             if inUse = [TabEdges.Edge.Top] then
                 let tabHeight =
@@ -232,21 +233,37 @@ type Desktop(notify:IDesktopNotification) as this =
                 let reserve =
                     try
                         let scale = Dpi.scaleForMonitorHandle mon.hMonitor
-                        let values = inUse |> List.map (fun edge -> edge, TabEdgeSettings.valuesOf Services.settings.root edge) |> Map.ofList
+                        let root = match previewRoot with Some root -> root | None -> Services.settings.root
+                        let values = inUse |> List.map (fun edge -> edge, TabEdgeSettings.valuesOf root edge) |> Map.ofList
                         TabStripDecorator.snapReserveAt(inUse, values, Services.program.tabAppearanceInfo,
                                                         Services.program.defaultTabAppearanceInfo, scale, dragInfo.sourceSnapTabHeightMargin,
                                                         Services.settings.getValue("tabVerticalDirection") :?> string)
-                    with _ -> TabEdgeLayout.noReserve
+                    with _ ->
+                        if previewRoot.IsSome then reraise() else TabEdgeLayout.noReserve
                 TabEdgeLayout.reserveArea reserve workArea
+
+        snapDirection, area
+
+    member private this.dropSnapBounds(mon, pt, dragInfo, edges, ?previewRoot) =
+        let _, area = this.dropSnapArea(mon, pt, dragInfo, edges, ?previewRoot = previewRoot)
+        let work = mon.workRect
+        let x, y, width, height = SnapGeometry.dropBounds (work.x, work.y, work.width, work.height) area (pt.x, pt.y)
+        Rect(Pt(x, y), Sz(width, height))
+
+    // Variant B uses the menu's 50-percent geometry. Group creation continues
+    // only after the position-first DPI transition, without blocking the UI.
+    member private this.snapDroppedWindow(window: Window, mon: Mon, pt: Pt, dragInfo: TabDragInfo, edges: Map<IntPtr, TabEdges.Edge>, complete: unit -> unit) =
+        let hwnd = window.hwnd
+        let margin = dragInfo.sourceFrameMargins.[hwnd]
+        let snapDirection, area = this.dropSnapArea(mon, pt, dragInfo, edges)
 
         let finish() =
             try
                 if window.isWindow then
                     // Final dimensions are computed after DPI settles. Unlike A,
                     // B's 50 percent does not depend on the restored window size.
-                    let (x, y, width, height) =
-                        SnapGeometry.calculateSnapBoundsWithPercent snapDirection 50 (snapArea())
-                    let baseBounds = Rect(Pt(x, y), Sz(width, height))
+                    let baseBounds = this.dropSnapBounds(mon, pt, dragInfo, edges)
+                    let x, y, width, height = baseBounds.x, baseBounds.y, baseBounds.width, baseBounds.height
                     FramePlacement.moveDetachedSnap window margin baseBounds
                     for selected in dragInfo.selectedHwnds do
                         FramePlacement.prepareSnap selected dragInfo.sourceFrameMargins.[selected] baseBounds
@@ -290,7 +307,7 @@ type Desktop(notify:IDesktopNotification) as this =
         // The captured restore size is the staging geometry input, never the
         // size of the off-screen (or maximized) rectangle. B's final size is 50%.
         let size = dragInfo.sourceRestoreSize
-        let (x, y, _, _) = SnapGeometry.snapBounds snapDirection (snapArea()) size.width size.height
+        let (x, y, _, _) = SnapGeometry.snapBounds snapDirection area size.width size.height
         window.setPositionOnly x y
         pendingSnapDrops <- pendingSnapDrops + 1
         let started = System.Diagnostics.Stopwatch.StartNew()
@@ -314,11 +331,58 @@ type Desktop(notify:IDesktopNotification) as this =
                 let foregroundWindow = os.foreground
                 this.findGroupContainingHwnd(foregroundWindow.hwnd)
 
+    member private this.hideSnapPreview() =
+        let previous = snapPreview
+        snapPreview <- None
+        previous |> Option.iter (fun preview ->
+            try preview.Hide() with _ -> ()
+            try preview.Dispose() with _ -> ())
+        previewPlan <- None
+
+    member private this.dropSnapMonitor(pt) =
+        let enabled =
+            try Services.settings.getValue("snapOnDragDetach") :?> bool
+            with _ -> false
+        if enabled then Mon.nearestFromPoint pt else None
+
     interface IDragDropParent with
         member x.dragBegin() = invoker.asyncInvoke <| fun() ->
             isDraggingCell.set(true)
+            previewFailed <- false
+            previewSettings <- None
+            try
+                let root = Services.settings.root
+                previewSettings <- Some root
+                previewDark <- defaultArg (root.getBool("EnableDarkMode")) false
+            with _ -> previewFailed <- true
+
+        member x.dragPreview((pt, data, image)) = invoker.asyncInvoke <| fun() ->
+            try
+                if not previewFailed && (pt.IsSome || snapPreview.IsSome) then
+                    let bounds =
+                        pt |> Option.bind (fun point ->
+                            this.dropSnapMonitor(point) |> Option.bind (fun mon ->
+                                previewSettings |> Option.map (fun root ->
+                                    let work = mon.workRect
+                                    let direction = SnapGeometry.directionForPoint (work.x, work.y, work.width, work.height) (point.x, point.y)
+                                    match previewPlan with
+                                    | Some(monitor, previous, area, bounds) when monitor = mon.hMonitor && previous = direction && area = work -> bounds
+                                    | _ ->
+                                        let info = unbox<TabDragInfo>(data)
+                                        let allowed = TabEdgeSettings.allowedOf root
+                                        let edges = info.sourceTabEdges |> Map.map (fun _ edge -> TabEdges.fallback allowed edge)
+                                        let bounds = this.dropSnapBounds(mon, point, info, edges, previewRoot = root)
+                                        // Snap bases already describe the visible frame.
+                                        previewPlan <- Some(mon.hMonitor, direction, work, bounds)
+                                        bounds)))
+                    if bounds.IsSome && snapPreview.IsNone then snapPreview <- Some(new SnapPreview())
+                    snapPreview |> Option.iter (fun preview -> preview.UpdateBounds(bounds, previewDark, [image], startBounds = os.windowFromHwnd(image).bounds))
+            with _ ->
+                previewFailed <- true
+                this.hideSnapPreview()
 
         member x.dragDrop((pt, data)) = invoker.asyncInvoke <| fun() ->
+            this.hideSnapPreview()
             let dragInfo = unbox<TabDragInfo>(data)
             let (Tab(hwnd)) = dragInfo.tab
             DragTrace.log (fun () -> sprintf "Desktop.dragDrop: hwnd=%X pt=%A selected=%d" (hwnd.ToInt64()) pt dragInfo.selectedHwnds.Length)
@@ -336,11 +400,7 @@ type Desktop(notify:IDesktopNotification) as this =
             // the one containing the drop point (nearest, for a point in a gap
             // between monitors). Off, or no display answered: the placement
             // below, unchanged.
-            let snapMonitor =
-                let enabled =
-                    try Services.settings.getValue("snapOnDragDetach") :?> bool
-                    with _ -> false
-                if enabled then Mon.nearestFromPoint pt else None
+            let snapMonitor = this.dropSnapMonitor(pt)
 
             let completeDrop() =
                 // Multi-select drag-detach continuation. Case C:
@@ -458,6 +518,8 @@ type Desktop(notify:IDesktopNotification) as this =
                 completeDrop()
 
         member x.dragEnd() = invoker.asyncInvoke <| fun() ->
+            this.hideSnapPreview()
+            previewSettings <- None
             isDraggingCell.set(false)
             notify.dragEnd()
 

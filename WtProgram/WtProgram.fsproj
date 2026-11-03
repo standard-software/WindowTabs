@@ -214,6 +214,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/Serialize.fs" />
     <Compile Include="Shared/SettingsField.fs" />
     <Compile Include="Shared/DarkMode.fs" />
+    <Compile Include="Shared/SnapPreview.fs" />
     <Compile Include="Shared/Win32Menu.fs" />
     <Compile Include="Shared/Services.fs" />
     <Compile Include="Shared/SettingsTiming.fs" />

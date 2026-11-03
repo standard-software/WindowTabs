@@ -3,6 +3,7 @@ open System
 
 type IDragDropParent =
     abstract member dragBegin : unit -> unit
+    abstract member dragPreview : (Pt option * obj * IntPtr) -> unit
     abstract member dragDrop : (Pt * obj) -> unit
     abstract member dragEnd : unit -> unit
 

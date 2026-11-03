@@ -987,6 +987,130 @@ module TabGlassHost =
         c.used <- rects.Length
         c.rects <- rects
 
+    // Preview HWNDs stay on their caller's UI thread. Only their composition
+    // objects live here; no synchronous window operations cross that boundary.
+    let private previewCleanups = Dictionary<obj, unit -> unit>()
+
+    type PreviewSurface(hwnd: nativeint) =
+        let gate = obj()
+        let key = obj()
+        let mutable disposed = false
+        let mutable queued = false
+        let mutable status = 0 // pending, ready (1), failed (-1)
+        let mutable wanted = Size.Empty, 0u
+        // Host thread only below this line.
+        let mutable target = 0n
+        let mutable root = 0n
+        let mutable children = 0n
+        let mutable backdrop = 0n
+        let mutable tint = 0n
+        let mutable tintColor = None
+        let sprites = ResizeArray<nativeint * nativeint>()
+        let cleanup() =
+            let oldTarget = target
+            let owned = [tint; backdrop; children; root; target]
+            let oldSprites = List.ofSeq sprites
+            tint <- 0n
+            backdrop <- 0n
+            children <- 0n
+            root <- 0n
+            target <- 0n
+            sprites.Clear()
+            previewCleanups.Remove(key) |> ignore
+            let safely action = try action() with _ -> ()
+            if oldTarget <> 0n then
+                safely (fun () -> putObject "preview-root-clear" oldTarget ICompositionTarget_put_Root 0n)
+            for visual, sprite in oldSprites do
+                safely (fun () -> release sprite)
+                safely (fun () -> release visual)
+            for pointer in owned do
+                if pointer <> 0n then
+                    safely (fun () -> close pointer)
+                    safely (fun () -> release pointer)
+        let add brush =
+            let sprite = getObject "preview-sprite" compositor ICompositor_CreateSpriteVisual
+            let mutable visual = 0n
+            try
+                visual <- query "preview-visual" sprite IID_IVisual
+                putObject "preview-brush" sprite ISpriteVisual_put_Brush brush
+                putObject "preview-insert" children IVisualCollection_InsertAtTop visual
+                sprites.Add(visual, sprite)
+            with _ ->
+                release visual
+                release sprite
+                reraise()
+        let create() =
+            previewCleanups.[key] <- cleanup
+            let mutable desktopTarget = 0n
+            check "preview-target" ((method<CreateDesktopWindowTargetCall> desktopInterop ICompositorDesktopInterop_CreateDesktopWindowTarget)
+                                        .Invoke(desktopInterop, hwnd, 1, &desktopTarget))
+            try target <- query "preview-target-interface" desktopTarget IID_ICompositionTarget
+            finally release desktopTarget
+            let container = getObject "preview-container" compositor ICompositor_CreateContainerVisual
+            try
+                root <- query "preview-root" container IID_IVisual
+                let inner = query "preview-container-interface" container IID_IContainerVisual
+                try children <- getObject "preview-children" inner IContainerVisual_get_Children
+                finally release inner
+            finally release container
+            let compositor3 = query "preview-compositor3" compositor IID_ICompositor3
+            try
+                let brush = getObject "preview-backdrop" compositor3 ICompositor3_CreateHostBackdropBrush
+                try backdrop <- query "preview-backdrop-interface" brush IID_ICompositionBrush
+                finally release brush
+            finally release compositor3
+            add backdrop
+            add backdrop // Replaced by the tint before the root becomes visible.
+        let render() =
+            let state = lock gate (fun () ->
+                queued <- false
+                if disposed || status < 0 then None else Some wanted)
+            match state with
+            | None -> cleanup()
+            | Some(size, color) ->
+                try
+                    let first = target = 0n
+                    if first then create()
+                    if tintColor <> Some color then
+                        let mutable brush = 0n
+                        checkQuiet "preview-color" ((method<CreateWithColorCall> compositor ICompositor_CreateColorBrushWithColor)
+                                                        .Invoke(compositor, color, &brush))
+                        let mutable replacement = 0n
+                        try replacement <- query "preview-color-interface" brush IID_ICompositionBrush
+                        finally release brush
+                        try putObject "preview-tint" (snd sprites.[1]) ISpriteVisual_put_Brush replacement
+                        with _ -> release replacement; reraise()
+                        release tint
+                        tint <- replacement
+                        tintColor <- Some color
+                    for visual, _ in sprites do
+                        checkQuiet "preview-size" ((method<PutVector2Call> visual IVisual_put_Size)
+                                                    .Invoke(visual, Vector2(float32 size.Width, float32 size.Height)))
+                    if first then putObject "preview-root" target ICompositionTarget_put_Root root
+                    lock gate (fun () -> status <- 1)
+                with _ ->
+                    (try cleanup() with _ -> ())
+                    lock gate (fun () -> status <- -1)
+        member _.Status = lock gate (fun () -> status)
+        member _.Update(size: Size, color: uint32) =
+            let send = lock gate (fun () ->
+                if disposed || status < 0 || (status = 1 && wanted = (size, color)) then false
+                else
+                    wanted <- size, color
+                    if queued then false
+                    else
+                        queued <- true
+                        true)
+            if send && not (post render) then lock gate (fun () -> queued <- false; status <- -1)
+        interface IDisposable with
+            member _.Dispose() =
+                let send = lock gate (fun () ->
+                    if disposed then false
+                    else
+                        disposed <- true
+                        true)
+                if send then post cleanup |> ignore
+
     let private failure (strip: nativeint) (e: exn) =
         TabGlassTrace.log (fun () ->
             match e with
@@ -1179,6 +1303,8 @@ module TabGlassHost =
     let private finish() =
         closing <- true
         startState <- TabGlassWay.Failed "shut-down"
+        for cleanup in List.ofSeq previewCleanups.Values do
+            try cleanup() with _ -> ()
         for slot in slots.Values do
             lock slot (fun () -> slot.State <- Broken "shut-down")
         for strip in List.ofSeq compositions.Keys do
@@ -1300,6 +1426,13 @@ module TabGlassHost =
             thread.Force() |> ignore
             requestConditions false
             TabGlassWay.hostRefused forced startState conditions false
+
+    /// Starts the shared host without requiring application startup. Preview
+    /// effects follow the tab host policy, including debug host overrides.
+    let previewAvailable() =
+        try
+            unavailable() = None
+        with _ -> false
 
     // ------------------------------------------------- strip's own thread --
 

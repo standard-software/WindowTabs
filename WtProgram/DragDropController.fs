@@ -222,6 +222,7 @@ type DragActionInfo = {
     data: obj
     onCancel : unit -> unit
     onBegin : unit -> unit
+    onPreview : Pt option * IntPtr -> unit
     onDrop : Pt -> unit
     onEnd : unit -> unit
     }
@@ -242,6 +243,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
     let mutable moveCount = 0
     let mutable hasEnded = false
+    let mutable previewFloating = false
 #if DEBUG
     let mutable traceForeground = IntPtr.Zero
 #endif
@@ -439,6 +441,7 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
             DragTrace.log (fun () -> sprintf "[d%d] captureEnded: state=%s pt=%A drop=%b" dragId (match dragStateCell.value with Some s -> s.GetType().Name | None -> "none") ptScreen dropAllowed)
             let step name f =
                 try f() with ex -> DragTrace.log (fun () -> sprintf "[d%d] captureEnded: %s FAILED %s" dragId name (ex.ToString()))
+            step "hideSnapPreview" (fun () -> info.onPreview(None, IntPtr.Zero))
             let restoreParked() =
                 match info.data with
                 | :? TabDragInfo as data -> step "restoreParked" data.restoreParked
@@ -568,6 +571,14 @@ type DragAction(info:DragActionInfo, dragId:int) as this =
         if hasSideTargets || ownSession.IsSome then
             try move() with _ -> this.abort()
         else move()
+        let floating = match dragStateCell.value with Some(:? DragFloatingState) -> true | _ -> false
+        let show = floating && not hasEnded
+        if show || previewFloating then
+            previewFloating <- show
+            try
+                let image = animationWindowCell.value |> Option.map (fun window -> window.hwnd) |> Option.defaultValue IntPtr.Zero
+                info.onPreview((if show then Some pt else None), image)
+            with _ -> ()
 
     member this.wndProc (msg:Win32Message) =
         DragTrace.windowMessage (fun () -> sprintf "[d%d] capture" dragId) msg
@@ -823,6 +834,7 @@ type DragDropController(parent:IDragDropParent) =
                         releaseSource()
                     onBegin = fun() -> 
                         parent.dragBegin()
+                    onPreview = fun (pt, image) -> parent.dragPreview(pt, data, image)
                     onDrop = fun pt ->
                         parent.dragDrop(pt, data)
                     onEnd = fun() ->    

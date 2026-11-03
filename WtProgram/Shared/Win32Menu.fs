@@ -5,6 +5,8 @@ open System.Runtime.InteropServices
 
 type ContextMenuItem =
     | CmiRegular of CmiRegular
+    | CmiPreview of CmiRegular * (unit -> Rect option)
+    | CmiPreviewFrom of CmiRegular * (unit -> Rect option) * (unit -> Rect option)
     | CmiSeparator
     | CmiPopUp of CmiPopUp
 
@@ -69,6 +71,9 @@ module Win32Menu =
             id.Value
 
         let handlers = ref (Map2())
+        let previews = ref (Map.empty<int, (unit -> Rect option) * (unit -> Rect option)>)
+        use preview = new SnapPreview()
+        let mutable previewId = None
 
         let menus = ref (Set2())
 
@@ -98,9 +103,18 @@ module Win32Menu =
             items.iter <| fun item ->
                 let pos = (!menuPosCounter).[hMenu]
                 menuPosCounter := (!menuPosCounter).Add(hMenu, pos + 1)
+                let previewForItem =
+                    match item with
+                    | CmiPreview(_, calculate) -> Some(calculate, fun () -> None)
+                    | CmiPreviewFrom(_, calculate, source) -> Some(calculate, source)
+                    | _ -> None
                 match item with
-                | CmiRegular(item) ->
+                | CmiRegular(item)
+                | CmiPreview(item, _)
+                | CmiPreviewFrom(item, _, _) ->
                     let id = nextId()
+                    if not (item.flags.any(fun flag -> flag &&& (MenuFlags.MF_GRAYED ||| MenuFlags.MF_DISABLED) <> 0)) then
+                        previewForItem |> Option.iter (fun calculate -> previews := (!previews).Add(id, calculate))
                     idToMenuPos := (!idToMenuPos).Add(id, (hMenu, pos))
                     WinUserApi.AppendMenu(hMenu,
                         item.flags.append(MenuFlags.MF_STRING).reduce((|||)),
@@ -324,7 +338,25 @@ module Win32Menu =
                 let mutable rect = RECT()
                 if WinUserApi.GetMenuItemRect(hwnd, menuHandle, pos, &rect) then
                     cachedItemRects := (!cachedItemRects).Add(kvp.Key, rect)
-            try enforceCascadeDirection() with _ -> ()
+            try
+                let hovered =
+                    menuAtPoint pt.X pt.Y |> Option.bind (fun menu ->
+                        (!idToMenuPos) |> Map.tryPick (fun id (owner, _) ->
+                            if owner <> menu then None else
+                            (!cachedItemRects).TryFind(id) |> Option.bind (fun r ->
+                                if pt.X >= r.Left && pt.X < r.Right && pt.Y >= r.Top && pt.Y < r.Bottom
+                                then Some id else None)))
+                if hovered <> previewId then
+                    previewId <- hovered
+                    let selected = hovered |> Option.bind (fun id -> (!previews).TryFind(id))
+                    let bounds = selected |> Option.bind (fun (calculate, _) -> calculate())
+                    let source = if bounds.IsSome then selected |> Option.bind (fun (_, source) -> source()) else None
+                    preview.UpdateBounds(bounds, enableDarkMode, visibleMenuWindows() |> Map.toList |> List.map snd, ?startBounds = source)
+            with _ -> preview.HideImmediately()
+            try
+                enforceCascadeDirection()
+                if preview.Visible then preview.KeepBehind(visibleMenuWindows() |> Map.toList |> List.map snd)
+            with _ -> preview.HideImmediately()
         )
         // The mouse hook is system-wide and the CBT hook thread-wide, so both
         // have to come off however the menu ends. The hook goes in INSIDE the
@@ -353,6 +385,7 @@ module Win32Menu =
                     lock openMenuGate (fun () ->
                         if openMenuOwner = hwnd then openMenuOwner <- IntPtr.Zero))
 
+                safely (fun () -> preview.HideImmediately())
                 safely trackTimer.Stop
                 safely trackTimer.Dispose
 
