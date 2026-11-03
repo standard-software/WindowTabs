@@ -234,8 +234,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // background windows whose activation is denied during the state change
     // would otherwise flash their tab (group-thread only)
     let mutable suppressFlashUntil = DateTime.MinValue
-    // Echoes of the group's own batch minimize/restore: every window changed
-    // by minimizeAll/restoreAll fires its own MINIMIZESTART/END, and one
+    // Echoes of the group's own minimize/restore: every window changed
+    // by group operations fires its own MINIMIZESTART/END, and one
     // arriving late — after a newer user operation — used to flip the whole
     // group back (the minimize<->restore oscillation). Events matching a
     // recorded expectation are consumed and ignored (group-thread only).
@@ -2183,8 +2183,19 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         // not stall the strip. Keep transitions disabled until the
                         // queued operations have had time to run.
                         this.disableTransitions(hwnd)
+                        let registerEcho = this.windows.contains(hwnd)
                         try
-                            window.showWindowAsync(ShowWindowCommands.SW_SHOWNOACTIVATE)
+                            if registerEcho then
+                                pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
+#if DEBUG
+                                Debug.WriteLine(sprintf "[Issue34] register MINIMIZEEND reason=follower-restore group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                            let started = WinUserApi.ShowWindowAsync(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
+                            if not started && registerEcho then
+                                pendingMinMaxEchoes.Remove((hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) |> ignore
+#if DEBUG
+                                Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=follower-restore-failed group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
                             window.moveAsync(adjustedBounds)
                             // Post the sibling directly behind the restore-front window
                             // so it surfaces already below it instead of flickering on
@@ -2193,6 +2204,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 window.insertAfterAsync(restoreFrontHwnd)
                             ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
                         with _ ->
+                            if registerEcho && pendingMinMaxEchoes.Remove((hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) then
+#if DEBUG
+                                Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=follower-restore-exception group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                                ()
                             // No delayed cleanup is guaranteed if posting fails.
                             this.enableTransitions(hwnd)
                             reraise()
@@ -2215,16 +2231,36 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                 // the follower. Retain the native placement fallback.
                                 if targetMaximized then
                                     this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
-                                PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp))
+                                PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp) |> ignore)
                     else
                         // Keep native placement for minimized followers; their
                         // restore bookkeeping must still be performed by Windows.
-                        this.withoutTransitions(hwnd, fun() ->
-                            if targetMaximized then
-                                // Placement alone cannot move a maximized window
-                                // between monitors. Suppress the preparatory move too.
-                                this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
-                            PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp))
+                        let registerEcho = this.windows.contains(hwnd) && window.isMinimized && targetMaximized
+                        try
+                            if registerEcho then
+                                pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
+#if DEBUG
+                                Debug.WriteLine(sprintf "[Issue34] register MINIMIZEEND reason=follower-maximized-restore group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                            this.withoutTransitions(hwnd, fun() ->
+                                if targetMaximized then
+                                    // Placement alone cannot move a maximized window
+                                    // between monitors. Suppress the preparatory move too.
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                                let placed = PerfTrace.time "group.follower.setPlacement" <| fun () -> window.setPlacement(wp)
+                                if not placed && registerEcho then
+                                    pendingMinMaxEchoes.Remove((hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) |> ignore
+#if DEBUG
+                                    Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=follower-maximized-restore-failed group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                                    ())
+                        with _ ->
+                            if registerEcho && pendingMinMaxEchoes.Remove((hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) then
+#if DEBUG
+                                Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=follower-maximized-restore-exception group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                                ()
+                            reraise()
 
             )
             // Track the margin-shrunk size for this window
@@ -2531,7 +2567,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         zorderCell.value.where((<>) hwnd).iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized && this.isSameWindow(other) then
                 pendingMinMaxEchoes.[(other, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
-                this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWNOACTIVATE)
+#if DEBUG
+                Debug.WriteLine(sprintf "[Issue34] register MINIMIZEEND reason=shared-restore group=%X hwnd=%X" (int64 this.hwnd) (int64 other))
+#endif
+                try
+                    this.showWindowNoAnimation(other, ShowWindowCommands.SW_SHOWNOACTIVATE)
+                with _ ->
+                    if pendingMinMaxEchoes.Remove((other, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) then
+#if DEBUG
+                        Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=shared-restore-exception group=%X hwnd=%X" (int64 this.hwnd) (int64 other))
+#endif
+                        ()
+                    reraise()
         this.updateIsVisible()
         this.followSharedWindow(hwnd)
 
@@ -2585,18 +2632,25 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND ->
             if this.windows.contains(hwnd) then
                 stripGroupMinimized <- false
-                if this.consumeMinMaxEcho(hwnd, evt) then () else
-                let needsRestore = zorderCell.value.any <| fun hwnd ->
-                    this.os.windowFromHwnd(hwnd).isMinimized
-                suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
-                if needsRestore then
-                    this.restoreAll()
-                    // Put the window the user restored in FRONT of the group:
-                    // setZorder places the list head topmost, and the siblings
-                    // were restored without activation, so they must stay
-                    // behind it. (moveToEnd pushed the restored window to the
-                    // BOTTOM of the group instead.)
-                    this.bringRestoredToFront(hwnd)
+                let isEcho = this.consumeMinMaxEcho(hwnd, evt)
+#if DEBUG
+                Debug.WriteLine(sprintf "[Issue34] MINIMIZEEND group=%X hwnd=%X echo=%b" (int64 this.hwnd) (int64 hwnd) isEcho)
+#endif
+                if not isEcho then
+                    let needsRestore = zorderCell.value.any <| fun hwnd ->
+                        this.os.windowFromHwnd(hwnd).isMinimized
+                    suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
+#if DEBUG
+                    Debug.WriteLine(sprintf "[Issue34] MINIMIZEEND user-restore group=%X hwnd=%X restoreAll-and-bringRestoredToFront=%b" (int64 this.hwnd) (int64 hwnd) needsRestore)
+#endif
+                    if needsRestore then
+                        this.restoreAll()
+                        // Put the window the user restored in FRONT of the group:
+                        // setZorder places the list head topmost, and the siblings
+                        // were restored without activation, so they must stay
+                        // behind it. (moveToEnd pushed the restored window to the
+                        // BOTTOM of the group instead.)
+                        this.bringRestoredToFront(hwnd)
                 this.updateIsVisible()
                 //foreground status may have changed
                 this.foreground <- this.os.foreground.hwnd
@@ -3172,8 +3226,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.enableTransitions(hwnd)
             reraise()
 
-    // Consume an expected echo of our own batch operation. Returns true if
-    // the event was caused by minimizeAll/restoreAll and must be ignored.
+    // Consume an expected echo of our own group operation. Returns true if
+    // the event was caused by the group and must be ignored.
     member private this.consumeMinMaxEcho(hwnd, evt) =
         let stale =
             pendingMinMaxEchoes
@@ -3202,7 +3256,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let window = this.os.windowFromHwnd(hwnd)
             if window.isMinimized then
                 pendingMinMaxEchoes.[(hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)] <- DateTime.Now
-                this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
+#if DEBUG
+                Debug.WriteLine(sprintf "[Issue34] register MINIMIZEEND reason=restore-all group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                try
+                    this.showWindowNoAnimation(hwnd, ShowWindowCommands.SW_SHOWNOACTIVATE)
+                with _ ->
+                    if pendingMinMaxEchoes.Remove((hwnd, WinEvent.EVENT_SYSTEM_MINIMIZEEND)) then
+#if DEBUG
+                        Debug.WriteLine(sprintf "[Issue34] cancel MINIMIZEEND reason=restore-all-exception group=%X hwnd=%X" (int64 this.hwnd) (int64 hwnd))
+#endif
+                        ()
+                    reraise()
         
     // Restore without arming or clearing the manual restore front hold.
     member private this.restoreForMenuLink(sourceFront: IntPtr) =

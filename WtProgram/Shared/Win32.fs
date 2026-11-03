@@ -550,7 +550,7 @@ and
         wpStruct.ptMinPosition <- wp.ptMinPosition.POINT
         wpStruct.ptMaxPosition <- wp.ptMaxPosition.POINT
         wpStruct.rcNormalPosition <- wp.rcNormalPosition.RECT
-        WinUserApi.SetWindowPlacement(hwnd, ref wpStruct) |> ignore
+        WinUserApi.SetWindowPlacement(hwnd, ref wpStruct)
 
     member this.setForeground(force) =
         if force then
