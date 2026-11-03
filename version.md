@@ -2,10 +2,15 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.02_next1
+## version ss_2026.11.02_next2
 
 - Fixed an older window coming to the front instead of a new window
   that was linked into a minimized group (#34).
+- Added a snap preview that looks like the Windows snap preview.
+  - While a tab is dragged out with "Snap detached tabs by drop
+    position" on, it shows where the window will land.
+  - In the tab menu, resting on a move, snap, size or link-to-group
+    item shows where the window will go.
 
 ## version ss_2026.11.02
 
