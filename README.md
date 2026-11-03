@@ -92,7 +92,7 @@ Auto Grouping brings windows of the same app together; shared categories (1–10
 
 ### Select and move several tabs
 
-https://github.com/user-attachments/assets/104a1a80-aa9f-4d5a-aaaa-2410aa078754
+![Two selected tabs](README_Image/ShotMultiSelect.png)
 
 Ctrl-click to select or deselect; Shift-click to select a range. Menu commands also apply to the selection.
 
@@ -106,7 +106,7 @@ Detach selected tabs and place them at a chosen position. Drag tabs to reorder, 
 
 ### Switch between tabs on all four edges
 
-https://github.com/user-attachments/assets/226afe92-2378-4ce3-b3ba-4b6ee5ac2e68
+![Tabs on all four edges](README_Image/ShotFourEdges.png)
 
 Switch apps using tabs on any of the four edges. Choose which edges to use in Settings → Tabs.
 
@@ -128,19 +128,23 @@ Join an entire group to another group, including one on another virtual desktop.
 
 ### Align tabs
 
-https://github.com/user-attachments/assets/83a64add-0c83-43a0-8b7e-147f94d6adfd
+| Before | After |
+| --- | --- |
+| ![Tabs before aligning](README_Image/ShotAlignBefore.png) | ![Tabs aligned to the right](README_Image/ShotAlignAfter.png) |
 
 Align individual tabs, selected tabs, or all tabs on an edge. Left and right edges use top and bottom alignment.
 
 ### Move tabs to another edge
 
-https://github.com/user-attachments/assets/be889145-0cd2-4b72-9f8a-114b7576691a
+| Before | After |
+| --- | --- |
+| ![A tab on the top edge](README_Image/ShotDirectionBefore.png) | ![The tab moved to the bottom edge](README_Image/ShotDirectionAfter.png) |
 
 Move individual tabs, selected tabs, all tabs on an edge, or a whole group to an enabled edge. Alignment and pinning are preserved.
 
 ### Identify tabs by color
 
-https://github.com/user-attachments/assets/2747a475-5491-42fb-9320-fb13019aeac0
+![A pink tab and colored edges](README_Image/ShotTabColors.png)
 
 ![Tab color menu](README_Image/PinnedColorTab.png)
 
@@ -154,7 +158,7 @@ Pin tabs to show just an icon or use a fixed width. Right-click to rename tabs, 
 
 ### Style and size for each edge
 
-https://github.com/user-attachments/assets/e99d4296-6372-4878-aace-21b669d541ff
+![Tab shape options](README_Image/SettingsAppearanceTabShape.png)
 
 Set styles, sizes, and alignment separately for each edge. Side tabs support vertical or horizontal text, and changes apply without restarting.
 

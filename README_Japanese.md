@@ -92,7 +92,7 @@ WindowTabs Standard-Software edition では、ウィンドウの上下左右に�
 
 ### 複数選択して一緒に動かす
 
-https://github.com/user-attachments/assets/104a1a80-aa9f-4d5a-aaaa-2410aa078754
+![選択した二つのタブ](README_Image/ShotMultiSelect.png)
 
 Ctrl + クリックで選択・解除、Shift + クリックで範囲選択。メニュー操作も選択したタブに適用されます。
 
@@ -106,7 +106,7 @@ Ctrl + クリックで選択・解除、Shift + クリックで範囲選択。�
 
 ### 上下左右のタブを切り替える
 
-https://github.com/user-attachments/assets/226afe92-2378-4ce3-b3ba-4b6ee5ac2e68
+![四辺に置いたタブ](README_Image/ShotFourEdges.png)
 
 四辺に置いたタブでアプリを切り替えられます。使う辺は設定の「タブ」で選びます。
 
@@ -128,19 +128,23 @@ https://github.com/user-attachments/assets/226afe92-2378-4ce3-b3ba-4b6ee5ac2e68
 
 ### タブを左右に寄せる
 
-https://github.com/user-attachments/assets/83a64add-0c83-43a0-8b7e-147f94d6adfd
+| 寄せる前 | 寄せた後 |
+| --- | --- |
+| ![寄せる前のタブ](README_Image/ShotAlignBefore.png) | ![右へ寄せたタブ](README_Image/ShotAlignAfter.png) |
 
 タブごと・選択したタブ・同じ辺の全タブをまとめて配置できます。左右の辺では上寄せ・下寄せになります。
 
 ### タブを別の辺へ移す
 
-https://github.com/user-attachments/assets/be889145-0cd2-4b72-9f8a-114b7576691a
+| 移す前 | 移した後 |
+| --- | --- |
+| ![上辺にあるタブ](README_Image/ShotDirectionBefore.png) | ![下辺へ移したタブ](README_Image/ShotDirectionAfter.png) |
 
 タブごと・選択したタブ・同じ辺の全タブ・グループ全体を、使用中の辺へ移せます。寄せとピン止めは維持されます。
 
 ### 色で見分ける
 
-https://github.com/user-attachments/assets/2747a475-5491-42fb-9320-fb13019aeac0
+![ピンクのタブと各辺の色分け](README_Image/ShotTabColors.png)
 
 ![Tab color menu](README_Image/PinnedColorTab_Japanese.png)
 
@@ -154,7 +158,7 @@ https://github.com/user-attachments/assets/2747a475-5491-42fb-9320-fb13019aeac0
 
 ### 四辺のスタイルと大きさ
 
-https://github.com/user-attachments/assets/e99d4296-6372-4878-aace-21b669d541ff
+![タブの形の選択肢](README_Image/SettingsAppearanceTabShape_Japanese.png)
 
 四辺それぞれにスタイル・大きさ・寄せを設定できます。左右のタブは縦書きと横書きを選べ、変更は再起動なしで反映されます。
 
