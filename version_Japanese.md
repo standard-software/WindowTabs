@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.06_next1
+
 ## version ss_2026.11.06
 
 - 最小化したグループに新しいウィンドウが連結されたとき、

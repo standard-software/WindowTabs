@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.06_next1
+
 ## version ss_2026.11.06
 
 - Fixed an older window coming to the front instead of a new window
