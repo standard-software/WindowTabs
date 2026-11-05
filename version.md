@@ -2,15 +2,22 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.02_next2
+## version ss_2026.11.06
 
 - Fixed an older window coming to the front instead of a new window
   that was linked into a minimized group (#34).
-- Added a snap preview that looks like the Windows snap preview.
-  - While a tab is dragged out with "Snap detached tabs by drop
-    position" on, it shows where the window will land.
-  - In the tab menu, resting on a move, snap, size or link-to-group
-    item shows where the window will go.
+- Added a snap preview.
+  - It looks like the Windows snap preview.
+  - Shown when a tab dragged out of the group snaps.
+  - Shown when the cursor rests on a move, snap, size or
+    link-to-group item in the tab menu.
+- A maximized group moved to the same position on another display from
+  the tab menu stays maximized there.
+  - Restoring it puts it at the same proportion as on the old display.
+- A snap that keeps a length already filling the screen (a left snap
+  moved to a top snap, for example) uses half of it in that direction.
+- Fixed the top tabs folding inside the window when a normal window
+  moved to the same position on another display.
 
 ## version ss_2026.11.02
 
