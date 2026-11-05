@@ -66,21 +66,55 @@ module SnapGeometry =
         if tabHeight > 0 then (areaX, areaY + tabHeight, areaWidth, areaHeight - tabHeight)
         else (areaX, areaY, areaWidth, areaHeight)
 
+    // Treat a visible extent within three logical pixels of full as full.
+    let fillsSnapLength scale available current =
+        let tolerance = max 1 (int (System.Math.Ceiling(3.0 * scale)))
+        current >= available - tolerance
+
+    let keepSnapLength scale available current =
+        if fillsSnapLength scale available current then available / 2
+        else min current available
+
+    // Preserve a full source extent across different work areas and tab margins.
+    let screenSnapSize scale (fullWidth, fullHeight) (reservedWidth, reservedHeight) (width, height) =
+        (if fillsSnapLength scale reservedWidth width then fullWidth else width),
+        (if fillsSnapLength scale reservedHeight height then fullHeight else height)
+
+    // Map the normal rectangle using the same ratios and position-only clamp
+    // as "Same position". Oversized rectangles keep their size.
+    let mapNormalBounds (sx, sy, sw, sh) (tx, ty, tw, th) (x, y, w, h) =
+        let width = int (float w * float tw / float sw)
+        let height = int (float h * float th / float sh)
+        let left = tx + int (float (x-sx) * float tw / float sw)
+        let top = ty + int (float (y-sy) * float th / float sh)
+        max tx (min left (tx+tw-width)), max ty (min top (ty+th-height)), width, height
+
+    // Only the retained axis changes to half when it already fills the area.
     // Returns (x, y, width, height) for a snap inside an (already reserved)
     // work area.
     // Snap right/left: maintain width, expand height to full
     // Snap top/bottom: maintain height, expand width to full
-    let snapBounds (snapDirection: string) (areaX: int, areaY: int, areaWidth: int, areaHeight: int) (currentWidth: int) (currentHeight: int) =
+    let snapBoundsAtScale scale (snapDirection: string) (areaX: int, areaY: int, areaWidth: int, areaHeight: int) (currentWidth: int) (currentHeight: int) =
         let areaRight = areaX + areaWidth
         let areaBottom = areaY + areaHeight
-        let clampedWidth = min currentWidth areaWidth
-        let clampedHeight = min currentHeight areaHeight
+        let clampedWidth = keepSnapLength scale areaWidth currentWidth
+        let clampedHeight = keepSnapLength scale areaHeight currentHeight
         match snapDirection with
         | "snapright" -> (areaRight - clampedWidth, areaY, clampedWidth, areaHeight)
         | "snapleft" -> (areaX, areaY, clampedWidth, areaHeight)
         | "snaptop" -> (areaX, areaY, areaWidth, clampedHeight)
         | "snapbottom" -> (areaX, areaBottom - clampedHeight, areaWidth, clampedHeight)
-        | _ -> (areaX, areaY, clampedWidth, clampedHeight)
+        | _ -> (areaX, areaY, min currentWidth areaWidth, min currentHeight areaHeight)
+
+    // Position-only staging keeps the original size, so do not halve its extent.
+    let snapStagingPosition direction (x, y, width, height) currentWidth currentHeight =
+        match direction with
+        | "snapright" -> x + width - min currentWidth width, y
+        | "snapbottom" -> x, y + height - min currentHeight height
+        | _ -> x, y
+
+    let snapBounds direction area width height =
+        snapBoundsAtScale 1.0 direction area width height
 
     // Percentage geometry extracted from the tab menu. The caller reserves
     // the tab margin and resolves the virtual desktop before calling.

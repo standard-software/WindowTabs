@@ -307,7 +307,7 @@ type Desktop(notify:IDesktopNotification) as this =
         // The captured restore size is the staging geometry input, never the
         // size of the off-screen (or maximized) rectangle. B's final size is 50%.
         let size = dragInfo.sourceRestoreSize
-        let (x, y, _, _) = SnapGeometry.snapBounds snapDirection area size.width size.height
+        let x, y = SnapGeometry.snapStagingPosition snapDirection area size.width size.height
         window.setPositionOnly x y
         pendingSnapDrops <- pendingSnapDrops + 1
         let started = System.Diagnostics.Stopwatch.StartNew()

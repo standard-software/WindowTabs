@@ -2025,6 +2025,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 result
         System.Drawing.Rectangle(x, y, width, height)
 
+    member private this.screenSnapSourceSize(area: System.Drawing.Rectangle, width: int, height: int) =
+        let reserved = this.adjustWorkAreaForTabHeight(area, ofGroup = true)
+        let scale = Dpi.scaleForRect(Rect(Pt(area.X, area.Y), Sz(area.Width, area.Height)))
+        SnapGeometry.screenSnapSize scale (area.Width, area.Height) (reserved.Width, reserved.Height) (width, height)
+
     member private this.calculateSnapBounds(
         snapDirection: string,
         workArea: System.Drawing.Rectangle,
@@ -2035,7 +2040,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // Keep-size menu geometry, also used for the drag staging position.
         // Variant B uses the percentage helper below for its final rectangle.
         let workArea = this.adjustWorkAreaForTabHeight(workArea, defaultArg ofGroup false, ?detachedEdges = detachedEdges)
-        let result = SnapGeometry.snapBounds snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
+        let scale = Dpi.scaleForRect(Rect(Pt(workArea.X, workArea.Y), Sz(workArea.Width, workArea.Height)))
+        let result = SnapGeometry.snapBoundsAtScale scale snapDirection (workArea.X, workArea.Y, workArea.Width, workArea.Height) currentWidth currentHeight
 #if DEBUG
         group.traceSnapGeometry(sprintf "direction=%s mode=keep-size inputSize=(%d,%d) reservedArea=%A base=%A"
                                     snapDirection currentWidth currentHeight workArea result)
@@ -2271,84 +2277,104 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         position |> Option.iter this.applyGroupSnapRealign
 
     member this.moveTabGroupToScreen(hwnd: IntPtr, targetScreen: MonitorScreen, position: Option<string>) =
-        // Move the entire tab group to the specified screen and position
-        // Always use the active window (topWindow) as the reference point
-        let activeHwnd = group.topWindow
-        let window = os.windowFromHwnd(activeHwnd)
-        let before = window.bounds
-        let bounds = SnapGeometry.placementSourceBounds SnapGeometry.GroupScreenMove before before
-        let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
-        let sourceWorkArea = sourceScreen.WorkingArea
+        let active = os.windowFromHwnd(group.topWindow)
+        let source = this.getCurrentScreenForWindow(active.hwnd)
+        if position.IsNone && active.isMaximized && not active.isMinimized && not (source.Equals(targetScreen)) then
+            let rect (r: System.Drawing.Rectangle) = Rect(Pt(r.X, r.Y), Sz(r.Width, r.Height))
+            group.moveMaximizedToScreen(rect source.WorkingArea, rect targetScreen.WorkingArea, rect targetScreen.Bounds)
+        else
+            // Move the entire tab group to the specified screen and position
+            // Always use the active window (topWindow) as the reference point
+            let activeHwnd = group.topWindow
+            let window = os.windowFromHwnd(activeHwnd)
+            let before = window.bounds
+            let bounds = SnapGeometry.placementSourceBounds SnapGeometry.GroupScreenMove before before
+            let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
+            let sourceWorkArea = sourceScreen.WorkingArea
 
-        // Use group bounds (expanded by margin) for percentage calculation
-        let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
-        let groupWidth = bounds.size.width + mLeft + mRight
-        let groupHeight = bounds.size.height + mTop + mBottom
-        let groupX = bounds.location.x - mLeft
-        let groupY = bounds.location.y - mTop
+            // Only normal same-position moves use the cached normal DWM frame.
+            // Preserve configured margins and all other placement commands.
+            let configuredMargin = group.getWindowMargin(activeHwnd, bounds)
+            let normalMargin =
+                if position.IsNone && not window.isMinimized && not window.isMaximized &&
+                   not (group.hasWindowMargin(activeHwnd)) then
+                    group.capturePlacementMargin(activeHwnd) |> ignore
+                    Some(fst (group.normalMoveMargin(activeHwnd)))
+                else None
+            let (mTop, mLeft, mRight, mBottom) =
+                match normalMargin with
+                | Some margin -> margin (max 96 (int (Math.Round(Dpi.scaleForRect bounds * 96.0))))
+                | None -> configuredMargin
+            let groupWidth = bounds.size.width + mLeft + mRight
+            let groupHeight = bounds.size.height + mTop + mBottom
+            let groupX = bounds.location.x - mLeft
+            let groupY = bounds.location.y - mTop
 #if DEBUG
-        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin hwnd=%X before=%A amountTLRB=%A base=%A"
-                                    (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom) (groupX,groupY,groupWidth,groupHeight))
+            WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-read-frame-margin hwnd=%X before=%A amountTLRB=%A base=%A"
+                                        (int64 activeHwnd) bounds (mTop,mLeft,mRight,mBottom) (groupX,groupY,groupWidth,groupHeight))
 #endif
 
-        // Calculate size percentages for DPI-aware placement
-        let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
-        let heightPercent = float(groupHeight) / float(sourceWorkArea.Height)
-        let topPercent = float(groupY - sourceWorkArea.Top) / float(sourceWorkArea.Height)
+            // Calculate size percentages for DPI-aware placement
+            let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
+            let heightPercent = float(groupHeight) / float(sourceWorkArea.Height)
+            let topPercent = float(groupY - sourceWorkArea.Top) / float(sourceWorkArea.Height)
 
-        // Restore window if minimized or maximized
-        if window.isMinimized || window.isMaximized then
-            window.showWindow(ShowWindowCommands.SW_RESTORE)
+            // Restore window if minimized or maximized
+            if window.isMinimized || window.isMaximized then
+                window.showWindow(ShowWindowCommands.SW_RESTORE)
 
-        // Calculate new size based on target screen
-        let targetWorkArea = targetScreen.WorkingArea
-        let newWidth = int(float(targetWorkArea.Width) * widthPercent)
-        let newHeight = int(float(targetWorkArea.Height) * heightPercent)
+            // Calculate new size based on target screen
+            let targetWorkArea = targetScreen.WorkingArea
+            let newWidth = int(float(targetWorkArea.Width) * widthPercent)
+            let newHeight = int(float(targetWorkArea.Height) * heightPercent)
 
-        // Calculate current position using percentages (use group position, not margined position)
-        let leftPercent = float(groupX - sourceWorkArea.Left) / float(sourceWorkArea.Width)
-        let currentX = targetWorkArea.Left + int(float(targetWorkArea.Width) * leftPercent)
-        let currentY = targetWorkArea.Top + int(float(targetWorkArea.Height) * topPercent)
+            // Calculate current position using percentages (use group position, not margined position)
+            let leftPercent = float(groupX - sourceWorkArea.Left) / float(sourceWorkArea.Width)
+            let currentX = targetWorkArea.Left + int(float(targetWorkArea.Width) * leftPercent)
+            let currentY = targetWorkArea.Top + int(float(targetWorkArea.Height) * topPercent)
 
-        // Calculate new position based on position option
-        let newLeft, newTop = this.calculatePositionInWorkArea(
-            position,
-            targetWorkArea,
-            currentX,
-            currentY,
-            newWidth,
-            newHeight, ofGroup = true)
+            // Calculate new position based on position option
+            let newLeft, newTop = this.calculatePositionInWorkArea(
+                position,
+                targetWorkArea,
+                currentX,
+                currentY,
+                newWidth,
+                newHeight, ofGroup = true)
 
-        // Ensure position is within bounds
-        let finalX, finalY = this.clampPositionInWorkArea(
-            position, targetWorkArea, newLeft, newTop, newWidth, newHeight, ofGroup = true)
+            // Ensure position is within bounds
+            let finalX, finalY = this.clampPositionInWorkArea(
+                position, targetWorkArea, newLeft, newTop, newWidth, newHeight, ofGroup = true)
 
-        // DPI-aware window placement: move position first, wait for DPI change, then set size
-        let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
-        window.setPositionOnly finalX finalY
+            // DPI-aware window placement: move position first, wait for DPI change, then set size
+            let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
+            window.setPositionOnly finalX finalY
 
-        // Wait for DPI change (max 200ms)
-        let mutable currentDpi = initialDpi
-        let mutable elapsed = 0
-        while elapsed < 200 && currentDpi = initialDpi do
-            System.Threading.Thread.Sleep(10)
-            elapsed <- elapsed + 10
-            currentDpi <- WinUserApi.GetDpiForWindow(hwnd)
+            // Wait for DPI change (max 200ms)
+            let mutable currentDpi = initialDpi
+            let mutable elapsed = 0
+            while elapsed < 200 && currentDpi = initialDpi do
+                System.Threading.Thread.Sleep(10)
+                elapsed <- elapsed + 10
+                currentDpi <- WinUserApi.GetDpiForWindow(hwnd)
 
-        if currentDpi <> initialDpi then
-            System.Threading.Thread.Sleep(20)
+            if currentDpi <> initialDpi then
+                System.Threading.Thread.Sleep(20)
 
-        let moveBounds = Rect(Pt(finalX, finalY), Sz(newWidth, newHeight))
-        let finalBounds = group.applyWindowMarginForWrite(activeHwnd, moveBounds)
+            let moveBounds = Rect(Pt(finalX, finalY), Sz(newWidth, newHeight))
+            let finalBounds =
+                match normalMargin with
+                | Some margin -> FramePlacement.target activeHwnd margin moveBounds
+                | None -> group.applyWindowMarginForWrite(activeHwnd, moveBounds)
 #if DEBUG
-        WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin hwnd=%X base=%A target=%A"
-                                    (int64 activeHwnd) moveBounds finalBounds)
+            WindowFrameMargin.trace (sprintf "geometry-compensation name=snap-write-frame-margin hwnd=%X base=%A target=%A"
+                                        (int64 activeHwnd) moveBounds finalBounds)
 #endif
-        window.move(finalBounds)
-        if group.hasWindowMargin(activeHwnd) then
-            group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
+            window.move(finalBounds)
+            if group.hasWindowMargin(activeHwnd) then
+                group.recordMarginApplied(activeHwnd, finalBounds.width, finalBounds.height)
 
-        position |> Option.iter this.applyGroupSnapRealign
+            position |> Option.iter this.applyGroupSnapRealign
 
     // Whether the "Tab alignment on snap and move" setting is enabled.
     member private this.snapRealignEnabled() =
@@ -2496,6 +2522,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
+        let wasMaximized = window.isMaximized && not window.isMinimized
         let screen = this.getCurrentScreenForWindow(activeHwnd)
 
         // Read shadow state together with the native rectangle, before restore.
@@ -2505,7 +2532,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         if window.isMinimized || window.isMaximized then
             window.showWindow(ShowWindowCommands.SW_RESTORE)
 
-        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true), bounds, window.bounds)
+        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true) || wasMaximized, bounds, window.bounds)
 
         // Use group bounds (expanded by margin) for snap calculation so margin is not applied twice
 #if DEBUG
@@ -2548,12 +2575,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let activeHwnd = group.topWindow
         let window = os.windowFromHwnd(activeHwnd)
         let bounds = window.bounds
+        let wasMaximized = window.isMaximized && not window.isMinimized
         let sourceScreen = this.getCurrentScreenForWindow(activeHwnd)
         let sourceWorkArea = sourceScreen.WorkingArea
 
         if not (this.useTopOnlySnap(true)) && (window.isMinimized || window.isMaximized) then
             window.showWindow(ShowWindowCommands.SW_RESTORE)
-        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true), bounds, window.bounds)
+        let bounds = TabStripDecorator.snapSourceBounds(this.useTopOnlySnap(true) || wasMaximized, bounds, window.bounds)
 
         // Use group bounds (expanded by margin) for percentage calculation
         let (mTop, mLeft, mRight, mBottom) = group.getWindowMargin(activeHwnd, bounds)
@@ -2566,8 +2594,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             if group.hasWindowMargin(activeHwnd) then
                 Rect(bounds.location, Sz(bounds.width + mLeft + mRight, bounds.height + mTop + mBottom))
             else FramePlacement.readSnap activeHwnd (fun _ -> (0,0,0,0)) bounds
-        let groupWidth = visible.width
-        let groupHeight = visible.height
+        let groupWidth, groupHeight = this.screenSnapSourceSize(sourceWorkArea, visible.width, visible.height)
 
         // Calculate size percentages for DPI-aware placement
         let widthPercent = float(groupWidth) / float(sourceWorkArea.Width)
@@ -2703,13 +2730,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let window = os.windowFromHwnd(seed)
         let source = this.getCurrentScreenForWindow(seed)
         let area = (defaultArg target source).WorkingArea
-        let margin = group.snapshotPlacementMargin(seed)
+        let normalSamePosition =
+            not detached && target.IsSome && position.IsNone && direction.IsNone &&
+            not window.isMinimized && not window.isMaximized && not (group.hasWindowMarginSnapshot(seed))
+        let margin =
+            if normalSamePosition then fst (group.normalMoveMargin(seed))
+            else group.snapshotPlacementMargin(seed)
         let before = window.bounds
         let restored = FramePlacement.restoredBounds window
         let sourceKind = SnapGeometry.menuPlacementSource detached target.IsSome direction.IsSome percent.IsSome (this.useTopOnlySnap(true))
-        let raw = SnapGeometry.placementSourceBounds sourceKind before restored
+        let raw =
+            if not detached && direction.IsSome && percent.IsNone && window.isMaximized && not window.isMinimized then before
+            else SnapGeometry.placementSourceBounds sourceKind before restored
         let bounds =
-            if detached || direction.IsNone && target.IsNone then
+            if normalSamePosition || detached || direction.IsNone && target.IsNone then
                 (if direction.IsSome then FramePlacement.readSnap else FramePlacement.read) seed margin raw
             else
                 // Same-screen keep-size snaps read margins before restoring;
@@ -2731,8 +2765,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             if target.IsNone then bounds.width, bounds.height, bounds.x, bounds.y
             else
                 let original = source.WorkingArea
-                int(float area.Width * (float bounds.width / float original.Width)),
-                int(float area.Height * (float bounds.height / float original.Height)),
+                let sourceWidth, sourceHeight =
+                    if not detached && direction.IsSome && percent.IsNone then
+                        this.screenSnapSourceSize(original, bounds.width, bounds.height)
+                    else bounds.width, bounds.height
+                int(float area.Width * (float sourceWidth / float original.Width)),
+                int(float area.Height * (float sourceHeight / float original.Height)),
                 area.X + int(float area.Width * (float(bounds.x-original.X) / float original.Width)),
                 area.Y + int(float area.Height * (float(bounds.y-original.Y) / float original.Height))
         let result =
@@ -2751,7 +2789,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                     else x, y
                 x, y, width, height
         let x, y, width, height = result
-        FramePlacement.previewVisible seed margin direction.IsSome (Rect(Pt(x, y), Sz(width, height)))
+        if not detached && target.IsSome && not (source.Equals(target.Value)) &&
+           position.IsNone && direction.IsNone && window.isMaximized && not window.isMinimized then
+            Rect(Pt(area.X, area.Y), Sz(area.Width, area.Height))
+        elif normalSamePosition then
+            Rect(Pt(x, y), Sz(width, height))
+        else
+            FramePlacement.previewVisible seed margin direction.IsSome (Rect(Pt(x, y), Sz(width, height)))
 
     // `menuScale` is the DPI scale of the monitor the menu is anchored on,
     // decided once by the caller and used for every picture in the menu:

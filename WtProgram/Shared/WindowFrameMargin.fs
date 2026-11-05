@@ -75,6 +75,15 @@ module WindowFrameMargin =
         { x = bounds.x - left; y = bounds.y - top
           width = bounds.width + left + right; height = bounds.height + top + bottom }
 
+    // Map the visible normal frame, then recover this member's native frame.
+    // Use the same position-only clamp as a normal same-position move.
+    let mapNormalPlacement sourceArea targetArea sourceMargin targetMargin (native: Bounds) =
+        let visible = outset sourceMargin native
+        let x, y, width, height =
+            SnapGeometry.mapNormalBounds sourceArea targetArea (visible.x, visible.y, visible.width, visible.height)
+        let mapped = { x=x; y=y; width=width; height=height }
+        visible, mapped, inset targetMargin mapped
+
     // DWM insets are physical pixels. Reject invalid samples instead of
     // allowing stale or unrelated frame bounds to enlarge a snap.
     let frameInsets (outer: Bounds) (visible: Bounds) =

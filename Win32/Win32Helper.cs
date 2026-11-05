@@ -335,6 +335,38 @@ namespace Bemo
             return SetWindowMaximizedNoActivate(hwnd, false, bounds);
         }
 
+        // Establish restore bookkeeping without ShowWindow/SetWindowPlacement:
+        // those APIs can raise a background member even without activation.
+        // The intermediate normal size must not be painted. On failure, restore
+        // only the original style; do not publish a new maximized rectangle.
+        public static bool SetMaximizedPlacementNoActivate(IntPtr hwnd, RECT normal, RECT maximized)
+        {
+            if (!WinUserApi.IsWindow(hwnd) || WinUserApi.IsIconic(hwnd)) return false;
+            int style = WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE));
+            int restored = style & ~(WindowsStyles.WS_MINIMIZE | WindowsStyles.WS_MAXIMIZE);
+            var flags = SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER |
+                        SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_FRAMECHANGED;
+            bool normalWritten = false;
+            bool maximizedWritten = false;
+            try
+            {
+                WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(restored));
+                if (WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE)) == restored)
+                    normalWritten = WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, normal.Left, normal.Top,
+                        normal.Width, normal.Height, flags | SetWindowPosFlags.SWP_NOREDRAW);
+            }
+            finally
+            {
+                int finalStyle = normalWritten ? restored | WindowsStyles.WS_MAXIMIZE : style;
+                WinUserApi.SetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE, new IntPtr(finalStyle));
+                if (normalWritten &&
+                    WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_STYLE)) == finalStyle)
+                    maximizedWritten = WinUserApi.SetWindowPos(hwnd, IntPtr.Zero, maximized.Left, maximized.Top,
+                        maximized.Width, maximized.Height, flags);
+            }
+            return normalWritten && maximizedWritten && WinUserApi.IsZoomed(hwnd);
+        }
+
         // Workspace rectangles use the caller's DPI-unaware workspace coordinates.
         // Change styles and bounds without showing, activating or raising the window.
         public static bool PlaceWorkspaceWindowNoActivate(IntPtr hwnd, RECT normal, bool maximized)

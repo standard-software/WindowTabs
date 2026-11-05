@@ -192,6 +192,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let _os = OS()
     let frameMargins = WindowFrameMargin.Cache()
     let configuredInsets = Dictionary<IntPtr, FramelessWindow.Insets>()
+    let normalMoveInsets = Dictionary<IntPtr, int * WindowFrameMargin.Margin>()
+    let mutable maximizedScreenMove = false
     let hasConfiguredInsets = FramelessWindowSettings.hasInsets()
     let mutable marginPollIndex = 0
     // Each group remembers what it applied even when another group sampled first.
@@ -685,13 +687,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Let the event's group AND strip batches finish before touching followers.
     // Keep only one queued pass; no HWND, bounds or showCmd is captured here.
     member private this.queueChildPlacement() =
-        if not childPlacementPending then
+        if not maximizedScreenMove && not childPlacementPending then
             childPlacementPending <- true
             // Deliberately use the raw invoker: wrapping both phases in
             // this.invokeAsync would hold the strip batch across the slow work.
             invoker.asyncInvoke <| fun () ->
                 childPlacementPending <- false
-                if isDestroyed.value.not && desktopShown && inMoveSize.value.not then
+                if not maximizedScreenMove && isDestroyed.value.not && desktopShown && inMoveSize.value.not then
                     match zorderCell.value.tryHead with
                     | Some(hwnd) ->
                         let window = this.os.windowFromHwnd(hwnd)
@@ -728,7 +730,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 let b = w.bounds
                 w.isWindow && w.isMinimized.not && b.width > 0 && b.height > 0
             | None -> false
-        if topIsValid then
+        if topIsValid && not maximizedScreenMove then
             this.refreshWindowMargin(zorderCell.value.head) |> ignore
             // This is the de-facto "restore follows the group" path: when the
             // user restores one window (e.g. from the taskbar), the siblings
@@ -1748,7 +1750,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // save such a placement — it would later be applied to every other
         // window in the group.
         let liveBounds = window.bounds
-        if  window.isWindow &&
+        if  not maximizedScreenMove && window.isWindow &&
             window.isMinimized.not &&
             liveBounds.width > 0 && liveBounds.height > 0 &&
             this.os.isOnScreen(liveBounds)
@@ -1958,6 +1960,166 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.configuredInsets(hwnd) |> ignore
         this.snapshotPlacementMargin(hwnd)
 
+    // Normal-frame metrics are sampled before maximization; maximized DWM
+    // borders are not a valid measurement of a future restored frame.
+    member this.normalMoveMargin(hwnd: IntPtr) =
+        let configured = this.snapshotPlacementMargin(hwnd)
+        let cached =
+            match normalMoveInsets.TryGetValue(hwnd) with
+            | true, value -> Some value
+            | _ -> None
+        let read dpi =
+            let margin = configured dpi
+            if margin <> (0,0,0,0) then margin
+            else
+                match cached with
+                | Some(sampleDpi, insets) ->
+                    let top, left, right, bottom = WindowFrameMargin.scale sampleDpi dpi insets
+                    -top, -left, -right, -bottom
+                | None -> margin
+        read, cached.IsSome
+
+    member this.moveMaximizedToScreen(sourceArea: Rect, targetArea: Rect, targetDisplay: Rect) = this.invokeSync <| fun () ->
+        let front = this.topWindow
+        let window = this.os.windowFromHwnd(front)
+        if window.isMaximized && not window.isMinimized then
+            let members = this.windows.items.list
+            // Drain older native writes before moving the source. Pending worker
+            // callbacks carry invalidated revisions and cannot publish old bounds.
+            followerPlacements.CancelAll()
+            pendingBackgroundMoves.Clear()
+            for hwnd in members do followerPlacements.Synchronous(hwnd, fun () -> ())
+            this.capturePlacementMargin(front) |> ignore
+            let sourceMargin, sourceMeasured = this.normalMoveMargin(front)
+            let original = FramePlacement.restoredBounds window
+            let sourceMaximized = window.bounds
+            let sourceDpi = max 96 (int (Math.Round(Dpi.scaleForRect sourceArea * 96.0)))
+            let targetDpi = max 96 (int (Math.Round(Dpi.scaleForRect targetArea * 96.0)))
+            // A window that is already maximized is not re-maximized by
+            // SetWindowPlacement, so its bounds after the move still carry the
+            // source display's size. Derive the destination maximized rectangle
+            // from the target work area and the source overhang instead.
+            let finalMaximized =
+                let scale v = int (Math.Round(float (max 0 v) * float targetDpi / float sourceDpi))
+                let left = scale (sourceArea.x - sourceMaximized.x)
+                let top = scale (sourceArea.y - sourceMaximized.y)
+                let right = scale ((sourceMaximized.x + sourceMaximized.width) - (sourceArea.x + sourceArea.width))
+                let bottom = scale ((sourceMaximized.y + sourceMaximized.height) - (sourceArea.y + sourceArea.height))
+                Rect(Pt(targetArea.x - left, targetArea.y - top),
+                     Sz(targetArea.width + left + right, targetArea.height + top + bottom))
+            let area (r: Rect) = r.x, r.y, r.width, r.height
+            let sourceVisible, targetVisible, _ =
+                WindowFrameMargin.mapNormalPlacement
+                    (area sourceArea) (area targetArea) (sourceMargin sourceDpi) (0,0,0,0)
+                    { x=original.x; y=original.y; width=original.width; height=original.height }
+            let visible = Rect(Pt(targetVisible.x, targetVisible.y), Sz(targetVisible.width, targetVisible.height))
+            let normalFor hwnd =
+                let margin, measured = this.normalMoveMargin(hwnd)
+                FramePlacement.target hwnd margin visible, measured
+            let waitForMoveDpi hwnd initialDpi =
+                let perMonitorAware =
+                    try
+                        WinUserApi.GetAwarenessFromDpiAwarenessContext(WinUserApi.GetWindowDpiAwarenessContext(hwnd)) = 2
+                    with _ -> false
+                if perMonitorAware && int initialDpi <> targetDpi && this.waitForDpiChange(hwnd, initialDpi, 200) then
+                    Thread.Sleep(20)
+            maximizedScreenMove <- true
+            try
+                this.withoutTransitions(front, fun () ->
+                    let initialDpi = WinUserApi.GetDpiForWindow(front)
+                    window.setPositionOnly targetArea.x targetArea.y
+                    waitForMoveDpi front initialDpi
+                    // Windows keeps the restore rectangle in its own placement
+                    // record; a style-toggled SetWindowPos does not update it,
+                    // and every member follows the front window's restore.
+                    let normal, _ = normalFor front
+                    let placementNormal =
+                        if int(window.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+                        else normal.move(targetDisplay.x-targetArea.x, targetDisplay.y-targetArea.y)
+                    let targetPlacement =
+                        { window.placement with
+                            rcNormalPosition=placementNormal
+                            ptMaxPosition=Pt(-1,-1)
+                            showCmd=ShowWindowCommands.SW_SHOWMAXIMIZED }
+                    window.setPlacement targetPlacement |> ignore)
+                // Give the computed destination maximization to every member,
+                // never the position-only staging rectangle.
+#if DEBUG
+                WindowFrameMargin.trace (sprintf "maximized-screen-map sourceNormalVisible=%A targetNormalVisible=%A targetWork=%A finalMaximized=%A sourceInsetsMeasured=%b"
+                    sourceVisible targetVisible targetArea finalMaximized sourceMeasured)
+#endif
+                // Walk members in the group's z-order and chain each one behind
+                // the previous, so restoring the placement record keeps the
+                // existing back-to-front order of the tabs.
+                let ordered =
+                    let zorder = zorderCell.value.list |> List.filter (fun hwnd -> List.contains hwnd members)
+                    zorder @ (members |> List.filter (fun hwnd -> not (List.contains hwnd zorder)))
+                let anchor = ref front
+                for hwnd in ordered do
+                    if this.isSameWindow(hwnd) then
+                        followerPlacements.Synchronous(hwnd, fun () ->
+                            this.withoutTransitions(hwnd, fun () ->
+                                let memberWindow = this.os.windowFromHwnd(hwnd)
+                                let minimized = memberWindow.isMinimized
+                                if not minimized && hwnd <> front then
+                                    let initialDpi = WinUserApi.GetDpiForWindow(hwnd)
+                                    memberWindow.setPositionOnly targetArea.x targetArea.y
+                                    waitForMoveDpi hwnd initialDpi
+                                let normal, measured = normalFor hwnd
+                                let placementNormal =
+                                    if int(memberWindow.styleEx) &&& WindowsExtendedStyles.WS_EX_TOOLWINDOW <> 0 then normal
+                                    else normal.move(targetDisplay.x-targetArea.x, targetDisplay.y-targetArea.y)
+                                let mutable restoreWritten = true
+                                let mutable orderKept = true
+                                let applied =
+                                    if minimized then
+                                        // Keep native minimized bookkeeping; Windows performs the later restore.
+                                        let current = memberWindow.placement
+                                        memberWindow.setPlacement
+                                            { current with
+                                                rcNormalPosition=placementNormal
+                                                flags=current.flags ||| WindowPlacementFlags.WPF_RESTORETOMAXIMIZED
+                                                showCmd=ShowWindowCommands.SW_SHOWMINNOACTIVE }
+                                    else
+                                        let placed = Win32Helper.SetMaximizedPlacementNoActivate(hwnd, normal.RECT, finalMaximized.RECT)
+                                        // The style-toggled write does not update the restore
+                                        // rectangle Windows keeps for the window. Any member can be
+                                        // the one the user restores, so write it through the
+                                        // placement record. SW_SHOWNA keeps the state and focus
+                                        // but raises the window, so put it back behind the
+                                        // previous member. A hidden member stays hidden.
+                                        if placed && hwnd <> front then
+                                            let current = memberWindow.placement
+                                            let showCmd =
+                                                if WinUserApi.IsWindowVisible(hwnd) then ShowWindowCommands.SW_SHOWNA
+                                                else ShowWindowCommands.SW_HIDE
+                                            restoreWritten <-
+                                                memberWindow.setPlacement
+                                                    { current with rcNormalPosition=placementNormal; showCmd=showCmd }
+                                            if memberWindow.tryInsertAfter(anchor.Value) then
+                                                anchor.Value <- hwnd
+                                            else
+                                                // Never leave a raised member above the active tab.
+                                                orderKept <- false
+                                                window.tryInsertAfter(IntPtr.Zero) |> ignore
+                                        placed
+#if DEBUG
+                                WindowFrameMargin.trace (sprintf "maximized-screen-member hwnd=%X normalNative=%A maximizedNative=%A insetsMeasured=%b minimized=%b applied=%b restoreWritten=%b orderKept=%b restoreRecord=%A zoomed=%b"
+                                    (int64 hwnd) normal finalMaximized measured minimized applied restoreWritten orderKept
+                                    memberWindow.placement.rcNormalPosition (WinUserApi.IsZoomed(hwnd)))
+#endif
+                                if applied && this.hasWindowMargin(hwnd) then
+                                    marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (normal.width, normal.height)))))
+#if DEBUG
+                WindowFrameMargin.trace (sprintf "maximized-screen-front front=%X foreground=%X" (int64 front) (int64 (WinUserApi.GetForegroundWindow())))
+#endif
+            finally
+                maximizedScreenMove <- false
+                this.saveTopWindowPlacement()
+                isMaximizedExport.update()
+                isFullscreenExport.update()
+                updateTabVisibility()
+
     member this.hasWindowMargin(hwnd: IntPtr) =
         let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
         top <> 0 || left <> 0 || right <> 0 || bottom <> 0 ||
@@ -2038,7 +2200,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             | _ -> frameMargins.Measurement(hwnd)
         let window = this.os.windowFromHwnd(hwnd)
         let normal = window.isWindow && not window.isMinimized && not window.isMaximized
-        let moving = inMoveSize.value || window.isInMoveSize
+        if normal && not maximizedScreenMove then
+            let outer = window.bounds
+            let mutable frame = RECT()
+            if DwmApi.DwmGetWindowAttribute(hwnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &frame, 16) = 0 then
+                let top, left, right, bottom =
+                    WindowFrameMargin.frameInsets
+                        { x=outer.x; y=outer.y; width=outer.width; height=outer.height }
+                        { x=frame.Left; y=frame.Top; width=frame.Right-frame.Left; height=frame.Bottom-frame.Top }
+                normalMoveInsets.[hwnd] <- max 96 (int (Math.Round(Dpi.scaleForRect outer * 96.0))),
+                                          { top=top; left=left; right=right; bottom=bottom }
+        let moving = maximizedScreenMove || inMoveSize.value || window.isInMoveSize
         if not moving then
             frameMargins.Refresh(hwnd, fun candidate ->
                 // Our strip and guard are owned popups too. Neither is an app frame.
@@ -2109,7 +2281,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         let mutable queuedAsync = false
         let window = this.os.windowFromHwnd(hwnd)
-        if placement.value.IsSome then
+        if not maximizedScreenMove && placement.value.IsSome then
             let bounds,wp = placement.value.Value
             this.traceMarginPlacement("follower-adjust", hwnd)
 #if DEBUG
@@ -2525,7 +2697,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.followSharedWindow(hwnd) =
         this.refreshWindowMargin(hwnd) |> ignore
         let window = this.os.windowFromHwnd(hwnd)
-        if window.isWindow && not window.isMinimized && not window.isInMoveSize && this.isSameWindow(hwnd) then
+        if not maximizedScreenMove && window.isWindow && not window.isMinimized && not window.isInMoveSize && this.isSameWindow(hwnd) then
             let live = window.bounds
             if live.width > 0 && live.height > 0 && this.os.isOnScreen(live) then
                 let bounds =
@@ -2919,6 +3091,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if not (this.windows.contains(hwnd)) then
                     frameMargins.Remove(hwnd)
                     configuredInsets.Remove(hwnd) |> ignore
+                    normalMoveInsets.Remove(hwnd) |> ignore
 
     // `place` false: the window joins where it is. A group made for a window
     // shown on all desktops, on another desktop, takes it as it is found - the
@@ -3109,6 +3282,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         frameMargins.Remove(hwnd)
         appliedMargins.Remove(hwnd) |> ignore
         configuredInsets.Remove(hwnd) |> ignore
+        normalMoveInsets.Remove(hwnd) |> ignore
         if this.windows.contains(hwnd) then    
             // A window this group parked is put back before it leaves: once it
             // is in no group, nothing would. Every way out of a group passes
@@ -3197,6 +3371,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             frameMargins.Clear()
             appliedMargins.Clear()
             configuredInsets.Clear()
+            normalMoveInsets.Clear()
 #if DEBUG
             WindowFrameMargin.forgetBase this.hwnd
 #endif
