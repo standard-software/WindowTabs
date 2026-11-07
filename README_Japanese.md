@@ -412,6 +412,19 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 
 </details>
 
+## コード署名ポリシー (Code signing policy)
+
+コード署名は [SignPath.io](https://about.signpath.io) が無償で提供し、証明書は [SignPath Foundation](https://signpath.org) が発行します。
+
+- コミットとレビュー: [standard-software](https://github.com/standard-software)
+- 署名の承認: [standard-software](https://github.com/standard-software)
+
+ss_2026.11.06 までのリリースは署名されていません。
+
+### プライバシーポリシー
+
+このプログラムは、利用者またはインストール・操作する人が求めない限り、ネットワーク上のほかのシステムへ情報を送りません。
+
 ## ライセンス
 
 このプロジェクトはオープンソースであり、MIT ライセンスに基づいています。

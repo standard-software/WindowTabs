@@ -412,6 +412,19 @@ Mr./Ms. leafOfTree also created a fork with various improvements:
 
 </details>
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [standard-software](https://github.com/standard-software)
+- Approvers: [standard-software](https://github.com/standard-software)
+
+Releases up to ss_2026.11.06 are not signed.
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
 ## License
 
 This project is open source and licensed under the MIT License.
