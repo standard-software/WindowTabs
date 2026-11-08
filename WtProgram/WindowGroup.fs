@@ -261,6 +261,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // busy processing the surfacing events). (group-thread only)
     let mutable restoreFrontHwnd = IntPtr.Zero
     let mutable restoreFrontUntil = DateTime.MinValue
+    // Only members present when the hold starts are restoring siblings.
+    let mutable restoreFrontMembers : Set<IntPtr> = Set.empty
     let foregroundCell = Cell.create(_os.foreground.hwnd)
     let prevForegroundCell = ref None
     let isMinimized hwnd = this.os.windowFromHwnd(hwnd).isMinimized
@@ -565,6 +567,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member this.foreground
         with get() = foregroundCell.value
         and set(value) =
+            // Record the newcomer taking focus even if a sibling activates next.
+            if restoreFrontHwnd <> IntPtr.Zero && this.windows.contains(value) &&
+               not (restoreFrontMembers.Contains(value)) then
+                restoreFrontHwnd <- IntPtr.Zero
             let prev = foregroundCell.value
             if prev <> value then
                 foregroundCell.set(value)
@@ -744,9 +750,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // siblings, so adjustWindowPlacement can insert each surfacing
             // sibling directly behind it (no flicker on top).
             if siblingsWereMinimized then
-                restoredHwnd |> Option.iter (fun front ->
-                    restoreFrontHwnd <- front
-                    restoreFrontUntil <- DateTime.Now.AddMilliseconds(1500.0))
+                restoredHwnd |> Option.iter this.armRestoreFront
             // Capture the final group rectangle BEFORE posting any moves.
             // The second pass must not keep a sibling's still-old position.
             let topWindow = this.os.windowFromHwnd(zorderCell.value.head)
@@ -825,6 +829,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if siblingsWereMinimized then
                 restoredHwnd |> Option.iter this.bringRestoredToFront
 
+    member private this.armRestoreFront(hwnd) =
+        let now = DateTime.Now
+        // Repeated placement passes must not adopt newcomers into an active hold.
+        if restoreFrontHwnd <> hwnd || now >= restoreFrontUntil then
+            restoreFrontMembers <- Set.ofList zorderCell.value.list
+        restoreFrontHwnd <- hwnd
+        restoreFrontUntil <- now.AddMilliseconds(1500.0)
+
     // Put the user-restored window in front of the group and keep it there:
     // siblings restored in the background may raise or activate themselves a
     // moment later (Office, Visual Studio), so one settle pass re-fronts it
@@ -837,20 +849,24 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // the next ~1s and each surfaces over this window. reassertRestoreFront
         // (called from the MINIMIZEEND cascade + a backstop timer) pushes it
         // back to the front each time until the deadline.
-        restoreFrontHwnd <- hwnd
-        restoreFrontUntil <- DateTime.Now.AddMilliseconds(1500.0)
+        this.armRestoreFront(hwnd)
         ThreadHelper.cancelablePostBack 900 (fun() -> this.invokeAsync this.reassertRestoreFront) |> ignore
 
     // Keep the user-restored window on top while its siblings are still
     // surfacing (see restoreFrontHwnd). Reorders z-order only; re-activates
-    // only if a sibling stole activation (Office/VS self-activate). Stops once
-    // focus leaves the group or the deadline passes.
+    // only if a sibling stole activation (Office/VS self-activate). Does nothing
+    // while focus is outside the group. Stops when a member that joined during
+    // the hold takes the foreground, or the deadline passes.
     member private this.reassertRestoreFront() =
         let hwnd = restoreFrontHwnd
         if hwnd <> IntPtr.Zero && DateTime.Now < restoreFrontUntil then
             try
                 let fg = this.os.foreground.hwnd
-                if this.windows.contains(fg) &&
+                // A window that joined during the hold (e.g. a document the app
+                // just opened) is not a surfacing sibling: let it keep the front.
+                if this.windows.contains(fg) && not (restoreFrontMembers.Contains(fg)) then
+                    restoreFrontHwnd <- IntPtr.Zero
+                elif this.windows.contains(fg) &&
                    this.windows.contains(hwnd) &&
                    this.os.windowFromHwnd(hwnd).isMinimized.not then
                     let z = this.os.windowZorders
@@ -2403,7 +2419,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             // Post the sibling directly behind the restore-front window
                             // so it surfaces already below it instead of flickering on
                             // top. Ordered after the show on the target's queue.
-                            if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd then
+                            if restoreFrontHwnd <> IntPtr.Zero && restoreFrontHwnd <> hwnd &&
+                               DateTime.Now < restoreFrontUntil && restoreFrontMembers.Contains(hwnd) then
                                 window.insertAfterAsync(restoreFrontHwnd)
                             ThreadHelper.cancelablePostBack 500 (fun() -> this.enableTransitions(hwnd)) |> ignore
                         with _ ->
@@ -3137,6 +3154,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // new to it (TabEdges.arrivalOf).
             let zorderBefore = zorderCell.value.list
             this.setWindows(this.windows.add hwnd)
+            // Foreground notification may have arrived before group membership.
+            if restoreFrontHwnd <> IntPtr.Zero && this.os.foreground.hwnd = hwnd &&
+               not (restoreFrontMembers.Contains(hwnd)) then
+                restoreFrontHwnd <- IntPtr.Zero
             if placement.value.IsNone then
                 prevTop.set(Some(hwnd))
                 match prepared with
