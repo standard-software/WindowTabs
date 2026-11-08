@@ -2,7 +2,10 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.11.06_next1
+## version ss_2026.11.06_next2
+
+- 最小化したグループの Word などで別の文書を開いたとき、
+  元の文書に前面を奪われる不具合を修正 (#34)
 
 ## version ss_2026.11.06
 

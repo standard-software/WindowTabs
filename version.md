@@ -2,7 +2,10 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.06_next1
+## version ss_2026.11.06_next2
+
+- Fixed a new document losing the front to an older one when it was
+  opened while its app's group was minimized, e.g. in Word (#34).
 
 ## version ss_2026.11.06
 
