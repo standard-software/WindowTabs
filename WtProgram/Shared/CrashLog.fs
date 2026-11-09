@@ -5,24 +5,33 @@ open System.Threading
 open System.Threading.Tasks
 open System.Windows.Forms
 
-// Shutdown diagnostics contain only fixed stages, type/method names and thread IDs.
+// Diagnostics contain only fixed stages, type/method names and numeric identifiers.
 module ShutdownTrace =
-#if DEBUG
-    let private startupClock = System.Diagnostics.Stopwatch.StartNew()
-    let remainingDelay milliseconds = max 1 (milliseconds - int (min (int64 Int32.MaxValue) startupClock.ElapsedMilliseconds))
     let private gate = obj()
     let private writing = new ThreadLocal<bool>(fun () -> false)
-    let mutable private stopping = 0
-    let write stage =
+    let private writeLine line =
         if not writing.Value then
             writing.Value <- true
             try
                 try
                     lock gate (fun () ->
                         File.AppendAllText(Path.Combine(Path.GetTempPath(), "WindowTabs_shutdown_trace.txt"),
-                            sprintf "thread=%d %s\r\n" Thread.CurrentThread.ManagedThreadId stage))
+                            line + "\r\n"))
                 with _ -> ()
             finally writing.Value <- false
+
+    // Registration failures need evidence in Release too. Do not include
+    // window data, paths or timestamps in this diagnostic.
+    let winEventRegistrationFailed number pid =
+        writeLine (sprintf "WinEvent registration failed number=%d pid=%d" number pid)
+    let winEventRegistrationFailuresSuppressed() =
+        writeLine "Further WinEvent registration failures omitted"
+#if DEBUG
+    let private startupClock = System.Diagnostics.Stopwatch.StartNew()
+    let remainingDelay milliseconds = max 1 (milliseconds - int (min (int64 Int32.MaxValue) startupClock.ElapsedMilliseconds))
+    let mutable private stopping = 0
+    let write stage =
+        writeLine (sprintf "thread=%d %s" Thread.CurrentThread.ManagedThreadId stage)
     let beginShutdown() =
         Interlocked.Exchange(&stopping, 1) |> ignore
         write "shutdown begin"

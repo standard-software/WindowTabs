@@ -122,9 +122,13 @@ module WinEventHooks =
                 try int (GetProcessIdOfThread handle)
                 finally CloseHandle handle |> ignore
 
-    let private register number dispatch =
+    let private registrationFailures = System.Collections.Generic.HashSet<int * int>()
+
+    let mutable private registrationFailuresSuppressed = false
+
+    let private register number pid dispatch =
 #if DEBUG
-        let burst = PerfTrace.WinEventBurstCounter(number, number, 0, 0)
+        let burst = PerfTrace.WinEventBurstCounter(number, number, pid, 0)
         let callbackCount = PerfTrace.winEventCallback
 #endif
         let callback hook event hwnd idObject idChild tid tick =
@@ -138,21 +142,33 @@ module WinEventHooks =
         let del = WINEVENTPROC(callback)
         let root = GCHandle.Alloc(del)
         // Own-process reorder/foreground events are used by strip/guard repair.
-        let hook = WinUserApi.SetWinEventHook(number, number, IntPtr.Zero, del, 0, 0, 0)
+        let wineventOutOfContext = 0
+        let hook = WinUserApi.SetWinEventHook(number, number, IntPtr.Zero, del, pid, 0, wineventOutOfContext)
+        if hook = IntPtr.Zero then
+            root.Free()
+            if not registrationFailuresSuppressed && not (registrationFailures.Contains((number, pid))) then
+                if registrationFailures.Count < 20 then
+                    registrationFailures.Add((number, pid)) |> ignore
+                    ShutdownTrace.winEventRegistrationFailed number pid
+                else
+                    registrationFailuresSuppressed <- true
+                    ShutdownTrace.winEventRegistrationFailuresSuppressed()
+            None
+        else
 #if DEBUG
-        let traceHook = if hook <> IntPtr.Zero then PerfTrace.registerWinEventBurst burst else 0
+            let traceHook = PerfTrace.registerWinEventBurst burst
 #endif
-        fun () ->
-            if hook = IntPtr.Zero || WinUserApi.UnhookWinEvent(hook) then
-                ShutdownTrace.write "WinEvent hook removed"
+            Some (fun () ->
+                if WinUserApi.UnhookWinEvent(hook) then
+                    ShutdownTrace.write "WinEvent hook removed"
 #if DEBUG
-                if traceHook <> 0 then PerfTrace.unregisterWinEventBurst traceHook
+                    if traceHook <> 0 then PerfTrace.unregisterWinEventBurst traceHook
 #endif
-                root.Free()
-                true
-            else false
+                    root.Free()
+                    true
+                else false)
 
-    let private hub = WinEventHub(register, sourcePid)
+    let private hub = WinEventHub(register, sourcePid, WinEventPump.defer, fun () -> Environment.TickCount)
     let private traceSubscribers() =
 #if DEBUG
         PerfTrace.winEventSubscribers hub.SubscriptionCount

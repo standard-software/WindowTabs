@@ -81,14 +81,36 @@ type private HubBucket(entries: HubSubscription array) =
 // Native registration is injected so lifetime and routing tests need no OS hook.
 // All members run on the registration pump, including native cleanup. A failed
 // unhook remains owned and can be reused or retried; never install a duplicate.
-type WinEventHub(register: int -> (HubEvent -> unit) -> (unit -> bool), resolvePid: HubEvent -> int) as this =
+type WinEventHub(register: int -> int -> (HubEvent -> unit) -> (unit -> bool) option,
+                 resolvePid: HubEvent -> int, defer: int -> (unit -> unit) -> bool,
+                 tickCount: unit -> int) as this =
     let subscriptions = Dictionary<int, HubSubscription>()
-    let hooks = Dictionary<int, unit -> bool>()
+    let hooks = Dictionary<int * int, unit -> bool>()
+    let mutable desired = HashSet<int * int>()
+    // The token prevents a queued cleanup from removing a reused hook.
+    let retiring = Dictionary<int * int, int * obj>()
+    let remove key =
+        if hooks.[key]() then hooks.Remove key |> ignore
+    let ensure ((number, pid) as key) =
+        if hooks.ContainsKey key then true
+        else
+            let dispatch (evt: HubEvent) =
+                let mutable retirement = Unchecked.defaultof<_>
+                // Signed modular subtraction handles the 32-bit tick rollover.
+                // Equal ticks may deliver twice; state-based receivers tolerate it.
+                if desired.Contains key ||
+                   (retiring.TryGetValue(key, &retirement) &&
+                    int32 (uint32 evt.Time - uint32 (fst retirement)) <= 0) then
+                    this.Dispatch evt
+            match register number pid dispatch with
+            | Some cleanup -> hooks.Add(key, cleanup); true
+            | None -> false
     let mutable table = Dictionary<int, HubBucket>()
     let mutable enabled = true
     let mutable nextId = 0
     let rebuild() =
         let next = Dictionary<int, HubBucket>()
+        let scopes = HashSet<int * int>()
         if enabled then
             let events = Dictionary<int, ResizeArray<HubSubscription>>()
             for entry in subscriptions.Values do
@@ -98,13 +120,62 @@ type WinEventHub(register: int -> (HubEvent -> unit) -> (unit -> bool), resolveP
                         entries <- ResizeArray()
                         events.Add(number, entries)
                     entries.Add entry
-            for pair in events do next.Add(pair.Key, HubBucket(pair.Value.ToArray()))
+            for pair in events do
+                let entries = pair.Value.ToArray()
+                next.Add(pair.Key, HubBucket(entries))
+                // Thread-only subscriptions also need a global hook: their
+                // process is unknown, and routing still checks the thread.
+                if entries |> Array.exists (fun entry -> entry.Pid = 0) then
+                    scopes.Add((pair.Key, 0)) |> ignore
+                else
+                    for entry in entries do scopes.Add((pair.Key, entry.Pid)) |> ignore
         table <- next
-        for number in hooks.Keys |> Seq.toArray do
-            if not (next.ContainsKey number) && hooks.[number]() then hooks.Remove number |> ignore
+        let selected = HashSet<int * int>()
+        let cutoffs = Dictionary<int, int>()
         for number in next.Keys do
-            if not (hooks.ContainsKey number) then
-                hooks.Add(number, register number this.Dispatch)
+            let requested = scopes |> Seq.filter (fun (event, _) -> event = number) |> Seq.toArray
+            // Evaluate every registration, even after one has failed.
+            let registered = requested |> Array.map (fun key -> key, ensure key)
+            if registered |> Array.forall snd then
+                for key in requested do selected.Add key |> ignore
+            elif not (scopes.Contains((number, 0))) && ensure (number, 0) then
+                selected.Add((number, 0)) |> ignore
+            else
+                // No complete replacement: keep the previous working coverage
+                // and any successfully added process scopes. Retry on rebuild.
+                for key in desired do
+                    if fst key = number then selected.Add key |> ignore
+                for key, success in registered do
+                    if success then selected.Add key |> ignore
+            cutoffs.Add(number, tickCount())
+        // All selected replacements are installed by this tick. An event from
+        // the registration interval can be duplicated, but later events use
+        // only the selected scopes. This is not a native queue-drain guarantee.
+        let previous = desired
+        desired <- selected
+        for key in desired do retiring.Remove key |> ignore
+        for key in hooks.Keys |> Seq.toArray do
+            if not (desired.Contains key) then
+                if not (next.ContainsKey (fst key)) then
+                    // Disable and last-unsubscribe cleanup must also work while
+                    // the pump is stopping and no longer accepts posted work.
+                    retiring.Remove key |> ignore
+                    remove key
+                elif not (retiring.ContainsKey key) then
+                    if previous.Contains key then
+                        let token = obj()
+                        retiring.Add(key, (cutoffs.[fst key], token))
+                        let cleanup() =
+                            let mutable current = Unchecked.defaultof<_>
+                            if retiring.TryGetValue(key, &current) &&
+                               Object.ReferenceEquals(snd current, token) then
+                                retiring.Remove key |> ignore
+                                remove key
+                        // Allow pre-switch notifications arriving during the grace
+                        // period to run. Notifications arriving later are not saved.
+                        // Rejection during shutdown falls back to immediate cleanup.
+                        if not (defer 500 cleanup) then cleanup()
+                    else remove key
     member _.Dispatch(evt: HubEvent) =
         // Zero HWND is meaningful for global system events. Window-specific
         // subscribers naturally miss it; do not change the global contract.

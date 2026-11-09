@@ -169,6 +169,11 @@ module WinEventPump =
     let mutable private stopping = false
     let mutable private worker : Thread option = None
     let isStopped() = worker |> Option.forall (fun thread -> not thread.IsAlive)
+    // Owned and disposed only on the pump thread.
+    let private deferred = System.Collections.Generic.HashSet<System.Windows.Forms.Timer>()
+    let private cancelDeferred() =
+        for timer in deferred do timer.Dispose()
+        deferred.Clear()
     let private dispatcher = lazy (
         let ready = new System.Threading.Tasks.TaskCompletionSource<Invoker>()
         let run() =
@@ -180,6 +185,7 @@ module WinEventPump =
                 ready.SetResult(invoker)
                 try Application.Run()
                 finally
+                    cancelDeferred()
                     (invoker :> IDisposable).Dispose()
                     inner.Dispose()
                     ShutdownTrace.write "WinEvent message loop ended"
@@ -194,11 +200,34 @@ module WinEventPump =
     let post action = lock gate (fun () ->
         if not stopping then dispatcher.Value.asyncInvoke action)
 
+    // Called on the pump, unlike post. A timer returns control to the native
+    // message loop instead of extending the current BeginInvoke callback batch.
+    // This grace period is not a guarantee that all WinEvents have drained.
+    let defer milliseconds action = lock gate (fun () ->
+        if stopping then false
+        else
+            let timer = new System.Windows.Forms.Timer()
+            try
+                timer.Interval <- milliseconds
+                timer.Tick.Add(fun _ ->
+                    timer.Stop()
+                    deferred.Remove timer |> ignore
+                    timer.Dispose()
+                    action())
+                deferred.Add timer |> ignore
+                timer.Start()
+                true
+            with _ ->
+                deferred.Remove timer |> ignore
+                timer.Dispose()
+                false)
+
     let stop cleanup = lock gate (fun () ->
         if not stopping then
             stopping <- true
             if dispatcher.IsValueCreated then
                 dispatcher.Value.asyncInvoke(fun () ->
+                    cancelDeferred()
                     cleanup()
                     ShutdownTrace.write "WinEvent ExitThread"
                     Application.ExitThread()))
