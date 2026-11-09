@@ -2,6 +2,11 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.06_next3
+
+- 待機中の CPU 負荷を軽減。グループに入っていないアプリの
+  ウィンドウの動きで WindowTabs が起こされないようにした (#37)
+
 ## version ss_2026.11.06_next2
 
 - 最小化したグループの Word などで別の文書を開いたとき、

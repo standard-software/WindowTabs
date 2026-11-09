@@ -73,7 +73,7 @@ If you have any feedback, I'd love to hear it on GitHub Issues.
 ## Download
 
 Supported: Windows 10 / Windows 11  
-Latest version: ss_2026.11.06_next2 · [Release notes version.md](version.md)
+Latest version: ss_2026.11.06_next3 · [Release notes version.md](version.md)
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 

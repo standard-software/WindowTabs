@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.06_next3
+
+- Lowered idle CPU use: window events from apps outside your groups
+  no longer wake WindowTabs (#37).
+
 ## version ss_2026.11.06_next2
 
 - Fixed a new document losing the front to an older one when it was
