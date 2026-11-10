@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.11_next1
+
 ## version ss_2026.11.11
 
 - 最小化したグループの Word などで別の文書を開いたとき、

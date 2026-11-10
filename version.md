@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.11_next1
+
 ## version ss_2026.11.11
 
 - Fixed a new document losing the front to an older one when it was
