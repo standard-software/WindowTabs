@@ -73,7 +73,7 @@ WindowTabs Standard-Software edition では、ウィンドウの上下左右に�
 ## ダウンロード
 
 対応: Windows 10 / Windows 11  
-最新バージョン: ss_2026.11.06_next3 · [変更履歴 version_Japanese.md](version_Japanese.md)
+最新バージョン: ss_2026.11.11 · [変更履歴 version_Japanese.md](version_Japanese.md)
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 
@@ -88,123 +88,121 @@ WindowTabs Standard-Software edition では、ウィンドウの上下左右に�
 
 自動グループ化で同じアプリを、同じカテゴリー（1〜10）で異なるアプリをまとめられます。有効にすると開いているウィンドウもまとまり、その後に手で分離したタブは外に残ります。
 
-## タブで操作する
+## WindowTabsの特徴
 
 ### 複数選択して一緒に動かす
 
 ![選択した二つのタブ](README_Image/ShotMultiSelect.png)
 
-Ctrl + クリックで選択・解除、Shift + クリックで範囲選択。メニュー操作も選択したタブに適用されます。
-
-### タブを分離して並べる
-
-| 分離前 | 分離後 |
-| --- | --- |
-| ![分離前の一つのグループ](README_Image/ShotDetachBefore.png) | ![右下へ分離した二つ目のグループ](README_Image/ShotDetachAfter.png) |
-
-選択したタブを分離し、指定位置へ配置できます。ドラッグでは並べ替え・分離・別グループへの連結もできます。
-
-### 上下左右のタブを切り替える
-
-![四辺に置いたタブ](README_Image/ShotFourEdges.png)
-
-四辺に置いたタブでアプリを切り替えられます。使う辺は設定の「タブ」で選びます。
+- Ctrl + クリックで選択・解除、Shift + クリックで範囲選択。
+- メニュー操作も選択したタブに適用されます。
+- 複数選択したタブの並び替えが行えます。
+- 複数選択したタブの分離や、連結が行えます。
+- 複数選択したタブの寄せ（左右・上下）や、配置する辺（上下左右）を切り替えられます。
 
 ### ウィンドウをスナップする
 
 | メニューで指定 | 配置後 |
 | --- | --- |
-| ![割合と配置先のメニュー](README_Image/ShotSnapMenu.png) | ![左半分へスナップした結果](README_Image/ShotSnapResult.png) |
+| ![割合と配置先のメニュー](README_Image/ShotSnapMenu_Japanese.png) | <img src="README_Image/ShotSnapResult.png" width="564" alt="左半分へスナップした結果"> |
 
-画面端・四隅への配置、比率指定、別ディスプレイへの移動ができます。通常のスナップは大きさを維持し、% 指定はディスプレイに対する比率でサイズを変えます。
+- Windows 標準のスナップと同じように使え、より細かく指定できます。
+- 大きさを維持したまま上下左右へ寄せるスナップと、比率を指定するスナップがあります。
+- 上下左右のエッジやコーナーへの移動が可能です。
+- 指定サイズへのリサイズが可能です。
 
-### グループを連結する
+### タブグループを指定した再配置
 
-| 連結前 | 連結後 |
-| --- | --- |
-| ![連結前の二つのグループ](README_Image/ShotLinkBefore.png) | ![一つに連結したグループ](README_Image/ShotLinkAfter.png) |
+![他のタブグループに連結](README_Image/MoveTabGroupToGroup_Japanese.png)
 
-グループ全体を別のグループへ連結できます。他の仮想デスクトップのグループも選べます。
+- タブグループを、指定した別のタブグループに連結できます。
+- 複数選択したタブを分離して位置を指定したり、指定したタブグループへ連結したりできます。
 
-### タブを左右に寄せる
+### 1つのタブグループ内で4方向のタブ配置
 
-| 寄せる前 | 寄せた後 |
-| --- | --- |
-| ![寄せる前のタブ](README_Image/ShotAlignBefore.png) | ![右へ寄せたタブ](README_Image/ShotAlignAfter.png) |
+![4方向のタブ](README_Image/ShotDirectionBefore.png)
 
-タブごと・選択したタブ・同じ辺の全タブをまとめて配置できます。左右の辺では上寄せ・下寄せになります。
+- 上タブ・下タブは左寄せ・右寄せ、左タブ・右タブは上寄せ・下寄せにできます。
 
-### タブを別の辺へ移す
+### タブをピンや色で見分ける
 
-| 移す前 | 移した後 |
-| --- | --- |
-| ![上辺にあるタブ](README_Image/ShotDirectionBefore.png) | ![下辺へ移したタブ](README_Image/ShotDirectionAfter.png) |
+![アイコンのみのピン止めタブ](README_Image/PinnedTabIcon.png)
+![アイコンとピン止めボタンのピン止めタブ](README_Image/PinnedTabWidth.png)
 
-タブごと・選択したタブ・同じ辺の全タブ・グループ全体を、使用中の辺へ移せます。寄せとピン止めは維持されます。
+- タブはピン止めでき、上タブ・下タブでは左端、左タブ・右タブでは上端に並びます。
 
-### 色で見分ける
+<img src="README_Image/PinnedColorTab_Japanese.png" width="558" alt="タブカラーメニュー">
 
-![ピンクのタブと各辺の色分け](README_Image/ShotTabColors.png)
-
-![Tab color menu](README_Image/PinnedColorTab_Japanese.png)
-
-背景・下線・枠線で色分けできます。
+- タブに色を付けられます。背景・下線・枠線のどれで描くかも選べます。
 
 ### その他のタブ操作
 
-ピン止めでアイコンのみ、または指定幅のタブにできます。右クリックからタブ名の変更、同じアプリの新規起動、同じ辺やグループ全体のタブを閉じる操作もできます。
+- タブUIとして普通にあるべき機能は全て実装されています。
+- 右クリックからタブ名の変更ができます。
+- 選択したタブと同じアプリを新しく起動してタブを追加できます。追加する位置やタブグループも指定できます。
+- 指定したタブの右側・左側のタブや、同じ辺やグループ全体のタブを閉じる操作もできます。
 
-## 見た目と操作を変える
+### 対応環境
 
-### 四辺のスタイルと大きさ
+- 異なる拡大率のマルチディスプレイに完全対応。
+- 仮想デスクトップに完全対応。
+- UWP アプリに対応。全体を1つの exe としてタブ化・自動グループ化します。
+
+### タスクトレイメニューの機能と対応言語
+
+![タスクトレイメニュー](README_Image/TaskTrayMenuImage_Japanese.png)
+
+- トレイメニューで言語変更、一時無効化、最新版の確認ができます。言語変更は再起動不要です。
+- 更新確認はクリックしたときだけ行います。更新時は MSI 版ではインストーラー、ZIP 版では exe の置き換えと再起動を行います。
+- 対応言語
+  - 英語、日本語（関西弁・東北弁版も同梱）、中国語（簡体・繁体）、韓国語、フランス語、ドイツ語、イタリア語、スペイン語、ポルトガル語、トルコ語、ポーランド語、ベトナム語、インドネシア語。
+
+## WindowTabsの設定
+
+### プログラム指定
+
+![プログラム](README_Image/SettingsPrograms.png)
+
+- タブを有効にするプログラムを指定できます。（すべてのプログラムでタブを既定で有効にしている場合は、タブを無効にするプログラムを指定します）
+- 使用されていない設定を削除することができます。
+- 自動グループ化を指定できます。同じカテゴリーを付けた複数のプログラムは、まとめて自動で連結されます。
+
+### 4方向のタブの設定
 
 ![タブの形の選択肢](README_Image/SettingsAppearanceTabShape_Japanese.png)
 
-四辺それぞれにスタイル・大きさ・寄せを設定できます。左右のタブは縦書きと横書きを選べ、変更は再起動なしで反映されます。
+- 四辺それぞれにスタイル・大きさ・寄せを設定できます。
+- 左右のタブは縦書きと横書きを選べ、変更は再起動なしで反映されます。
 
 ### ダークモードとカラーテーマ
 
 ![Color settings](README_Image/SettingsColor_Japanese.png)
 
-テーマは編集・保存し、クリップボードで共有できます。作成したテーマは [Issues](https://github.com/standard-software/WindowTabs/issues) にもお寄せください。
+- テーマは編集・保存し、クリップボードで共有できます。
+- 作成したテーマは [WindowTabs GitHub Issues](https://github.com/standard-software/WindowTabs/issues) にもお寄せください。
 
-### ボタンと移動の動作
+### ボタンと移動の操作設定
 
 ![Interaction settings](README_Image/SettingsInteraction_Japanese.png)
 
-移動禁止はタイトルバーのドラッグと上端リサイズが対象です。左右・下端のリサイズはできます。
-
-### 起動とタブの表示
+### 起動とタブの表示、全般設定
 
 ![General settings](README_Image/SettingsGeneral_Japanese.png)
 
-非アクティブなグループを半透明にしたり、全画面表示中・移動中のタブを隠したりできます。
-
-### ショートカットキー
+### ショートカットキー設定
 
 ![Shortcut key settings](README_Image/SettingsShortcutKeys_Japanese.png)
 
-数字キーによるタブ選択は、対象ウィンドウの操作中のみ有効です。
-
-## 保存と復元
-
-タブグループは10秒ごとに保存され、WindowTabs や Windows の再起動後も復元されます。「ワークスペース」では配置・装飾・ピン・名前・寄せを保存して呼び出せます。
-
-<details>
-<summary>復元の条件と仮想デスクトップ</summary>
-
-- 再び開かれたウィンドウをアプリとタイトルで照合します。タイトルが確定していない場合は、確定後に戻ります。未再開の情報は30日、手で閉じたタブの情報は8日保持します。
-- グループは仮想デスクトップをまたいで1つです。別デスクトップのタブは半透明で、クリックすると切り替わります。現在のデスクトップにウィンドウがないグループは表示しません。
-- ワークスペースの新規保存は、現在またはすべてのデスクトップのタブを対象にできます。復元はウィンドウを別デスクトップへ移しません。グループ連結もデスクトップを切り替えません。
-- 無応答時は Watchdog が WindowTabs を再起動し、タブグループを復元します。
-
-</details>
+- ショートカットキーは対象ウィンドウの操作中のみ有効です。
 
 ## 設定ファイルとポータブル利用
 
 ![System settings](README_Image/SettingsSystem_Japanese.png)
 
-設定は `%APPDATA%\WindowTabs\WindowTabsSettings.json` に保存します。このファイルがない場合は exe と同じ場所の `WindowTabsSettings.json` を使います。「システム」で使用中のファイルを確認し、Exeフォルダへのコピー・移動や APPDATA へ戻す操作ができます。
+- 設定は `%APPDATA%\WindowTabs\WindowTabsSettings.json` に保存します。
+- そのファイルがない場合は exe と同じ場所の `WindowTabsSettings.json` を使います。
+- これを利用してポータブル版を作成することができます。
+- 「システム」で使用中のファイルを確認し、Exeフォルダへのコピー・移動や APPDATA へ戻す操作ができます。
 
 <details>
 <summary>バックアップ・追加設定・旧版からの移行</summary>
@@ -219,16 +217,17 @@ Ctrl + クリックで選択・解除、Shift + クリックで範囲選択。�
 
 </details>
 
-## 対応環境と日常の操作
+## 保存と復元
 
-- 異なる拡大率のマルチディスプレイに対応。UWP アプリは全体を1つの exe としてタブ化・自動グループ化します。
-- トレイメニューで言語変更、一時無効化、最新版の確認ができます。言語変更は再起動不要です。
-- 更新確認はクリックしたときだけ行います。更新時は MSI 版ではインストーラー、ZIP 版では exe の置き換えと再起動を行います。
+タブグループは10秒ごとに保存され、WindowTabs や Windows の再起動後も復元されます。「ワークスペース」では配置・装飾・ピン・名前・寄せを保存して呼び出せます。
 
 <details>
-<summary>対応言語</summary>
+<summary>復元の条件と仮想デスクトップ</summary>
 
-英語、日本語（関西弁・東北弁版も同梱）、中国語（簡体・繁体）、韓国語、フランス語、ドイツ語、イタリア語、スペイン語、ポルトガル語、トルコ語、ポーランド語、ベトナム語、インドネシア語。
+- 再び開かれたウィンドウをアプリとタイトルで照合します。タイトルが確定していない場合は、確定後に戻ります。未再開の情報は30日、手で閉じたタブの情報は8日保持します。
+- グループは仮想デスクトップをまたいで1つです。別デスクトップのタブは半透明で、クリックすると切り替わります。現在のデスクトップにウィンドウがないグループは表示しません。
+- ワークスペースの新規保存は、現在またはすべてのデスクトップのタブを対象にできます。復元はウィンドウを別デスクトップへ移しません。グループ連結もデスクトップを切り替えません。
+- 無応答時は Watchdog が WindowTabs を再起動し、タブグループを復元します。
 
 </details>
 
@@ -419,7 +418,7 @@ leafOfTree 氏も様々な改良を加えたフォークを作成しています
 - コミットとレビュー: [standard-software](https://github.com/standard-software)
 - 署名の承認: [standard-software](https://github.com/standard-software)
 
-ss_2026.11.06 までのリリースは署名されていません。
+ss_2026.11.11 までのリリースは署名されていません。
 
 ### プライバシーポリシー
 

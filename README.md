@@ -73,7 +73,7 @@ If you have any feedback, I'd love to hear it on GitHub Issues.
 ## Download
 
 Supported: Windows 10 / Windows 11  
-Latest version: ss_2026.11.06_next3 · [Release notes version.md](version.md)
+Latest version: ss_2026.11.11 · [Release notes version.md](version.md)
 
 <a href="https://github.com/standard-software/WindowTabs/releases">![GitHub Downloads (all assets, all releases)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstandard-software%2FWindowTabs%2Fbadge-data%2Fdownloads.json)</a>
 
@@ -88,123 +88,121 @@ Right-click the tray icon → Settings → Programs to choose which apps get tab
 
 Auto Grouping brings windows of the same app together; shared categories (1–10) group different apps. Enabling either also groups open windows; tabs you detach afterwards stay separate.
 
-## Working with tabs
+## WindowTabs features
 
 ### Select and move several tabs
 
 ![Two selected tabs](README_Image/ShotMultiSelect.png)
 
-Ctrl-click to select or deselect; Shift-click to select a range. Menu commands also apply to the selection.
-
-### Detach and arrange tabs
-
-| Before | After |
-| --- | --- |
-| ![One group before detaching](README_Image/ShotDetachBefore.png) | ![A second group detached to the bottom right](README_Image/ShotDetachAfter.png) |
-
-Detach selected tabs and place them at a chosen position. Drag tabs to reorder, detach, or join another group.
-
-### Switch between tabs on all four edges
-
-![Tabs on all four edges](README_Image/ShotFourEdges.png)
-
-Switch apps using tabs on any of the four edges. Choose which edges to use in Settings → Tabs.
+- Ctrl-click to select or deselect; Shift-click to select a range.
+- Menu commands also apply to the selected tabs.
+- Reorder several selected tabs at once.
+- Detach or join several selected tabs at once.
+- Change the left/right or top/bottom alignment of selected tabs, or move them to another edge.
 
 ### Snap windows into position
 
 | Choose from the menu | Result |
 | --- | --- |
-| ![Snap size and position menu](README_Image/ShotSnapMenu.png) | ![Window snapped to the left half](README_Image/ShotSnapResult.png) |
+| ![Snap size and position menu](README_Image/ShotSnapMenu.png) | <img src="README_Image/ShotSnapResult.png" width="564" alt="Window snapped to the left half"> |
 
-Place windows at screen edges or corners, choose a percentage size, or move them to another display. Ordinary snaps preserve size; percentage snaps resize relative to the display.
+- Snap like Windows' own snapping, with finer control.
+- Snap to an edge while keeping the window size, or snap to a percentage of the display.
+- Move windows to any edge or corner.
+- Resize windows to a chosen size.
 
-### Join tab groups
+### Move to a chosen tab group
 
-| Before | After |
-| --- | --- |
-| ![Two groups before joining](README_Image/ShotLinkBefore.png) | ![The groups joined into one](README_Image/ShotLinkAfter.png) |
+![Join another tab group](README_Image/MoveTabGroupToGroup.png)
 
-Join an entire group to another group, including one on another virtual desktop.
+- Join a tab group to another tab group you choose.
+- Detach selected tabs and choose where to place them, or join them to another tab group you choose.
 
-### Align tabs
+### Tabs on four edges in one tab group
 
-| Before | After |
-| --- | --- |
-| ![Tabs before aligning](README_Image/ShotAlignBefore.png) | ![Tabs aligned to the right](README_Image/ShotAlignAfter.png) |
+![Tabs on four edges](README_Image/ShotDirectionBefore.png)
 
-Align individual tabs, selected tabs, or all tabs on an edge. Left and right edges use top and bottom alignment.
+- Align tabs left or right on the top and bottom edges, and top or bottom on the left and right edges.
 
-### Move tabs to another edge
+### Tell tabs apart with pins and colors
 
-| Before | After |
-| --- | --- |
-| ![A tab on the top edge](README_Image/ShotDirectionBefore.png) | ![The tab moved to the bottom edge](README_Image/ShotDirectionAfter.png) |
+![Pinned tabs showing only icons](README_Image/PinnedTabIcon.png)
+![Pinned tabs with icons and pin buttons](README_Image/PinnedTabWidth.png)
 
-Move individual tabs, selected tabs, all tabs on an edge, or a whole group to an enabled edge. Alignment and pinning are preserved.
+- Pin tabs; pinned tabs line up at the left end on the top and bottom edges, and at the top end on the left and right edges.
 
-### Identify tabs by color
+<img src="README_Image/PinnedColorTab.png" width="558" alt="Tab color menu">
 
-![A pink tab and colored edges](README_Image/ShotTabColors.png)
-
-![Tab color menu](README_Image/PinnedColorTab.png)
-
-Color-code tabs with backgrounds, underlines, or borders.
+- Give tabs a color, and choose whether to draw it as a background, underline, or border.
 
 ### More tab commands
 
-Pin tabs to show just an icon or use a fixed width. Right-click to rename tabs, launch another instance of the same app, or close tabs on an edge or throughout the group.
+- Every feature you would expect from a tab UI is there.
+- Rename a tab by right-clicking it.
+- Add a tab by launching another instance of the app in the selected tab. You can also choose its position or tab group.
+- Close the tabs to the right or left of a tab, all tabs on an edge, or the whole group.
 
-## Customize appearance and controls
+### Compatibility
 
-### Style and size for each edge
+- Full support for multiple displays with different scaling levels.
+- Full support for virtual desktops.
+- Supports UWP apps, treating them together as one executable for tabs and auto grouping.
+
+### Tray menu and languages
+
+![Tray menu](README_Image/TaskTrayMenuImage.png)
+
+- Use the tray menu to change language, temporarily disable tabs, or check for updates. Language changes need no restart.
+- Updates are checked only when you click. Updating launches the MSI installer, or replaces the ZIP executable and restarts it.
+- Supported languages
+  - English, Japanese (including Kansai and Tohoku dialect files), Chinese (Simplified and Traditional), Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian.
+
+## WindowTabs settings
+
+### Programs
+
+![Programs](README_Image/SettingsPrograms.png)
+
+- Choose which programs get tabs. (When tabs are on for all programs by default, you choose which programs to exclude.)
+- Remove settings that are no longer used.
+- Turn on auto grouping. Programs given the same category are joined together automatically.
+
+### Tabs on four edges
 
 ![Tab shape options](README_Image/SettingsAppearanceTabShape.png)
 
-Set styles, sizes, and alignment separately for each edge. Side tabs support vertical or horizontal text, and changes apply without restarting.
+- Set styles, sizes, and alignment separately for each edge.
+- Side tabs support vertical or horizontal text, and changes apply without restarting.
 
 ### Dark mode and color themes
 
 ![Color settings](README_Image/SettingsColor.png)
 
-Edit and save themes, and share them through the clipboard. You can also submit themes through [Issues](https://github.com/standard-software/WindowTabs/issues).
+- Edit and save themes, and share them through the clipboard.
+- You can also submit themes through [WindowTabs GitHub Issues](https://github.com/standard-software/WindowTabs/issues).
 
 ### Buttons and movement
 
 ![Interaction settings](README_Image/SettingsInteraction.png)
 
-The movement lock blocks title-bar dragging and resizing from the top; resizing from the sides and bottom remains available.
-
-### Startup and tab visibility
+### Startup, tab visibility, and general settings
 
 ![General settings](README_Image/SettingsGeneral.png)
-
-Fade inactive groups, or hide tabs while a window is fullscreen or being moved.
 
 ### Keyboard shortcuts
 
 ![Shortcut key settings](README_Image/SettingsShortcutKeys.png)
 
-Numbered tab shortcuts are active only while working in a target window.
-
-## Saving and restoring
-
-Tab groups are saved every 10 seconds and restored after WindowTabs or Windows restarts. Workspaces let you save and recall layouts, decorations, pins, names, and alignment.
-
-<details>
-<summary>Restore behavior and virtual desktops</summary>
-
-- Reopened windows are matched by app and title. If a title is not yet final, restoration waits for it. Records are kept for 30 days for unopened windows and 8 days for manually closed tabs.
-- A group spans virtual desktops. Tabs on another desktop are dimmed; clicking one switches desktops. Groups with no windows on the current desktop are hidden.
-- New workspaces can save tabs on the current desktop or all desktops. Restoring does not move windows between desktops. Joining groups does not switch desktops either.
-- If WindowTabs becomes unresponsive, Watchdog restarts it and restores tab groups.
-
-</details>
+- Keyboard shortcuts are active only while working in a target window.
 
 ## Settings files and portable use
 
 ![System settings](README_Image/SettingsSystem.png)
 
-Settings are saved in `%APPDATA%\WindowTabs\WindowTabsSettings.json`. If absent, WindowTabs uses `WindowTabsSettings.json` beside the exe. The System tab shows the active file and lets you copy or move it to the exe folder, or return it to APPDATA.
+- Settings are saved in `%APPDATA%\WindowTabs\WindowTabsSettings.json`.
+- If that file is absent, WindowTabs uses `WindowTabsSettings.json` beside the exe.
+- You can use this to create a portable version.
+- The System tab shows the active file and lets you copy or move it to the exe folder, or return it to APPDATA.
 
 <details>
 <summary>Backups, overrides, and migration</summary>
@@ -219,16 +217,17 @@ Settings are saved in `%APPDATA%\WindowTabs\WindowTabsSettings.json`. If absent,
 
 </details>
 
-## Compatibility and everyday controls
+## Saving and restoring
 
-- Supports multiple displays with different scaling levels. UWP apps are treated together as one executable for tabs and auto grouping.
-- Use the tray menu to change language, temporarily disable tabs, or check for updates. Language changes need no restart.
-- Updates are checked only when requested. Updating launches the MSI installer or replaces the ZIP executable and restarts it.
+Tab groups are saved every 10 seconds and restored after WindowTabs or Windows restarts. Workspaces let you save and recall layouts, decorations, pins, names, and alignment.
 
 <details>
-<summary>Supported languages</summary>
+<summary>Restore behavior and virtual desktops</summary>
 
-English, Japanese (including Kansai and Tohoku dialect files), Chinese (Simplified and Traditional), Korean, French, German, Italian, Spanish, Portuguese, Turkish, Polish, Vietnamese, and Indonesian.
+- Reopened windows are matched by app and title. If a title is not yet final, restoration waits for it. Records are kept for 30 days for unopened windows and 8 days for manually closed tabs.
+- A group spans virtual desktops. Tabs on another desktop are dimmed; clicking one switches desktops. Groups with no windows on the current desktop are hidden.
+- New workspaces can save tabs on the current desktop or all desktops. Restoring does not move windows between desktops. Joining groups does not switch desktops either.
+- If WindowTabs becomes unresponsive, Watchdog restarts it and restores tab groups.
 
 </details>
 
@@ -419,7 +418,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
 - Committers and reviewers: [standard-software](https://github.com/standard-software)
 - Approvers: [standard-software](https://github.com/standard-software)
 
-Releases up to ss_2026.11.06 are not signed.
+Releases up to ss_2026.11.11 are not signed.
 
 ### Privacy policy
 
