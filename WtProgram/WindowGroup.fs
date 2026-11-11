@@ -11,6 +11,23 @@ open System.Windows.Forms
 open Bemo.Win32.Forms
 open Newtonsoft.Json.Linq
 
+// Shared only by maintenance signature checks, never by placement decisions.
+module private MaintenanceZorder =
+    let private gate = obj()
+    let private clock = Stopwatch.StartNew()
+    let private lifetimeMs = 150L
+    let mutable private cached : (int64 * IntPtr array) option = None
+    let snapshot () =
+        lock gate (fun () ->
+            let now = clock.ElapsedMilliseconds
+            match cached with
+            | Some(takenAt, order) when now - takenAt < lifetimeMs -> order
+            | _ ->
+                let order = Win32Helper.GetWindowsInZOrder()
+                // Age from before enumeration, so slow reads do not extend the TTL.
+                cached <- Some(now, order)
+                order)
+
 /// Debug-only trace of window titles and tab texts: every name-change event a
 /// group receives, every tab text it sets, and every tab whose text differs
 /// from its window's title. Truncated at each start; Release builds drop it.
@@ -331,6 +348,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable stripSkipTrace : string option = None
 #endif
     let stripSwapRetry = VirtualDesktopGroups.StripSwapRetry()
+    let mutable stripSwapTarget : IntPtr option = None
     // What the last full refresh left behind (see stripStateSignature), and
     // when a reorder notification last started one.
     let mutable lastStripSignature : obj = null
@@ -991,8 +1009,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // strip are in the top-level order and what sits directly above each of
     // them, each member's own state, and the desktop reading. While this is
     // unchanged a periodic refresh has nothing to do.
-    member private this.stripStateSignature() : obj =
-        let order = TabGlassBackdrops.without (Win32Helper.GetWindowsInZOrder())
+    member private this.stripStateSignature(maintenance: bool) : obj =
+        let order =
+            (if maintenance then MaintenanceZorder.snapshot() else Win32Helper.GetWindowsInZOrder())
+            |> TabGlassBackdrops.without
         let members = this.windows.items.list
         let strips = this.ts.hwnd :: this.ts.edgeHwnds
         let placed = VirtualDesktopGroups.stripOrderSignature strips members order
@@ -1000,7 +1020,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let w = this.os.windowFromHwnd(hwnd)
             hwnd, w.isWindow, w.isVisible, w.isMinimized, w.cloakedValue, w.isTopMost)
         let live = VirtualDesktopGroups.Live.snapshot()
-        box (placed, states, live.generation, desktopShown, stripGroupMinimized, this.ts.visible)
+        let desktop = VirtualDesktopGroups.Live.stripContentSignature
+                          (VirtualDesktopGroups.Live.isFresh live) members live
+        let view = stripView.current, members |> List.map (fun h -> Map.tryFind h stripView.presence)
+        box (placed, states, desktop, view, desktopShown, stripGroupMinimized, this.ts.visible)
 
     member private this.stripFrontDecision(order: IntPtr list) =
         // Other groups predict strip pixels only; their native front and
@@ -1295,6 +1318,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
 
     member this.repairStripZorder(reason: string) =
+        // Hidden or destroyed strips have no pending placement to repair.
+        // Reentrant calls must not cancel the outer call's retry reservation.
+        if not stripRepairing && ((!_ts).IsNone || isDestroyed.value || not this.ts.visible) then
+            stripSwapRetry.Reset()
+            stripSwapTarget <- None
         if (!_ts).IsSome && not stripRepairing && not isDestroyed.value && this.ts.visible then
             stripRepairing <- true
             try
@@ -1322,12 +1350,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
                 match front with
                 | None ->
+                    stripSwapRetry.Reset()
+                    stripSwapTarget <- None
 #if DEBUG
                     this.traceStripSkip("no-candidate")
 #else
                     ()
 #endif
                 | Some front ->
+                    if stripSwapTarget <> Some front then stripSwapRetry.Reset()
+                    stripSwapTarget <- Some front
                     let frame = this.os.windowFromHwnd(front)
                     let edges = this.ts.edgeHwnds
                     let rec preceding hwnd depth =
@@ -1364,6 +1396,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                                     (if before = IntPtr.Zero then 0L else WinUserApi.GetWindow(before, 4).ToInt64())
                                     (strip.prevZorder.hwnd.ToInt64()) strip.isTopMost)
 #endif
+                        if plan <> VirtualDesktopGroups.SwapWithFront then stripSwapRetry.Reset()
                         if plan = VirtualDesktopGroups.SwapWithFront && stripSwapRetry.TryBegin stripClock.ElapsedMilliseconds then
                             // Preserve our guards as a block between the strip and frame.
                             // Other owned windows are barriers, not windows we may reorder.
@@ -1618,10 +1651,11 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // The tick and the system-wide reorder notification come all the time;
         // nearly always nothing that concerns this group has changed.
         let periodic = (reason = "maintenance" || reason = "global-reorder")
+        let transient = this.stripSwitchActive || shellStripHold
         let unchanged =
-            periodic && not this.stripSwitchActive && not shellStripHold && (!_ts).IsSome &&
+            periodic && not transient && not (stripSwapRetry.IsDue stripClock.ElapsedMilliseconds) && (!_ts).IsSome &&
             not isDestroyed.value && not (isNull lastStripSignature) &&
-            (try lastStripSignature.Equals(this.stripStateSignature()) with _ -> false)
+            (try lastStripSignature.Equals(this.stripStateSignature((reason = "maintenance"))) with _ -> false)
         if unchanged then
             PerfTrace.count "strip.refresh.skipped"
 #if DEBUG
@@ -1631,8 +1665,10 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             PerfTrace.count "strip.refresh.run"
             this.refreshStripStateNow(reason)
             lastStripSignature <-
-                if (!_ts).IsSome && not isDestroyed.value then
-                    (try this.stripStateSignature() with _ -> null)
+                // A transient refresh cannot stand in for the first ordinary pass.
+                if not transient && not this.stripSwitchActive && not shellStripHold &&
+                   (!_ts).IsSome && not isDestroyed.value then
+                    (try this.stripStateSignature(false) with _ -> null)
                 else null
 
     member private this.refreshStripStateNow(reason: string) = this.ts.withContentSource(reason, fun () ->

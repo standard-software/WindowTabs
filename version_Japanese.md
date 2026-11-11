@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.22_next1
+
 ## version ss_2026.11.22
 
 - Windows 標準のスナップ(Win+矢印キーなど)でも、

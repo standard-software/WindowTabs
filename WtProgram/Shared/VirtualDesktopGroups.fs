@@ -696,18 +696,25 @@ module VirtualDesktopGroups =
     // Reserve the retry interval before native calls, including reentrant callbacks.
     // A failed swap is retried soon (the front app may raise its window again
     // right after the swap), backing off up to 5 s while it keeps failing.
+    let stripSwapRetryDue pending nextAttempt now = pending && now >= nextAttempt
+
     type StripSwapRetry() =
+        let mutable pending = false
         let mutable nextAttempt = 0L
         let mutable delay = 400L
+        member this.IsDue now = stripSwapRetryDue pending nextAttempt now
         member this.TryBegin now =
             if now < nextAttempt then false
             else
+                pending <- true
                 nextAttempt <- now + delay
                 delay <- min 5000L (delay * 2L)
                 true
-        member this.Succeeded() =
+        member this.Reset() =
+            pending <- false
             nextAttempt <- 0L
             delay <- 400L
+        member this.Succeeded() = this.Reset()
 
     // Move the frame first, then restore only our intervening guards in order.
     let lowerStripFront strip front guards insertAfter =
@@ -1034,6 +1041,13 @@ module VirtualDesktopGroups =
         let read (state: Snapshot) hwnd =
             state.reads |> Map.tryFind hwnd
             |> Option.defaultValue { hwnd = hwnd; presence = Unsure; desktop = None }
+        // Publication counters and timestamps do not change strip content.
+        // Freshness is explicit because invalidation can change it between reads.
+        let stripContentSignature fresh members (state: Snapshot) =
+            fresh, state.current,
+            (members |> List.map (fun h ->
+                read state h, state.shared.Contains h,
+                state.inSeveral.Contains h, state.stripShared.Contains h))
         let isHere state hwnd = isFresh state && (read state hwnd).presence = Here
         let canDecide state members =
             isFresh state && members |> List.forall (fun h -> (read state h).presence <> Unsure)

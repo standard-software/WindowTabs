@@ -2,6 +2,8 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.22_next1
+
 ## version ss_2026.11.22
 
 - Room for tabs can now also be left when Windows snaps a group
