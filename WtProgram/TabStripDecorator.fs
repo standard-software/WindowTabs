@@ -682,7 +682,6 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             if topEdgeGuard.followsStrip then
                 topEdgeGuard.refreshChildren()
                 this.updateTopEdgeGuard()
-            repairGuardOrder()
             // Same tick, same thread as the rest of this group's upkeep.
             this.reconcileVirtualDesktop()
             PerfTrace.time "title.refresh" group.refreshTitles)
@@ -954,7 +953,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             topEdgeGuard.update(wanted, ownerHwnd, group.bounds.value,
                                 marginTop, (ownerHwnd <> IntPtr.Zero && os.windowFromHwnd(ownerHwnd).isTopMost), not group.isInMoveSizeThreadSafe,
                                 TopEdgeGuardPolicy.behindStrip view, this.ts.hwnd,
-                                ?ownerBounds=(if wanted then group.visibleBodyBounds(ownerHwnd) else None))
+                                ?ownerBounds=(if wanted then group.visibleBodyBounds(ownerHwnd) else None),
+                                stripHwnds=(this.ts.hwnd :: this.ts.edgeHwnds))
+            if topEdgeGuard.requestRepairAfterUpdate() then this.queueTopEdgeGuard()
         with _ -> topEdgeGuard.hide()
 
     member private this.updateTsPlacement() =

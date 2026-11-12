@@ -10,7 +10,12 @@ module TopEdgeGuardPlacement =
 #if DEBUG
         Bemo.Win32.ShellCallTrace.GuardRegister(hwnd)
 #endif
+    let private guardStrips = System.Collections.Concurrent.ConcurrentDictionary<nativeint, nativeint list * TopEdgeGuardPolicy.Band>()
+    let private inputRegions = System.Collections.Concurrent.ConcurrentDictionary<nativeint, TopEdgeGuardPolicy.Band * TopEdgeGuardPolicy.Band list>()
+    let setGuardStrips band strips body = guardStrips.[band] <- strips, body
     let unregisterGuard hwnd =
+        guardStrips.TryRemove(hwnd) |> ignore
+        inputRegions.TryRemove(hwnd) |> ignore
         guards.TryRemove(hwnd) |> ignore
 #if DEBUG
         Bemo.Win32.ShellCallTrace.GuardUnregister(hwnd)
@@ -79,6 +84,15 @@ module TopEdgeGuardPlacement =
         extern bool ShowWindow(nativeint hwnd, int command)
         [<DllImport("user32.dll")>]
         extern bool SetWindowPos(nativeint hwnd, nativeint after, int x, int y, int width, int height, uint32 flags)
+
+        [<DllImport("gdi32.dll")>]
+        extern nativeint CreateRectRgn(int left, int top, int right, int bottom)
+        [<DllImport("gdi32.dll")>]
+        extern int CombineRgn(nativeint destination, nativeint first, nativeint second, int mode)
+        [<DllImport("gdi32.dll")>]
+        extern bool DeleteObject(nativeint handle)
+        [<DllImport("user32.dll")>]
+        extern int SetWindowRgn(nativeint hwnd, nativeint region, bool redraw)
 
     let private dpiOf hwnd = try max 96 (int (Native.GetDpiForWindow hwnd)) with _ -> 96
 
@@ -275,12 +289,49 @@ module TopEdgeGuardPlacement =
         // the ownerless strip or demote its temporary topmost layer.
         onOwnerThread && actual = requested && owner = requested
 
-    let repairStripAboveGuard band strip owner =
-        if Native.GetForegroundWindow() = owner && Native.IsWindow strip then
-            if visible strip && visible band && not (isAbove strip band) then
-                // The group positions its strip above the frame. Keep the
-                // guard below that strip without changing the strip's layer.
-                setPosition band strip owner strip 0 0 0 0 0x0213u |> ignore
+    let private stripExclusions band strip (body: TopEdgeGuardPolicy.Band option) rect =
+        let strips =
+            match guardStrips.TryGetValue band with
+            | true, (values, _) -> strip :: values |> List.distinct
+            | _ -> [strip]
+        let visibleStrips = if body.IsNone then [] else strips |> List.filter visible
+        let bounds = visibleStrips |> List.choose rectOf
+        if bounds.Length <> visibleStrips.Length then None
+        else Some(TopEdgeGuardPolicy.inputExclusions body.IsSome (defaultArg body rect) rect bounds)
+
+    let private protectStripInput band strip body rect =
+        match stripExclusions band strip body rect with
+        | None -> false
+        | Some holes ->
+            let key = rect, holes
+            match inputRegions.TryGetValue band with
+            | true, previous when previous = key -> true
+            | _ ->
+                let region = Native.CreateRectRgn(0, 0, rect.width, rect.height)
+                if region = 0n then false
+                else
+                    let mutable transferred = false
+                    try
+                        let mutable ok = true
+                        for hole in holes do
+                            let cut = Native.CreateRectRgn(hole.x, hole.y, hole.x+hole.width, hole.y+hole.height)
+                            if cut = 0n then ok <- false
+                            else
+                                try
+                                    if Native.CombineRgn(region, region, cut, 4 (* RGN_DIFF *)) = 0 then ok <- false
+                                finally Native.DeleteObject(cut) |> ignore
+                        if ok then transferred <- Native.SetWindowRgn(band, region, false) <> 0
+                        if transferred then inputRegions.[band] <- key
+                        transferred
+                    finally
+                        // A successful SetWindowRgn transfers ownership to Windows.
+                        if not transferred then Native.DeleteObject(region) |> ignore
+
+    let private stripInputSafe band strip body rect =
+        match inputRegions.TryGetValue band with
+        | true, (previous, holes) when rect = previous ->
+            stripExclusions band strip body rect = Some holes
+        | _ -> false
 
     let hide band =
         if visible band then
@@ -458,18 +509,23 @@ module TopEdgeGuardPlacement =
 
     let foregroundOwner owner = owner <> 0n && Native.GetForegroundWindow() = owner
 
-    let ownerSafe band strip owner =
-        if not (Native.IsWindow owner) ||
-           not (visible owner) || Native.IsIconic owner || Native.IsZoomed owner then false
+    let private inputBody band owner target keepTopmost =
+        if keepTopmost || isTopMost owner || target = 0n || target = owner then None
         else
-            let target =
-                match rectOf band with
-                | Some rect -> targetBelow band strip owner rect
-                | None -> 0n
-            // Foreground and strip order do not determine whether an exposed
-            // background border is locked. Only the guard's own native order does.
-            target <> 0n && ownerOf band = owner &&
-            not (isTopMost band) && aboveIncludingBand band target = Some band
+            match guardStrips.TryGetValue band with
+            | true, (_, body) -> Some body
+            | _ -> rectOf owner
+
+    let private ownerSafeAtTarget band owner target =
+        Native.IsWindow owner && visible owner &&
+        not (Native.IsIconic owner) && not (Native.IsZoomed owner) &&
+        target <> 0n && ownerOf band = owner &&
+        not (isTopMost band) && aboveIncludingBand band target = Some band
+
+    let ownerSafe band strip owner =
+        match rectOf band with
+        | Some rect -> ownerSafeAtTarget band owner (targetBelow band strip owner rect)
+        | None -> false
 
     // A stale frame snapshot can fail adjacency after a successful insertion.
     // Keep that best position only while it cannot intercept another group's
@@ -508,6 +564,8 @@ module TopEdgeGuardPlacement =
                 ok <- setPosition band strip owner -2n 0 0 0 0 0x0213u
             let mutable insertionBlocked = false
             let target = if ok then targetBelow band strip owner rect else 0n
+            let body = inputBody band owner target false
+            if ok then ok <- protectStripInput band strip body rect
 #if DEBUG
             traceDecision (sprintf "selected-frame(target=%X)" (int64 target)) band strip owner (Some rect) None None
 #endif
@@ -531,10 +589,10 @@ module TopEdgeGuardPlacement =
                         // The verified position is preserved by SWP_NOZORDER.
                         (fun () -> setPosition band strip owner 0n 0 0 0 0 0x0257u)
                     traceDecision (if ok then "validated" else "validation-failed") band strip owner (Some rect) (Some anchor) None
-            if not ok && not insertionBlocked && canKeepShown band owner then
-                traceDecision "validation-deferred-keep-shown" band strip owner (Some rect) None None
-                ok <- true
-            if not ok then hide band
+            if not ok then
+                if not insertionBlocked && canKeepShown band owner && stripInputSafe band strip body rect then
+                    traceDecision "validation-deferred-keep-shown" band strip owner (Some rect) None None
+                else hide band
             ok
 
     // Used when relinquishing foreground, including the UWP compatibility layer.
@@ -544,27 +602,49 @@ module TopEdgeGuardPlacement =
             setPosition band 0n (ownerOf band) -2n 0 0 0 0 0x0213u |> ignore
 
     let safeForOwner band strip owner keepTopmost =
-        if not keepTopmost || not (foregroundOwner owner) then ownerSafe band strip owner
+        let inspect rect =
+            if not keepTopmost || not (foregroundOwner owner) then
+                let target = targetBelow band strip owner rect
+                ownerSafeAtTarget band owner target, inputBody band owner target keepTopmost
+            else
+                let observed = observe band strip owner rect
+                (observed.ownerReady && observed.stripReady && observed.sameOwner &&
+                 observed.stripTopmost && TopEdgeGuardPolicy.safeOrder observed), None
+        match rectOf band with
+        | None -> false
+        | Some rect ->
+            let ordered, body = inspect rect
+            if not ordered then false
+            elif stripInputSafe band strip body rect then true
+            elif not (protectStripInput band strip body rect) then false
+            else
+                // Region changes can send native notifications. Validate after
+                // the write, without hiding a correctly ordered stale region.
+                let ordered, body = inspect rect
+                ordered && rectOf band = Some rect && stripInputSafe band strip body rect
+
+    let canRetainForOwner band strip owner keepTopmost =
+        if keepTopmost || isTopMost owner || not (canKeepShown band owner) then false
         else
             match rectOf band with
             | None -> false
             | Some rect ->
-                let observed = observe band strip owner rect
-                observed.ownerReady && observed.stripReady && observed.sameOwner &&
-                observed.stripTopmost && TopEdgeGuardPolicy.safeOrder observed
+                let target = targetBelow band strip owner rect
+                protectStripInput band strip (inputBody band owner target false) rect
 
     let placeForOwner band strip owner keepTopmost rect =
         // A stale UWP request must fall back to ordinary placement on focus loss.
         let keepTopmost = keepTopmost && foregroundOwner owner
         let ok =
             if not keepTopmost then placeAtOwner band strip owner rect
-            elif foregroundOwner owner && isTopMost strip then
+            elif foregroundOwner owner && isTopMost strip && protectStripInput band strip None rect then
                 // UWP frame composition needs the same layer as its strip.
                 // Reuse its verified, non-activating insertion behind the strip.
                 let result = place band strip owner true rect
-                result.succeeded && safeForOwner band strip owner true
+                result.succeeded
             else false
-        if ok then repairStripAboveGuard band strip owner
-        else hideAndDemote band
-        traceDecision (if ok then "place-final-shown" else "place-final-hidden") band strip owner (Some rect) None None
-        ok
+        let complete = ok && visible band && rectOf band = Some rect &&
+                       safeForOwner band strip owner keepTopmost
+        if not complete && not (canRetainForOwner band strip owner keepTopmost) then hideAndDemote band
+        traceDecision (if complete then "place-final-shown" else "place-final-incomplete") band strip owner (Some rect) None None
+        complete

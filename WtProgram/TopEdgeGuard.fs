@@ -73,7 +73,7 @@ type TopEdgeGuard(os: OS) =
     let mutable disposed = false
     let mutable strip = IntPtr.Zero
     let mutable keepTopmost = false
-    let mutable lastOrder = None
+    let mutable lastUpdateComplete = false
     let mutable lastFailedOrder = None
     let hiddenRetry = TopEdgeGuardPolicy.HiddenRetry<obj>()
     let traceChanges = TopEdgeGuardPolicy.ChangeTrace<obj>()
@@ -322,9 +322,8 @@ type TopEdgeGuard(os: OS) =
 #endif
 
     member this.hide() =
-        lastFailedOrder <- None
+        lastUpdateComplete <- false
         this.auditDecision("hide-enter")
-        lastOrder <- None
         match window with
         | Some w ->
             TopEdgeGuardPlacement.hideAndDemote w.hwnd
@@ -355,56 +354,45 @@ type TopEdgeGuard(os: OS) =
     member this.followsStrip = eligible && not disposed
 
     member this.invalidateOrder(resetRetry: bool) =
-        lastOrder <- None
-        if resetRetry then hiddenRetry.Reset()
+        if resetRetry then
+            hiddenRetry.Reset()
+            lastFailedOrder <- None
 
     member private this.orderKey(stripHwnd: IntPtr, guard: IntPtr) =
-        (stripHwnd, TopEdgeGuardPlacement.above owner, TopEdgeGuardPlacement.above guard,
+        (owner, stripHwnd, TopEdgeGuardPlacement.above owner, TopEdgeGuardPlacement.above guard,
          TopEdgeGuardPlacement.above stripHwnd, TopEdgeGuardPlacement.isTopMost owner,
          TopEdgeGuardPlacement.isTopMost guard, TopEdgeGuardPlacement.isTopMost stripHwnd,
          TopEdgeGuardPlacement.visible stripHwnd, TopEdgeGuardPlacement.ownerOf stripHwnd, keepTopmost)
 
+    member private this.requestRepair() =
+        match window with
+        | Some w when this.followsStrip && (shown || hiddenRetry.Ready scanClock.ElapsedMilliseconds) ->
+            let retry, state = TopEdgeGuardPolicy.repairAttempt (this.orderKey(strip, w.hwnd)) lastFailedOrder
+            lastFailedOrder <- state
+            retry
+        | _ -> false
+
+    // The update already performed final validation; do not walk the order again.
+    member this.requestRepairAfterUpdate() =
+        not lastUpdateComplete && this.requestRepair()
+
     member this.stripChanged(stripHwnd: IntPtr) =
         match window with
         | Some w when this.followsStrip ->
-            if not shown then
-                let ready = hiddenRetry.Ready scanClock.ElapsedMilliseconds
-                this.auditDecision(if ready then "repair-hidden-request" else "repair-hidden-backoff")
-                ready
+            if not shown then this.requestRepair()
+            elif TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost then
+                lastFailedOrder <- None
+                false
             else
-                let aboveOwner = TopEdgeGuardPlacement.above owner
-                let key = this.orderKey(stripHwnd, w.hwnd)
-                // Only direct adjacency proves no window was inserted between
-                // the guard and owner. Owned-frame chains still need validation.
-                if aboveOwner = w.hwnd && lastOrder = Some key &&
-                   (not keepTopmost || TopEdgeGuardPlacement.foregroundOwner owner) then
-                    this.auditDecision("repair-cached-safe")
-                    PerfTrace.count "topEdgeGuard.repairUnchanged"
-                    TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
-                    false
-                else
-                    let safe = TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost
-                    this.auditDecision(if safe then "repair-safe" else "repair-unsafe")
-                    if safe then
-                        lastOrder <- Some key
-                        lastFailedOrder <- None
-                        TopEdgeGuardPlacement.repairStripAboveGuard w.hwnd stripHwnd owner
-                        false
-                    elif TopEdgeGuardPlacement.canKeepShown w.hwnd owner then
-                        // No repeated retry for the same failed native order.
-                        // A changed neighbour, foreground, or geometry permits
-                        // another attempt through the existing event paths.
-                        lastFailedOrder <> Some key
-                    else
-                        this.hide()
-                        true
+                if not (TopEdgeGuardPlacement.canRetainForOwner w.hwnd stripHwnd owner keepTopmost) then this.hide()
+                this.requestRepair()
         | _ -> false
 
     /// Cover the target's top border and its contiguous owned margin frames.
     /// The strip and unrelated windows always keep their input priority.
     member this.update(wanted: bool, ownerHwnd: IntPtr, bounds: Rect option, marginTop: int, useTopmost: bool, mayScan: bool,
-                       tabsInside: bool, stripHwnd: IntPtr, ?ownerBounds: Rect) =
-        lastOrder <- None
+                       tabsInside: bool, stripHwnd: IntPtr, ?ownerBounds: Rect, ?stripHwnds: IntPtr list) =
+        lastUpdateComplete <- false
         keepTopmost <- useTopmost
         strip <- stripHwnd
         eligible <- wanted && not disposed && ownerHwnd <> IntPtr.Zero && bounds.IsSome
@@ -433,6 +421,8 @@ type TopEdgeGuard(os: OS) =
                 let bounds = bounds.Value
                 let body = match ownerBounds with Some value -> value | None -> target.bounds
                 let w = this.ensureWindow()
+                TopEdgeGuardPlacement.setGuardStrips w.hwnd (defaultArg stripHwnds [stripHwnd])
+                    { x=body.x; y=body.y; width=body.width; height=body.height }
                 if owner <> ownerHwnd then
                     this.hide()
                     // Shared placement sets and verifies the native owner while hidden.
@@ -503,23 +493,24 @@ type TopEdgeGuard(os: OS) =
                             false
                         else
                             let placed = TopEdgeGuardPlacement.placeForOwner w.hwnd stripHwnd ownerHwnd keepTopmost covered
-                            if placed then hiddenRetry.Reset()
-                            else
+                            lastUpdateComplete <- placed
+                            if placed then
+                                hiddenRetry.Reset()
+                                lastFailedOrder <- None
+                            elif not (TopEdgeGuardPlacement.visible w.hwnd) then
                                 // Read after native work: our own failed insertion
                                 // must not immediately invalidate the retry key.
                                 let failedKey = box (ownerHwnd, stripHwnd, keepTopmost, covered, (body.x, body.y, body.width, body.height),
                                                      this.orderKey(stripHwnd, w.hwnd), WinUserApi.GetForegroundWindow())
                                 hiddenRetry.Fail(scanClock.ElapsedMilliseconds, failedKey)
-                            placed
+                            // Visibility is not proof of complete protection. A retained
+                            // partial placement is retried by stripChanged with a budget.
+                            TopEdgeGuardPlacement.visible w.hwnd
                     | None ->
                         this.auditDecision("coverage-unavailable")
                         this.hide()
                         false
-                if shown then
-                    if TopEdgeGuardPlacement.safeForOwner w.hwnd stripHwnd owner keepTopmost then
-                        lastFailedOrder <- None
-                    else lastFailedOrder <- Some (this.orderKey(stripHwnd, w.hwnd))
-                    repaint()
+                if shown then repaint()
 #if DEBUG
                 let previous = TopEdgeGuardPlacement.above ownerHwnd
                 let key = box (ownerHwnd, stripHwnd, w.hwnd, previous, shown)

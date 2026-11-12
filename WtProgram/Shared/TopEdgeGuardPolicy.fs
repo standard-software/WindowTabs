@@ -46,6 +46,24 @@ module TopEdgeGuardPolicy =
                 min top frame.y, max bottom (frame.y + frame.height)) (band.y, band.y + band.height)
         { band with y = top; height = bottom - top }
 
+    // Only a normal-layer guard above an owned frame needs holes. Keep the
+    // external frame covered, including any overlap with outside tabs.
+    let inputExclusions coversOwnedFrame (body: Band) (band: Band) (strips: Band list) =
+        (if coversOwnedFrame then strips else []) |> List.choose (fun strip ->
+            let left = max body.x (max band.x strip.x)
+            let top = max body.y (max band.y strip.y)
+            let right = min (body.x + body.width) (min (band.x + band.width) (strip.x + strip.width))
+            let bottom = min (body.y + body.height) (min (band.y + band.height) (strip.y + strip.height))
+            if right <= left || bottom <= top then None
+            else Some { x=left-band.x; y=top-band.y; width=right-left; height=bottom-top })
+        |> List.distinct |> List.sortBy (fun r -> r.x, r.y, r.width, r.height)
+
+    // At most two queued repairs of the same incomplete placement. Ordinary
+    // maintenance still runs; a changed order or foreground gets a new budget.
+    let repairAttempt key previous =
+        let count = match previous with Some(old, count) when old = key -> count | _ -> 0
+        count < 2, Some(key, min 2 (count + 1))
+
     type Stacking = Topmost | LeaveTopmost | Keep | Hide | Behind of nativeint
     type StackingInput = {
         tabsInside: bool; keepOnTop: bool; marginTop: int
