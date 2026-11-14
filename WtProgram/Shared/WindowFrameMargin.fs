@@ -9,6 +9,16 @@ module WindowFrameMargin =
     type Margin = { top: int; left: int; right: int; bottom: int }
     let zero = { top = 0; left = 0; right = 0; bottom = 0 }
 
+    // The target has already been compensated for the two windows' margins.
+    // Keep this separate from native reads so their ordering does not change.
+    let secondPass topOnScreen (current: Bounds) (target: Bounds) =
+        let bounds = if topOnScreen then target else { target with x=current.x; y=current.y }
+        let write = current <> bounds || current.x <= -30000 || current.y <= -30000
+        bounds, write
+
+    let secondPassUsesDpi (current: Bounds) (target: Bounds) currentScale targetScale =
+        (current.x <> target.x || current.y <> target.y) && currentScale <> targetScale
+
     // Input contains only visible, directly owned windows from other processes. Corner pieces may
     // shorten an edge piece by up to the thickness limit at either end, but a
     // small popup must not count as a full side. All coordinates are pixels.

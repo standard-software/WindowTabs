@@ -754,6 +754,15 @@ module VirtualDesktopGroups =
     let adoptsMoveOf (groupShown: bool) (isShared: bool) (isTop: bool) =
         if groupShown then isTop || isShared else isShared
 
+    /// Decide only the local write record; callers retain native read/write ordering.
+    type PlacementWriteDecision = KeepWrite | ForgetWrite | RememberWrite
+
+    let placementWrite shared changed normal =
+        if not shared then ForgetWrite
+        elif not changed then KeepWrite
+        elif normal then RememberWrite
+        else ForgetWrite
+
     /// Retain a matching write for repeated queued echoes. Once an external
     /// placement is observed, returning to the old target is external too.
     /// Callers compare native bounds together with the native show state.

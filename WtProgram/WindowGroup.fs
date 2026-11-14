@@ -803,14 +803,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         let currentBounds = window.bounds
                         // Use one top-window snapshot when its position is on screen.
                         // Otherwise retain the follower position, as before.
-                        let atIconicPosition = currentBounds.x <= -30000 || currentBounds.y <= -30000
-                        let correctBounds =
-                            if topOnScreen then targetBounds
-                            else Rect(currentBounds.location, targetBounds.size)
+                        let current : WindowFrameMargin.Bounds =
+                            { x=currentBounds.x; y=currentBounds.y; width=currentBounds.width; height=currentBounds.height }
+                        let target : WindowFrameMargin.Bounds =
+                            { x=targetBounds.x; y=targetBounds.y; width=targetBounds.width; height=targetBounds.height }
+                        let corrected, shouldWrite = WindowFrameMargin.secondPass topOnScreen current target
+                        let correctBounds = Rect(Pt(corrected.x, corrected.y), Sz(corrected.width, corrected.height))
                         // Skip the move if bounds already match - SetWindowPos is expensive and apps that
                         // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
                         // otherwise trigger redundant work and follow-up events on every spurious change.
-                        if currentBounds <> correctBounds || atIconicPosition then
+                        if shouldWrite then
 #if DEBUG
                             WindowFrameMargin.trace (
                                 sprintf "move reason=second-pass group=%X hwnd=%X source=%X target=%A"
@@ -823,7 +825,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             let targetScale = Dpi.scaleForRect(correctBounds)
                             let crossesDpi =
                                 currentBounds.location <> correctBounds.location &&
-                                Dpi.scaleForHwnd(hwnd) <> targetScale
+                                WindowFrameMargin.secondPassUsesDpi current corrected (Dpi.scaleForHwnd(hwnd)) targetScale
                             this.writeSharedFollowerBounds(hwnd, correctBounds, fun () ->
                                 if crossesDpi then
                                     this.applyWindowBoundsWithDpiHandling(hwnd, correctBounds,
@@ -1829,12 +1831,14 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let window = this.os.windowFromHwnd(hwnd)
         // Non-shared callers also pass here, even when no native write is needed.
         let shared = (VirtualDesktopGroups.Live.shared()).Contains hwnd
-        if not shared then sharedPlacementWrites.Remove(hwnd) |> ignore
+        if VirtualDesktopGroups.placementWrite shared false false = VirtualDesktopGroups.ForgetWrite then
+            sharedPlacementWrites.Remove(hwnd) |> ignore
         if window.bounds <> bounds then
             let showCmd = window.placement.showCmd
-            if showCmd = ShowWindowCommands.SW_SHOWNORMAL && shared then
-                sharedPlacementWrites.[hwnd] <- (bounds, showCmd)
-            else sharedPlacementWrites.Remove(hwnd) |> ignore
+            match VirtualDesktopGroups.placementWrite shared true (showCmd = ShowWindowCommands.SW_SHOWNORMAL) with
+            | VirtualDesktopGroups.RememberWrite -> sharedPlacementWrites.[hwnd] <- (bounds, showCmd)
+            | VirtualDesktopGroups.ForgetWrite -> sharedPlacementWrites.Remove(hwnd) |> ignore
+            | VirtualDesktopGroups.KeepWrite -> ()
             try write()
             with _ ->
                 sharedPlacementWrites.Remove(hwnd) |> ignore
