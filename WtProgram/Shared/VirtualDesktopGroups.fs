@@ -754,6 +754,12 @@ module VirtualDesktopGroups =
     let adoptsMoveOf (groupShown: bool) (isShared: bool) (isTop: bool) =
         if groupShown then isTop || isShared else isShared
 
+    /// Retain a matching write for repeated queued echoes. Once an external
+    /// placement is observed, returning to the old target is external too.
+    /// Callers compare native bounds together with the native show state.
+    let placementEcho expected actual =
+        expected |> Option.filter ((=) actual)
+
     // ------------------------------------------------------------ leaving --
 
     /// The group's windows as the 09.21 straddle rule is to see them

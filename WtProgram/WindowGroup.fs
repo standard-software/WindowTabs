@@ -391,6 +391,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable parkedBounds : Map<IntPtr, Rect> = Map.empty
     let pendingBackgroundMoves = System.Collections.Generic.Dictionary<IntPtr, int64>()
     let mutable backgroundMoveGeneration = 0L
+    // Native rectangles written by this group's normal shared-member following.
+    let sharedPlacementWrites = System.Collections.Generic.Dictionary<IntPtr, Rect * int>()
 
     member this.init(ts:TabStrip) =
         _ts := Some(ts)
@@ -768,6 +770,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             | Some(topHwnd) ->
                 let topWindow = this.os.windowFromHwnd(topHwnd)
                 let topBounds = topWindow.bounds
+                // Use the same on-screen gate as saveTopWindowPlacement.
+                let topOnScreen = this.os.isOnScreen(topBounds)
                 // When the top window is maximized, its bounds already match the
                 // monitor work rect — skip detected frame margin on both sides.
                 let topMaximized = topWindow.isMaximized
@@ -797,16 +801,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             if topMaximized then groupBounds
                             else this.applyWindowMarginForWrite(hwnd, groupBounds)
                         let currentBounds = window.bounds
-                        // Keep current position but use correct size - unless
-                        // the position is the iconic one, which is nowhere.
+                        // Use one top-window snapshot when its position is on screen.
+                        // Otherwise retain the follower position, as before.
                         let atIconicPosition = currentBounds.x <= -30000 || currentBounds.y <= -30000
                         let correctBounds =
-                            if atIconicPosition then targetBounds
+                            if topOnScreen then targetBounds
                             else Rect(currentBounds.location, targetBounds.size)
-                        // Skip the move if size already matches - SetWindowPos is expensive and apps that
+                        // Skip the move if bounds already match - SetWindowPos is expensive and apps that
                         // fire EVENT_OBJECT_LOCATIONCHANGE without actually moving (e.g. LibreOffice) would
                         // otherwise trigger redundant work and follow-up events on every spurious change.
-                        if currentBounds.size <> correctBounds.size || atIconicPosition then
+                        if currentBounds <> correctBounds || atIconicPosition then
 #if DEBUG
                             WindowFrameMargin.trace (
                                 sprintf "move reason=second-pass group=%X hwnd=%X source=%X target=%A"
@@ -816,8 +820,16 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             // app can't stall the strip thread here; z-order is
                             // untouched so this can't disturb the fronting done
                             // afterwards.
-                            if siblingsWereMinimized then window.moveAsync(correctBounds)
-                            else PerfTrace.time "group.follower.secondBounds" <| fun () -> window.move(correctBounds)
+                            let targetScale = Dpi.scaleForRect(correctBounds)
+                            let crossesDpi =
+                                currentBounds.location <> correctBounds.location &&
+                                Dpi.scaleForHwnd(hwnd) <> targetScale
+                            this.writeSharedFollowerBounds(hwnd, correctBounds, fun () ->
+                                if crossesDpi then
+                                    this.applyWindowBoundsWithDpiHandling(hwnd, correctBounds,
+                                        preserveSharedWrite=true, destinationDpi=uint32 (targetScale * Dpi.BaseDpi))
+                                elif siblingsWereMinimized then window.moveAsync(correctBounds)
+                                else PerfTrace.time "group.follower.secondBounds" <| fun () -> window.move(correctBounds))
                         // Track the margin-shrunk size for this window
                         if this.hasWindowMargin(hwnd) && not topMaximized then
                             marginShrunkSizes.set(marginShrunkSizes.value.Add(hwnd, (correctBounds.width, correctBounds.height)))
@@ -895,6 +907,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // came from is remembered here so they can be put back regardless.
     member private this.hideChildWindows() =
         zorderCell.value.tail.where(isMinimized >> not).iter(fun hwnd ->
+            sharedPlacementWrites.Remove(hwnd) |> ignore
             followerPlacements.Synchronous(hwnd, ignore)
             let window = this.os.windowFromHwnd(hwnd)
             (try
@@ -934,7 +947,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             let r = mon.displayRect
                             bounds.x < r.x + r.width && bounds.x + bounds.width > r.x &&
                             bounds.y < r.y + r.height && bounds.y + bounds.height > r.y)
-                    if not onScreen then window.move(home)
+                    if not onScreen then
+                        sharedPlacementWrites.Remove(hwnd) |> ignore
+                        window.move(home)
             with _ -> ()
 
     // The position of any window in the top-level order, from ONE enumeration.
@@ -1760,6 +1775,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.saveTopWindowPlacement() = PerfTrace.time "group.saveTopPlacement" <| fun () ->
         let window = this.os.windowFromHwnd(zorderCell.value.head)
+        sharedPlacementWrites.Remove(window.hwnd) |> ignore
         this.refreshWindowMargin(window.hwnd) |> ignore
         // A dying window (e.g. LibreOffice tearing down under load) reports
         // degenerate bounds: GetWindowRect fails and yields (0,0,0,0). Never
@@ -1807,8 +1823,27 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             
         currentDpi <> initialDpi // Return true if DPI changed
 
+    // Keep the target across queued LOCATIONCHANGEs, including repeated echoes.
+    // A different observed rectangle or show state invalidates it on adoption.
+    member private this.writeSharedFollowerBounds(hwnd: IntPtr, bounds: Rect, write: unit -> unit) =
+        let window = this.os.windowFromHwnd(hwnd)
+        // Non-shared callers also pass here, even when no native write is needed.
+        let shared = (VirtualDesktopGroups.Live.shared()).Contains hwnd
+        if not shared then sharedPlacementWrites.Remove(hwnd) |> ignore
+        if window.bounds <> bounds then
+            let showCmd = window.placement.showCmd
+            if showCmd = ShowWindowCommands.SW_SHOWNORMAL && shared then
+                sharedPlacementWrites.[hwnd] <- (bounds, showCmd)
+            else sharedPlacementWrites.Remove(hwnd) |> ignore
+            try write()
+            with _ ->
+                sharedPlacementWrites.Remove(hwnd) |> ignore
+                reraise()
+
     // Common method to apply window bounds with DPI-aware logic
-    member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect) = PerfTrace.time "group.follower.dpiBounds" <| fun () ->
+    member private this.applyWindowBoundsWithDpiHandling(hwnd:IntPtr, bounds:Rect,
+            ?preserveSharedWrite: bool, ?destinationDpi: uint32) = PerfTrace.time "group.follower.dpiBounds" <| fun () ->
+        if not (defaultArg preserveSharedWrite false) then sharedPlacementWrites.Remove(hwnd) |> ignore
         let window = this.os.windowFromHwnd(hwnd)
 
         // Skip the move if bounds already match - SetWindowPos is expensive and apps that
@@ -1823,7 +1858,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
         // Get current DPI (before move) and target DPI (after move)
         let currentDpi = WinUserApi.GetDpiForWindow(hwnd)
-        let targetDpi =
+        let targetDpi = defaultArg destinationDpi (
             // Find other windows in the group (excluding current hwnd)
             let otherWindows = zorderCell.value.where(fun h -> h <> hwnd)
             match otherWindows.tryHead with
@@ -1832,7 +1867,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 WinUserApi.GetDpiForWindow(otherHwnd)
             | None ->
                 // No other windows, use current DPI
-                currentDpi
+                currentDpi)
 
         // Use different approach based on DPI change
         if currentDpi <> targetDpi then
@@ -1854,6 +1889,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // not a sleep on the group thread. Tickets prevent an old correction from
     // moving a detached member or overwriting a newer placement.
     member private this.applyBackgroundWindowBounds(hwnd: IntPtr, bounds: Rect) =
+        sharedPlacementWrites.Remove(hwnd) |> ignore
         let window = this.os.windowFromHwnd(hwnd)
 #if DEBUG
         WindowFrameMargin.trace (
@@ -1892,8 +1928,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         BackgroundPlacementPolicy.move
             (fun () -> WinUserApi.GetDpiForWindow(hwnd)) targetDpi
             (fun () -> watch.ElapsedMilliseconds) later valid
-            (fun () -> count(); window.setPositionOnlyAsync bounds.x bounds.y)
-            (fun () -> count(); window.moveAsync(bounds)) completed
+            (fun () -> sharedPlacementWrites.Remove(hwnd) |> ignore; count(); window.setPositionOnlyAsync bounds.x bounds.y)
+            (fun () -> sharedPlacementWrites.Remove(hwnd) |> ignore; count(); window.moveAsync(bounds)) completed
 
     // Preview reads may resolve a cache miss, but never publish it.
     member private this.snapshotConfiguredInsets(hwnd: IntPtr) =
@@ -2004,6 +2040,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             // callbacks carry invalidated revisions and cannot publish old bounds.
             followerPlacements.CancelAll()
             pendingBackgroundMoves.Clear()
+            sharedPlacementWrites.Clear()
             for hwnd in members do followerPlacements.Synchronous(hwnd, fun () -> ())
             this.capturePlacementMargin(front) |> ignore
             let sourceMargin, sourceMeasured = this.normalMoveMargin(front)
@@ -2295,6 +2332,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.adjustWindowPlacementCore(hwnd, backgroundBounds: Rect option) = PerfTrace.time "group.adjustOne" <| fun () ->
         pendingBackgroundMoves.Remove(hwnd) |> ignore
+        sharedPlacementWrites.Remove(hwnd) |> ignore
         let mutable queuedAsync = false
         let window = this.os.windowFromHwnd(hwnd)
         if not maximizedScreenMove && placement.value.IsSome then
@@ -2395,7 +2433,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     if useAsync then
                         queuedAsync <- true
                         this.applyBackgroundWindowBounds(hwnd, adjustedBounds)
-                    else this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds)
+                    else
+                        this.writeSharedFollowerBounds(hwnd, adjustedBounds, fun () ->
+                            this.applyWindowBoundsWithDpiHandling(hwnd, adjustedBounds, preserveSharedWrite=true))
                 else
                     if window.isMinimized && not targetMaximized then
                         // Un-minimize and reposition asynchronously so busy apps do
@@ -2640,8 +2680,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 // causes comes back as a LOCATIONCHANGE that matches the anchor.
                 match correction with
                 | CaptionDragFallback.NoCorrection -> ()
-                | CaptionDragFallback.RestorePosition(x, y) -> window.setPositionOnly x y
-                | CaptionDragFallback.RestoreBounds(b) -> window.move(Rect(Pt(b.x, b.y), Sz(b.width, b.height)))
+                | CaptionDragFallback.RestorePosition(x, y) ->
+                    sharedPlacementWrites.Remove(hwnd) |> ignore
+                    window.setPositionOnly x y
+                | CaptionDragFallback.RestoreBounds(b) ->
+                    sharedPlacementWrites.Remove(hwnd) |> ignore
+                    window.move(Rect(Pt(b.x, b.y), Sz(b.width, b.height)))
         | Some(_) ->
             // Another window of the group changed. If the armed one is no
             // longer on top (a tab switch mid-drag), nothing is left to hold.
@@ -2727,11 +2771,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     if this.hasWindowMargin(hwnd) && not window.isMaximized then this.removeWindowMarginForRead(hwnd, bounds)
                     else bounds
                 let wp = window.placement
+                let expected =
+                    match sharedPlacementWrites.TryGetValue hwnd with
+                    | true, value -> Some value
+                    | _ -> None
+                let echo = VirtualDesktopGroups.placementEcho expected (live, wp.showCmd)
+                if echo.IsNone then sharedPlacementWrites.Remove(hwnd) |> ignore
                 let unchanged =
                     match placement.value with
                     | Some(r, p) -> r = adjusted && p.showCmd = wp.showCmd
                     | None -> false
-                if not unchanged then
+                if not unchanged && echo.IsNone then
                     VirtualDesktopTrace.log (fun () ->
                         sprintf "group=%X follows %X to %d,%d %dx%d (shown=%b)"
                             (this.hwnd.ToInt64()) (hwnd.ToInt64())
@@ -2810,6 +2860,15 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     member private this.dispatchEvent(hwnd, evt, fallbackPress) = this.invokeAsync <| fun() -> this.ts.withContentSource(PerfTrace.label (fun () -> string evt), fun () -> this.dispatchStripEvent(hwnd, evt, fallbackPress))
 
     member private this.dispatchStripEvent(hwnd, evt, fallbackPress) = this.withUpdate <| fun() -> PerfTrace.timeNamed (fun () -> sprintf "group.%O" evt) <| fun () ->
+        // A non-shared observation invalidates the old shared write even if
+        // this event will not reach followSharedWindow.
+        if evt = WinEvent.EVENT_OBJECT_LOCATIONCHANGE && sharedPlacementWrites.ContainsKey(hwnd) &&
+           not ((VirtualDesktopGroups.Live.shared()).Contains hwnd) then
+            sharedPlacementWrites.Remove(hwnd) |> ignore
+        // Explicit interaction and show-state transitions end an old move echo.
+        if evt = WinEvent.EVENT_SYSTEM_MOVESIZESTART ||
+           evt = WinEvent.EVENT_SYSTEM_MINIMIZESTART || evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND then
+            sharedPlacementWrites.Remove(hwnd) |> ignore
         if evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND && this.windows.contains(hwnd) then
             stripGroupMinimized <- false
         let foregroundInvolvesGroup =
@@ -3298,6 +3357,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             this.adjustChildWindows()
 
     member this.removeWindow(hwnd, ?activate: bool) = this.withUpdate <| fun() ->
+        sharedPlacementWrites.Remove(hwnd) |> ignore
         followerPlacements.Synchronous(hwnd, ignore)
         pendingBackgroundMoves.Remove(hwnd) |> ignore
         frameMargins.Remove(hwnd)
@@ -3398,6 +3458,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
             followerPlacements.CancelAll()
             pendingBackgroundMoves.Clear()
+            sharedPlacementWrites.Clear()
             isDestroyed.set(true)
             this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
             stripMaintenanceTimer.Stop()
