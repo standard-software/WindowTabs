@@ -4,6 +4,11 @@
 
 ## version ss_2026.11.11_next1
 
+- Fixed a group snapped to a screen edge by Windows (Aero Snap)
+  going back to where it was before the snap.
+- Fixed resizing a LINE window by its top edge not working
+  correctly while the window is in front.
+
 ## version ss_2026.11.11
 
 - Fixed a new document losing the front to an older one when it was
