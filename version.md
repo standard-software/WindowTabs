@@ -8,6 +8,9 @@
   going back to where it was before the snap.
 - Fixed resizing a LINE window by its top edge not working
   correctly while the window is in front.
+- Fixed the neighbouring tab coming to the front when a file is
+  opened from an empty Excel workbook in a group.
+  - The opened workbook now comes to the front.
 
 ## version ss_2026.11.11
 
