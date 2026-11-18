@@ -305,6 +305,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let desktopHiddenCell = Cell.create(false)
     let desktopChangedEvent = Event<unit>()
     let stripClock = Stopwatch.StartNew()
+    // Owned exclusively by the group thread; checked only on removal/arrival.
+    let mutable hiddenReplacement : HiddenReplacement.Pending<IntPtr> option = None
     let mutable stripPreview : VirtualDesktopGroups.StripPreview option = None
     let mutable stripClickedAt = DateTime.MinValue
 #if DEBUG
@@ -3021,9 +3023,37 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         TabEdges.edgeFor this.ts.allowedEdges arrival |> Option.defaultValue TabEdges.Edge.Top
 
     member this.addWindow(hwnd, withDelay, ?alignment: TabAlign, ?pinned: bool, ?after: IntPtr,
-                          ?restoreOrder: TabOrder.Placed list -> IntPtr list, ?edge: TabEdges.Edge) =
+                          ?restoreOrder: TabOrder.Placed list -> IntPtr list, ?edge: TabEdges.Edge,
+                          ?replaceHiddenSelection: bool) =
+        let isArrival = not (this.windows.contains(hwnd))
+        let replaceHiddenSelection = defaultArg replaceHiddenSelection false
+        // Read before the add: what the user had in front decides whether the
+        // arrival may take it.
+        let frontHeld =
+            replaceHiddenSelection &&
+            (match hiddenReplacement with
+             | Some entry ->
+                 HiddenReplacement.frontHeld (WinUserApi.GetForegroundWindow()) entry.neighbor hwnd
+                     (this.os.windowFromHwnd(entry.neighbor).isMinimized)
+             | None -> false)
         this.addWindowPlaced(hwnd, withDelay, true, ?alignment=alignment, ?pinned=pinned,
                              ?after=after, ?restoreOrder=restoreOrder, ?edge=edge)
+        if replaceHiddenSelection && isArrival && this.windows.contains(hwnd) then
+            let window = this.os.windowFromHwnd(hwnd)
+            let skipActivation =
+                Services.program.isShuttingDown || Services.program.isDisabled ||
+                window.isCloaked || not desktopShown
+            let activate =
+                HiddenReplacement.shouldActivate stripClock.ElapsedMilliseconds this.topWindow
+                    window.pid.pid window.isWindow window.isVisible skipActivation frontHeld hiddenReplacement
+            let pendingBefore = hiddenReplacement
+            DragTrace.log (fun () ->
+                sprintf "hidden-replacement arrival group=%X hwnd=%X pending=%b activate=%b visible=%b skip=%b frontHeld=%b"
+                    (this.hwnd.ToInt64()) (hwnd.ToInt64()) pendingBefore.IsSome activate window.isVisible skipActivation frontHeld)
+            // Every eligible arrival consumes the record, including a mismatch.
+            // Do not let an unrelated arrival leave a stale focus transfer armed.
+            hiddenReplacement <- None
+            if activate then this.tabActivate(Tab(hwnd), true)
 
     // Workspace placement precedes hooks and membership, so no sibling follows
     // an intermediate restore and no ordinary add path can activate a window.
@@ -3406,7 +3436,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 else
                     None
 
-            // Activate the next tab before removing the window
+            // A newer active removal supersedes any previous replacement.
+            if wasActiveWindow then
+                hiddenReplacement <- HiddenReplacement.remember wasActiveWindow window.isWindow
+                    window.isVisible skipActivation window.pid.pid stripClock.ElapsedMilliseconds
+                    (tabToActivate |> Option.map (fun (Tab h) -> h))
+                let remembered = hiddenReplacement.IsSome
+                DragTrace.log (fun () ->
+                    sprintf "hidden-replacement removal group=%X hwnd=%X remembered=%b"
+                        (this.hwnd.ToInt64()) (hwnd.ToInt64()) remembered)
+
+            // Activate the next tab before removing the window.
             tabToActivate.iter <| fun tab ->
                 this.tabActivate(tab, true)
 

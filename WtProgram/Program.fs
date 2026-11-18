@@ -2199,15 +2199,16 @@ type Program() as this =
 
     member this.findGroupForWindow(window:Window) =
         let handlers = List2([
-            this.tryExplicitLaunch
-            this.tryDropped
-            this.tryRegroup
-            launcher.findGroup
-            this.tryClosedTabRestore
-            this.tryReturnToLastGroup
-            this.tryAutoGroup
+            false, this.tryExplicitLaunch
+            false, this.tryDropped
+            false, this.tryRegroup
+            false, launcher.findGroup
+            true, this.tryClosedTabRestore
+            false, this.tryReturnToLastGroup
+            true, this.tryAutoGroup
             ])
-        handlers.tryPick(fun f -> f(window)).def(None)
+        handlers.tryPick(fun (automatic, find) ->
+            find(window) |> Option.map (fun group -> group, automatic)).def((None, false))
 
     // A window the scan dropped alive (see windowLastGroup) that can be
     // tabbed again goes back to its own group while that group exists, not
@@ -2249,10 +2250,10 @@ type Program() as this =
             m.add hwnd ((try window.pid.processPath with _ -> ""), (try window.text with _ -> "")))
         // Read before the group is chosen: tryReturnToLastGroup wants it.
         let returning = windowLastGroup.value.tryFind(hwnd)
-        let group,isNewGroup =
+        let group,isNewGroup,automatic =
             match this.findGroupForWindow(window) with
-            | Some(group) -> (group, false)
-            | None -> (Services.desktop.createGroup(), true)
+            | Some(group), automatic -> (group, false, automatic)
+            | None, _ -> (Services.desktop.createGroup(), true, false)
         // Back in a group, so the remembered place is used up either way. Where
         // that group is the one it left, the place is put back through the
         // same step a closed tab's is (at the end of this method); anywhere
@@ -2325,6 +2326,17 @@ type Program() as this =
         let restoreTargetHidden = not group.isDesktopShown || pendingLinkedRestores.value.Contains hwnd
         pendingLinkedRestores.map(Set.remove hwnd)
         let restoreInFormerGroup = returningState |> Option.exists (this.isInfoGroup group)
+        // Exclude the startup restore itself and windows claimed by a startup
+        // seed. Unclaimed seeds stay cached for days, so their mere presence
+        // must not switch this off.
+        let startupRestore =
+            needsRestoreOnStartup.value ||
+            returningState |> Option.exists (fun info -> info.isRestoreSeed)
+        let replaceHiddenSelection =
+            automatic && not isNewGroup && not isDropped && returning.IsNone &&
+            not (this.isInGroup(hwnd)) && not startupRestore && not restoreTargetHidden &&
+            invokerHwnd = IntPtr.Zero &&
+            (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone
         match group :> obj with
         | :? GroupInfo as gi ->
             gi.addWindowWith(hwnd, fun wg ->
@@ -2374,7 +2386,8 @@ type Program() as this =
                         addLinked(fun () ->
                             wg.addWindowLinked(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder, edge=edge))
                     else
-                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder, edge=edge))
+                        wg.addWindow(hwnd, withDelay, ?alignment=alignment, ?pinned=pinned, ?restoreOrder=restoreOrder,
+                                     edge=edge, replaceHiddenSelection=replaceHiddenSelection))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
         if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
