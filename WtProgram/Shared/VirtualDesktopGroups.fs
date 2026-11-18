@@ -693,6 +693,14 @@ module VirtualDesktopGroups =
         elif previous = IntPtr.Zero || previousTopmost then SwapWithFront
         else AboveWindow previous
 
+    // An unchanged signature only proves that what was observed is the same,
+    // not that the last refresh reached the state it wanted (a placement call
+    // can fail silently, and the order can change between the refresh and the
+    // signature read). One full refresh per interval recovers from those.
+    [<Literal>]
+    let stripSafetyRefreshMs = 10000L
+    let stripSafetyRefreshDue lastRunAt now = now - lastRunAt >= stripSafetyRefreshMs
+
     // Reserve the retry interval before native calls, including reentrant callbacks.
     // A failed swap is retried soon (the front app may raise its window again
     // right after the swap), backing off up to 5 s while it keeps failing.

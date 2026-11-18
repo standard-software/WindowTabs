@@ -352,6 +352,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // What the last full refresh left behind (see stripStateSignature), and
     // when a reorder notification last started one.
     let mutable lastStripSignature : obj = null
+    let mutable lastStripRefreshAt = 0L
     let mutable lastReorderRefresh = -1000L
     let mutable taskbarOrderEnabled = unbox<bool>(Services.settings.getValue "taskbarActiveTabFirst")
     let mutable taskbarOrderTimer : IDisposable option = None
@@ -1008,7 +1009,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Everything a periodic refresh could act on: where the members and the
     // strip are in the top-level order and what sits directly above each of
     // them, each member's own state, and the desktop reading. While this is
-    // unchanged a periodic refresh has nothing to do.
+    // unchanged a periodic refresh is skipped, except for the safety refresh
+    // (VirtualDesktopGroups.stripSafetyRefreshMs).
     member private this.stripStateSignature(maintenance: bool) : obj =
         let order =
             (if maintenance then MaintenanceZorder.snapshot() else Win32Helper.GetWindowsInZOrder())
@@ -1653,7 +1655,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let periodic = (reason = "maintenance" || reason = "global-reorder")
         let transient = this.stripSwitchActive || shellStripHold
         let unchanged =
-            periodic && not transient && not (stripSwapRetry.IsDue stripClock.ElapsedMilliseconds) && (!_ts).IsSome &&
+            periodic && not transient && not (stripSwapRetry.IsDue stripClock.ElapsedMilliseconds) &&
+            not (VirtualDesktopGroups.stripSafetyRefreshDue lastStripRefreshAt stripClock.ElapsedMilliseconds) &&
+            (!_ts).IsSome &&
             not isDestroyed.value && not (isNull lastStripSignature) &&
             (try lastStripSignature.Equals(this.stripStateSignature((reason = "maintenance"))) with _ -> false)
         if unchanged then
@@ -1663,6 +1667,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
         else
             PerfTrace.count "strip.refresh.run"
+            lastStripRefreshAt <- stripClock.ElapsedMilliseconds
+            // If the refresh throws, the old signature must not make the next tick skip.
+            lastStripSignature <- null
             this.refreshStripStateNow(reason)
             lastStripSignature <-
                 // A transient refresh cannot stand in for the first ordinary pass.
