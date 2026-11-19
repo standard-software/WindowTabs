@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Masquer les onglets quand la fenêtre est en plein écran",
   "HideTabsWhileMoving": "Masquer les onglets pendant le déplacement d'une fenêtre",
   "LockWindowPosition": "Empêcher le déplacement des fenêtres et le redimensionnement par le haut",
-  "SnapTabHeightMargin": "Laisser de la place pour les onglets lors de l’ancrage ou du déplacement",
+  "SnapTabMarginMode": "Espace pour les onglets lors de l’ancrage ou du déplacement",
+  "SnapTabMarginNone": "Aucun espace",
+  "SnapTabMarginWindowTabs": "Uniquement lors de l’ancrage par WindowTabs",
+  "SnapTabMarginAll": "Lors de l’ancrage par WindowTabs ou Windows",
   "SnapOnDragDetach": "Ancrer au bord de l'écran en faisant glisser un onglet vers une nouvelle fenêtre",
   "NextTab": "Onglet suivant",
   "PrevTab": "Onglet précédent",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Comportement du groupe d'onglets",
   "LockWindowPositionMenu": "Empêcher le déplacement des fenêtres et le redimensionnement par le haut",
-    "SnapTabMarginTop": "Laisser de la place pour les onglets lors de l’ancrage ou du déplacement",
 
   "TabDirectionMenu": "Direction des onglets",
   "TabAlignMenu": "Alignement des onglets",

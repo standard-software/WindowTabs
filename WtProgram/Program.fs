@@ -318,7 +318,7 @@ type Program() as this =
     let isSubscribed = Cell.create(Map2<IntPtr,IDisposable>())
     let isDroppedAndAwaitingGrouping = Cell.create(Set2())
     let pendingDragEdges = Cell.create(Map2<IntPtr, TabEdges.Edge>())
-    let pendingDragSnapMargins = Cell.create(Map2<IntPtr, bool>())
+    let pendingDragSnapMargins = Cell.create(Map2<IntPtr, string>())
     // The lock of the group a tab was dragged out of, waiting for the group
     // it lands in to be created (see IProgram.markDetachedLock).
     let pendingDetachedLocks = Cell.create(Map2<IntPtr, bool>())
@@ -439,7 +439,7 @@ type Program() as this =
     // auto-grouping, which knows nothing of what was saved, so without this
     // the group came back on the default side of its windows and lost the
     // setting again at the next save.
-    let seededGroupSettings = Cell.create(Map2() : Map2<IntPtr, string option * bool option * bool option>)
+    let seededGroupSettings = Cell.create(Map2() : Map2<IntPtr, string option * string option * bool option>)
     // The virtual desktop such a group belongs to, as the file names it.
     let seededGroupDesktops = Cell.create(Map2() : Map2<IntPtr, string>)
     // Maps a restored window's NEW hwnd to the hwnd it had before closing, so
@@ -456,7 +456,7 @@ type Program() as this =
     let restoredFromMap = System.Collections.Concurrent.ConcurrentDictionary<IntPtr, IntPtr>()
     // Temporary storage for tab group configuration (used during disable/enable)
     // Keep each group's own tab state as well as its home and settings.
-    let savedTabGroups = Cell.create<List2<SavedTabState.SavedTab list * string * bool * bool * Guid option>>(List2())
+    let savedTabGroups = Cell.create<List2<SavedTabState.SavedTab list * string * string * bool * Guid option>>(List2())
     let windowNameOverride = Cell.create(Map2())
     let windowNameOverrideSnapshot = windowNameOverride.createSnapshot()
     // Global per-HWND storage for fill color, underline color and pinned state (persists across group transfers)
@@ -1173,7 +1173,7 @@ type Program() as this =
         match seededGroupSettings.value.tryFind(token) with
         | Some(pos, margin, locked) ->
             pos |> Option.iter (fun p -> g.perGroupTabPositionValue <- p)
-            margin |> Option.iter (fun m -> g.snapTabHeightMargin <- m)
+            margin |> Option.iter (fun m -> g.snapTabMarginMode <- m)
             locked |> Option.iter (fun l -> g.lockWindowPosition <- l)
         | None -> ()
 
@@ -2284,7 +2284,7 @@ type Program() as this =
         pendingDragEdges.map(fun m -> m.remove hwnd)
         let snapMargin = pendingDragSnapMargins.value.tryFind(hwnd)
         pendingDragSnapMargins.map(fun m -> m.remove hwnd)
-        if isNewGroup then snapMargin |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
+        if isNewGroup then snapMargin |> Option.iter (fun margin -> group.snapTabMarginMode <- margin)
         let detachedLock = pendingDetachedLocks.value.tryFind(hwnd)
         pendingDetachedLocks.map(fun m -> m.remove hwnd)
         if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
@@ -2900,7 +2900,7 @@ type Program() as this =
             let g = Services.desktop.createGroup()
             g.desktopHome <- Some(desktop)
             g.perGroupTabPositionValue <- source.perGroupTabPositionValue
-            g.snapTabHeightMargin <- source.snapTabHeightMargin
+            g.snapTabMarginMode <- source.snapTabMarginMode
             g.lockWindowPosition <- source.lockWindowPosition
             for hwnd in members do
                 // The global maps are what a joining tab takes its state from.
@@ -2925,7 +2925,7 @@ type Program() as this =
         match source with
         | :? GroupInfo as info when not members.IsEmpty && not info.isExited && not desktopTransferPending ->
             let position = source.perGroupTabPositionValue
-            let margin = source.snapTabHeightMargin
+            let margin = source.snapTabMarginMode
             let locked = source.lockWindowPosition
             members |> List.iter (fun h -> this.publishTabState(source, h))
             let program = this :> IProgram
@@ -2950,7 +2950,7 @@ type Program() as this =
                                 let target = Services.desktop.createGroup()
                                 target.desktopHome <- Some desktop
                                 target.perGroupTabPositionValue <- position
-                                target.snapTabHeightMargin <- margin
+                                target.snapTabMarginMode <- margin
                                 target.lockWindowPosition <- locked
                                 for h in moved do
                                     target.addWindowUnplaced(h)
@@ -3403,7 +3403,7 @@ type Program() as this =
                           mirrorOrder = gi.visualOrder.list |> List.filter (keeps i)
                           seeds = seeds
                           tabPosition = Some(gi.perGroupTabPositionValue)
-                          snapMargin = Some(gi.snapTabHeightMargin)
+                          snapMargin = Some(gi.snapTabMarginMode)
                           lockPosition = Some(gi.lockWindowPosition)
                           desktop = gi.desktopHome |> Option.map VirtualDesktopGroups.formatDesktop }
                     group, stateIn gi)
@@ -3722,7 +3722,7 @@ type Program() as this =
                                 finish false ("group-dispatch-error-" + ex.GetType().Name)
 #endif
                                 reraise())
-                        g.snapMargin |> Option.iter (fun v -> group.snapTabHeightMargin <- v)
+                        g.snapMargin |> Option.iter (fun v -> group.snapTabMarginMode <- v)
                         g.lockPosition |> Option.iter (fun v -> group.lockWindowPosition <- v)
                         group.desktopHome <- homes.[gi]
                         Some(group)
@@ -4174,7 +4174,7 @@ type Program() as this =
                             RestoreTrace.log (fun () ->
                                 sprintf "disable-snapshot token=%X rank=%d hwnd=%X reason=saved"
                                     (int64 token) rank (int64 tab.hwnd)))
-                        (tabs, gi.perGroupTabPositionValue, gi.snapTabHeightMargin, gi.lockWindowPosition, gi.desktopHome))
+                        (tabs, gi.perGroupTabPositionValue, gi.snapTabMarginMode, gi.lockWindowPosition, gi.desktopHome))
                 savedTabGroups.set(List2(groupConfigs))
 
                 // Set disabled state before destroying groups
@@ -4227,7 +4227,7 @@ type Program() as this =
                     if not valid.IsEmpty then
                         let group = Services.desktop.createGroup()
                         group.perGroupTabPositionValue <- savedTabPos
-                        group.snapTabHeightMargin <- savedSnapMargin
+                        group.snapTabMarginMode <- savedSnapMargin
                         group.lockWindowPosition <- savedLockPosition
                         group.desktopHome <- home
                         match group :> obj with

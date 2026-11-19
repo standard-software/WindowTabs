@@ -158,8 +158,10 @@ module ThreadHelper =
         let timer = new System.Windows.Forms.Timer()
         timer.Interval <- interval
         timer.Tick.Add <| fun _ ->
-            f()
+            // Stop before user code, including exceptions or nested message pumps.
+            timer.Stop()
             timer.Dispose()
+            f()
         timer.Start()
         timer :> IDisposable
 // WinEvent delivery can wait inside the native message pump during a display

@@ -49,6 +49,22 @@ type InteractionView() =
                 (fun mode -> if mode = "nochange" then "nochange" else "change")
                 ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
 
+        let snapMarginChoice =
+            let options = SnapTabMarginMode.choices
+            let combo = EdgeRows.choice (options |> List.map (snd >> Localization.getString))
+            let fit() = EdgeRows.fitChoiceWidth combo
+            fit()
+            combo.FontChanged.Add(fun _ -> fit())
+            combo.DropDown.Add(fun _ -> fit())
+            let refresh() =
+                let mode = Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.normalize
+                combo.SelectedIndex <- options |> List.findIndex (fun (value,_) -> value = mode)
+            refresh()
+            refreshers.Add(refresh)
+            combo.SelectedIndexChanged.Add(fun _ ->
+                if combo.SelectedIndex >= 0 then save "snapTabMarginMode" (box (fst options.[combo.SelectedIndex])))
+            combo :> Control
+
         let previewNumber key minimum maximum defaultValue =
             let row = new TableLayoutPanel(AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, Margin = Padding(0))
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
@@ -76,7 +92,7 @@ type InteractionView() =
             ("LockWindowPosition", lockPositionCheckbox)
             ("", gap :> Control)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionRadios)
-            ("SnapTabHeightMargin", settingsCheckbox "snapTabHeightMargin")
+            ("SnapTabMarginMode", snapMarginChoice)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
             ("TabPreviewDelay", previewNumber "tabPreviewDelay" 0 5000 500)
             ("TabPreviewSize", previewNumber "tabPreviewSize" 80 1000 320)

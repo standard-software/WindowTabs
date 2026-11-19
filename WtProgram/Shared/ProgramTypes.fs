@@ -52,7 +52,7 @@ type SettingsRec = {
     hideTabsOnFullscreen: bool
     hideTabsWhileMoving: bool
     lockWindowPosition: bool
-    snapTabHeightMargin: bool
+    snapTabMarginMode: string
     // "change": on a snap or move to the left, right or a corner, re-align every
     // tab of a uniformly aligned group to that side. "nochange": leave alignment alone.
     changeTabPositionOnSnap: string
@@ -227,7 +227,8 @@ type IGroup =
     abstract member visualOrderThreadSafe: List2<IntPtr>
     abstract member destroy: unit -> unit
     abstract member perGroupTabPositionValue: string with get, set
-    abstract member snapTabHeightMargin: bool with get, set
+    abstract member snapTabHeightMargin: bool with get
+    abstract member snapTabMarginMode: string with get, set
     abstract member lockWindowPosition: bool with get, set
     abstract member isPinned: IntPtr -> bool
     abstract member pinTab: IntPtr -> unit

@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Nascondi le schede quando la finestra è a schermo intero",
   "HideTabsWhileMoving": "Nascondi le schede durante lo spostamento di una finestra",
   "LockWindowPosition": "Impedisci lo spostamento delle finestre e il ridimensionamento dal bordo superiore",
-  "SnapTabHeightMargin": "Lascia spazio per le schede durante l’aggancio o lo spostamento",
+  "SnapTabMarginMode": "Spazio per le schede durante l’aggancio o lo spostamento",
+  "SnapTabMarginNone": "Nessuno spazio",
+  "SnapTabMarginWindowTabs": "Solo durante l’aggancio con WindowTabs",
+  "SnapTabMarginAll": "Durante l’aggancio con WindowTabs o Windows",
   "SnapOnDragDetach": "Aggancia al bordo dello schermo trascinando una scheda in una nuova finestra",
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Comportamento del gruppo di schede",
   "LockWindowPositionMenu": "Impedisci lo spostamento delle finestre e il ridimensionamento dal bordo superiore",
-    "SnapTabMarginTop": "Lascia spazio per le schede durante l’aggancio o lo spostamento",
 
   "TabDirectionMenu": "Direzione delle schede",
   "TabAlignMenu": "Allineamento scheda",

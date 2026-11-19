@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "全画面ウィンドウの場合はタブを非表示にすっぺ",
   "HideTabsWhileMoving": "ウィンドウ移動中はタブを非表示にすっぺ",
   "LockWindowPosition": "ウィンドウの移動や上端のサイズ変更はさせねえ",
-  "SnapTabHeightMargin": "スナップ時と移動時にタブの分の余白をあけるべ",
+  "SnapTabMarginMode": "スナップ時移動時のタブ分の余白",
+  "SnapTabMarginNone": "余白をあけない",
+  "SnapTabMarginWindowTabs": "WindowTabsのスナップ時のみ余白をあける",
+  "SnapTabMarginAll": "WindowTabsのスナップとWindows標準のスナップ時に余白をあける",
   "SnapOnDragDetach": "タブ分離したとき落とした位置でスナップすっぺ",
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "タブグループの動き",
   "LockWindowPositionMenu": "ウィンドウの移動や上端のサイズ変更はさせねえ",
-    "SnapTabMarginTop": "スナップ時と移動時にタブの分の余白をあけるべ",
 
   "TabDirectionMenu": "タブの方向",
   "TabAlignMenu": "タブの配置だべ",

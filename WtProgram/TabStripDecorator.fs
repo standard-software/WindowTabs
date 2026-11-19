@@ -168,6 +168,16 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     static let mutable groupInfos = System.Collections.Generic.Dictionary<IntPtr, TabGroupInfo>()
 
     let os = OS()
+    let snapRoomClock = System.Diagnostics.Stopwatch.StartNew()
+    let mutable snapRoomChangedAt = 0L
+    let mutable snapRoomFront : IntPtr option = None
+    let mutable snapRoomLastMember : IntPtr option = None
+    let mutable snapRoomTimer : IDisposable option = None
+    let mutable snapRoomRemembered : TabEdgeLayout.ExternalSnapRoomMemory option = None
+    let mutable snapRoomReleased : Map<IntPtr, int * int> = Map.empty
+    let mutable snapRoomObserved : (IntPtr * Rect) option = None
+    let mutable snapRoomDisposed = false
+    let mutable snapRoomRetry = TabEdgeLayout.ExternalSnapRetry.Idle
     let Cell = CellScope(false, true)
     let readHideSettings () =
         let root = Services.settings.root
@@ -626,6 +636,24 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         this.ts.setAllowedEdges(allowed)
         this.readEdgeValues settingsRoot allowed
         group.init(this.ts)
+        group.zorder.changed.Add <| fun () ->
+            // A snap picker can place a member that was not in front and
+            // bring it forward, with no position notice for the new front.
+            // Check the new front once it has settled; never write to the old.
+            let front = group.tryTopWindow
+            if front <> snapRoomFront then
+                let known = snapRoomFront.IsSome
+                snapRoomFront <- front
+                if known && front.IsSome && not snapRoomDisposed &&
+                   SnapTabMarginMode.externalEnabled group.snapTabMarginMode then
+                    this.cancelExternalSnapCandidate("front-changed")
+                    this.queueExternalSnapRoom(false)
+        group.snapRoomChanged.Add this.queueExternalSnapRoom
+        group.snapRoomStateChanged.Add this.resumeExternalSnapRoom
+        group.desktopChanged.Add this.resumeExternalSnapRoom
+        this.ts.destroying.Add <| fun () ->
+            snapRoomDisposed <- true
+            this.resetExternalSnapRoom("destroy")
         // Register this decorator in the global registry
         lock decorators (fun () -> decorators.[group.hwnd] <- this)
 
@@ -2025,6 +2053,225 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 #endif
                 result
         System.Drawing.Rectangle(x, y, width, height)
+
+    member private this.traceExternalSnapSkip(exitName: string, state: int) =
+#if DEBUG
+        let hwnd = snapRoomObserved |> Option.map fst |> Option.defaultValue IntPtr.Zero
+        WindowFrameMargin.trace (sprintf "external-snap-room-skip hwnd=%X exit=%s state=%d retry=%A"
+            (int64 hwnd) exitName state snapRoomRetry)
+#endif
+        ()
+
+    member private this.traceExternalSnapQueue(origin: string) =
+#if DEBUG
+        let hwnd = snapRoomObserved |> Option.map fst |> Option.defaultValue IntPtr.Zero
+        WindowFrameMargin.trace (sprintf "external-snap-room-queue hwnd=%X origin=%s state=-1 retry=%A waitMs=%d"
+            (int64 hwnd) origin snapRoomRetry
+            (TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt))
+#endif
+        ()
+
+    member private this.cancelExternalSnapCandidate(reason: string) =
+        if snapRoomObserved.IsSome || snapRoomTimer.IsSome then this.traceExternalSnapSkip(reason, 0)
+        snapRoomTimer |> Option.iter (fun timer -> timer.Dispose())
+        snapRoomTimer <- None
+        snapRoomObserved <- None
+        snapRoomChangedAt <- 0L
+        snapRoomRetry <- TabEdgeLayout.ExternalSnapRetry.Idle
+
+    member private this.resetExternalSnapRoom(reason: string) =
+        this.cancelExternalSnapCandidate(reason)
+        snapRoomRemembered <- None
+        snapRoomReleased <- Map.empty
+        snapRoomLastMember <- None
+
+    member private this.externalSnapRoomState(window: Window) =
+        if not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then 0
+        else
+            let normal = group.canApplySnapRoom && window.isWindow && not window.isMinimized &&
+                         not window.isMaximized && not window.isCloaked && window.isVisible && not group.isFullscreen.value
+            let moving = group.isInMoveSizeThreadSafe || window.isInMoveSize || isDraggingCell.value
+            let held = Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
+            let state = TabEdgeLayout.externalSnapReadiness group.snapTabMarginMode normal moving held
+            // The cached fullscreen state rejects known fullscreen placements
+            // before native monitor reads; check the live state only when ready.
+            if state = 5 && window.isFullscreen then 1 else state
+
+    member private this.advanceExternalSnapRoom(input) =
+        let next, action = TabEdgeLayout.ExternalSnapRetry.transition snapRoomRetry input
+        snapRoomRetry <- next
+        action
+
+    member private this.resumeExternalSnapRoom() =
+        if not snapRoomDisposed &&
+           this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.StateChanged) = TabEdgeLayout.ExternalSnapRetry.Schedule then
+            group.refreshSnapRoomState()
+            this.traceExternalSnapQueue("state")
+            this.scheduleExternalSnapRoom()
+
+    // Notifications update the candidate without replacing a waiting timer.
+    member private this.queueExternalSnapRoom(starting: bool) =
+        if starting || not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then
+            this.resetExternalSnapRoom(if starting then "reset" else "mode")
+        elif not snapRoomDisposed && group.windows.items.count > 0 then
+            let hwnd = group.topWindow
+            let bounds = os.windowFromHwnd(hwnd).bounds
+            let deferred =
+                match snapRoomRetry with
+                | TabEdgeLayout.ExternalSnapRetry.StateWaiting
+                | TabEdgeLayout.ExternalSnapRetry.NotificationWaiting -> true
+                | _ -> false
+            if deferred || snapRoomObserved <> Some(hwnd, bounds) then
+                let changed = snapRoomObserved <> Some(hwnd, bounds)
+                if changed then
+                    if snapRoomObserved |> Option.exists (fun (old,_) -> old <> hwnd) then
+                        this.traceExternalSnapSkip("front-changed", -1)
+                    snapRoomChangedAt <- snapRoomClock.ElapsedMilliseconds
+                snapRoomObserved <- Some(hwnd, bounds)
+                let newWait = snapRoomTimer.IsNone
+                this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Position) |> ignore
+                if newWait then this.traceExternalSnapQueue("position")
+                this.scheduleExternalSnapRoom()
+
+    member private this.scheduleExternalSnapRoom() =
+        if not snapRoomDisposed && snapRoomTimer.IsNone then
+            match snapRoomObserved with
+            | None -> this.traceExternalSnapSkip("no-candidate", -1)
+            | Some _ ->
+                let delay = TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt
+                snapRoomTimer <- Some(ThreadHelper.cancelablePostBack delay (fun () ->
+                    snapRoomTimer <- None
+                    try
+                        if snapRoomDisposed || not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then
+                            this.resetExternalSnapRoom(if snapRoomDisposed then "destroy" else "mode")
+                        elif TabEdgeLayout.ExternalSnapRetry.waitsForSettle snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt then
+                            this.traceExternalSnapSkip("settling", -1)
+                            this.scheduleExternalSnapRoom()
+                        else
+                            // The bounded button wait remains independent of the
+                            // geometry deadline and reads only the button while held.
+                            let held = Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
+                            match this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Tick held) with
+                            | TabEdgeLayout.ExternalSnapRetry.Schedule ->
+                                this.traceExternalSnapSkip("button", 6)
+                                this.scheduleExternalSnapRoom()
+                            | TabEdgeLayout.ExternalSnapRetry.Inspect ->
+                                if TabEdgeLayout.ExternalSnapRetry.remainingMs snapRoomClock.ElapsedMilliseconds snapRoomChangedAt > 0 then
+                                    this.traceExternalSnapSkip("settling", -1)
+                                    this.scheduleExternalSnapRoom()
+                                else this.inspectExternalSnapRoom()
+                            | _ -> this.traceExternalSnapSkip("retry-stopped", if held then 6 else -1)
+                    with _ ->
+                        this.traceExternalSnapSkip("exception", -1)
+                        reraise()))
+
+    member private this.inspectExternalSnapRoom() =
+        match snapRoomObserved with
+        | None -> this.traceExternalSnapSkip("no-candidate", -1)
+        | Some(hwnd, bounds) ->
+            if group.windows.items.count = 0 then this.resetExternalSnapRoom("empty")
+            elif group.topWindow <> hwnd then
+                this.traceExternalSnapSkip("front-changed", -1)
+                snapRoomObserved <- None
+                this.queueExternalSnapRoom(false)
+            else
+                let window = os.windowFromHwnd(hwnd)
+                match this.externalSnapRoomState(window) with
+                | 0 -> this.resetExternalSnapRoom("mode")
+                | 6 -> this.deferExternalSnapButton()
+                | 5 ->
+                    if window.bounds <> bounds then
+                        this.traceExternalSnapSkip("bounds-changed", 5)
+                        // Even if a second read sees a reversal, this observed
+                        // change must start a fresh quiet period.
+                        snapRoomObserved <- None
+                        this.queueExternalSnapRoom(false)
+                    else this.applyExternalSnapRoom(window)
+                | state ->
+                    this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Blocked) |> ignore
+                    this.traceExternalSnapSkip("state", state)
+
+    member private this.deferExternalSnapButton() =
+        let action = this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Tick true)
+        this.traceExternalSnapSkip((if action = TabEdgeLayout.ExternalSnapRetry.Schedule then "button" else "retry-stopped"), 6)
+        if action = TabEdgeLayout.ExternalSnapRetry.Schedule then this.scheduleExternalSnapRoom()
+
+    member private this.applyExternalSnapRoom(window: Window) =
+        // Recheck just before geometry; modes 1/2 and inactive states do not
+        // enter the external placement path at all.
+        match this.externalSnapRoomState(window) with
+        | 0 -> this.resetExternalSnapRoom("mode")
+        | 6 -> this.deferExternalSnapButton()
+        | 5 ->
+            this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Complete) |> ignore
+            let area = (this.getCurrentScreenForWindow(window.hwnd)).WorkingArea
+            let reserved = this.adjustWorkAreaForTabHeight(area, ofGroup = true)
+            let margin = group.snapshotPlacementMargin(window.hwnd)
+            let bounds = FramePlacement.readSnap window.hwnd margin window.bounds
+            let box (r: System.Drawing.Rectangle) = r.X,r.Y,r.Width,r.Height
+            // A window with a declared margin is snapped by Windows with its
+            // own frame on the work area, so its group rectangle overshoots
+            // by that margin. Count such an edge as being on the work area.
+            // The remembered rectangles use the same form as the input.
+            let onWorkArea (bounds: Rect) =
+                let (mt, ml, mr, mb) = margin (max 96 (int (Math.Round(Dpi.scaleForRect window.bounds * 96.0))))
+                let l, t, r, b = bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height
+                let l = if ml > 0 && l < area.Left && area.Left - l <= ml + 1 then area.Left else l
+                let t = if mt > 0 && t < area.Top && area.Top - t <= mt + 1 then area.Top else t
+                let r = if mr > 0 && r > area.Right && r - area.Right <= mr + 1 then area.Right else r
+                let b = if mb > 0 && b > area.Bottom && b - area.Bottom <= mb + 1 then area.Bottom else b
+                l, t, r - l, b - t
+            let before = onWorkArea bounds
+            let identity hwnd = Win32Helper.GetWindowProcessId(hwnd), Win32Helper.GetWindowThreadId(hwnd)
+            let arrangedBefore = Win32Helper.WindowArrangedState(window.hwnd)
+            // Evidence of a new snap: this member's release was verified, or
+            // it is not the member corrected last (a tab picked in the snap
+            // picker). The same member still arranged is not chased again.
+            let released =
+                (snapRoomReleased |> Map.tryFind window.hwnd |> Option.exists ((=) (identity window.hwnd))) ||
+                snapRoomLastMember <> Some window.hwnd
+            let previous = snapRoomRemembered
+            let remembered, reason, target =
+                TabEdgeLayout.externalSnapRoom group.snapTabMarginMode true false released arrangedBefore snapRoomRemembered
+                    (box area) (box reserved) before
+
+            snapRoomRemembered <- remembered
+            match target with
+            | Some(x,y,w,h) ->
+                // Consume all old release evidence before any native write.
+                snapRoomReleased <- Map.empty
+                snapRoomLastMember <- Some window.hwnd
+                let wanted : Rect = this.writeGroupSnap(window, Rect(Pt(x,y), Sz(w,h)))
+                if group.hasWindowMargin(window.hwnd) then
+                    group.recordMarginApplied(window.hwnd, wanted.width, wanted.height)
+                let arrangedAfterMove = Win32Helper.WindowArrangedState(window.hwnd)
+                let didRelease = Win32Helper.ReleaseWindowArrangement(window.hwnd)
+                let arrangedAfter = Win32Helper.WindowArrangedState(window.hwnd)
+                // A move can itself release arrangement. Otherwise require the
+                // placement helper to verify both geometry and normal bounds.
+                let frontReleased = didRelease || (arrangedBefore = 1 && arrangedAfterMove = 0 && arrangedAfter = 0)
+                if frontReleased then snapRoomReleased <- snapRoomReleased.Add(window.hwnd, identity window.hwnd)
+#if DEBUG
+                WindowFrameMargin.trace (sprintf "external-snap-room-write hwnd=%X wanted=%A actual=%A accepted=%b arrangedBefore=%d arrangedAfter=%d released=%b"
+                    (int64 window.hwnd) wanted window.bounds (wanted = window.bounds) arrangedBefore arrangedAfter frontReleased)
+#endif
+                let actual = FramePlacement.readSnap window.hwnd margin window.bounds
+                snapRoomRemembered <- snapRoomRemembered |> Option.map (fun previous ->
+                    { previous with after = onWorkArea actual })
+                for hwnd in group.adoptSnapRoomPlacement() do
+                    snapRoomReleased <- snapRoomReleased.Add(hwnd, identity hwnd)
+            | None -> if remembered.IsNone then snapRoomReleased <- Map.empty
+#if DEBUG
+            WindowFrameMargin.trace (sprintf "external-snap-room hwnd=%X enabled=true normal=true moving=false latched=%b rememberedArea=%A rememberedBefore=%A rememberedAfter=%A area=%A reserved=%A before=%A reason=%d target=%A arrangedBefore=%d arrangedAfter=%d"
+                (int64 window.hwnd) previous.IsSome
+                (previous |> Option.map (fun previous -> previous.workArea))
+                (previous |> Option.map (fun previous -> previous.before))
+                (previous |> Option.map (fun previous -> previous.after))
+                (box area) (box reserved) before reason target arrangedBefore (Win32Helper.WindowArrangedState(window.hwnd)))
+#endif
+        | state ->
+            this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Blocked) |> ignore
+            this.traceExternalSnapSkip("apply-state", state)
 
     member private this.screenSnapSourceSize(area: System.Drawing.Rectangle, width: int, height: int) =
         let reserved = this.adjustWorkAreaForTabHeight(area, ofGroup = true)
@@ -4070,12 +4317,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                         click = fun() ->
                             group.lockWindowPosition <- not group.lockWindowPosition
                     })
-                    CmiRegular({
-                        text = Localization.getString("SnapTabMarginTop")
+                    CmiPopUp({
+                        text = Localization.getString("SnapTabMarginMode")
                         image = None
-                        flags = if group.snapTabHeightMargin then List2([MenuFlags.MF_CHECKED]) else List2()
-                        click = fun() ->
-                            group.snapTabHeightMargin <- not group.snapTabHeightMargin
+                        flags = List2()
+                        items = List2(SnapTabMarginMode.choices |> List.map (fun (mode, caption) ->
+                            CmiRegular({ text = Localization.getString(caption); image = None
+                                         flags = if group.snapTabMarginMode = mode then List2([MenuFlags.MF_CHECKED]) else List2()
+                                         click = fun () -> group.snapTabMarginMode <- mode })))
                     })
                 ])
                 flags = List2()
@@ -4869,7 +5118,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                                           let window = os.windowFromHwnd(hwnd)
                                           let restored = FramePlacement.restoredBounds window
                                           (FramePlacement.read hwnd frameMargins.[hwnd] restored).size
-                                      sourceSnapTabHeightMargin = group.snapTabHeightMargin
+                                      sourceSnapTabMarginMode = group.snapTabMarginMode
                                       sourceLockWindowPosition = group.lockWindowPosition
                                       sourceTabAligns = (hwnd :: selectedSnapshot) |> List.map group.getTabAlign
                                       sourceTabEdges = (hwnd :: selectedSnapshot) |> List.map (fun h -> h, group.tabEdge h) |> Map.ofList })
@@ -4960,7 +5209,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     member private this.cleanupEdgeDrag() =
         TabEdges.cleanupDrag [
             (fun () -> this.ts.stopDragScroll(); this.ts.isReceiving <- false)
-            (fun () -> isDraggingCell.value <- false)
+            (fun () -> isDraggingCell.value <- false; this.resumeExternalSnapRoom())
             (fun () -> this.ts.transparent <- true)
             (fun () -> this.ts.dragGroup <- [])
             (fun () -> mouseDownTab := None; mouseDownOnSelected := false)
@@ -5032,6 +5281,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                     group.traceDockDrag("end-before", this.ts.edgeOf info.tab, hwnd))
 #endif
                 isDraggingCell.value <- false
+                this.resumeExternalSnapRoom()
                 group.repairStripZorder("drag-end")
                 this.ts.transparent <- true
                 let didMove =

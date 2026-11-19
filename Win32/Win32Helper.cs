@@ -313,6 +313,77 @@ namespace Bemo
             return result;
         }
 
+        [DllImport("user32.dll", EntryPoint = "IsWindowArranged")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool NativeIsWindowArranged(IntPtr hwnd);
+
+        // -1 means unavailable, never evidence of a successful release.
+        public static int WindowArrangedState(IntPtr hwnd)
+        {
+            try { return NativeIsWindowArranged(hwnd) ? 1 : 0; }
+            catch (EntryPointNotFoundException) { return -1; }
+            catch (DllNotFoundException) { return -1; }
+        }
+
+        // Inverse of RestoreWindowNoActivate's workspace-to-screen conversion.
+        // All three rectangles must use the same caller DPI context.
+        public static RECT ScreenBoundsToNormalPlacement(RECT bounds, RECT monitor, RECT work, bool toolWindow)
+        {
+            if (!toolWindow)
+            {
+                int dx = work.Left - monitor.Left;
+                int dy = work.Top - monitor.Top;
+                bounds.Left -= dx; bounds.Right -= dx;
+                bounds.Top -= dy; bounds.Bottom -= dy;
+            }
+            return bounds;
+        }
+
+        private static bool SamePlacementRect(RECT a, RECT b)
+        {
+            return a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
+        }
+
+        // Only the external-snap path calls this. Preserve the accepted outer
+        // rectangle, not a DWM-visible or WindowMargin-adjusted group rectangle.
+        public static bool ReleaseWindowArrangement(IntPtr hwnd)
+        {
+            if (!WinUserApi.IsWindow(hwnd) || !WinUserApi.IsWindowVisible(hwnd) ||
+                WinUserApi.IsIconic(hwnd) || WinUserApi.IsZoomed(hwnd) || WindowArrangedState(hwnd) != 1) return false;
+            RECT bounds;
+            if (!WinUserApi.GetWindowRect(hwnd, out bounds) || bounds.Width <= 0 || bounds.Height <= 0) return false;
+            WINDOWPLACEMENT placement = WINDOWPLACEMENT.NewWindowPlacement();
+            if (WinUserApi.GetWindowPlacement(hwnd, ref placement) == 0) return false;
+            MONITORINFO info = GetMonitorInfo(WinUserApi.MonitorFromWindow(hwnd, MonitorFlags.MONITOR_DEFAULTTONEAREST));
+            if (info.rcMonitor.Width <= 0 || info.rcMonitor.Height <= 0 ||
+                bounds.Right <= info.rcMonitor.Left || bounds.Left >= info.rcMonitor.Right ||
+                bounds.Bottom <= info.rcMonitor.Top || bounds.Top >= info.rcMonitor.Bottom) return false;
+            bool toolWindow = (WindowLongAsInt(WinUserApi.GetWindowLong(hwnd, WindowLongFieldOffset.GWL_EXSTYLE)) &
+                               WindowsExtendedStyles.WS_EX_TOOLWINDOW) != 0;
+            RECT normal = ScreenBoundsToNormalPlacement(bounds, info.rcMonitor, info.rcWork, toolWindow);
+            placement.rcNormalPosition = normal;
+            placement.showCmd = ShowWindowCommands.SW_SHOWNOACTIVATE;
+            placement.flags = 0;
+            // SHOWNOACTIVATE preserves focus but can raise a background member.
+            // Retain its predecessor without activating any window.
+            IntPtr predecessor = WinUserApi.GetWindow(hwnd, 3); // GW_HWNDPREV
+            if (WinUserApi.IsIconic(hwnd) || WinUserApi.IsZoomed(hwnd) || !WinUserApi.IsWindowVisible(hwnd)) return false;
+            RECT latest;
+            if (!WinUserApi.GetWindowRect(hwnd, out latest) || !SamePlacementRect(bounds, latest)) return false;
+            bool placed = WinUserApi.SetWindowPlacement(hwnd, ref placement);
+            if (WinUserApi.IsWindow(hwnd) && (predecessor == IntPtr.Zero || WinUserApi.IsWindow(predecessor)) &&
+                WinUserApi.GetWindow(hwnd, 3) != predecessor)
+                WinUserApi.SetWindowPos(hwnd, predecessor, 0, 0, 0, 0,
+                    SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOSIZE |
+                    SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOOWNERZORDER);
+            RECT actual;
+            WINDOWPLACEMENT saved = WINDOWPLACEMENT.NewWindowPlacement();
+            return placed && WindowArrangedState(hwnd) == 0 &&
+                !WinUserApi.IsIconic(hwnd) && !WinUserApi.IsZoomed(hwnd) &&
+                WinUserApi.GetWindowRect(hwnd, out actual) && SamePlacementRect(bounds, actual) &&
+                WinUserApi.GetWindowPlacement(hwnd, ref saved) != 0 && SamePlacementRect(normal, saved.rcNormalPosition);
+        }
+
         // Restore a maximized follower before parking it. Use its saved normal
         // bounds so this path also avoids a restored frame at maximized size.
         public static bool RestoreWindowNoActivate(IntPtr hwnd)

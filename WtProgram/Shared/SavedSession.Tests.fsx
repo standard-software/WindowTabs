@@ -63,7 +63,7 @@ let liveWindow (h: int) (exe: string) (title: string) (rect: (int * int * int * 
 // from a desktop. `write` is the function saveTabGroupsToSettings calls, and
 // the function passed to it is the only thing the desktop is needed for: what
 // the program knows about one live window.
-let saveScreen (groups: (SavedTab list * string option * bool option * PendingTab list) list) =
+let saveScreen (groups: (SavedTab list * string option * string option * PendingTab list) list) =
     let byHandle =
         groups
         |> List.collect (fun (ts, _, _, _) -> ts)
@@ -125,17 +125,17 @@ let mailTabs = [
     { tab 0x202 browser "title-calendar" with align = Some(AlignLeft); renamedTabName = Some("alias-calendar") } ]
 
 let screenText =
-    asText (saveScreen [ group editorTabs (Some("TopLeft")) (Some(true))
-                         group mailTabs (Some("TopRight")) (Some(false)) ])
+    asText (saveScreen [ group editorTabs (Some("TopLeft")) (Some(SnapTabMarginMode.windowTabs))
+                         group mailTabs (Some("TopRight")) (Some(SnapTabMarginMode.none)) ])
 let loaded = loadText screenText
 
 is "both groups come back" 2 (List.length loaded)
 is "the first group's tabs, in the order they are drawn in" editorTabs loaded.[0].windows
 is "the second group's" mailTabs loaded.[1].windows
 is "the first group's tab position" (Some("TopLeft")) loaded.[0].tabPosition
-is "and its snap margin" (Some(true)) loaded.[0].snapMargin
+is "and its snap margin" (Some(SnapTabMarginMode.windowTabs)) loaded.[0].snapMargin
 is "the second group's tab position" (Some("TopRight")) loaded.[1].tabPosition
-is "and its snap margin" (Some(false)) loaded.[1].snapMargin
+is "and its snap margin" (Some(SnapTabMarginMode.none)) loaded.[1].snapMargin
 
 printfn ""
 printfn "2. Nothing is invented. A tab that had no alignment of its own has"
@@ -184,7 +184,7 @@ let seedOf (rank: int) (t: SavedTab) =
     p
 let withSeeds =
     saveScreen [ (editorTabs |> List.filter (fun t -> t.hwnd = hwnd 0x101),
-                  Some("TopLeft"), Some(true),
+                  Some("TopLeft"), Some(SnapTabMarginMode.windowTabs),
                   [ seedOf 1 editorTabs.[1]; seedOf 3 editorTabs.[3] ]) ]
 let seededBack = (loadText (asText withSeeds)).[0].windows
 is "the group comes back with its waiting entries in place"
@@ -242,7 +242,7 @@ printfn "   group is the plainest way of saying it is finished with."
 let emptyGroup =
     let g : GroupToSave =
         { stripOrder = [hwnd 1]; mirrorOrder = []; seeds = []
-          tabPosition = Some("TopLeft"); snapMargin = Some(true); lockPosition = None; desktop = None }
+          tabPosition = Some("TopLeft"); snapMargin = Some(SnapTabMarginMode.windowTabs); lockPosition = None; desktop = None }
     write (fun _ -> None) [g]
 is "no group object is written" 0 emptyGroup.Count
 
@@ -266,7 +266,7 @@ is "the name comes back with it" (Some("alias-notes")) editorPlan.tabs.[0].appli
 is "so does the pin" true editorPlan.tabs.[0].applied.isPinned
 is "so does the alignment" (Some(AlignLeft)) editorPlan.tabs.[0].applied.align
 is "and the colours" (Some("112233FF")) (editorPlan.tabs |> List.last).applied.fillColor
-is "the group's settings survive" (Some("TopLeft"), Some(true)) (editorPlan.tabPosition, editorPlan.snapMargin)
+is "the group's settings survive" (Some("TopLeft"), Some(SnapTabMarginMode.windowTabs)) (editorPlan.tabPosition, editorPlan.snapMargin)
 is "the saved order is carried forward in the old handles"
     (editorTabs |> List.map (fun t -> t.hwnd)) editorPlan.savedOrder
 is "and the group is named by the first of them" (hwnd 0x101) editorPlan.token
@@ -475,7 +475,7 @@ is "the colours are still there"
 is "the rectangles are still there"
     (editorTabs |> List.map (fun t -> t.rect)) (cycledEditor.windows |> List.map (fun t -> t.rect))
 is "and so are the group's own settings"
-    (Some("TopLeft"), Some(true)) (cycledEditor.tabPosition, cycledEditor.snapMargin)
+    (Some("TopLeft"), Some(SnapTabMarginMode.windowTabs)) (cycledEditor.tabPosition, cycledEditor.snapMargin)
 // The twins' names are the case where the state cannot be applied. It must
 // still not be thrown away: an entry nobody has claimed is the file's only
 // copy of it.
@@ -678,7 +678,7 @@ do
     let oldPath = @"C:\Program Files\WindowsApps\Example.Terminal_2.3.4.0_x64__examplepub\app\terminal.exe"
     let newPath = @"C:\Program Files\WindowsApps\Example.Terminal_3.4.5.0_x64__examplepub\app\terminal.exe"
     let saved = { tab 901 oldPath "title-alpha" with isPinned = true; align = Some AlignRight }
-    let groups = saveScreen [group [saved] (Some "TopRight") (Some true)] |> read
+    let groups = saveScreen [group [saved] (Some "TopRight") (Some SnapTabMarginMode.windowTabs)] |> read
     for handle in [901; 902] do
         let planned = planOf groups [liveWindow handle newPath "title-alpha" None]
         let restored = planned.Head.tabs.Head

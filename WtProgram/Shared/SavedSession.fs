@@ -36,7 +36,7 @@ module SavedSession =
         // the order.
         windows: SavedTab list
         tabPosition: string option
-        snapMargin: bool option
+        snapMargin: string option
         // None in a file written before the lock became per-group.
         lockPosition: bool option
         // The virtual desktop the group belongs to (VirtualDesktopGroups).
@@ -72,7 +72,7 @@ module SavedSession =
         mirrorOrder: IntPtr list
         seeds: PendingTab list
         tabPosition: string option
-        snapMargin: bool option
+        snapMargin: string option
         lockPosition: bool option
         desktop: string option
     }
@@ -110,7 +110,7 @@ module SavedSession =
     // in at the index they held. A group with nothing in it is not written at
     // all: emptying a group is the plainest way of saying it is finished with.
     let groupToSavedJson (windows: SavedTab list) (seeds: PendingTab list)
-                         (tabPosition: string option) (snapMargin: bool option)
+                         (tabPosition: string option) (snapMargin: string option)
                          (lockPosition: bool option) (desktop: string option) =
         let arr = JArray()
         windows |> List.iter (fun t -> arr.Add(toJson t))
@@ -121,7 +121,7 @@ module SavedSession =
             arr.Insert(at, toJson e.tab))
         if arr.Count = 0 then None
         else
-            let o = groupToJson arr tabPosition snapMargin lockPosition
+            let o = groupToJsonWithSnapMode arr tabPosition snapMargin lockPosition
             desktop |> Option.iter (fun d -> o.Add("virtualDesktop", JValue(d)))
             Some(o)
 
@@ -154,7 +154,7 @@ module SavedSession =
         |> Seq.map (fun t ->
             { windows = groupWindows t
               tabPosition = groupTabPosition t
-              snapMargin = groupSnapMargin t
+              snapMargin = groupSnapMarginMode t
               lockPosition = groupLockPosition t
               desktop = groupDesktop t })
         |> List.ofSeq
@@ -216,7 +216,7 @@ module SavedSession =
     type PlannedGroup = {
         tabs: PlannedTab list
         tabPosition: string option
-        snapMargin: bool option
+        snapMargin: string option
         lockPosition: bool option
         // The saved order in the handles the file holds, which is what an
         // arrival's order arithmetic is done against.

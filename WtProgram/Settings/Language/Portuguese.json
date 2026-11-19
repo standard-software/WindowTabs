@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Ocultar guias quando a janela estiver em tela cheia",
   "HideTabsWhileMoving": "Ocultar guias ao mover uma janela",
   "LockWindowPosition": "Impedir mover janelas e redimensioná-las pela borda superior",
-  "SnapTabHeightMargin": "Deixar espaço para as guias ao encaixar ou mover",
+  "SnapTabMarginMode": "Espaço para as guias ao encaixar ou mover",
+  "SnapTabMarginNone": "Sem espaço",
+  "SnapTabMarginWindowTabs": "Somente ao encaixar com o WindowTabs",
+  "SnapTabMarginAll": "Ao encaixar com o WindowTabs ou o Windows",
   "SnapOnDragDetach": "Ajustar à borda da tela ao arrastar uma guia para uma nova janela",
   "NextTab": "Próxima guia",
   "PrevTab": "Guia anterior",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Comportamento do grupo de guias",
   "LockWindowPositionMenu": "Impedir mover janelas e redimensioná-las pela borda superior",
-    "SnapTabMarginTop": "Deixar espaço para as guias ao encaixar ou mover",
 
   "TabDirectionMenu": "Direção das guias",
   "TabAlignMenu": "Alinhamento da guia",

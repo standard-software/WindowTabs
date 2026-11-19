@@ -61,7 +61,10 @@ for file in files do
         equal "translated key exists" true (json.[key] <> null && not (System.String.IsNullOrWhiteSpace(string json.[key])))
         equal "key unique" 1 (System.Text.RegularExpressions.Regex.Matches(text, "\"" + key + "\"\\s*:").Count)
         if key.EndsWith("Format") then equal "format placeholder" true ((string json.[key]).Contains("{0}"))
-    equal "snap margin captions agree" (string json.["SnapTabHeightMargin"]) (string json.["SnapTabMarginTop"])
+    for key in ["SnapTabMarginMode"; "SnapTabMarginNone"; "SnapTabMarginWindowTabs"; "SnapTabMarginAll"] do
+        equal "snap mode caption exists" true (json.[key] <> null && not (System.String.IsNullOrWhiteSpace(string json.[key])))
+    equal "old snap checkbox caption removed" true (isNull json.["SnapTabHeightMargin"])
+    equal "old snap menu caption removed" true (isNull json.["SnapTabMarginTop"])
 let english = System.IO.File.ReadAllText(System.IO.Path.Combine(__SOURCE_DIRECTORY__, "../Localization/Localization_English.fs"))
 for key in keys do equal "English fallback exists" true (english.Contains("(\"" + key + "\","))
 printfn "Total: %d checks, 0 failures" checks

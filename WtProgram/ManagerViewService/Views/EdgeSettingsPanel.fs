@@ -203,6 +203,15 @@ module EdgeRows =
         combo.Margin <- Padding(0, marginPx, 0, marginPx)
         combo
 
+    /// Use the writing-mode row's text measurement and arrow allowance.
+    let fitChoiceWidth (combo: ComboBox) =
+        let textWidth = combo.Items |> Seq.cast<obj>
+                        |> Seq.map (fun item -> TextRenderer.MeasureText(string item, combo.Font).Width)
+                        |> Seq.fold max 0
+        let width = textWidth + SettingsDpi.px 28
+        combo.MinimumSize <- Size(width, 0)
+        combo.DropDownWidth <- max combo.Width width
+
     /// The same radio rows and delay field on every edge page.
     let hideTabsControls (read: unit -> string * int) (save: string -> int -> unit) =
         let table = UIHelper.settingsRadioGroup 3 3

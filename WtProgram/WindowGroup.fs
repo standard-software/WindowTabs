@@ -204,6 +204,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 #endif
     let addedEvent = Event<_>()
     let movedEvent = Event<IntPtr*int>()
+    // Native front-member geometry signals, delivered on the group thread.
+    let snapRoomEvent = Event<bool>()
+    let snapRoomStateEvent = Event<unit>()
     let removedEvent = Event<_>()
     let exitedEvent = Event<_>()
     // Raised when this group's lock changes, from its own menu or from the
@@ -384,7 +387,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // Per-group tab position: always has a concrete value (TopLeft/TopRight)
     let mutable perGroupTabPosition : string = "TopRight"
     // Per-group snap tab height margin: always has a concrete value
-    let mutable perGroupSnapTabHeightMargin : bool = false
+    let mutable perGroupSnapTabMarginMode = SnapTabMarginMode.none
 
     // Track the margin-shrunk size for each hwnd, so we know when to compensate on read
     // Key: hwnd, Value: (shrunkWidth, shrunkHeight) that was last applied
@@ -454,9 +457,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
         // Apply default setting for snap tab height margin
         let defaultSnapMargin =
-            try Services.settings.getValue("snapTabHeightMargin") :?> bool
-            with _ -> false
-        perGroupSnapTabHeightMargin <- defaultSnapMargin
+            try Services.settings.getValue("snapTabMarginMode") :?> string |> SnapTabMarginMode.normalize
+            with _ -> SnapTabMarginMode.none
+        perGroupSnapTabMarginMode <- defaultSnapMargin
 
         captionDragEnabled <-
             try Services.settings.getValue("lockWindowPosition") :?> bool
@@ -515,10 +518,9 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     | _ -> TopRight
                 ts.setAlignment(ts.direction, alignment)
 
-        // Listen for snapTabHeightMargin changes (apply to all groups)
-        Services.settings.notifyValue "snapTabHeightMargin" <| fun value ->
-            this.invokeAsync <| fun() ->
-                perGroupSnapTabHeightMargin <- unbox<bool>(value)
+        // Apply the dialog's mode to every group, including menu overrides.
+        Services.settings.notifyValue "snapTabMarginMode" <| fun value ->
+            this.invokeAsync <| fun() -> this.snapTabMarginMode <- unbox<string>(value)
 
         // Turning "lock window position" off drops an armed fallback at once,
         // even in the middle of a drag.
@@ -1745,9 +1747,18 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 | _ -> TopRight
             this.ts.setAlignment(this.ts.direction, alignment)
 
+    member this.snapTabMarginMode
+        with get() = perGroupSnapTabMarginMode
+        and set(value) =
+            let mode = SnapTabMarginMode.normalize value
+            if mode <> perGroupSnapTabMarginMode then
+                perGroupSnapTabMarginMode <- mode
+                // Cancel pending work and forget the previous mode's placement.
+                snapRoomEvent.Trigger(true)
+
+    // Existing geometry keeps its boolean contract for both enabled modes.
     member this.snapTabHeightMargin
-        with get() = perGroupSnapTabHeightMargin
-        and set(value) = perGroupSnapTabHeightMargin <- value
+        with get() = SnapTabMarginMode.enabled perGroupSnapTabMarginMode
 
     member this.lockWindowPosition
         with get() = captionDragEnabled
@@ -2178,6 +2189,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 isMaximizedExport.update()
                 isFullscreenExport.update()
                 updateTabVisibility()
+                snapRoomStateEvent.Trigger()
 
     member this.hasWindowMargin(hwnd: IntPtr) =
         let (top, left, right, bottom) = frameMargins.Get(hwnd, 96)
@@ -2203,7 +2215,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             let live = VirtualDesktopGroups.Live.snapshot()
             let header = sprintf "geometry reason=%s group=%X thread=%d context=%A awareness=%A shown=%b current=%A snapTabHeightMargin=%b stripScale=%f tabHeight=%d cachedBase=%A source=%X lastSnapRequest=%A"
                             reason (int64 this.hwnd) Thread.CurrentThread.ManagedThreadId context awareness
-                            desktopShown stripView.current perGroupSnapTabHeightMargin this.ts.scale
+                            desktopShown stripView.current this.snapTabHeightMargin this.ts.scale
                             (this.tabAppearanceAt this.ts.scale).tabHeight (placement.value |> Option.map fst)
                             (int64 placementSource) lastSnapGeometry
             let members = this.windows.items.list
@@ -2698,7 +2710,28 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if not (this.isTop fallbackHwnd) then this.endCaptionDragFallback "tab switched"
         | None -> ()
 
+    member this.snapRoomChanged = snapRoomEvent.Publish
+    member this.snapRoomStateChanged = snapRoomStateEvent.Publish
+    // A state-only wake may arrive without the location event that normally
+    // refreshes this cache. Do this only for a deferred candidate.
+    member this.refreshSnapRoomState() = isFullscreenExport.update()
+    member this.canApplySnapRoom = desktopShown && not isDestroyed.value && not maximizedScreenMove
+    member this.adoptSnapRoomPlacement() = this.withUpdate <| fun () ->
+        // Release normal, visible followers at their current accepted bounds
+        // before the queued move. Their subsequent normal move updates their
+        // restore rectangle; minimized/hidden/maximized members are untouched.
+        let released =
+            if SnapTabMarginMode.externalEnabled this.snapTabMarginMode && this.canApplySnapRoom then
+                this.windows.items.list |> List.filter (fun hwnd ->
+                    hwnd <> this.topWindow && this.isSameWindow(hwnd) && not (OS().windowFromHwnd(hwnd).isCloaked) &&
+                    Win32Helper.ReleaseWindowArrangement(hwnd))
+            else []
+        this.saveTopWindowPlacement()
+        this.queueChildPlacement()
+        released
+
     member this.onEnterMoveSize() =
+        snapRoomEvent.Trigger(true)
         inMoveSizeSnapshot <- true
         inMoveSize.set(true)
         updateTabVisibility()
@@ -2718,6 +2751,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         this.makeTopWindowForeground()
         this.updateIsVisible()
         updateTabVisibility()
+        snapRoomEvent.Trigger(false)
 
     // Thread-safe version for cross-thread reads (reads from volatile snapshot)
     member this.isInMoveSizeThreadSafe = inMoveSizeSnapshot
@@ -2994,6 +3028,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         isFullscreenExport.update()
                         updateTabVisibility()
                         this.queueChildPlacement()
+                        snapRoomEvent.Trigger(false)
             // A window of this group that is shown on all desktops, moved by
             // something other than this group - its group on another desktop
             // following a move made there. Same as if it had been dragged
@@ -3013,6 +3048,12 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 isFullscreenExport.update()
                 updateTabVisibility()
         | _ -> ()
+        // Wake only a deferred candidate, using existing state notifications.
+        // No periodic strip-maintenance path sends this event.
+        if this.windows.contains(hwnd) &&
+           (evt = WinEvent.EVENT_SYSTEM_MINIMIZEEND || evt = WinEvent.EVENT_OBJECT_SHOW ||
+            evt = WinEvent.EVENT_SYSTEM_FOREGROUND || evt = WinEvent.EVENT_SYSTEM_MOVESIZEEND) then
+            snapRoomStateEvent.Trigger()
       
     /// The active strip, or the first allowed edge for an empty group.
     member this.joinEdge =
@@ -3270,7 +3311,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                             for strip in this.ts.hwnd :: this.ts.edgeHwnds do
                                 TabGlassHost.cloakNotice strip
                             stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
-                            this.repairStripZorder(if evt = WinEvent.EVENT_OBJECT_UNCLOAKED then "uncloak" else "cloak"))
+                            this.repairStripZorder(if evt = WinEvent.EVENT_OBJECT_UNCLOAKED then "uncloak" else "cloak")
+                            if evt = WinEvent.EVENT_OBJECT_UNCLOAKED then snapRoomStateEvent.Trigger())
                     else this.main(hwnd, evt)
                 let handler =
                     match Map.tryFind evt conflateIntervals with

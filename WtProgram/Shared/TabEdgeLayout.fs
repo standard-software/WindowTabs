@@ -444,6 +444,100 @@ module TabEdgeLayout =
         let ah = if r.bottom < ah then ah - r.bottom else ah
         (ax, ay, aw, ah)
 
+    // A candidate can be dormant without being completed. Only a new
+    // position notification renews an exhausted button-wait budget.
+    module ExternalSnapRetry =
+        let delayMs = 250
+        let settleMs = 3000
+        let maxButtonChecks = 20
+        type State = Idle | Checking of int | ButtonWaiting of int | StateWaiting | NotificationWaiting
+        // Use elapsed monotonic time, not another full quiet period per tick.
+        let remainingMs now changedAt = max 0L (int64 settleMs - max 0L (now - changedAt)) |> int
+        let timerDelay state now changedAt =
+            match state with
+            | ButtonWaiting _ -> delayMs
+            | _ -> max 1 (remainingMs now changedAt)
+        let waitsForSettle state now changedAt =
+            match state with
+            | ButtonWaiting _ -> false
+            | _ -> remainingMs now changedAt > 0
+        type Input = Position | StateChanged | Tick of bool | Blocked | Complete | Reset
+        type Action = Nothing | Schedule | Inspect
+        let transition state input =
+            match input with
+            | Reset | Complete -> Idle, Nothing
+            | Position ->
+                match state with
+                | Checking _ | ButtonWaiting _ -> state, Schedule
+                | _ -> Checking maxButtonChecks, Schedule
+            | StateChanged ->
+                match state with
+                | StateWaiting -> Checking maxButtonChecks, Schedule
+                | _ -> state, Nothing
+            | Blocked -> StateWaiting, Nothing
+            | Tick held ->
+                match state with
+                | Checking remaining | ButtonWaiting remaining ->
+                    if not held then Checking remaining, Inspect
+                    elif remaining > 0 then ButtonWaiting (remaining - 1), Schedule
+                    else NotificationWaiting, Nothing
+                | _ -> state, Nothing
+
+    // Cheap scheduling gates run before monitor, reserve and DWM reads.
+    // Button waits are bounded separately, regardless of the foreground app.
+    let externalSnapReadiness mode normal moving held =
+        if not (SnapTabMarginMode.externalEnabled mode) then 0
+        elif not normal || moving then 1
+        elif held then 6
+        else 5
+
+    type ExternalSnapRoomMemory = {
+        workArea: Box
+        before: Box
+        after: Box
+    }
+
+    // Compare physical edges, so a one-pixel frame rounding difference does
+    // not turn an undo or our own echo into another snap request.
+    let private sameSnapRoomBox ((x,y,w,h): Box) ((ox,oy,ow,oh): Box) =
+        let near a b = abs (a-b) <= 1L
+        near (int64 x) (int64 ox) && near (int64 y) (int64 oy) &&
+        near (int64 x + int64 w) (int64 ox + int64 ow) &&
+        near (int64 y + int64 h) (int64 oy + int64 oh)
+
+    /// Remember only the last snap, including its work area and written result.
+    /// An undo or echo preserves it; another boundary placement replaces it.
+    /// An arranged window at the before rectangle bypasses the before latch
+    /// only with evidence of a new snap (`released`): a verified release of
+    /// this member, or a member other than the one corrected last. A plain
+    /// write-back is not arranged. The written-result echo still wins.
+    /// Reason codes: 0 disabled, 1 state, 2 remembered, 3 clear, 4 invalid, 5 apply.
+    let externalSnapRoom mode normal moving released arranged (remembered: ExternalSnapRoomMemory option)
+                         ((ax,ay,aw,ah) as area: Box) ((rx,ry,rw,rh): Box)
+                         ((x,y,w,h) as bounds: Box) =
+        let left, top = rx-ax, ry-ay
+        let right, bottom = ax+aw-rx-rw, ay+ah-ry-rh
+        let repeats =
+            remembered |> Option.exists (fun previous ->
+                previous.workArea = area &&
+                (sameSnapRoomBox bounds previous.after ||
+                 (sameSnapRoomBox bounds previous.before && not (released && arranged = 1))))
+        if not (SnapTabMarginMode.externalEnabled mode) then None, 0, None
+        elif not normal || moving then remembered, 1, None
+        elif repeats then remembered, 2, None
+        elif w <= 0 || h <= 0 || aw <= 0 || ah <= 0 ||
+             x < ax-1 || y < ay-1 || x+w > ax+aw+1 || y+h > ay+ah+1 then None, 4, None
+        else
+            let near a b = abs (a-b) <= 1
+            let nx = if left > 0 && near x ax then rx else x
+            let ny = if top > 0 && near y ay then ry else y
+            let nr = if right > 0 && near (x+w) (ax+aw) then rx+rw else x+w
+            let nb = if bottom > 0 && near (y+h) (ay+ah) then ry+rh else y+h
+            let target = nx,ny,nr-nx,nb-ny
+            if nr <= nx || nb <= ny then None, 4, None
+            elif target = bounds then None, 3, None
+            else Some {workArea=area; before=bounds; after=target}, 5, Some target
+
     /// Clamp a popup on all four sides; only new edge popups use this policy.
     let fitPopup ((wx, wy, ww, wh): Box) ((x, y, w, h): Box) : Box =
         let w, h = min w (max 1 ww), min h (max 1 wh)

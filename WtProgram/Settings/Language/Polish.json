@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Ukrywaj karty, gdy okno jest w trybie pełnoekranowym",
   "HideTabsWhileMoving": "Ukrywaj karty podczas przenoszenia okna",
   "LockWindowPosition": "Blokuj przesuwanie okien i zmianę rozmiaru od górnej krawędzi",
-  "SnapTabHeightMargin": "Zostaw miejsce na karty przy przyciąganiu lub przenoszeniu",
+  "SnapTabMarginMode": "Miejsce na karty podczas przyciągania lub przenoszenia",
+  "SnapTabMarginNone": "Bez miejsca",
+  "SnapTabMarginWindowTabs": "Tylko przy przyciąganiu przez WindowTabs",
+  "SnapTabMarginAll": "Przy przyciąganiu przez WindowTabs lub Windows",
   "SnapOnDragDetach": "Przyciągaj do krawędzi ekranu przy przeciąganiu karty do nowego okna",
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Zachowanie grupy kart",
   "LockWindowPositionMenu": "Blokuj przesuwanie okien i zmianę rozmiaru od górnej krawędzi",
-    "SnapTabMarginTop": "Zostaw miejsce na karty przy przyciąganiu lub przenoszeniu",
 
   "TabDirectionMenu": "Kierunek kart",
   "TabAlignMenu": "Wyrównanie kart",

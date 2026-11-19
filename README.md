@@ -279,7 +279,8 @@ Close Tab
 ---
 Tab Group Behavior
   Prevent moving windows and resizing them from the top
-  Leave room for tabs when snapping or moving
+  Room for tabs when snapping or moving
+    No room / Only when WindowTabs snaps / When WindowTabs or Windows snaps
 Tab Alignment
   Align this tab to Left
   Align this tab to Right

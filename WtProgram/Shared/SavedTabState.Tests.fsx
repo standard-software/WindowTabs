@@ -190,4 +190,39 @@ is "and the text is identical" ((toJson full).ToString()) ((toJson (roundTrip fu
 printfn ""
 if failures = 0 then printfn "%d checks, all passed." checks
 else printfn "%d checks, %d FAILED." checks failures
+
+module SnapTabMarginModeTests =
+    open Bemo
+    let mutable checks = 0
+    let equal label expected actual =
+        checks <- checks+1
+        if expected <> actual then failwithf "%s: expected %A, got %A" label expected actual
+    equal "missing retains group default" None (SnapTabMarginMode.load None None)
+    equal "legacy false" (Some SnapTabMarginMode.none) (SnapTabMarginMode.load (Some false) None)
+    equal "legacy true" (Some SnapTabMarginMode.windowTabs) (SnapTabMarginMode.load (Some true) None)
+    equal "old version disabled overrides companion" (Some SnapTabMarginMode.none)
+        (SnapTabMarginMode.load (Some false) (Some SnapTabMarginMode.all))
+    equal "old version enabled upgrades none to internal" (Some SnapTabMarginMode.windowTabs)
+        (SnapTabMarginMode.load (Some true) (Some SnapTabMarginMode.none))
+    equal "unknown companion falls back to legacy" (Some SnapTabMarginMode.windowTabs)
+        (SnapTabMarginMode.load (Some true) (Some "invalid"))
+    equal "invalid without legacy inherits" None (SnapTabMarginMode.load None (Some "invalid"))
+    for mode,_ in SnapTabMarginMode.choices do
+        equal "mode only" (Some mode) (SnapTabMarginMode.load None (Some mode))
+        for oldKey,newKey in ["SnapTabHeightMargin","SnapTabMarginMode"; "snapTabHeightMargin","snapTabMarginMode"] do
+            let obj = JObject()
+            SnapTabMarginMode.writeJson oldKey newKey mode obj
+            let parsed = JObject.Parse(string obj)
+            equal "legacy value remains boolean" JTokenType.Boolean parsed.[oldKey].Type
+            equal "legacy projection" (SnapTabMarginMode.enabled mode) (unbox<bool>((parsed.[oldKey] :?> JValue).Value))
+            equal "mode round trip" (Some mode) (SnapTabMarginMode.readJson oldKey newKey parsed)
+            equal "case insensitive key load" (Some mode) (SnapTabMarginMode.readJson (oldKey.ToUpperInvariant()) (newKey.ToUpperInvariant()) parsed)
+        let saved = groupToJsonWithSnapMode (JArray()) None (Some mode) None
+        equal "group mode round trip" (Some mode) (groupSnapMarginMode saved)
+        equal "legacy group parser still reads" (Some(SnapTabMarginMode.enabled mode)) (groupSnapMargin saved)
+    for bad in ["null"; "[]"; "{}"; "12"; "true"] do
+        let obj = JObject.Parse("{\"SnapTabMarginMode\":"+bad+"}")
+        equal "malformed mode inherits" None (SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" obj)
+    printfn "Snap tab margin modes: %d checks, 0 failures" checks
+
 exit (if failures = 0 then 0 else 1)

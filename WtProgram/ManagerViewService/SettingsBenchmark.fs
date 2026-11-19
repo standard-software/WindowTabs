@@ -24,10 +24,10 @@ module SettingsBenchmark =
                         // Exercise a persisted change while visible, on the disposable
                         // settings copy only. Reopening must reflect the new value.
                         if opened = 4 then
-                            let key = "snapTabHeightMargin"
-                            let previous = unbox<bool>(Services.settings.getValue key)
-                            Services.settings.setValue(key, box(not previous))
-                            SettingsTiming.mark "settings-changed:snapTabHeightMargin"
+                            let key = "snapTabMarginMode"
+                            let previous = unbox<string>(Services.settings.getValue key)
+                            Services.settings.setValue(key, box(if previous = SnapTabMarginMode.none then SnapTabMarginMode.windowTabs else SnapTabMarginMode.none))
+                            SettingsTiming.mark "settings-changed:snapTabMarginMode"
                         match DesktopManagerFormState.currentForm with
                         | Some form ->
                             form.Update()

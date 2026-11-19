@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Ocultar pestañas cuando la ventana está en pantalla completa",
   "HideTabsWhileMoving": "Ocultar pestañas al mover una ventana",
   "LockWindowPosition": "Impedir mover ventanas y redimensionarlas desde el borde superior",
-  "SnapTabHeightMargin": "Dejar espacio para las pestañas al acoplar o mover",
+  "SnapTabMarginMode": "Espacio para las pestañas al acoplar o mover",
+  "SnapTabMarginNone": "Sin espacio",
+  "SnapTabMarginWindowTabs": "Solo al acoplar con WindowTabs",
+  "SnapTabMarginAll": "Al acoplar con WindowTabs o Windows",
   "SnapOnDragDetach": "Acoplar al borde de la pantalla al arrastrar una pestaña a una nueva ventana",
   "NextTab": "Pestaña siguiente",
   "PrevTab": "Pestaña anterior",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Comportamiento del grupo de pestañas",
   "LockWindowPositionMenu": "Impedir mover ventanas y redimensionarlas desde el borde superior",
-    "SnapTabMarginTop": "Dejar espacio para las pestañas al acoplar o mover",
 
   "TabDirectionMenu": "Dirección de las pestañas",
   "TabAlignMenu": "Alineación de la pestaña",

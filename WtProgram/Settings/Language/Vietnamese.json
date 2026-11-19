@@ -141,7 +141,10 @@
   "HideTabsOnFullscreen": "Ẩn thẻ khi cửa sổ ở chế độ toàn màn hình",
   "HideTabsWhileMoving": "Ẩn thẻ khi di chuyển cửa sổ",
   "LockWindowPosition": "Ngăn di chuyển cửa sổ và thay đổi kích thước từ cạnh trên",
-  "SnapTabHeightMargin": "Chừa chỗ cho thẻ khi neo hoặc di chuyển",
+  "SnapTabMarginMode": "Khoảng trống cho thẻ khi neo hoặc di chuyển cửa sổ",
+  "SnapTabMarginNone": "Không chừa khoảng trống",
+  "SnapTabMarginWindowTabs": "Chỉ chừa khoảng trống khi neo bằng WindowTabs",
+  "SnapTabMarginAll": "Chừa khoảng trống khi neo bằng WindowTabs hoặc Windows",
   "SnapOnDragDetach": "Ghép vào cạnh màn hình khi kéo thẻ ra thành cửa sổ mới",
   "NextTab": "Thẻ tiếp theo",
   "PrevTab": "Thẻ trước",
@@ -248,7 +251,6 @@
 
 "WindowBehaviorMenu": "Hành vi nhóm thẻ",
   "LockWindowPositionMenu": "Ngăn di chuyển cửa sổ và thay đổi kích thước từ cạnh trên",
-    "SnapTabMarginTop": "Chừa chỗ cho thẻ khi neo hoặc di chuyển",
 
   "TabDirectionMenu": "Hướng thẻ",
   "TabAlignMenu": "Căn chỉnh thẻ",

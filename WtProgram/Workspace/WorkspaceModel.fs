@@ -255,7 +255,7 @@ and
     member this.windows = List2(_windows)
     member this.children = this.windows
     // Missing in older workspaces: keep the new group's current default.
-    member val snapTabHeightMargin : bool option = None with get, set
+    member val snapTabMarginMode : string option = None with get, set
     
     interface IWorkspaceNode with
         member x.showSettings = false
@@ -279,8 +279,8 @@ and
         groupObj.setString("name", this.name)
         groupObj.setObject("placement", placementObj)
         groupObj.setObjectArray("windows", windowObjects)
-        this.snapTabHeightMargin |> Option.iter (fun margin ->
-            groupObj.Add("snapTabHeightMargin", JValue(margin)))
+        this.snapTabMarginMode |> Option.iter (fun mode ->
+            SnapTabMarginMode.writeJson "snapTabHeightMargin" "snapTabMarginMode" mode groupObj)
         groupObj
 
     static member deserialize(obj:JObject) =
@@ -297,7 +297,7 @@ and
                 })
         )
         obj.getObjectArray("windows").Value.map(WorkspaceWindow.deserialize).iter(group.addWindow)
-        group.snapTabHeightMargin <- SavedTabState.groupSnapMargin obj
+        group.snapTabMarginMode <- SavedTabState.groupSnapMarginMode obj
         group
 
 
@@ -456,7 +456,7 @@ type WorkspaceModel() as this =
             let innerZorder = Map2(windowsInZorder.enumerate.map(fun(innerZorder, hwnd) -> hwnd, innerZorder))
             let wsGroup = WorkspaceGroup(
                 name = sprintf "Group %d" (i + 1),
-                snapTabHeightMargin = Some group.snapTabHeightMargin,
+                snapTabMarginMode = Some group.snapTabMarginMode,
                 // Read in the DPI-unaware coordinate space - see the comment
                 // on restoreWorkspace below. GetWindowPlacement answers in the
                 // caller's space, and this rectangle goes straight into
@@ -657,8 +657,8 @@ type WorkspaceModel() as this =
                         target <- Some destination
                         trace index "create" "end" members
                         onGroup false index "add" members (destination :?> GroupInfo) (fun group ->
-                            (groupInfo :?> WorkspaceGroup).snapTabHeightMargin
-                            |> Option.iter (fun margin -> group.snapTabHeightMargin <- margin)
+                            (groupInfo :?> WorkspaceGroup).snapTabMarginMode
+                            |> Option.iter (fun margin -> group.snapTabMarginMode <- margin)
                             // OS owns thread-affine caches; never use the model's OS here.
                             let groupOs = OS()
                             let savedEdges =

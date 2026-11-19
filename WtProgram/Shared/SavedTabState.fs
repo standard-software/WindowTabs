@@ -3,6 +3,36 @@ namespace Bemo
 open System
 open Newtonsoft.Json.Linq
 
+// String values match other multi-choice settings. The old boolean remains
+// readable by older releases; false always wins over a stale companion value.
+module SnapTabMarginMode =
+    let none = "none"
+    let windowTabs = "windowtabs"
+    let all = "all"
+    let choices = [none,"SnapTabMarginNone"; windowTabs,"SnapTabMarginWindowTabs"; all,"SnapTabMarginAll"]
+    let normalize mode = if mode = all then all elif mode = windowTabs then windowTabs else none
+    let enabled mode = normalize mode <> none
+    let externalEnabled mode = normalize mode = all
+    let ofLegacy enabled = if enabled then windowTabs else none
+    let load legacy stored =
+        match legacy with
+        | Some false -> Some none
+        | Some true -> Some (if stored = Some all then all else windowTabs)
+        | None -> stored |> Option.filter (fun value -> choices |> List.exists (fun (key,_) -> key = value))
+    let readJson legacyKey modeKey (token: JToken) =
+        let value key =
+            match token with
+            | :? JObject as obj ->
+                obj.Properties() |> Seq.tryFind (fun p -> String.Equals(p.Name,key,StringComparison.OrdinalIgnoreCase))
+                |> Option.map (fun p -> p.Value)
+            | _ -> None
+        let legacy = value legacyKey |> Option.bind (fun v -> if v.Type = JTokenType.Boolean then Some(unbox<bool>((v :?> JValue).Value)) else None)
+        let stored = value modeKey |> Option.bind (fun v -> if v.Type = JTokenType.String then Some(unbox<string>((v :?> JValue).Value)) else None)
+        load legacy stored
+    let writeJson (legacyKey: string) (modeKey: string) mode (obj: JObject) =
+        obj.[legacyKey] <- JValue(enabled mode)
+        obj.[modeKey] <- JValue(normalize mode)
+
 // One saved tab as it is written to settings.json and read back, and nothing
 // else.
 //
@@ -269,6 +299,9 @@ module SavedTabState =
         | :? JObject as g -> boolOf g "snapTabHeightMargin"
         | _ -> None
 
+    let groupSnapMarginMode token =
+        SnapTabMarginMode.readJson "snapTabHeightMargin" "snapTabMarginMode" token
+
     // Absent in a file written before the lock became per-group: the group
     // then starts from the dialog's value, as it always did.
     let groupLockPosition (groupToken: JToken) =
@@ -296,3 +329,8 @@ module SavedTabState =
         snapMargin |> Option.iter (fun m -> o.Add("snapTabHeightMargin", JValue(m)))
         lockPosition |> Option.iter (fun m -> o.Add("lockWindowPosition", JValue(m)))
         o
+
+    let groupToJsonWithSnapMode windows tabPosition snapMode lockPosition =
+        let obj = groupToJson windows tabPosition (snapMode |> Option.map SnapTabMarginMode.enabled) lockPosition
+        snapMode |> Option.iter (fun mode -> SnapTabMarginMode.writeJson "snapTabHeightMargin" "snapTabMarginMode" mode obj)
+        obj

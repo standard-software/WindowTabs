@@ -784,7 +784,7 @@ type Settings(isStandAlone) as this =
                         hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
                         hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
                         lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
-                        snapTabHeightMargin = settingsJson.getBool("SnapTabHeightMargin").def(false)
+                        snapTabMarginMode = SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" settingsJson |> Option.defaultValue SnapTabMarginMode.none
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
                         snapOnDragDetach = settingsJson.getBool("SnapOnDragDetach").def(false)
                         version = settingsJson.getString("Version").def(String.Empty)
@@ -846,7 +846,7 @@ type Settings(isStandAlone) as this =
                         hideTabsOnFullscreen = true
                         hideTabsWhileMoving = false
                         lockWindowPosition = false
-                        snapTabHeightMargin = false
+                        snapTabMarginMode = SnapTabMarginMode.none
                         changeTabPositionOnSnap = "change"
                         snapOnDragDetach = false
                         version = String.Empty
@@ -892,7 +892,8 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("HideTabsOnFullscreen", settings.hideTabsOnFullscreen)
             settingsJson.setBool("HideTabsWhileMoving", settings.hideTabsWhileMoving)
             settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
-            settingsJson.setBool("SnapTabHeightMargin", settings.snapTabHeightMargin)
+            settingsJson.setBool("SnapTabHeightMargin", SnapTabMarginMode.enabled settings.snapTabMarginMode)
+            settingsJson.setString("SnapTabMarginMode", SnapTabMarginMode.normalize settings.snapTabMarginMode)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setBool("SnapOnDragDetach", settings.snapOnDragDetach)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

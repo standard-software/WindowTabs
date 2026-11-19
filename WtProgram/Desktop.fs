@@ -126,7 +126,9 @@ type GroupInfo() as this =
             and set(value:string) = this.invokeGroup <| fun() -> _group.perGroupTabPositionValue <- value
         member x.snapTabHeightMargin
             with get() = _group.snapTabHeightMargin
-            and set(value) = this.invokeGroup <| fun() -> _group.snapTabHeightMargin <- value
+        member x.snapTabMarginMode
+            with get() = _group.snapTabMarginMode
+            and set(value) = this.invokeGroup <| fun() -> _group.snapTabMarginMode <- value
         member x.lockWindowPosition
             with get() = _group.lockWindowPosition
             and set(value) = this.invokeGroup <| fun() -> _group.lockWindowPosition <- value
@@ -164,7 +166,7 @@ type GroupInfo() as this =
         member x.setTabEdge(hwnd, edge) = this.invokeGroup <| fun() -> _group.restoreTabEdge(hwnd, edge)
 
 type IDesktopNotification =
-    abstract member dragDrop : IntPtr * bool option * TabEdges.Edge option -> unit
+    abstract member dragDrop : IntPtr * string option * TabEdges.Edge option -> unit
     abstract member dragEnd : unit -> unit
 
 type Desktop(notify:IDesktopNotification) as this =
@@ -224,7 +226,7 @@ type Desktop(notify:IDesktopNotification) as this =
             let inUse = edges |> Map.toList |> List.map snd |> List.distinct
             if inUse = [TabEdges.Edge.Top] then
                 let tabHeight =
-                    if TabBehaviorPolicy.reserveTopMargin dragInfo.sourceSnapTabHeightMargin (Services.settings.getValue("tabVerticalDirection") :?> string) then
+                    if TabBehaviorPolicy.reserveTopMargin (SnapTabMarginMode.enabled dragInfo.sourceSnapTabMarginMode) (Services.settings.getValue("tabVerticalDirection") :?> string) then
                         let scale = Dpi.scaleForMonitorHandle mon.hMonitor
                         (Dpi.scaleAppearance scale Services.program.tabAppearanceInfo).tabHeight - 1
                     else 0
@@ -236,7 +238,7 @@ type Desktop(notify:IDesktopNotification) as this =
                         let root = match previewRoot with Some root -> root | None -> Services.settings.root
                         let values = inUse |> List.map (fun edge -> edge, TabEdgeSettings.valuesOf root edge) |> Map.ofList
                         TabStripDecorator.snapReserveAt(inUse, values, Services.program.tabAppearanceInfo,
-                                                        Services.program.defaultTabAppearanceInfo, scale, dragInfo.sourceSnapTabHeightMargin,
+                                                        Services.program.defaultTabAppearanceInfo, scale, (SnapTabMarginMode.enabled dragInfo.sourceSnapTabMarginMode),
                                                         Services.settings.getValue("tabVerticalDirection") :?> string)
                     with _ ->
                         if previewRoot.IsSome then reraise() else TabEdgeLayout.noReserve
@@ -416,7 +418,7 @@ type Desktop(notify:IDesktopNotification) as this =
                     Services.program.suspendTabMonitoring()
                     try
                         let newGroup = this.createGroup()
-                        if snapMonitor.IsSome then newGroup.snapTabHeightMargin <- dragInfo.sourceSnapTabHeightMargin
+                        if snapMonitor.IsSome then newGroup.snapTabMarginMode <- dragInfo.sourceSnapTabMarginMode
                         newGroup.lockWindowPosition <- dragInfo.sourceLockWindowPosition
                         let addDetached h =
                             match newGroup with
@@ -447,7 +449,7 @@ type Desktop(notify:IDesktopNotification) as this =
                     if not (List.isEmpty dragInfo.transferOrder) then
                         os.setZorder(List2([WindowHandleTypes.HWND_TOP; hwnd]))
                     Services.program.markDetachedLock hwnd dragInfo.sourceLockWindowPosition
-                    notify.dragDrop(hwnd, (snapMonitor |> Option.map (fun _ -> dragInfo.sourceSnapTabHeightMargin)), Some edges.[hwnd])
+                    notify.dragDrop(hwnd, (snapMonitor |> Option.map (fun _ -> dragInfo.sourceSnapTabMarginMode)), Some edges.[hwnd])
             match snapMonitor with
             | Some(mon) ->
                 if window.isMinimized || window.isMaximized then

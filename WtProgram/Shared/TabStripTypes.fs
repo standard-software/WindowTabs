@@ -34,13 +34,13 @@ and TabDragInfo = {
     // Snap on drag-detach (Desktop.dragDrop): what the source group knew at
     // drag start. dragExit removes the tabs from the source before the drop,
     // and a source whose tabs all left may already be gone by then.
-    //   sourceSnapTabHeightMargin: the source group's per-group snap margin.
+    //   sourceSnapTabMarginMode: the source group's per-group snap margin.
     //   sourceTabAligns: alignment of the dragged tab and each selected tab.
     // Immutable readers remain valid after the source group releases its cache.
     // Restore dimensions include the external frame before dragExit parks the window.
     sourceFrameMargins: Map<IntPtr, int -> int * int * int * int>
     sourceRestoreSize: Sz
-    sourceSnapTabHeightMargin: bool
+    sourceSnapTabMarginMode: string
     //   sourceLockWindowPosition: the source group's per-group lock. A tab
     //   dragged out keeps it, so a window that could not be moved does not
     //   suddenly become movable by being detached.
