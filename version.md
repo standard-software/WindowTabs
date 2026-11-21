@@ -2,28 +2,22 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.11_next1
+## version ss_2026.11.11_next2
 
-- Fixed a group snapped to a screen edge by Windows (Aero Snap)
-  going back to where it was before the snap.
-- Fixed resizing a LINE window by its top edge not working
-  correctly while the window is in front.
+- Room for tabs can now also be left when Windows snaps a group
+  (Win+arrow keys and so on).
+  - The setting "Room for tabs when snapping or moving" is now
+    a choice of three.
+    - No room
+    - Only when WindowTabs snaps
+    - When WindowTabs or Windows snaps
+  - The room is made three seconds after the snap.
+- Fixed a group that contains a window shown on all desktops
+  going back to where it was before a Windows snap.
 - Fixed the neighbouring tab coming to the front when a file is
   opened from an empty Excel workbook in a group.
-  - The opened workbook now comes to the front.
-- The setting "Leave room for tabs when snapping or moving" is now
-  "Room for tabs when snapping or moving", a choice of three.
-  - No room (the old off).
-  - Only when WindowTabs snaps (the old on).
-  - When WindowTabs or Windows snaps (new).
-  - The tab menu shows the same three choices as a submenu.
-- With the third choice, a group snapped by Windows (Win+arrow keys,
-  dragging to an edge, picking a window for the free area) or by
-  another snapping program gets room for its tabs.
-  - The room is made three seconds after the group stops moving,
-    so repeated Win+arrow presses keep working.
-  - The window then keeps that size when it is moved, instead of
-    going back to the size it had before the snap.
+- Fixed resizing by the top edge not working correctly
+  while LINE is in front.
 
 ## version ss_2026.11.11
 
