@@ -2,6 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.11_next6
+
+- Changing the language now asks for confirmation first, and reports
+  the result with a notification instead of a dialog.
+- Fixed WindowTabs restarting itself when changing the language
+  took a long time.
+
 ## version ss_2026.11.11_next5
 
 - On the Interaction page of the settings dialog, the close button,
