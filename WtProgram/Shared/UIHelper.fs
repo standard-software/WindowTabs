@@ -742,22 +742,6 @@ module UIHelper =
         radio.MinimumSize <- Size(0, rowContentHeightPx)
         radio
 
-    let settingsRadios (refreshers: ResizeArray<unit -> unit>) save key normalize options =
-        let table = settingsRadioGroup (List.length options) 1
-        let current = unbox<string>(Services.settings.getValue key) |> normalize
-        let radios =
-            options |> List.mapi (fun row (mode, caption) ->
-                let radio = settingsRadio caption
-                radio.Checked <- (mode = current)
-                table.Controls.Add(radio, 0, row)
-                radio.CheckedChanged.Add(fun _ ->
-                    if radio.Checked then save key (box mode))
-                mode, radio)
-        refreshers.Add(fun () ->
-            let mode = unbox<string>(Services.settings.getValue key) |> normalize
-            for value, radio in radios do radio.Checked <- (value = mode))
-        table :> Control
-
     // centerRows: label and input centred on the same line. The settings tabs
     // keep the old layout (label held down by a top margin, input at the top
     // of the row), which lined up with their taller inputs; on the compact

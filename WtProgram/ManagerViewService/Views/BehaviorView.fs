@@ -37,33 +37,32 @@ type InteractionView() =
 
         let settingsCheckbox key = checkBox(settingsProperty(key))
         
-        let settingsRadios key normalize options =
-            UIHelper.settingsRadios refreshers save key normalize options
-
-        let buttonModeRadios key captions =
-            List.zip [TabButtonPolicy.activeOnly; TabButtonPolicy.all; TabButtonPolicy.none] captions
-            |> settingsRadios key TabButtonPolicy.normalize
-
-        let snapChangeTabPositionRadios =
-            settingsRadios "changeTabPositionOnSnap"
-                (fun mode -> if mode = "nochange" then "nochange" else "change")
-                ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
-
-        let snapMarginChoice =
-            let options = SnapTabMarginMode.choices
+        let settingsChoice key normalize options =
             let combo = EdgeRows.choice (options |> List.map (snd >> Localization.getString))
             let fit() = EdgeRows.fitChoiceWidth combo
             fit()
             combo.FontChanged.Add(fun _ -> fit())
             combo.DropDown.Add(fun _ -> fit())
             let refresh() =
-                let mode = Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.normalize
+                let mode = Services.settings.getValue key |> unbox<string> |> normalize
                 combo.SelectedIndex <- options |> List.findIndex (fun (value,_) -> value = mode)
             refresh()
             refreshers.Add(refresh)
             combo.SelectedIndexChanged.Add(fun _ ->
-                if combo.SelectedIndex >= 0 then save "snapTabMarginMode" (box (fst options.[combo.SelectedIndex])))
+                if combo.SelectedIndex >= 0 then save key (box (fst options.[combo.SelectedIndex])))
             combo :> Control
+
+        let buttonModeChoice key captions =
+            List.zip [TabButtonPolicy.activeOnly; TabButtonPolicy.all; TabButtonPolicy.none] captions
+            |> settingsChoice key TabButtonPolicy.normalize
+
+        let snapChangeTabPositionChoice =
+            settingsChoice "changeTabPositionOnSnap"
+                (fun mode -> if mode = "nochange" then "nochange" else "change")
+                ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
+
+        let snapMarginChoice =
+            settingsChoice "snapTabMarginMode" SnapTabMarginMode.normalize SnapTabMarginMode.choices
 
         let previewNumber key minimum maximum defaultValue =
             let row = new TableLayoutPanel(AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, Margin = Padding(0))
@@ -78,6 +77,12 @@ type InteractionView() =
             refreshers.Add(refresh)
             number.ValueChanged.Add(fun _ -> save key (box (int number.Value)))
             let reset = new Button(AutoSize = true, Text = sprintf "%s:%d" (Localization.getString "Reset") defaultValue)
+            reset.MinimumSize <- Size(reset.Width, 0)
+            reset.AutoSizeMode <- AutoSizeMode.GrowAndShrink
+            reset.Anchor <- AnchorStyles.Left
+            // Same horizontal margins as the edge pages: field flush left, 5 px before the button.
+            number.Margin <- Padding(0)
+            reset.Margin <- Padding(5, 0, 0, 0)
             reset.Click.Add(fun _ -> number.Value <- decimal defaultValue)
             row.Controls.Add(number, 0, 0)
             row.Controls.Add(reset, 1, 0)
@@ -86,12 +91,12 @@ type InteractionView() =
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let gap = new Panel()
         let fields = List2([
-            ("TabCloseButton", buttonModeRadios "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
-            ("TabPinButton", buttonModeRadios "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
+            ("TabCloseButton", buttonModeChoice "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
+            ("TabPinButton", buttonModeChoice "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("LockWindowPosition", lockPositionCheckbox)
             ("", gap :> Control)
-            ("ChangeTabPositionOnSnap", snapChangeTabPositionRadios)
+            ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
             ("SnapTabMarginMode", snapMarginChoice)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
             ("TabPreviewDelay", previewNumber "tabPreviewDelay" 0 5000 500)
@@ -99,9 +104,21 @@ type InteractionView() =
         ])
 
         let formPanel = UIHelper.form fields
-        // Radio groups already include their row spacing.
-        for row in [0; 1; 5] do
-            formPanel.GetControlFromPosition(1, row).Margin <- Padding(0)
+        // Absorb unused page height without stretching the final editor row.
+        formPanel.RowCount <- fields.length + 1
+        formPanel.RowStyles.Add(RowStyle(SizeType.Percent, 100.0f)) |> ignore
+        // Captions occupy the complete row, including wrapped two-line text.
+        // Editors are centred independently of their native preferred heights.
+        for row in [0; 1; 2; 3; 5; 6; 7; 8; 9] do
+            let label = formPanel.GetControlFromPosition(0, row)
+            label.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx)
+            label.Margin <- Padding(0)
+            let control = formPanel.GetControlFromPosition(1, row)
+            control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+            control.Dock <- DockStyle.None
+            control.Margin <- Padding(0)
+            formPanel.RowStyles.[row].SizeType <- SizeType.Absolute
+            formPanel.RowStyles.[row].Height <- float32 UIHelper.settingsRowHeightPx
         // An empty row avoids the caption's full-row minimum height.
         let gapRow = 4
         for column in 0 .. 1 do
