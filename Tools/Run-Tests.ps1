@@ -8,7 +8,10 @@ param(
 
 # Optional repository-relative patterns: 'path/*.Tests.fsx' = 'Reason'
 # Review side effects before changing exclusions or runtime markers.
-$ExcludedTests = @{}
+# Exclusions apply to the default run only; a test named with -Filter runs.
+$ExcludedTests = @{
+    'Tools/TabShape.Strip.Tests.fsx' = 'Slow (10-20 minutes). Run it by name after changing tab drawing: -Filter TabShape.Strip.Tests.fsx -TimeoutSec 1800'
+}
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -208,7 +211,7 @@ foreach ($file in $testFiles) {
     $relative = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
     if ($file.Name -notlike $Filter -and $relative -notlike $Filter) { continue }
     $exclusion = @($ExcludedTests.Keys | Where-Object { $relative -like $_ } | Sort-Object | Select-Object -First 1)
-    if ($exclusion.Count -gt 0) {
+    if ($exclusion.Count -gt 0 -and $Filter -eq '*') {
         Write-Output ('SKIP {0}: {1}' -f $relative, $ExcludedTests[$exclusion[0]])
         $results.Add([pscustomobject]@{ File=$relative; Status='Skipped'; ExitCode=$null; Seconds=0; Reason=$ExcludedTests[$exclusion[0]]; Log=$null })
     } else {
