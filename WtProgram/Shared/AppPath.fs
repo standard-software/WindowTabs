@@ -2,6 +2,7 @@ namespace Bemo
 
 open System
 open System.Collections.Generic
+open System.Globalization
 
 // Naming an application in a way that survives its updates.
 //
@@ -61,14 +62,26 @@ module AppPath =
     // than mutated: normalize is called from more than one thread.
     let mutable private versionDirectoryApps : Set<string> = Set.empty
 
+    // One lock covers rule replacement and cache access, including misses,
+    // so a result computed under old rules cannot enter the new cache.
+    let private normalizationLock = obj()
+    let private normalizationMemo = Dictionary<struct (string * string), string>()
+
+    [<Literal>]
+    let private normalizationMemoLimit = 4096
+
     let setVersionDirectoryApps (exeNames: string seq) =
-        versionDirectoryApps <-
+        let apps =
             exeNames
             |> Seq.filter (String.IsNullOrWhiteSpace >> not)
             |> Seq.map (fun n -> n.Trim().ToLowerInvariant())
             |> Set.ofSeq
+        lock normalizationLock (fun () ->
+            versionDirectoryApps <- apps
+            normalizationMemo.Clear())
 
-    let versionDirectoryAppNames () = versionDirectoryApps
+    let versionDirectoryAppNames () =
+        lock normalizationLock (fun () -> versionDirectoryApps)
 
     // Rewrite the package folder of a Store path, leaving anything else as it
     // came in. Split from the right: a package name may contain dots and
@@ -137,7 +150,19 @@ module AppPath =
     // happened to use.
     let normalize (path: string) =
         if String.IsNullOrEmpty(path) then ""
-        else path.ToLowerInvariant() |> canonicalPackageFolder |> stripVersionSegments
+        else
+            // Keep the original culture-sensitive searches. Exact input and
+            // culture names distinguish results without changing those rules.
+            let key = struct (CultureInfo.CurrentCulture.Name, path)
+            lock normalizationLock (fun () ->
+                match normalizationMemo.TryGetValue(key) with
+                | true, value -> value
+                | _ ->
+                    let value = path.ToLowerInvariant() |> canonicalPackageFolder |> stripVersionSegments
+                    if normalizationMemo.Count >= normalizationMemoLimit then
+                        normalizationMemo.Clear()
+                    normalizationMemo.Add(key, value)
+                    value)
 
     let sameApp (a: string) (b: string) = normalize a = normalize b
 

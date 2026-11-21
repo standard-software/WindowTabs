@@ -2,7 +2,13 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.22_next1
+## version ss_2026.11.22_next2
+
+- Reduced CPU use while nothing is happening (#37)
+  - The periodic refresh of the tab strip is skipped while its
+    state is unchanged. One refresh still runs every 10 seconds.
+  - The check for restoring closed tabs no longer rebuilds
+    the same path strings every second.
 
 ## version ss_2026.11.22
 

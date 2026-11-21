@@ -1,7 +1,7 @@
 // Checks for AppPath. Run with:
 //     dotnet fsi WtProgram/Shared/AppPath.Tests.fsx
 //
-// The module is pure, so this needs neither a build nor a running WindowTabs.
+// These checks need neither a build nor a running WindowTabs.
 
 #load "AppPath.fs"
 
@@ -37,6 +37,45 @@ let withNames names f =
     let saved = AppPath.versionDirectoryAppNames () |> Set.toList
     AppPath.setVersionDirectoryApps names
     try f () finally AppPath.setVersionDirectoryApps saved
+
+// ----- memo entries must not survive rule replacement -----
+
+check "adding a rule invalidates cached paths in every culture"
+    (withNames [] (fun () ->
+        let culture = Globalization.CultureInfo.CurrentCulture
+        let path = @"C:\a\1.0\app.exe"
+        try
+            for name in [ "en-US"; "tr-TR" ] do
+                Globalization.CultureInfo.CurrentCulture <- Globalization.CultureInfo.GetCultureInfo(name)
+                AppPath.normalize path |> ignore
+            AppPath.setVersionDirectoryApps [ "app.exe" ]
+            [ "en-US"; "tr-TR" ] |> List.forall (fun name ->
+                Globalization.CultureInfo.CurrentCulture <- Globalization.CultureInfo.GetCultureInfo(name)
+                AppPath.normalize path = @"c:\a\*\app.exe")
+        finally Globalization.CultureInfo.CurrentCulture <- culture))
+
+check "removing a rule invalidates cached sameApp results"
+    (withNames [ "app.exe" ] (fun () ->
+        let a = @"C:\a\1.0\app.exe"
+        let b = @"C:\a\2.0\app.exe"
+        let before = AppPath.sameApp a b
+        AppPath.setVersionDirectoryApps []
+        before && not (AppPath.sameApp a b)))
+
+check "memo entries are reused only within the calling culture"
+    (let culture = Globalization.CultureInfo.CurrentCulture
+     let path = @"C:\WindowsApps\App_1.0_x64__pub\app.exe"
+     try
+         Globalization.CultureInfo.CurrentCulture <- Globalization.CultureInfo.GetCultureInfo("en-US")
+         let first = AppPath.normalize path
+         let repeated = AppPath.normalize path
+         Globalization.CultureInfo.CurrentCulture <- Globalization.CultureInfo.GetCultureInfo("tr-TR")
+         let other = AppPath.normalize path
+         Globalization.CultureInfo.CurrentCulture <- Globalization.CultureInfo.GetCultureInfo("en-US")
+         let returned = AppPath.normalize path
+         first = other && obj.ReferenceEquals(first, repeated)
+         && not (obj.ReferenceEquals(first, other)) && obj.ReferenceEquals(first, returned)
+     finally Globalization.CultureInfo.CurrentCulture <- culture)
 
 // ----- the rule is opt-in, per executable -----
 

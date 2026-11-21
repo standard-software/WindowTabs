@@ -219,7 +219,7 @@ type PendingRegroup = {
 }
 
 type Program() as this =
-    let version = "ss_2026.11.22_next1"
+    let version = "ss_2026.11.22_next2"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -1563,11 +1563,6 @@ type Program() as this =
                 if not (this.suppressExplicitRestore(hwnd, windowTitle)) && closedTabCache.value.IsEmpty.not && this.isPristineForClaim(hwnd) && (this.isOnDesktopFromReader(hwnd) || this.isInGroup(hwnd)) then
                     // Peek first: the entry is only consumed when applied in place
                     let normTitle = normalizeClosedTabTitle windowTitle
-                    let bounds =
-                        try
-                            let b = os.windowFromHwnd(hwnd).bounds
-                            Some(b.x, b.y, b.width, b.height)
-                        with _ -> None
                     let peeked =
                         this.peekClosedTabMatch(hwnd, exePath, windowTitle)
                         |> Option.map (fun info -> info, false)
