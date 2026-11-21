@@ -89,16 +89,15 @@ type InteractionView() =
             row :> Control
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
-        let gap = new Panel()
         let fields = List2([
             ("TabCloseButton", buttonModeChoice "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
             ("TabPinButton", buttonModeChoice "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("LockWindowPosition", lockPositionCheckbox)
-            ("", gap :> Control)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
             ("SnapTabMarginMode", snapMarginChoice)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
+            ("EnableTabPreview", settingsCheckbox "enableTabPreview")
             ("TabPreviewDelay", previewNumber "tabPreviewDelay" 0 5000 500)
             ("TabPreviewSize", previewNumber "tabPreviewSize" 80 1000 320)
         ])
@@ -109,7 +108,7 @@ type InteractionView() =
         formPanel.RowStyles.Add(RowStyle(SizeType.Percent, 100.0f)) |> ignore
         // Captions occupy the complete row, including wrapped two-line text.
         // Editors are centred independently of their native preferred heights.
-        for row in [0; 1; 2; 3; 5; 6; 7; 8; 9] do
+        for row in 0 .. fields.length - 1 do
             let label = formPanel.GetControlFromPosition(0, row)
             label.MinimumSize <- Size(0, UIHelper.settingsRowHeightPx)
             label.Margin <- Padding(0)
@@ -119,14 +118,6 @@ type InteractionView() =
             control.Margin <- Padding(0)
             formPanel.RowStyles.[row].SizeType <- SizeType.Absolute
             formPanel.RowStyles.[row].Height <- float32 UIHelper.settingsRowHeightPx
-        // An empty row avoids the caption's full-row minimum height.
-        let gapRow = 4
-        for column in 0 .. 1 do
-            let control = formPanel.GetControlFromPosition(column, gapRow)
-            formPanel.Controls.Remove(control)
-            control.Dispose()
-        formPanel.RowStyles.[gapRow].SizeType <- SizeType.Absolute
-        formPanel.RowStyles.[gapRow].Height <- float32 (UIHelper.settingsRowHeightPx / 2)
 
         formPanel.Dock <- DockStyle.Fill
         formPanel.Padding <- UIHelper.settingsPagePadding
@@ -199,7 +190,6 @@ type GeneralView() =
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
-            ("EnableTabPreview", settingsCheckbox "enableTabPreview")
             ("TaskbarActiveTabFirst", settingsCheckbox "taskbarActiveTabFirst")
         ])
         let panel = UIHelper.form fields
@@ -304,7 +294,7 @@ type SystemView() =
             "", new Panel() :> Control
             "PortableOperations", operations :> Control
         ]))
-        // Match the Interaction page's half-row section gap before DPI scaling.
+        // A half-row section gap, set before DPI scaling.
         let gapRow = 3
         for column in 0 .. 1 do
             let control = panel.GetControlFromPosition(column, gapRow)
