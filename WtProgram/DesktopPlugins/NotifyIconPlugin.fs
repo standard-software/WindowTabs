@@ -798,8 +798,10 @@ type NotifyIconPlugin() as this =
 #endif
                 Services.managerView.preparePresentation()
                 // Keep this message in English so a user can recover after
-                // accidentally choosing a language they cannot read.
-                show "Language Change" (sprintf "Language has been changed to %s." displayName)
+                // accidentally choosing a language they cannot read. A tray
+                // notification, so nothing has to be dismissed.
+                this.icon.ShowBalloonTip(3000, "WindowTabs",
+                    sprintf "Language has been changed to %s." displayName, ToolTipIcon.Info)
             with
             | ex -> show "Error" ex.Message
 
