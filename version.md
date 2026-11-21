@@ -2,6 +2,12 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.11_next5
+
+- On the Interaction page of the settings dialog, the close button,
+  pin button and tab alignment choices are now combo boxes,
+  and the rows are evenly spaced.
+
 ## version ss_2026.11.11_next4
 
 - Fixed the label of a disabled radio button being shown in black
