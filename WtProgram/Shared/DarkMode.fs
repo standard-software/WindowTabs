@@ -479,9 +479,17 @@ module DarkMode =
                     // controls in the settings views that actually carry a
                     // caption (the check boxes come from UIHelper.BoolEditor
                     // and their text lives in the label column instead).
-                    let native = int (12.0 * float g.DpiX / 96.0)
                     use wipe = new SolidBrush(rb.BackColor)
-                    g.FillRectangle(wipe, Rectangle(0, 0, rb.Padding.Left + native + 1, rb.Height))
+                    // The native caption of a disabled flat radio button is
+                    // near black, unreadable on the dark surface. Draw the
+                    // caption here in both states, like the CheckBox above,
+                    // so it does not shift when the button is disabled.
+                    g.FillRectangle(wipe, rb.ClientRectangle)
+                    let textX = circleSize + SettingsDpi.px 4
+                    let textRect = Rectangle(textX, 0, max 0 (rb.Width - textX), rb.Height)
+                    let textColor = if rb.Enabled then darkText else Color.FromArgb(160, 160, 160)
+                    TextRenderer.DrawText(g, rb.Text, rb.Font, textRect, textColor,
+                        SettingsCheckBoxLayout.darkCaptionFlags)
                     let circleY = (rb.Height - circleSize) / 2
                     let circleRect = Rectangle(0, circleY, circleSize, circleSize)
                     g.SmoothingMode <- System.Drawing.Drawing2D.SmoothingMode.AntiAlias
