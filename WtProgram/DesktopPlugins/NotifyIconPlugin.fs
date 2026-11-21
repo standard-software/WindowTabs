@@ -143,6 +143,24 @@ module Watchdog =
     let respondToPing() =
         pingResponse.Set() |> ignore
 
+    // Stopwatch timestamp until which the UI thread is known to be busy with
+    // work it started itself. An unanswered ping before it is not a freeze.
+    let mutable private busyUntil = 0L
+
+    /// Call on the UI thread around long work it does on purpose (rebuilding
+    /// the settings dialog after a language change). The limit keeps a real
+    /// hang inside that work from hiding for ever.
+    let expectBusy (maxMs: int) =
+        Interlocked.Exchange(&busyUntil, Stopwatch.GetTimestamp() + int64 maxMs * Stopwatch.Frequency / 1000L) |> ignore
+        { new IDisposable with
+            // The ping posted during the work is answered only after this
+            // returns, so keep a short grace instead of ending at once.
+            member _.Dispose() =
+                let grace = Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency
+                Interlocked.Exchange(&busyUntil, min grace (Interlocked.Read(&busyUntil))) |> ignore }
+
+    let private knownBusy () = Stopwatch.GetTimestamp() < Interlocked.Read(&busyUntil)
+
 #if DEBUG
     // Do not suspend a thread again if an earlier stack walk is still pending.
     let private activeCaptures = System.Collections.Concurrent.ConcurrentDictionary<int, byte>()
@@ -347,7 +365,7 @@ module Watchdog =
                 let quick = pingResponse.WaitOne(1500)
                 let responded =
                     if quick then true else
-                    if diagnosticDue then
+                    if diagnosticDue && not (knownBusy ()) then
                         lastDiagnostic <- clock.ElapsedMilliseconds
                         Bemo.Win32.ShellCallTrace.Stall()
                         InputStallTrace.context InputStallTrace.Kind.Watchdog IntPtr.Zero (float stallWatch.ElapsedMilliseconds)
@@ -366,8 +384,9 @@ module Watchdog =
                 let responded = pingResponse.WaitOne(freezeTimeout)
 #endif
 
-                if responded then
-                    // Any UI response starts a fresh deferral budget.
+                if responded || knownBusy () then
+                    // Any UI response starts a fresh deferral budget. So does
+                    // a period the UI thread announced with expectBusy.
                     consecutiveFailures <- 0
                     deferredSince <- None
                 else
@@ -785,7 +804,13 @@ type NotifyIconPlugin() as this =
             use lifetime = session
             let show title message =
                 AppDialog.showReservedEnglish title message |> ignore
-            try
+            // The switch freezes WindowTabs for some seconds while the settings
+            // dialog is rebuilt, so ask first. English, like the notice below.
+            let confirmed =
+                AppDialog.showReserved "WindowTabs" (sprintf "Change the language to %s?" displayName)
+                    AppDialog.OkCancel AppDialog.DefaultOk = DialogResult.OK
+            if confirmed then
+              try
                 let json = Services.settings.root
                 json.["language"] <- JToken.FromObject(fileName)
                 Services.settings.root <- json
@@ -796,14 +821,17 @@ type NotifyIconPlugin() as this =
 #if DEBUG
                 DesktopManagerFormState.log (sprintf "language load and notifications ms=%.1f" languageClock.Elapsed.TotalMilliseconds)
 #endif
+                // Rebuilding the settings dialog can take longer than the
+                // watchdog's timeout on a busy machine; that is not a freeze.
+                use _busy = Watchdog.expectBusy 60000
                 Services.managerView.preparePresentation()
                 // Keep this message in English so a user can recover after
                 // accidentally choosing a language they cannot read. A tray
                 // notification, so nothing has to be dismissed.
                 this.icon.ShowBalloonTip(3000, "WindowTabs",
                     sprintf "Language has been changed to %s." displayName, ToolTipIcon.Info)
-            with
-            | ex -> show "Error" ex.Message
+              with
+              | ex -> show "Error" ex.Message
 
     interface IPlugin with
         member this.init() =
