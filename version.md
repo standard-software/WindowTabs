@@ -2,36 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.11_next10
-
-- Added the setting "Put the active tab first in the taskbar button"
-  (General page, off by default). (#36)
-  - Three seconds after a tab is switched or a group is minimized,
-    the active tab becomes the first window of its group in the
-    taskbar button, so Win+number brings back the window last used.
-- The active tab now shows the hover preview too.
-- Moved "Show window preview when hovering over a tab" from the
-  General page to the Interaction page.
-
-## version ss_2026.11.11_next6
-
-- Changing the language now asks for confirmation first, and reports
-  the result with a notification instead of a dialog.
-- Fixed WindowTabs restarting itself when changing the language
-  took a long time.
-
-## version ss_2026.11.11_next5
-
-- On the Interaction page of the settings dialog, the close button,
-  pin button and tab alignment choices are now combo boxes,
-  and the rows are evenly spaced.
-
-## version ss_2026.11.11_next4
-
-- Fixed the label of a disabled radio button being shown in black
-  in the dark-mode settings dialog.
-
-## version ss_2026.11.11_next2
+## version ss_2026.11.22
 
 - Room for tabs can now also be left when Windows snaps a group
   (Win+arrow keys and so on).
@@ -47,6 +18,23 @@
   opened from an empty Excel workbook in a group.
 - Fixed resizing by the top edge not working correctly
   while LINE is in front.
+- Fixed the label of a disabled radio button being shown in black
+  in the dark-mode settings dialog.
+- On the Interaction page of the settings dialog, the close button,
+  pin button and tab alignment choices are now combo boxes,
+  and the rows are evenly spaced.
+- Changing the language
+  - Asks for confirmation first, and reports the result
+    with a notification.
+  - Fixed WindowTabs restarting itself when it took a long time.
+- Added the setting "Put the active tab first in the taskbar button"
+  (General page, off by default). (#36)
+  - Three seconds after a tab is switched or a group is minimized,
+    the active tab becomes the first window of its group in the
+    taskbar button, so Win+number brings back the window last used.
+- The active tab now shows the hover preview too.
+- Moved "Show window preview when hovering over a tab" from the
+  General page to the Interaction page.
 
 ## version ss_2026.11.11
 
