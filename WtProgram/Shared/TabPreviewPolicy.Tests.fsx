@@ -17,12 +17,11 @@ check (0, 0) (TabPreviewPolicy.fit 100 0 320 1000 1000)
 check (-1920, -100) (TabPreviewPolicy.place -1920 -100 0 980 320 212 -2000 -200)
 check (-320, 768) (TabPreviewPolicy.place -1920 -100 0 980 320 212 100 1000)
 // Eligibility is independent of virtual-desktop dimming.
-check true (TabPreviewPolicy.eligible true false false false true)
-for enabled, hover, active, dragging, visible in
-    [false,false,false,false,true; true,true,false,false,true;
-     true,false,true,false,true; true,false,false,true,true;
-     true,false,false,false,false] do
-    check false (TabPreviewPolicy.eligible enabled hover active dragging visible)
+check true (TabPreviewPolicy.eligible true false false true)
+for enabled, hover, dragging, visible in
+    [false,false,false,true; true,true,false,true;
+     true,false,true,true; true,false,false,false] do
+    check false (TabPreviewPolicy.eligible enabled hover dragging visible)
 check 500 (TabPreviewPolicy.delay false 500)
 check 0 (TabPreviewPolicy.delay true 500)
 check 1 (TabPreviewPolicy.delay false -1)

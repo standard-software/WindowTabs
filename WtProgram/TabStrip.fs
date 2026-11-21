@@ -1244,7 +1244,6 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         TabPreviewPolicy.eligible
             (unbox<bool>(Services.settings.getValue "enableTabPreview"))
             (unbox<bool>(Services.settings.getValue "enableHoverActivate"))
-            (this.isEmpty || this.top = tab)
             (capturedCell.value.IsSome || slideCell.value.IsSome) visibleCell.value
         && _os.windowFromHwnd(hwnd).isWindow
 

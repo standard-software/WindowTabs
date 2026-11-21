@@ -1,8 +1,9 @@
 namespace Bemo
 
 module TabPreviewPolicy =
-    let eligible enabled hoverActivate active dragging visible =
-        enabled && not hoverActivate && not active && not dragging && visible
+    // The active tab gets a preview too, so every tab behaves alike.
+    let eligible enabled hoverActivate dragging visible =
+        enabled && not hoverActivate && not dragging && visible
 
     let delay warm milliseconds =
         if warm then 0 else max 1 (min 5000 milliseconds)
