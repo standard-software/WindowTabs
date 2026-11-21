@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.11_next4
+
+- Fixed the label of a disabled radio button being shown in black
+  in the dark-mode settings dialog.
+
 ## version ss_2026.11.11_next2
 
 - Room for tabs can now also be left when Windows snaps a group

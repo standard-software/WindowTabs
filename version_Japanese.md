@@ -2,6 +2,11 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.11_next4
+
+- ダークモードの設定画面で、無効のときのラジオボタンの文字が
+  黒く表示される不具合を修正。
+
 ## version ss_2026.11.11_next2
 
 - Windows 標準のスナップ(Win+矢印キーなど)でも、
