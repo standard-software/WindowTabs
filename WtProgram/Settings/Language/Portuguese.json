@@ -118,6 +118,7 @@
   "Interaction": "Interação",
   "General": "Geral",
   "RunAtStartup": "Executar o WindowTabs na inicialização",
+  "TaskbarActiveTabFirst": "Colocar a guia ativa em primeiro lugar no botão da barra de tarefas",
   "GroupTaskbarButtons": "Combinar botões da barra de tarefas por grupo de guias",
   "GroupTaskbarButtonsNote": "Só funciona se o Windows combinar os botões da barra de tarefas (rótulos ocultos). Com rótulos visíveis, cada janela mantém seu próprio botão.",
   "HideInactiveTabs": "Esmaecer guias em janelas inativas",

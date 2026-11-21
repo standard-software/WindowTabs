@@ -118,6 +118,7 @@
   "Interaction": "Interacción",
   "General": "General",
   "RunAtStartup": "Ejecutar WindowTabs al iniciar el sistema",
+  "TaskbarActiveTabFirst": "Colocar la pestaña activa en primer lugar en el botón de la barra de tareas",
   "GroupTaskbarButtons": "Combinar los botones de la barra de tareas por grupo de pestañas",
   "GroupTaskbarButtonsNote": "Solo funciona si Windows combina los botones de la barra de tareas (etiquetas ocultas). Con etiquetas visibles, cada ventana conserva su propio botón.",
   "HideInactiveTabs": "Atenuar pestañas en ventanas inactivas",

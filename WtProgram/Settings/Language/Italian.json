@@ -118,6 +118,7 @@
   "Interaction": "Interazione",
   "General": "Generale",
   "RunAtStartup": "Esegui WindowTabs all'avvio",
+  "TaskbarActiveTabFirst": "Metti la scheda attiva al primo posto nel pulsante della barra delle applicazioni",
   "GroupTaskbarButtons": "Combina i pulsanti della barra delle applicazioni per i gruppi di schede",
   "GroupTaskbarButtonsNote": "Funziona solo se Windows combina i pulsanti della barra delle applicazioni (etichette nascoste). Con le etichette visibili, ogni finestra mantiene il proprio pulsante.",
   "HideInactiveTabs": "Dissolvi le schede delle finestre inattive",

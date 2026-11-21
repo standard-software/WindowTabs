@@ -468,7 +468,7 @@ module TaskbarAppId =
     /// DeleteTab then AddTab, nothing in between: the taskbar files the window
     /// again under its current ID. Only windows shown on this desktop. A
     /// window without a button has nothing to refile.
-    let private rebuild reason (hwnd: IntPtr) =
+    let private rebuildWith attempts canRetry reason (hwnd: IntPtr) =
 #if DEBUG
         use metric = Bemo.Win32.ShellCallTrace.Measure(12)
 #endif
@@ -490,14 +490,17 @@ module TaskbarAppId =
                         let mutable deleted = 0
                         let mutable added = 0
                         lastRebuild <- Some Environment.TickCount
-                        try deleted <- bar.DeleteTab(hwnd)
-                        finally added <- bar.AddTab(hwnd)
+                        let succeeded = TaskbarOrderPolicy.reRegister attempts canRetry
+                                            (fun () -> deleted <- bar.DeleteTab(hwnd); deleted >= 0)
+                                            (fun () -> added <- bar.AddTab(hwnd); added >= 0)
                         trace hwnd "rebuild" reason (if deleted < 0 then deleted else added) ""
-                        if deleted < 0 || added < 0 then Failed else Done
+                        if succeeded then Done else Failed
                 finally Marshal.ReleaseComObject(bar) |> ignore
             with ex ->
                 trace hwnd "rebuild-failure" reason ex.HResult ""
                 Failed
+
+    let private rebuild reason hwnd = rebuildWith 1 (fun () -> false) reason hwnd
 
     // ---------------------------------------------------------------- work --
 
@@ -576,6 +579,86 @@ module TaskbarAppId =
             (if hr = 0 && desktop <> Guid.Empty then Some desktop else None), hr
 
     let private desktopOf hwnd = desktopReading hwnd |> fst
+
+    // Worker-owned guards keep count verification out of registration settling.
+    let mutable private orderBusy: Set<IntPtr> = Set.empty
+    let mutable private lastOrderRebuild: int option = None
+    let mutable private orderRebuiltAt: Map<IntPtr, int> = Map.empty
+
+    // Registration order is not exposed by ITaskbarList. Keep the front
+    // registered and move only its peers to the end; never hide a window.
+    let private prepareActiveOrder (token: CancellationToken) members =
+        let ready hwnd =
+            not token.IsCancellationRequested && IsWindow(hwnd) && hasButton hwnd && onCurrentDesktop hwnd &&
+            canRebuild (held.TryFind hwnd |> Option.exists (fun h -> h.entry.pin)) (desktopOf hwnd) &&
+            GetWindowLong(hwnd, -20) &&& (0x80 ||| 0x08000000) = 0 &&
+            GetWindowLong(hwnd, -16) &&& 0x40000000 = 0
+        match members with
+        | front :: rest when not rest.IsEmpty && ready front ->
+            let identity = readId front
+            let pid = processOf front
+            let sameButton hwnd =
+                match identity, readId hwnd with
+                | Some(Some a), Some(Some b) -> a = b
+                | Some None, Some None ->
+                    let otherPid = processOf hwnd
+                    if pid = 0u || otherPid = 0u then false
+                    elif pid = otherPid then true
+                    else
+                        // Compare full native image paths, never just executable names.
+                        let imagePath processId =
+                            let handle = OpenProcess(0x1000u, false, processId)
+                            if handle = IntPtr.Zero then None else
+                            try
+                                let path = StringBuilder(32768)
+                                let length = Psapi.GetProcessImageFileName(handle, path, path.Capacity)
+                                if length > 0 && length < path.Capacity then Some(path.ToString()) else None
+                            finally CloseHandle(handle) |> ignore
+                        try
+                            match imagePath pid, imagePath otherPid with
+                            | Some a, Some b -> String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
+                            | _ -> false
+                        with _ -> false
+                | _ -> false
+            // A mixed-application group can have several buttons. Only peers
+            // in the front's button participate; other buttons stay untouched.
+            let peers = rest |> List.filter (fun hwnd -> ready hwnd && sameButton hwnd)
+            // On a real machine the first rebuild of a run sometimes left its window
+            // where it was (the reported call succeeded). Rebuilding that window once
+            // more at the end of the run moved it reliably; the cause is unknown.
+            // A single peer is rebuilt twice as well.
+            let peers = match peers with first :: _ -> peers @ [first] | _ -> peers
+            // Uncombined buttons have no common thumbnail order to change.
+            let multiple = explorerValue "MMTaskbarEnabled" = Some 1
+            if alwaysCombined (explorerValue "TaskbarGlomLevel") &&
+               (not multiple || (alwaysCombined (explorerValue "MMTaskbarGlomLevel") &&
+                                 not (splitAcrossTaskbars (explorerValue "MMTaskbarMode")))) &&
+               not peers.IsEmpty then
+                let mutable remaining = peers
+                Some(fun () ->
+                    match remaining with
+                    | hwnd :: tail when ready front && ready hwnd && readId front = identity && sameButton hwnd ->
+                        let pid = processOf hwnd
+                        let started = startedOf pid
+                        let desktop = desktopOf hwnd
+                        let canRetry () =
+                            IsWindow(hwnd) && processOf hwnd = pid && startedOf pid = started &&
+                            onCurrentDesktop hwnd && desktopOf hwnd = desktop
+                        lastOrderRebuild <- Some Environment.TickCount
+                        let result =
+                            try rebuildWith TaskbarOrderPolicy.addAttempts canRetry "active-order" hwnd
+                            finally
+                                let now = Environment.TickCount
+                                lastOrderRebuild <- Some now
+                                orderRebuiltAt <- orderRebuiltAt |> Map.filter (fun _ at -> not (settled now at))
+                                orderRebuiltAt <- orderRebuiltAt.Add(hwnd, now)
+                        remaining <- tail
+                        if result <> Done || token.IsCancellationRequested then Some false
+                        elif tail.IsEmpty then Some true
+                        else None
+                    | _ -> Some false)
+            else None
+        | _ -> None
 
     let private changePin hwnd pin =
 #if DEBUG
@@ -1035,7 +1118,9 @@ module TaskbarAppId =
 
     let private verify (s: Snapshot) seq =
         let now = Environment.TickCount
-        let due = checks |> Map.filter (fun key c -> verificationHere s.current key.desktop (fun () -> c.members |> List.forall onCurrentDesktop) && c.seq < seq && settled now c.at && (c.members |> List.forall (fun h -> held.TryFind h |> Option.forall (fun h -> not (pinSettling h.pinPending h.lostDesktop)))))
+        let due = checks |> Map.filter (fun key c ->
+            not (c.members |> List.exists orderBusy.Contains) &&
+            (c.members |> List.forall (fun hwnd -> orderRebuiltAt.TryFind hwnd |> Option.forall (settled now))) && verificationHere s.current key.desktop (fun () -> c.members |> List.forall onCurrentDesktop) && c.seq < seq && settled now c.at && (c.members |> List.forall (fun h -> held.TryFind h |> Option.forall (fun h -> not (pinSettling h.pinPending h.lostDesktop)))))
         let counts = lazy (readCounts ())
         for KeyValue(key, c) in due do
             let expected = c.members |> List.filter hasButton |> List.length
@@ -1479,59 +1564,88 @@ module TaskbarAppId =
     // --------------------------------------------------------------- worker --
 
     type private Inbox = {
+        mutable orders: (CancellationToken * IntPtr list * (unit -> unit)) list
         mutable recover: bool
         mutable release: string option
         mutable snapshot: Snapshot option
         mutable stop: bool
         mutable seq: int64 }
     let private gate = obj()
-    let private inbox = { recover = false; release = None; snapshot = None; stop = false; seq = 0L }
+    let private inbox = { orders = []; recover = false; release = None; snapshot = None; stop = false; seq = 0L }
     // Created with the first worker: off and untouched, not even this handle exists.
     let private signal = lazy (new AutoResetEvent(false))
     let mutable private worker: Thread = null
     // A recovery file was found at start; it is handled with the first hand-over.
     let mutable private recoveryPending = false
 
-    // While something is held the thread waits for the next hand-over (no
-    // timeout); with nothing held, or at exit, it ends.
+    // One registration per loop. The existing signal wakes paced work early
+    // for releases and snapshots; no polling timer or token wait handle is used.
     let private work () =
+        let mutable pending: (CancellationToken * IntPtr list * (unit -> unit) * (unit -> bool option) option) list = []
         try
             let mutable go = true
             while go do
-                let recoverNow, releaseNow, snapshot, seq, final =
+                let orders, recoverNow, releaseNow, snapshot, seq, final =
                     lock gate (fun () ->
-                        let taken = inbox.recover, inbox.release, inbox.snapshot, inbox.seq, inbox.stop
+                        let taken = inbox.orders, inbox.recover, inbox.release, inbox.snapshot, inbox.seq, inbox.stop
+                        inbox.orders <- []
                         inbox.recover <- false
                         inbox.release <- None
                         inbox.snapshot <- None
                         taken)
-                if not recoverNow && releaseNow.IsNone && snapshot.IsNone then
-                    // Decide under the gate, so a post either finds this
-                    // thread still running or starts a new one.
-                    let wait = lock gate (fun () ->
-                        if inbox.recover || inbox.release.IsSome || inbox.snapshot.IsSome then Some false
-                        elif isHolding () && not inbox.stop then Some true
-                        else
-                            worker <- null
-                            None)
-                    match wait with
-                    | Some true -> signal.Value.WaitOne() |> ignore
-                    | Some false -> ()
-                    | None -> go <- false
-                else
+                pending <- pending @ (orders |> List.rev |> List.map (fun (t, m, c) -> t, m, c, None))
+                pending <- pending |> List.filter (fun (t, _, _, _) -> not t.IsCancellationRequested)
+                if final || releaseNow.IsSome then pending <- []
+                orderBusy <- pending |> List.collect (fun (_, m, _, _) -> m) |> Set.ofList
+                if recoverNow || releaseNow.IsSome || snapshot.IsSome then
                     try
                         cleanupClosedOff ()
                         if recoverNow then recover (releaseNow = Some "disable" || (snapshot |> Option.exists (fun s -> not s.enabled)))
                         releaseNow |> Option.iter (fun reason ->
                             releaseAll reason
                             finishUnpins final
-                            // Disable keeps normal settling and bounded observation.
-                            // Only an actual stop uses the final, immediate check.
                             verifyGiven (lazy (readCounts ())) final |> ignore
                             saveIfChanged ())
                         snapshot |> Option.iter (fun s -> pass s seq)
                     with ex -> trace IntPtr.Zero "failure" "worker" ex.HResult ""
                     updateFlags()
+                // Work posted during a pass takes precedence over the next registration.
+                let urgent = lock gate (fun () -> inbox.stop || inbox.release.IsSome || inbox.recover || inbox.snapshot.IsSome)
+                if not urgent && TaskbarOrderPolicy.paceRemaining Environment.TickCount lastOrderRebuild = 0 then
+                    match pending with
+                    | (token, members, completed, continuation) :: tail ->
+                        pending <- tail
+                        // A failure belongs to this request, never the rest of the queue.
+                        try
+                            if not token.IsCancellationRequested then
+                                let step = match continuation with Some step -> Some step | None -> prepareActiveOrder token members
+                                match step with
+                                | Some step ->
+                                    let result = step ()
+                                    match result with
+                                    | None -> pending <- pending @ [token, members, completed, Some step]
+                                    | Some true when not token.IsCancellationRequested -> completed ()
+                                    | _ -> ()
+                                | None -> ()
+                        with ex -> trace IntPtr.Zero "failure" "active-order" ex.HResult ""
+                    | [] -> ()
+                let wait = lock gate (fun () ->
+                    if not inbox.orders.IsEmpty || inbox.recover || inbox.release.IsSome || inbox.snapshot.IsSome then Some 0
+                    elif inbox.stop then
+                        pending <- []
+                        orderBusy <- Set.empty
+                        worker <- null
+                        None
+                    elif not pending.IsEmpty then Some(TaskbarOrderPolicy.paceRemaining Environment.TickCount lastOrderRebuild)
+                    elif isHolding () then Some Timeout.Infinite
+                    else
+                        orderBusy <- Set.empty
+                        worker <- null
+                        None)
+                match wait with
+                | Some 0 -> ()
+                | Some timeout -> signal.Value.WaitOne(timeout) |> ignore
+                | None -> go <- false
         finally
             VirtualDesktopHelper.ReleaseCurrentThread()
 
@@ -1545,16 +1659,24 @@ module TaskbarAppId =
             thread.Start()
         else signal.Value.Set() |> ignore
 
-    let private post (fill: Inbox -> unit) =
+    let private post consumeRecovery (fill: Inbox -> unit) =
         lock gate (fun () ->
             fill inbox
-            if recoveryPending then
+            if consumeRecovery && recoveryPending then
                 inbox.recover <- true
                 recoveryPending <- false
             inbox.seq <- inbox.seq + 1L
             start ())
 
     // ------------------------------------------------------------------ API --
+
+    /// A cancellation token invalidates queued work on changes, disable and disposal.
+    let orderActive (token: CancellationToken) members completed =
+        if not token.IsCancellationRequested then
+            // Ordering must not consume recovery before the first desktop hand-over.
+            post false (fun inbox ->
+                inbox.orders <- (token, members, completed) ::
+                    (inbox.orders |> List.filter (fun (pending, _, _) -> not pending.IsCancellationRequested)))
 
     let mutable private lastPosted: Snapshot option = None
 
@@ -1568,7 +1690,7 @@ module TaskbarAppId =
                 idObservationDue now (Some at) (idReadAt.TryFind hwnd) false))))
         if lastPosted <> Some snapshot || Volatile.Read(&wantsPass) || observationDue then
             lastPosted <- Some snapshot
-            post (fun inbox -> inbox.snapshot <- Some snapshot)
+            post true (fun inbox -> inbox.snapshot <- Some snapshot)
 
     /// Coalesce a burst without postponing observation indefinitely.
     let nameChanged hwnd =
@@ -1583,14 +1705,14 @@ module TaskbarAppId =
     let release reason =
         lock observationGate (fun () -> monitored <- Set.empty; nameChanges <- Map.empty; idReadAt <- Map.empty)
         lastPosted <- None
-        if isHolding () || running () then post (fun inbox -> inbox.release <- Some reason; inbox.snapshot <- None)
+        if isHolding () || running () then post true (fun inbox -> inbox.release <- Some reason; inbox.snapshot <- None)
 
     /// Exit: give everything back and wait for it, at most `timeoutMs`. What
     /// does not finish stays in the recovery file for the next start.
     let releaseAndWait reason (timeoutMs: int) =
         lastPosted <- None
         lock gate (fun () -> inbox.stop <- true)
-        if isHolding () || running () then post (fun inbox -> inbox.release <- Some reason; inbox.snapshot <- None)
+        if isHolding () || running () then post true (fun inbox -> inbox.release <- Some reason; inbox.snapshot <- None)
         elif signal.IsValueCreated then signal.Value.Set() |> ignore
         let thread = lock gate (fun () -> worker)
         if not (isNull thread) then thread.Join(timeoutMs) |> ignore

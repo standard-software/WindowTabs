@@ -200,6 +200,7 @@ type GeneralView() =
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
             ("EnableTabPreview", settingsCheckbox "enableTabPreview")
+            ("TaskbarActiveTabFirst", settingsCheckbox "taskbarActiveTabFirst")
         ])
         let panel = UIHelper.form fields
         panel.Padding <- UIHelper.settingsPagePadding

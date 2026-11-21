@@ -118,6 +118,7 @@
   "Interaction": "交互",
   "General": "常规",
   "RunAtStartup": "开机时启动 WindowTabs",
+  "TaskbarActiveTabFirst": "将活动标签页排在任务栏按钮中的首位",
   "GroupTaskbarButtons": "合并标签组的任务栏按钮",
   "GroupTaskbarButtonsNote": "仅当 Windows 设置为合并任务栏按钮（隐藏标签）时才有效。显示标签时，每个窗口仍有独立的按钮。",
   "HideInactiveTabs": "将非活动窗口的标签页变为半透明",

@@ -118,6 +118,7 @@
   "Interaction": "操作やで",
   "General": "全般やで",
   "RunAtStartup": "パソコン起動したらWindowTabs立ち上げるで",
+  "TaskbarActiveTabFirst": "アクティブタブをタスクバーボタン先頭にするで",
   "GroupTaskbarButtons": "タブグループのタスクバーボタンをまとめるで",
   "GroupTaskbarButtonsNote": "Windows のタスクバーの設定で、ボタンをまとめる（ラベルを表示せえへん）ようにしてるときだけ働くで。ラベルを表示する設定やと、まとまらへんで。",
   "HideInactiveTabs": "使ってへんウィンドウのタブ薄くするで",

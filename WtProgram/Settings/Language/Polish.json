@@ -118,6 +118,7 @@
   "Interaction": "Interakcja",
   "General": "Ogólne",
   "RunAtStartup": "Uruchamiaj WindowTabs przy starcie systemu",
+  "TaskbarActiveTabFirst": "Umieszczaj aktywną kartę na początku przycisku paska zadań",
   "GroupTaskbarButtons": "Łącz przyciski paska zadań dla grup kart",
   "GroupTaskbarButtonsNote": "Działa tylko, gdy Windows łączy przyciski paska zadań (etykiety ukryte). Przy widocznych etykietach każde okno zachowuje osobny przycisk.",
   "HideInactiveTabs": "Wygaszaj karty nieaktywnych okien",

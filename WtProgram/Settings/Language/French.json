@@ -118,6 +118,7 @@
   "Interaction": "Interaction",
   "General": "Général",
   "RunAtStartup": "Lancer WindowTabs au démarrage",
+  "TaskbarActiveTabFirst": "Placer l’onglet actif en premier dans le bouton de la barre des tâches",
   "GroupTaskbarButtons": "Regrouper les boutons de la barre des tâches par groupe d’onglets",
   "GroupTaskbarButtonsNote": "Fonctionne seulement si Windows regroupe les boutons de la barre des tâches (libellés masqués). Si les libellés sont affichés, chaque fenêtre garde son bouton.",
   "HideInactiveTabs": "Estomper les onglets des fenêtres inactives",

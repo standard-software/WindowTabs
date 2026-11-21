@@ -170,6 +170,7 @@ if $(ConfigurationName) == Release (
     <Compile Include="Shared/TabEdges.fs" />
     <Compile Include="Shared/TabPreviewPolicy.fs" />
     <Compile Include="Shared\TabStripTypes.fs" />
+    <Compile Include="Shared/TaskbarOrderPolicy.fs" />
     <Compile Include="Shared/TaskbarAppIdPolicy.fs" />
     <Compile Include="Shared/LinkGroupLayout.fs" />
     <Compile Include="Shared/LinkGroupTabs.fs" />

@@ -118,6 +118,7 @@
   "Interaction": "Interaktion",
   "General": "Allgemein",
   "RunAtStartup": "WindowTabs beim Systemstart ausführen",
+  "TaskbarActiveTabFirst": "Den aktiven Tab in der Taskleistenschaltfläche an erster Stelle anzeigen",
   "GroupTaskbarButtons": "Taskleistenschaltflächen für Tabgruppen zusammenfassen",
   "GroupTaskbarButtonsNote": "Wirkt nur, wenn Windows Taskleistenschaltflächen gruppiert (Beschriftungen ausgeblendet). Mit Beschriftungen behält jedes Fenster seine eigene Schaltfläche.",
   "HideInactiveTabs": "Tabs auf inaktiven Fenstern ausblenden",

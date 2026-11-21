@@ -118,6 +118,7 @@
   "Interaction": "Tương tác",
   "General": "Chung",
   "RunAtStartup": "Chạy WindowTabs khi khởi động",
+  "TaskbarActiveTabFirst": "Đặt thẻ đang hoạt động lên đầu trong nút trên thanh tác vụ",
   "GroupTaskbarButtons": "Gộp các nút trên thanh tác vụ theo nhóm thẻ",
   "GroupTaskbarButtonsNote": "Chỉ hoạt động khi Windows gộp các nút trên thanh tác vụ (ẩn nhãn). Khi hiện nhãn, mỗi cửa sổ vẫn có nút riêng.",
   "HideInactiveTabs": "Làm mờ thẻ trên cửa sổ không hoạt động",

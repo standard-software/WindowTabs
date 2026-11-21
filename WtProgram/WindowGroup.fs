@@ -335,6 +335,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     // when a reorder notification last started one.
     let mutable lastStripSignature : obj = null
     let mutable lastReorderRefresh = -1000L
+    let mutable taskbarOrderEnabled = unbox<bool>(Services.settings.getValue "taskbarActiveTabFirst")
+    let mutable taskbarOrderTimer : IDisposable option = None
+    let mutable taskbarOrderWork : System.Threading.CancellationTokenSource option = None
+    let mutable taskbarOrderChangedAt = 0L
+    let mutable taskbarOrderObserved : (IntPtr * Set<IntPtr>) option = None
+    let mutable taskbarOrderFront : IntPtr option = None
+    let mutable taskbarOrderCompleted : (IntPtr * Set<IntPtr>) option = None
     let mutable stripGroupMinimized = false
     let mutable stripOrderHook : IDisposable option = None
     let mutable stripPredictionHook : IDisposable option = None
@@ -506,6 +513,13 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         refreshButtonModes()
         for key in ["tabCloseButton"; "tabPinButton"] do
             Services.settings.notifyValue key (fun _ -> this.invokeAsync refreshButtonModes)
+
+        Services.settings.notifyValue "taskbarActiveTabFirst" <| fun value ->
+            this.invokeAsync <| fun () ->
+                taskbarOrderEnabled <- unbox<bool>(value)
+                if not taskbarOrderEnabled then this.cancelTaskbarOrder()
+                elif not isDestroyed.value then
+                    zorderCell.value.tryHead |> Option.iter (fun front -> this.requestTaskbarOrder(front, true))
 
         // Listen for tabPositionByDefault changes (apply to all groups)
         Services.settings.notifyValue "tabPositionByDefault" <| fun value ->
@@ -1026,7 +1040,63 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                         ((newZorder.tryHead |> Option.defaultValue IntPtr.Zero).ToInt64()))
 #endif
             prevTop.set(zorderCell.value.tryHead)
+            let frontChanged = zorderCell.value.tryHead <> newZorder.tryHead
             zorderCell.set(newZorder)
+            if taskbarOrderEnabled && frontChanged && not stripGroupMinimized then
+                newZorder.tryHead |> Option.iter (fun front -> this.requestTaskbarOrder(front, false))
+
+    member private this.cancelTaskbarOrderWork() =
+        // The worker reads only IsCancellationRequested, never WaitHandle or registrations.
+        // This group owns disposal; a captured token remains safe after disposal.
+        taskbarOrderWork |> Option.iter (fun work -> work.Cancel(); work.Dispose())
+        taskbarOrderWork <- None
+
+    member private this.cancelTaskbarOrder() =
+        taskbarOrderTimer |> Option.iter (fun timer -> timer.Dispose())
+        taskbarOrderTimer <- None
+        this.cancelTaskbarOrderWork()
+        taskbarOrderObserved <- None
+        taskbarOrderCompleted <- None
+
+    member private this.requestTaskbarOrder(front, force) =
+        if taskbarOrderEnabled && not isDestroyed.value then
+            let members = Set.ofList this.windows.items.list
+            // Preserve the pre-minimize selection even while another desktop is shown.
+            if members.Contains front then taskbarOrderFront <- Some front
+            if not desktopShown || members.Count < 2 || not (members.Contains front) then
+                this.cancelTaskbarOrder()
+            else
+                let observed = Some(front, members)
+                if force || taskbarOrderObserved <> observed then
+                    this.cancelTaskbarOrderWork()
+                    taskbarOrderObserved <- observed
+                    taskbarOrderChangedAt <- stripClock.ElapsedMilliseconds
+                    if taskbarOrderTimer.IsNone then this.scheduleTaskbarOrder(TaskbarOrderPolicy.settleMs)
+
+    member private this.scheduleTaskbarOrder(delay) =
+        taskbarOrderTimer <- Some(ThreadHelper.cancelablePostBack delay (fun () ->
+            this.withUpdate (fun () ->
+                taskbarOrderTimer <- None
+                if taskbarOrderEnabled && not isDestroyed.value && desktopShown then
+                    match taskbarOrderObserved with
+                    | Some(front, members) when members = Set.ofList this.windows.items.list ->
+                        match TaskbarOrderPolicy.decide taskbarOrderChangedAt stripClock.ElapsedMilliseconds front members taskbarOrderCompleted with
+                        | TaskbarOrderPolicy.Wait remaining -> this.scheduleTaskbarOrder(remaining)
+                        | TaskbarOrderPolicy.Ignore -> ()
+                        | TaskbarOrderPolicy.Execute ->
+                            if members |> Seq.forall this.isSameWindow then
+                                let work = new System.Threading.CancellationTokenSource()
+                                let token = work.Token
+                                // A canceled partial rebuild must not reuse an older success.
+                                taskbarOrderCompleted <- None
+                                taskbarOrderWork <- Some work
+                                let ordered = front :: (zorderCell.value.list |> List.filter ((<>) front))
+                                TaskbarAppId.orderActive token ordered (fun () ->
+                                    this.invokeAsync (fun () ->
+                                        if not token.IsCancellationRequested && taskbarOrderEnabled && not isDestroyed.value then
+                                            taskbarOrderCompleted <- Some(front, members)))
+                    | _ -> this.cancelTaskbarOrder()
+                else this.cancelTaskbarOrder())))
 
     member private this.saveZorder() =
         this.setZorder(this.inZorder(this.windows.items))
@@ -1045,8 +1115,17 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             if not (newWindows.contains hwnd) || not register then
                 CaptionDragTargets.remove captionDragOwner hwnd)
         if register then newWindows.items.iter (CaptionDragTargets.add captionDragOwner)
+        let membershipChanged = taskbarOrderEnabled && this.windows.items.list <> newWindows.items.list
         windowsCell.set(newWindows)
         this.saveZorder()
+        if taskbarOrderEnabled && membershipChanged then
+            taskbarOrderCompleted <- None
+            let front =
+                taskbarOrderObserved |> Option.map fst |> Option.filter newWindows.contains
+                |> Option.orElse zorderCell.value.tryHead
+            match front with
+            | Some hwnd -> this.requestTaskbarOrder(hwnd, true)
+            | None -> this.cancelTaskbarOrder()
         this.updateIsVisible()
 
     member private this.isEmpty : bool = this.windows.items.isEmpty
@@ -1483,10 +1562,24 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         let view = { view with presence=view.presence |> Map.filter (fun h _ -> this.windows.contains h) }
         let unchanged = appliedStripView |> Option.exists (fun (oldShown, oldView) -> VirtualDesktopGroups.sameStripView shown oldShown view oldView)
         appliedStripView <- Some(shown, view)
-        if stripView.current <> view.current then
+        let orderDesktopChanged = stripView.current <> view.current
+        let orderBecameShown = shown && not desktopShown
+        if orderDesktopChanged then
             stripSwitchUntil <- stripClock.ElapsedMilliseconds + 1500L
         stripView <- view
+        if taskbarOrderEnabled && (orderDesktopChanged || not shown) then
+            // A desktop switch drops what is waiting, but an order that was
+            // completed stays valid: do not rebuild every group on each switch.
+            let completed = taskbarOrderCompleted
+            this.cancelTaskbarOrder()
+            taskbarOrderCompleted <- completed
         desktopShown <- shown
+        if taskbarOrderEnabled && shown && (orderDesktopChanged || orderBecameShown) then
+            let front =
+                if stripGroupMinimized then
+                    taskbarOrderFront |> Option.filter this.windows.contains |> Option.orElse zorderCell.value.tryHead
+                else zorderCell.value.tryHead
+            front |> Option.iter (fun hwnd -> this.requestTaskbarOrder(hwnd, true))
         this.ts.desktopNoticeTick <- view.noticeTick
         let ended = this.finishStripPreview()
         if unchanged && not ended && not this.stripSwitchActive then
@@ -2864,6 +2957,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.followSharedMinimize(hwnd) =
         stripGroupMinimized <- true
+        if taskbarOrderEnabled then this.requestTaskbarOrder(hwnd, true)
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.where((<>) hwnd).reverse.iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized.not && this.isSameWindow(other) then
@@ -2873,6 +2967,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
 
     member private this.followSharedRestore(hwnd) =
         stripGroupMinimized <- false
+        if taskbarOrderEnabled then this.requestTaskbarOrder(hwnd, false)
         suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
         zorderCell.value.where((<>) hwnd).iter <| fun other ->
             if this.os.windowFromHwnd(other).isMinimized && this.isSameWindow(other) then
@@ -2946,6 +3041,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     // Every minimize is already posted. This orders handles only;
                     // it does not require the followers to be minimized yet.
                     this.os.setZorder(zorderCell.value.moveToEnd((=)hwnd))
+                if taskbarOrderEnabled then this.requestTaskbarOrder(hwnd, true)
                 this.updateIsVisible()
         //this happens when a window is restored from minimize
         | WinEvent.EVENT_SYSTEM_MINIMIZEEND ->
@@ -2956,6 +3052,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 Debug.WriteLine(sprintf "[Issue34] MINIMIZEEND group=%X hwnd=%X echo=%b" (int64 this.hwnd) (int64 hwnd) isEcho)
 #endif
                 if not isEcho then
+                    if taskbarOrderEnabled then this.requestTaskbarOrder(hwnd, false)
                     let needsRestore = zorderCell.value.any <| fun hwnd ->
                         this.os.windowFromHwnd(hwnd).isMinimized
                     suppressFlashUntil <- DateTime.Now.AddSeconds(3.0)
@@ -3545,6 +3642,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
             followerPlacements.CancelAll()
             pendingBackgroundMoves.Clear()
             sharedPlacementWrites.Clear()
+            this.cancelTaskbarOrder()
             isDestroyed.set(true)
             this.windows.items.iter (CaptionDragTargets.remove captionDragOwner)
             stripMaintenanceTimer.Stop()
