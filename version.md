@@ -2,6 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.11_next10
+
+- Added the setting "Put the active tab first in the taskbar button"
+  (General page, off by default). (#36)
+  - Three seconds after a tab is switched or a group is minimized,
+    the active tab becomes the first window of its group in the
+    taskbar button, so Win+number brings back the window last used.
+- The active tab now shows the hover preview too.
+- Moved "Show window preview when hovering over a tab" from the
+  General page to the Interaction page.
+
 ## version ss_2026.11.11_next6
 
 - Changing the language now asks for confirmation first, and reports
