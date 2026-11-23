@@ -169,6 +169,8 @@ Auto Grouping brings windows of the same app together; shared categories (1–10
 
 ### Tabs on four edges
 
+![Tabs settings](README_Image/SettingsAppearance.png)
+
 ![Tab shape options](README_Image/SettingsAppearanceTabShape.png)
 
 - Set styles, sizes, and alignment separately for each edge.

@@ -169,6 +169,8 @@ WindowTabs Standard-Software edition では、ウィンドウの上下左右に�
 
 ### 4方向のタブの設定
 
+![タブの設定](README_Image/SettingsAppearance_Japanese.png)
+
 ![タブの形の選択肢](README_Image/SettingsAppearanceTabShape_Japanese.png)
 
 - 四辺それぞれにスタイル・大きさ・寄せを設定できます。
