@@ -55,6 +55,62 @@ type SmoothNodeTextBox() =
 type INode =
     abstract member showSettings : bool
 
+module NumericFieldMenu =
+    /// Share the settings menu while keeping each field's normal validation.
+    let attach (control: Control) (accepts: string -> bool) (commit: unit -> unit)
+               (reset: (string * (unit -> unit)) option) =
+        let previous = control.ContextMenuStrip
+        let menu = new ContextMenuStrip()
+        let add key action =
+            let item = new ToolStripMenuItem(Localization.getString key)
+            item.Click.Add(fun _ -> action ())
+            menu.Items.Add(item) |> ignore
+            item
+        let clipboardText () =
+            try
+                let value = Clipboard.GetText().Trim()
+                if accepts value then Some value else None
+            with :? System.Runtime.InteropServices.ExternalException -> None
+        add "Copy" (fun () ->
+            try
+                if control.Text.Length > 0 then Clipboard.SetText(control.Text)
+            with :? System.Runtime.InteropServices.ExternalException -> ()) |> ignore
+        let paste = add "Paste" (fun () ->
+            clipboardText () |> Option.iter (fun value ->
+                control.Text <- value
+                commit ()))
+        menu.Items.Add(new ToolStripSeparator()) |> ignore
+        add "SelectAll" (fun () ->
+            match control with
+            | :? NumericUpDown as number -> number.Select(0, number.Text.Length)
+            | :? TextBoxBase as text -> text.SelectAll()
+            | _ -> ()) |> ignore
+        reset |> Option.iter (fun (value, action) ->
+            menu.Items.Add(new ToolStripSeparator()) |> ignore
+            let item = add "Reset" action
+            item.Text <- sprintf "%s:%s" (Localization.getString "Reset") value)
+        // The popup is not a child of the dialog: give it the scaled font here,
+        // on opening, because the dialog can change monitors.
+        let menuFont = menu.Font
+        menu.Opening.Add(fun _ ->
+            menu.Font <-
+                if SettingsDpi.current() = 1.0 then menuFont
+                else SettingsDpi.font (SettingsDpi.current()) |> Option.defaultValue menuFont
+            paste.Enabled <- clipboardText () |> Option.isSome
+            if DarkMode.darkModeEnabled then DarkMode.attachDarkContextMenuStripTheme menu
+            else
+                menu.RenderMode <- ToolStripRenderMode.ManagerRenderMode
+                menu.ResetBackColor()
+                menu.ResetForeColor()
+                for item in menu.Items do
+                    item.ResetBackColor()
+                    item.ResetForeColor())
+        control.ContextMenuStrip <- menu
+        for child in control.Controls do
+            if child :? TextBoxBase then child.ContextMenuStrip <- menu
+        if not (isNull previous) then previous.Dispose()
+        control.Disposed.Add(fun _ -> menu.Dispose())
+
 /// The spin field of the settings dialog. NumericUpDown clamps its height to
 /// the one its font asks for, whatever it is told - putting it in a box of the
 /// wanted height only made its arrows look small in a field too tall for them -
@@ -64,7 +120,13 @@ type SettingsNumericUpDown() =
     static member Create() =
         let control = new SettingsNumericUpDown()
         SettingsField.apply control
+        control.SetNumericMenu(None)
         control
+    member private this.CommitNumericText() = this.ValidateEditText()
+    member this.SetNumericMenu(reset) =
+        NumericFieldMenu.attach this
+            (fun text -> fst (Decimal.TryParse(text, Globalization.NumberStyles.Number, Globalization.CultureInfo.CurrentCulture)))
+            (fun () -> this.CommitNumericText()) reset
     override this.OnLayout(e) =
         if not (SettingsField.arrangingNumeric this) then
             base.OnLayout(e)
@@ -254,8 +316,11 @@ type ColorEditor() as this =
         let tb = TextBox()
         let maxLen = 6
         let save() =
-            (this :> IPropEditor).value <- this.colorFromTb
-            changedEvent.Trigger()
+            // Leaving the field after Enter or a paste must not save the same colour again.
+            let color : Color = this.colorFromTb
+            if color.ToRGB() <> chooserButton.BackColor.ToRGB() then
+                (this :> IPropEditor).value <- color
+                changedEvent.Trigger()
         tb.Dock <- DockStyle.None
         tb.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right  // Left align and stretch
         tb.CharacterCasing <- CharacterCasing.Upper
@@ -287,6 +352,14 @@ type ColorEditor() as this =
             if tb.Text <> normalized then tb.Text <- normalized
 
         tb.Validated.Add <| fun e -> save()
+        // Same menu as the number fields, without a reset entry. Paste takes
+        // one to six hex digits and replaces the whole text.
+        NumericFieldMenu.attach tb
+            (fun text -> text.Length >= 1 && text.Length <= maxLen && text |> Seq.forall Uri.IsHexDigit)
+            (fun () ->
+                tb.Text <- sprintf "%06X" (Int32.Parse(tb.Text, Globalization.NumberStyles.HexNumber))
+                save())
+            None
         tb
 
     let panel =

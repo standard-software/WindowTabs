@@ -7,7 +7,7 @@ open Newtonsoft.Json.Linq
 /// What the edge panels of the Appearance tab are built from. The top
 /// edge's panel (AppearanceView) and the other edges' (EdgeSettingsPanel)
 /// lay their rows out as the rest of the dialog does: a 250-px caption
-/// column, the input, the reset button, on the same row grid.
+/// column and the input, on the same row grid.
 module EdgeRows =
     let marginPx = UIHelper.settingsRowMarginPx
 
@@ -29,7 +29,7 @@ module EdgeRows =
         label.MinimumSize <- Size(0, captionHeightPx)
         label
 
-    /// Caption, input and reset columns, one AutoSize row each: a caption
+    /// Caption and input columns, one AutoSize row each: a caption
     /// that wraps makes its row taller instead of being cut off.
     let rowTable (rows: int) =
         let p = TableLayoutPanel()
@@ -38,32 +38,16 @@ module EdgeRows =
         p.Margin <- Padding(0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- rows
-        p.ColumnCount <- 3
+        p.ColumnCount <- 2
         for _ in 1 .. rows do p.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)) |> ignore  // Caption
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore   // Input
-        p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore          // Reset button
         p
 
     let place (table: TableLayoutPanel) (control: Control) (column: int) (row: int) =
         table.Controls.Add(control)
         table.SetRow(control, row)
         table.SetColumn(control, column)
-
-    let resetText (value: string) = sprintf "%s:%s" (Localization.getString("Reset")) value
-
-    /// A reset button filling the reset column, as the int rows' buttons.
-    let resetButton (text: string) (onClick: unit -> unit) =
-        let btn = Button()
-        btn.Text <- text
-        btn.AutoSize <- true
-        btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        btn.MinimumSize <- Size(btn.Width, SettingsField.heightPx)
-        btn.Dock <- DockStyle.Fill
-        btn.TextAlign <- ContentAlignment.MiddleLeft
-        btn.Margin <- Padding(5, marginPx, 0, marginPx)
-        btn.Click.Add(fun _ -> onClick ())
-        btn
 
     /// A content-sized action at the upper right of an edge page.
     let copyButton key onClick =
@@ -88,87 +72,31 @@ module EdgeRows =
         header.Controls.Add(copy, 1, 0)
         header, copy
 
-    /// Two numeric fields and their reset buttons on the same row grid.
+    /// Two numeric fields on the same row grid.
     let pairTable () =
         let pair = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
-                                       Margin = Padding(0), ColumnCount = 6, RowCount = 1)
+                                       Margin = Padding(0), ColumnCount = 4, RowCount = 1)
         pair.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         pair.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         for _ in 1..2 do
             pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
             pair.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 50.0f)) |> ignore
-            pair.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
         pair
 
     let preparePair (pair: TableLayoutPanel) =
-        for column in [0; 3] do
+        for column in [0; 2] do
             let label = pair.GetControlFromPosition(column, 0)
             label.Margin <- Padding((if column = 0 then 0 else 30), marginPx, 5, marginPx)
             pair.GetControlFromPosition(column + 1, 0).MinimumSize <- Size(50, SettingsField.heightPx)
-        for column in [2; 5] do
-            let reset = pair.GetControlFromPosition(column, 0) :?> Button
-            reset.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            reset.MinimumSize <- Size(0, SettingsField.heightPx)
-            reset.AutoSize <- false
-            reset.Dock <- DockStyle.Right
-            pair.ColumnStyles.[column].SizeType <- SizeType.Absolute
 
-    let alignPairs (referenceReset: Control) (pairs: seq<TableLayoutPanel>) =
-        // Preserve the existing width unless a paired reset caption needs more room.
-        // Measure every pair so three-digit defaults do not clip and all rows align.
-        let mutable syncingResetWidths = false
-        let syncResetWidths () =
-            if not syncingResetWidths then
-                syncingResetWidths <- true
-                try
-                    let captionWidth =
-                        pairs |> Seq.collect (fun pair ->
-                            [2; 5] |> Seq.map (fun column ->
-                                pair.GetControlFromPosition(column, 0).GetPreferredSize(Size.Empty).Width))
-                        |> Seq.max
-                    // A scaled reference button can exceed the pair's remaining space.
-                    // Reserve the shared captions and minimum numeric fields before sizing resets.
-                    let sharedCaptionWidth =
-                        [0; 3] |> List.sumBy (fun column ->
-                            pairs |> Seq.map (fun pair ->
-                                let caption = pair.GetControlFromPosition(column, 0)
-                                caption.GetPreferredSize(Size.Empty).Width + caption.Margin.Horizontal)
-                            |> Seq.max)
-                    let fittingWidth =
-                        pairs |> Seq.map (fun pair ->
-                            let fieldsWidth =
-                                [1; 4] |> List.sumBy (fun column ->
-                                    let field = pair.GetControlFromPosition(column, 0)
-                                    field.MinimumSize.Width + field.Margin.Horizontal)
-                            let resetMargins =
-                                [2; 5] |> List.sumBy (fun column -> pair.GetControlFromPosition(column, 0).Margin.Horizontal)
-                            (pair.ClientSize.Width - sharedCaptionWidth - fieldsWidth - resetMargins) / 2)
-                        |> Seq.min
-                    let requiredWidth = max captionWidth (min referenceReset.Width fittingWidth)
-                    for pair in pairs do
-                        pair.SuspendLayout()
-                        try
-                            for column in [2; 5] do
-                                let reset = pair.GetControlFromPosition(column, 0)
-                                // Dock right so a rounding pixel cannot widen the button.
-                                if reset.Width <> requiredWidth then reset.Width <- requiredWidth
-                                let width = float32 (requiredWidth + reset.Margin.Horizontal)
-                                if pair.ColumnStyles.[column].Width <> width then
-                                    pair.ColumnStyles.[column].Width <- width
-                        finally
-                            pair.ResumeLayout(true)
-                finally
-                    syncingResetWidths <- false
-        referenceReset.SizeChanged.Add(fun _ -> syncResetWidths ())
-        for pair in pairs do pair.Layout.Add(fun _ -> syncResetWidths ())
-        syncResetWidths ()
+    let alignPairs (pairs: seq<TableLayoutPanel>) =
         // Share caption widths across all paired rows, including after DPI changes.
         let mutable syncingCaptionWidths = false
         let syncCaptionWidths () =
             if not syncingCaptionWidths then
                 syncingCaptionWidths <- true
                 try
-                    for column in [0; 3] do
+                    for column in [0; 2] do
                         let width =
                             pairs |> Seq.map (fun pair ->
                                 let caption = pair.GetControlFromPosition(column, 0)
@@ -245,13 +173,19 @@ module EdgeRows =
                     let current, milliseconds = read ()
                     if mode <> current then save mode milliseconds
                     delay.Enabled <- (mode = "down"))
-        delay.LostFocus.Add(fun _ ->
+        let commitDelay () =
             if not refreshing then
                 let mode, previous = read ()
                 match Int32.TryParse delay.Text with
                 | true, value when value >= 0 && value <= 10000 ->
                     if value <> previous then save mode value
-                | _ -> delay.Text <- string previous)
+                | _ -> delay.Text <- string previous
+        delay.LostFocus.Add(fun _ -> commitDelay ())
+        let defaultDelay = snd (TabEdgeSettings.hideSettings (JObject()) TabEdges.Edge.Top)
+        NumericFieldMenu.attach delay (fun text -> fst (Int32.TryParse text)) commitDelay
+            (Some(string defaultDelay, fun () ->
+                delay.Text <- string defaultDelay
+                commitDelay ()))
         table, refresh
 
     /// A number field with IntEditor's range.
@@ -467,50 +401,24 @@ module EdgeRows =
         tbl.Controls.Add(width, 2, 0)
         ({ panel = tbl; iconOnly = iconOnly; specify = specify; width = width } : PinnedWidth)
 
-    /// A distance row's two ends: [first][number][reset] [second][number]
-    /// [reset] - [left][right] on a top or bottom edge, [top][bottom] on a
-    /// left or right one (8). It spans the input and reset columns. What a
-    /// reset button does is the caller's.
+    /// Two distance fields with independent reset actions.
     type DistancePair = {
         panel: TableLayoutPanel
         first: SettingsNumericUpDown
         second: SettingsNumericUpDown
-        firstReset: Button
-        secondReset: Button
     }
 
     let distancePair (firstCaption: string) (secondCaption: string) (resetValue: int) =
-        let tbl = TableLayoutPanel()
-        tbl.ColumnCount <- 6
-        tbl.RowCount <- 1
-        tbl.Dock <- DockStyle.Fill
-        tbl.Margin <- Padding(0)
-        tbl.AutoSize <- true
-        tbl.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        for percent in [ None; Some 50.0f; None; None; Some 50.0f; None ] do
-            match percent with
-            | Some(p) -> tbl.ColumnStyles.Add(ColumnStyle(SizeType.Percent, p)) |> ignore
-            | None -> tbl.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
-        tbl.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-        let side (text: string) (column: int) (leftGap: int) =
-            let label = caption text
-            label.Margin <- Padding(leftGap, marginPx, 5, marginPx)
+        let tbl = pairTable ()
+        let side text column =
             let n = number ()
-            let reset = Button()
-            reset.Text <- resetText (string resetValue)
-            reset.AutoSize <- true
-            reset.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            reset.MinimumSize <- Size(0, SettingsField.heightPx)
-            reset.TextAlign <- ContentAlignment.MiddleLeft
-            reset.Anchor <- AnchorStyles.Left
-            reset.Margin <- Padding(5, marginPx, 0, marginPx)
-            tbl.Controls.Add(label, column, 0)
+            n.SetNumericMenu(Some(string resetValue, fun () -> n.Value <- decimal resetValue))
+            tbl.Controls.Add(caption text, column, 0)
             tbl.Controls.Add(n, column + 1, 0)
-            tbl.Controls.Add(reset, column + 2, 0)
-            n, reset
-        let first, firstReset = side firstCaption 0 0
-        let second, secondReset = side secondCaption 3 15
-        ({ panel = tbl; first = first; second = second; firstReset = firstReset; secondReset = secondReset } : DistancePair)
+            n
+        let first = side firstCaption 0
+        let second = side secondCaption 2
+        { panel = tbl; first = first; second = second }
 
 /// The panel of an edge other than the top on the Appearance tab (8): its
 /// own tab appearance and layout, kept under "TabEdge<name>" of the
@@ -551,12 +459,11 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         panel.Controls.Add(header, 0, 0)
         panel.Controls.Add(table, 0, 1)
     let mutable nextRow = 0
-    let row (captionKey: string) (input: Control) (reset: Control option) =
+    let row (captionKey: string) (input: Control) =
         let r = nextRow
         nextRow <- nextRow + 1
         EdgeRows.place table (EdgeRows.caption (text captionKey)) 0 r
         EdgeRows.place table input 1 r
-        reset |> Option.iter (fun b -> EdgeRows.place table b 2 r)
         r
 
     let mutable listedShapes = []
@@ -647,7 +554,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             textBottomCombo.Visible <- not horizontal
             if pinnedRow >= 0 then
                 table.SuspendLayout()
-                for column in 0 .. 2 do
+                for column in 0 .. 1 do
                     table.GetControlFromPosition(column, pinnedRow).Visible <- not horizontal
                 table.RowStyles.[pinnedRow].SizeType <- if horizontal then SizeType.Absolute else SizeType.AutoSize
                 table.RowStyles.[pinnedRow].Height <- 0.0f
@@ -660,44 +567,40 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
     do
         let d = defaults ()
         if sideways then
-            row "Tab Shape" textOptions None |> ignore
-            table.SetColumnSpan(textOptions, 2)
+            row "Tab Shape" textOptions |> ignore
+
             EdgeRows.place table shapeCombo 1 nextRow
             nextRow <- nextRow + 1
         else
-            row "Tab Shape" shapeCombo None |> ignore
-        table.SetColumnSpan(shapeCombo, 2)
+            row "Tab Shape" shapeCombo |> ignore
+
         let numberRow captionKey (input: SettingsNumericUpDown) (defaultValue: int) =
-            let reset = EdgeRows.resetButton (EdgeRows.resetText (string defaultValue)) (fun () -> input.Value <- decimal defaultValue)
-            row captionKey input (Some(reset :> Control)) |> ignore
+            input.SetNumericMenu(Some(string defaultValue, fun () -> input.Value <- decimal defaultValue))
+            row captionKey input |> ignore
         let sizePair = EdgeRows.pairTable ()
         for column, caption, input, value in
-            [0, "Height", heightInput, d.tabHeight; 3, "Width (max)", widthInput, d.tabMaxWidth] do
-            let reset = EdgeRows.resetButton (EdgeRows.resetText (string value)) (fun () -> input.Value <- decimal value)
+            [0, "Height", heightInput, d.tabHeight; 2, "Width (max)", widthInput, d.tabMaxWidth] do
+            input.SetNumericMenu(Some(string value, fun () -> input.Value <- decimal value))
             EdgeRows.place sizePair (EdgeRows.caption (text caption)) column 0
             EdgeRows.place sizePair input (column + 1) 0
-            EdgeRows.place sizePair reset (column + 2) 0
         EdgeRows.preparePair sizePair
-        row "Tab size" sizePair None |> ignore
-        table.SetColumnSpan(sizePair, 2)
-        let pinnedReset =
-            EdgeRows.resetButton (EdgeRows.resetText (string d.tabPinnedTabWidth)) (fun () ->
-                pinned.width.Value <- decimal d.tabPinnedTabWidth)
-        pinnedRow <- row "Pinned Tab Width" pinned.panel (Some(pinnedReset :> Control))
+        row "Tab size" sizePair |> ignore
+
+        pinned.width.SetNumericMenu(Some(string d.tabPinnedTabWidth, fun () ->
+            pinned.width.Value <- decimal d.tabPinnedTabWidth))
+        pinnedRow <- row "Pinned Tab Width" pinned.panel
         numberRow "Tab Overlap" overlapInput d.tabOverlap
-        // The distance rows carry their own reset buttons, across both columns.
-        row "Indent Normal" outside.panel None |> ignore
-        row "Indent Flipped" inside.panel None |> ignore
-        table.SetColumnSpan(outside.panel, 2)
-        table.SetColumnSpan(inside.panel, 2)
+        // Distance rows share the input column.
+        row "Indent Normal" outside.panel |> ignore
+        row "Indent Flipped" inside.panel |> ignore
         EdgeRows.preparePair outside.panel
         EdgeRows.preparePair inside.panel
-        EdgeRows.alignPairs pinnedReset [sizePair; outside.panel; inside.panel]
+        EdgeRows.alignPairs [sizePair; outside.panel; inside.panel]
         if sideways then
             // Split the pickers where the distance rows split: the writing mode
-            // ends with the first end's reset, the text side starts at the second end.
+            // ends with the first field, the text side starts at the second end.
             outside.panel.Layout.Add(fun _ ->
-                let secondCaption = outside.panel.GetControlFromPosition(3, 0)
+                let secondCaption = outside.panel.GetControlFromPosition(2, 0)
                 let gap = secondCaption.Margin.Left
                 if textCombo.Margin.Right <> gap then
                     textCombo.Margin <- Padding(0, EdgeRows.marginPx, gap, EdgeRows.marginPx)
@@ -724,9 +627,6 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         numberKey outside.second "tabOutsideDistanceEnd"
         numberKey inside.first "tabInsideDistanceStart"
         numberKey inside.second "tabInsideDistanceEnd"
-        for pair, resetValue in [ outside, TabEdges.defaultOutsideDistance; inside, TabEdges.defaultInsideDistance ] do
-            pair.firstReset.Click.Add(fun _ -> pair.first.Value <- decimal resetValue)
-            pair.secondReset.Click.Add(fun _ -> pair.second.Value <- decimal resetValue)
         // The pictures in the shape list follow the overlap.
         overlapInput.ValueChanged.Add(fun _ -> shapeCombo.Invalidate())
         pinned.iconOnly.CheckedChanged.Add(fun _ ->

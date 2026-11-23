@@ -174,6 +174,9 @@
   "WindowSettings": "窗口设置",
   "WorkspaceNameSettings": "工作区名称",
 
+  "Copy": "复制",
+  "Paste": "粘贴",
+  "SelectAll": "全选",
   "Reset": "重置",
 
   "TargetTabHeader": "目标标签页 : {TabName}",

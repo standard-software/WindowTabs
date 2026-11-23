@@ -174,6 +174,9 @@ module Localization_English =
         ("WindowSettings", "Window Settings")
         ("WorkspaceNameSettings", "Workspace Name")
 
+        ("Copy", "Copy")
+        ("Paste", "Paste")
+        ("SelectAll", "Select All")
         ("Reset", "Reset")
 
         ("TargetTabHeader", "Target tab : {TabName}")

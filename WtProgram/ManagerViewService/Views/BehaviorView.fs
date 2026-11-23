@@ -65,9 +65,6 @@ type InteractionView() =
             settingsChoice "snapTabMarginMode" SnapTabMarginMode.normalize SnapTabMarginMode.choices
 
         let previewNumber key minimum maximum defaultValue =
-            let row = new TableLayoutPanel(AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, Margin = Padding(0))
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore
             let number = SettingsNumericUpDown.Create()
             number.Minimum <- decimal minimum
             number.Maximum <- decimal maximum
@@ -76,17 +73,9 @@ type InteractionView() =
             refresh()
             refreshers.Add(refresh)
             number.ValueChanged.Add(fun _ -> save key (box (int number.Value)))
-            let reset = new Button(AutoSize = true, Text = sprintf "%s:%d" (Localization.getString "Reset") defaultValue)
-            reset.MinimumSize <- Size(reset.Width, 0)
-            reset.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            reset.Anchor <- AnchorStyles.Left
-            // Same horizontal margins as the edge pages: field flush left, 5 px before the button.
             number.Margin <- Padding(0)
-            reset.Margin <- Padding(5, 0, 0, 0)
-            reset.Click.Add(fun _ -> number.Value <- decimal defaultValue)
-            row.Controls.Add(number, 0, 0)
-            row.Controls.Add(reset, 1, 0)
-            row :> Control
+            number.SetNumericMenu(Some(string defaultValue, fun () -> number.Value <- decimal defaultValue))
+            number :> Control
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([

@@ -248,7 +248,7 @@ type AppearanceView() as this =
         p.Margin <- Padding(0)
         p.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         p.RowCount <- upperRowCount
-        p.ColumnCount <- 3
+        p.ColumnCount <- 2
         // AutoSize rather than a fixed 35 px, for the same reason
         // UIHelper.buildForm is: a caption that does not fit the label column
         // wraps onto a second line, and a fixed row height cut the wrapped
@@ -263,7 +263,6 @@ type AppearanceView() as this =
         // longest translated labels still stay on a single line.
         p.ColumnStyles.Add(ColumnStyle(SizeType.Absolute, float32 UIHelper.settingsLabelWidthPx)).ignore  // Label
         p.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)).ignore   // Input
-        p.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)).ignore          // Reset button
         p
 
     // Color grid panel for color settings (separate from upper panel)
@@ -341,28 +340,13 @@ type AppearanceView() as this =
         target.SetRow(editor.control, row)
         target.SetColumn(editor.control, column + 1)
 
-        let resetBtn =
-            let btn = Button()
-            btn.Text <- sprintf "%s:%s" (Localization.getString("Reset")) (formatDefaultValue prop.key)
-            btn.AutoSize <- true
-            btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-            btn.MinimumSize <- Size(0, SettingsField.heightPx)
-            btn.Dock <- DockStyle.Fill
-            btn.TextAlign <- ContentAlignment.MiddleLeft
-            btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
-            btn.Click.Add <| fun _ ->
-                let previous = suppressEvents
-                suppressEvents <- true
-                try
-                    let defaultValue = getDefaultValue prop.key
-                    editor.value <- defaultValue
-                    this.applyAppearance()
-                finally
-                    suppressEvents <- previous
-            btn
-        target.Controls.Add(resetBtn)
-        target.SetRow(resetBtn, row)
-        target.SetColumn(resetBtn, column + 2)
+        (editor.control :?> SettingsNumericUpDown).SetNumericMenu(Some(formatDefaultValue prop.key, fun () ->
+            let previous = suppressEvents
+            suppressEvents <- true
+            try
+                editor.value <- getDefaultValue prop.key
+                this.applyAppearance()
+            finally suppressEvents <- previous))
 
         (prop.key, editor)
 
@@ -392,14 +376,13 @@ type AppearanceView() as this =
                 let pair = EdgeRows.pairTable ()
                 pair.SuspendLayout()
                 let left = createIntEditorAt pair 0 (intConfig leftKey leftCaption) 0
-                let right = createIntEditorAt pair 3 (intConfig rightKey rightCaption) 0
+                let right = createIntEditorAt pair 2 (intConfig rightKey rightCaption) 0
                 EdgeRows.preparePair pair
                 upperPanel.Controls.Add(pair, 1, row)
-                upperPanel.SetColumnSpan(pair, 2)
                 pair.ResumeLayout(true)
                 pairs.Add(pair)
                 [left; right])
-        EdgeRows.alignPairs (upperPanel.GetControlFromPosition(2, 3)) pairs
+        EdgeRows.alignPairs pairs
         List2(regular @ paired)
 
     // Custom pinned tab width row with radio buttons (row 2 in upperPanel).
@@ -483,28 +466,15 @@ type AppearanceView() as this =
         upperPanel.SetColumn(tbl, 1)
         tbl
 
-    let pinnedWidthResetBtn =
-        let btn = Button()
+    do
         let defaultWidth = unbox<int>(getDefaultValue "tabPinnedTabWidth")
-        btn.Text <- sprintf "%s:%d" (Localization.getString("Reset")) defaultWidth
-        btn.AutoSize <- true
-        btn.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        btn.MinimumSize <- Size(btn.Width, SettingsField.heightPx)
-        btn.Dock <- DockStyle.Fill
-        btn.TextAlign <- ContentAlignment.MiddleLeft
-        btn.Margin <- Padding(5, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)
-        btn.Click.Add <| fun _ ->
+        pinnedWidthNumeric.SetNumericMenu(Some(string defaultWidth, fun () ->
             let previous = suppressEvents
             suppressEvents <- true
             try
                 pinnedWidthNumeric.Value <- decimal defaultWidth
                 this.applyAppearance()
-            finally
-                suppressEvents <- previous
-        upperPanel.Controls.Add(btn)
-        upperPanel.SetRow(btn, pinnedWidthRow)
-        upperPanel.SetColumn(btn, 2)
-        btn
+            finally suppressEvents <- previous))
 
     // IPropEditor for pinned tab width numeric value (always holds the real value like 90)
     let pinnedWidthNumericEditor : IPropEditor =
@@ -649,7 +619,6 @@ type AppearanceView() as this =
         upperPanel.Controls.Add(combo)
         upperPanel.SetRow(combo, tabShapeRow)
         upperPanel.SetColumn(combo, 1)
-        upperPanel.SetColumnSpan(combo, 2)
         combo
 
     let tabShapeEditor : IPropEditor =

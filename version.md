@@ -2,6 +2,16 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.22_next3
+
+- Number fields of the settings dialog have their own
+  right-click menu: Copy, Paste, Select all, Reset
+  - Copy takes the whole text. Paste replaces the whole text
+    and is enabled only while the clipboard holds a number.
+  - The reset buttons beside the fields are removed.
+- Color fields have the same menu: Copy, Paste, Select all
+  - Paste is enabled only for 1 to 6 hexadecimal digits.
+
 ## version ss_2026.11.22_next2
 
 - Reduced CPU use while nothing is happening (#37)
