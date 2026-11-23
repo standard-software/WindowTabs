@@ -12,6 +12,8 @@
 - "Tab room when snapping or moving": shorter wording
 - "Hide inside tabs" is a drop-down list with its wait time
 - The items of the General page are in a new order
+- Disabled labels of the settings dialog are drawn in plain
+  gray, without the shadow
 
 ## version ss_2026.11.22_next3
 

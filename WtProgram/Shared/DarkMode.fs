@@ -65,6 +65,49 @@ module SettingsCheckBoxLayout =
                 if cb.UseCompatibleTextRendering then Rectangle(bounds.X - 1, bounds.Y, bounds.Width + 1, bounds.Height)
                 else bounds
 
+/// A disabled Label paints an embossed, shadowed text. Paint the plain grey
+/// that the disabled radio buttons and check boxes of the dialog use instead.
+module FlatDisabledLabel =
+    let private attached = System.Runtime.CompilerServices.ConditionalWeakTable<Control, obj>()
+    let private color = Color.FromArgb(160, 160, 160)
+    let private paint (label: Label) (e: PaintEventArgs) =
+        // Only the plain case; anything else keeps the native painting.
+        if not label.Enabled && not (String.IsNullOrEmpty label.Text) && isNull label.Image &&
+           label.BackColor.A = 255uy && not label.AutoEllipsis && label.RightToLeft <> RightToLeft.Yes then
+            let area = Rectangle(label.Padding.Left, label.Padding.Top,
+                                 max 0 (label.ClientSize.Width - label.Padding.Horizontal),
+                                 max 0 (label.ClientSize.Height - label.Padding.Vertical))
+            use background = new SolidBrush(label.BackColor)
+            e.Graphics.FillRectangle(background, label.ClientRectangle)
+            let align = int label.TextAlign
+            let right = align &&& (int ContentAlignment.TopRight ||| int ContentAlignment.MiddleRight ||| int ContentAlignment.BottomRight) <> 0
+            let center = align &&& (int ContentAlignment.TopCenter ||| int ContentAlignment.MiddleCenter ||| int ContentAlignment.BottomCenter) <> 0
+            let bottom = align &&& (int ContentAlignment.BottomLeft ||| int ContentAlignment.BottomCenter ||| int ContentAlignment.BottomRight) <> 0
+            let middle = align &&& (int ContentAlignment.MiddleLeft ||| int ContentAlignment.MiddleCenter ||| int ContentAlignment.MiddleRight) <> 0
+            if label.UseCompatibleTextRendering then
+                // Same GDI+ layout as the enabled text, so it does not shift.
+                use format = new StringFormat()
+                format.Alignment <- if right then StringAlignment.Far elif center then StringAlignment.Center else StringAlignment.Near
+                format.LineAlignment <- if bottom then StringAlignment.Far elif middle then StringAlignment.Center else StringAlignment.Near
+                format.HotkeyPrefix <- if label.UseMnemonic then Drawing.Text.HotkeyPrefix.Show else Drawing.Text.HotkeyPrefix.None
+                use brush = new SolidBrush(color)
+                e.Graphics.DrawString(label.Text, label.Font, brush, RectangleF(float32 area.X, float32 area.Y, float32 area.Width, float32 area.Height), format)
+            else
+                let flags =
+                    (if right then TextFormatFlags.Right elif center then TextFormatFlags.HorizontalCenter else TextFormatFlags.Left) |||
+                    (if bottom then TextFormatFlags.Bottom elif middle then TextFormatFlags.VerticalCenter else TextFormatFlags.Top) |||
+                    TextFormatFlags.WordBreak ||| TextFormatFlags.TextBoxControl |||
+                    (if label.UseMnemonic then enum<TextFormatFlags> 0 else TextFormatFlags.NoPrefix)
+                TextRenderer.DrawText(e.Graphics, label.Text, label.Font, area, color, flags)
+    let rec apply (control: Control) =
+        match control with
+        | :? Label as label when not (control :? LinkLabel) ->
+            if not (attached.TryGetValue(control) |> fst) then
+                attached.Add(control, obj())
+                label.Paint.Add(paint label)
+        | _ -> ()
+        for child in control.Controls do apply child
+
 module ScaledChoiceGlyph =
     let private images = System.Collections.Generic.Dictionary<bool * int * bool, Bitmap>()
 

@@ -312,6 +312,7 @@ type DesktopManagerForm() =
             DarkMode.applyDarkColorsBeforeShow form
         else
             ScaledChoiceGlyph.applyLight form
+        FlatDisabledLabel.apply form
         form.FormClosing.Add(fun e ->
             if e.CloseReason = CloseReason.UserClosing && not Services.program.isShuttingDown then
                 e.Cancel <- true
