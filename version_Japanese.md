@@ -2,6 +2,8 @@
 
 **Language:** [English](version.md)
 
+## version ss_2026.11.24_next1
+
 ## version ss_2026.11.24
 
 - 何も操作していないときの CPU 負荷を減らした (#37)
