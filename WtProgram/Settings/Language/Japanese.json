@@ -1,7 +1,6 @@
 {
   "EnableTabPreview": "タブにマウスを重ねるとプレビューを表示",
-  "TabPreviewDelay": "プレビューの待ち時間 (ms)",
-  "TabPreviewSize": "プレビューの大きさ（長い辺の px）",
+  "TabPreviewSize": "長辺の大きさ",
   "CloseEdgeTabsFormat": "{0}のすべてのタブ({1}タブ)を閉じる",
   "BottomTabsInMenu": "下タブ",
   "RightTabsInMenu": "右タブ",

@@ -3,8 +3,7 @@ namespace Bemo
 module Localization_English =
     let strings = dict [
         ("EnableTabPreview", "Show window preview when hovering over a tab")
-        ("TabPreviewDelay", "Preview delay (ms)")
-        ("TabPreviewSize", "Preview size (long edge, px)")
+        ("TabPreviewSize", "Long edge size")
         ("StartupRegistrationFailed", "Could not change startup registration. Check access permissions and try again.")
         ("System", "System")
         ("PortableAppData", "APPDATA folder")

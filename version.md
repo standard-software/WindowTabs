@@ -11,6 +11,8 @@
   - The reset buttons beside the fields are removed.
 - Color fields have the same menu: Copy, Paste, Select all
   - Paste is enabled only for 1 to 6 hexadecimal digits.
+- The tab preview setting, its wait time and its size are
+  on one row of the Interaction page
 
 ## version ss_2026.11.22_next2
 

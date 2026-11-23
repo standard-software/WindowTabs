@@ -77,6 +77,40 @@ type InteractionView() =
             number.SetNumericMenu(Some(string defaultValue, fun () -> number.Value <- decimal defaultValue))
             number :> Control
 
+        let previewControls =
+            // One row: the check box takes 1/7, the delay and the size 3/7 each.
+            // Everything starts at the top of the row with the caption's
+            // height, so the texts sit on the line of the row's caption.
+            let lineHeight = UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx
+            let top = AnchorStyles.Top ||| AnchorStyles.Left
+            let panel = new TableLayoutPanel(ColumnCount = 3, RowCount = 1, Dock = DockStyle.Fill, Margin = Padding(0),
+                                             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
+            for share in [1.0f; 3.0f; 3.0f] do
+                panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, share * 100.0f / 7.0f)) |> ignore
+            panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+            let check = settingsCheckbox "enableTabPreview"
+            check.Anchor <- top
+            check.Margin <- Padding(0)
+            check.MinimumSize <- Size(0, lineHeight)
+            panel.Controls.Add(check, 0, 0)
+            let labelled column key (number: Control) =
+                let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill,
+                                                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                                                Margin = Padding((if column = 1 then 0 else 20), 0, 0, 0))
+                cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+                cell.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+                cell.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+                let label = new Label(AutoSize = true, Text = Localization.getString(key),
+                                      TextAlign = ContentAlignment.MiddleLeft, MinimumSize = Size(0, lineHeight),
+                                      Anchor = top, Margin = Padding(0, 0, 5, 0))
+                number.Anchor <- top ||| AnchorStyles.Right
+                cell.Controls.Add(label, 0, 0)
+                cell.Controls.Add(number, 1, 0)
+                panel.Controls.Add(cell, column, 0)
+            labelled 1 "HideTabsDelayMilliseconds" (previewNumber "tabPreviewDelay" 0 5000 500)
+            labelled 2 "TabPreviewSize" (previewNumber "tabPreviewSize" 80 1000 320)
+            panel :> Control
+
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
             ("TabCloseButton", buttonModeChoice "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
@@ -86,9 +120,7 @@ type InteractionView() =
             ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
             ("SnapTabMarginMode", snapMarginChoice)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
-            ("EnableTabPreview", settingsCheckbox "enableTabPreview")
-            ("TabPreviewDelay", previewNumber "tabPreviewDelay" 0 5000 500)
-            ("TabPreviewSize", previewNumber "tabPreviewSize" 80 1000 320)
+            ("EnableTabPreview", previewControls)
         ])
 
         let formPanel = UIHelper.form fields

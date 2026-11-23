@@ -155,6 +155,11 @@ module EdgeRows =
                 let radio = UIHelper.settingsRadio key
                 table.Controls.Add(radio, 0, row)
                 mode, radio)
+        // Sit on the same line as the radio button of this row.
+        let rowRadio = snd radios.[1]
+        label.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left
+        label.Margin <- Padding(10, rowRadio.Margin.Top, 3, 0)
+        label.MinimumSize <- rowRadio.MinimumSize
         table.Controls.Add(label, 1, 1)
         table.Controls.Add(delay, 2, 1)
         let mutable refreshing = false
