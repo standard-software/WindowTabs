@@ -791,30 +791,6 @@ module UIHelper =
 
     // Keep the first option on the caption line and use the same trailing
     // space regardless of the number of options.
-    let settingsRadioGroup rowCount columnCount =
-        let table = new TableLayoutPanel()
-        table.AutoSize <- true
-        table.AutoSizeMode <- AutoSizeMode.GrowAndShrink
-        table.Margin <- Padding(0)
-        let radioPitch = 28
-        table.Padding <- Padding(0, 0, 0, 12)
-        table.ColumnCount <- columnCount
-        table.RowCount <- rowCount
-        for _ in 1 .. columnCount do
-            table.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
-        for _ in 1 .. rowCount do
-            table.RowStyles.Add(RowStyle(SizeType.Absolute, float32 radioPitch)) |> ignore
-        table
-
-    let settingsRadio captionKey =
-        let radio = new RadioButton()
-        radio.Text <- Localization.getString(captionKey)
-        radio.AutoSize <- true
-        radio.Margin <- Padding(0, settingsRowMarginPx, 0, 0)
-        // Match the caption height and vertical alignment.
-        radio.MinimumSize <- Size(0, rowContentHeightPx)
-        radio
-
     // centerRows: label and input centred on the same line. The settings tabs
     // keep the old layout (label held down by a top margin, input at the top
     // of the row), which lined up with their taller inputs; on the compact

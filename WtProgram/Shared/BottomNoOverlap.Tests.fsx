@@ -295,35 +295,34 @@ module ExternalSnapDeadlineTests =
         let equal name expected actual =
             checks <- checks + 1
             if expected <> actual then failwithf "%s: expected %A, got %A" name expected actual
-        equal "quiet period constant" 3000 settleMs
-        equal "first position waits three seconds" 3000 (timerDelay (Checking 20) 0L 0L)
-        equal "last millisecond still waits" true (waitsForSettle (Checking 20) 2999L 0L)
-        equal "deadline permits inspection" false (waitsForSettle (Checking 20) 3000L 0L)
+        equal "first position waits three seconds" 3000 (timerDelay 3000 (Checking 20) 0L 0L)
+        equal "last millisecond still waits" true (waitsForSettle 3000 (Checking 20) 2999L 0L)
+        equal "deadline permits inspection" false (waitsForSettle 3000 (Checking 20) 3000L 0L)
         // An existing timer fires at 3000 after a change at 2900. Its next
         // deadline is 5900, not 6000 or 8900; notifications create no timer.
-        equal "coalesced position waits only remaining time" 2900 (timerDelay (Checking 20) 3000L 2900L)
-        equal "new position deadline reached" 0 (remainingMs 5900L 2900L)
-        equal "late timer adds no quiet period" 0 (remainingMs 9000L 2900L)
-        equal "new front has its own deadline" 3000 (remainingMs 4500L 4500L)
+        equal "coalesced position waits only remaining time" 2900 (timerDelay 3000 (Checking 20) 3000L 2900L)
+        equal "new position deadline reached" 0 (remainingMs 3000 5900L 2900L)
+        equal "late timer adds no quiet period" 0 (remainingMs 3000 9000L 2900L)
+        equal "new front has its own deadline" 3000 (remainingMs 3000 4500L 4500L)
         let resumed,_ = transition StateWaiting StateChanged
-        equal "state wake retains recent position deadline" 1200 (timerDelay resumed 1800L 0L)
-        equal "state wake after quiet period does not add three seconds" 1 (timerDelay resumed 4000L 0L)
+        equal "state wake retains recent position deadline" 1200 (timerDelay 3000 resumed 1800L 0L)
+        equal "state wake after quiet period does not add three seconds" 1 (timerDelay 3000 resumed 4000L 0L)
         let mutable state = Checking maxButtonChecks
         let mutable delayTotal = 0
         for index in 1..maxButtonChecks do
             let next,action = transition state (Tick true)
             state <- next
             equal "button retry scheduled" Schedule action
-            let delay = timerDelay state (3000L + int64 (index-1)*250L) 0L
+            let delay = timerDelay 3000 state (3000L + int64 (index-1)*250L) 0L
             equal "button interval unchanged" 250 delay
             delayTotal <- delayTotal + delay
         equal "button budget remains five seconds" 5000 delayTotal
         equal "button limit stops" (NotificationWaiting,Nothing) (transition state (Tick true))
-        equal "new position does not slow held-button polling" 250 (timerDelay (ButtonWaiting 8) 5000L 4900L)
-        equal "button phase bypasses quiet wait" false (waitsForSettle (ButtonWaiting 8) 5000L 4900L)
+        equal "new position does not slow held-button polling" 250 (timerDelay 3000 (ButtonWaiting 8) 5000L 4900L)
+        equal "button phase bypasses quiet wait" false (waitsForSettle 3000 (ButtonWaiting 8) 5000L 4900L)
         let released,_ = transition (ButtonWaiting 8) (Tick false)
-        equal "release waits only remaining quiet period" 2900 (timerDelay released 5000L 4900L)
-        equal "release after deadline adds no second quiet period" 1 (timerDelay released 8000L 4900L)
+        equal "release waits only remaining quiet period" 2900 (timerDelay 3000 released 5000L 4900L)
+        equal "release after deadline adds no second quiet period" 1 (timerDelay 3000 released 8000L 4900L)
         equal "settings or move reset cancels candidate" (Idle,Nothing) (transition released Reset)
         printfn "ExternalSnapDeadline: %d checks, 0 failures" checks
     run()

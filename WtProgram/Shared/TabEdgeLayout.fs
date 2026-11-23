@@ -448,19 +448,18 @@ module TabEdgeLayout =
     // position notification renews an exhausted button-wait budget.
     module ExternalSnapRetry =
         let delayMs = 250
-        let settleMs = 3000
         let maxButtonChecks = 20
         type State = Idle | Checking of int | ButtonWaiting of int | StateWaiting | NotificationWaiting
         // Use elapsed monotonic time, not another full quiet period per tick.
-        let remainingMs now changedAt = max 0L (int64 settleMs - max 0L (now - changedAt)) |> int
-        let timerDelay state now changedAt =
+        let remainingMs settleMs now changedAt = max 0L (int64 settleMs - max 0L (now - changedAt)) |> int
+        let timerDelay settleMs state now changedAt =
             match state with
             | ButtonWaiting _ -> delayMs
-            | _ -> max 1 (remainingMs now changedAt)
-        let waitsForSettle state now changedAt =
+            | _ -> max 1 (remainingMs settleMs now changedAt)
+        let waitsForSettle settleMs state now changedAt =
             match state with
             | ButtonWaiting _ -> false
-            | _ -> remainingMs now changedAt > 0
+            | _ -> remainingMs settleMs now changedAt > 0
         type Input = Position | StateChanged | Tick of bool | Blocked | Complete | Reset
         type Action = Nothing | Schedule | Inspect
         let transition state input =

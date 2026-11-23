@@ -3,9 +3,6 @@
 /// Timing and duplicate suppression do not read windows or the shell.
 module TaskbarOrderPolicy =
     [<Literal>]
-    let settleMs = 3000
-
-    [<Literal>]
     let paceMs = 300
 
     [<Literal>]
@@ -33,7 +30,7 @@ module TaskbarOrderPolicy =
 
     type Decision = Wait of int | Execute | Ignore
 
-    let decide changedAt now front members previous =
+    let decide settleMs changedAt now front members previous =
         if Set.count members < 2 || not (Set.contains front members) then Ignore
         else
             let remaining = int64 settleMs - (now - changedAt)

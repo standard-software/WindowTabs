@@ -170,6 +170,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     let os = OS()
     let snapRoomClock = System.Diagnostics.Stopwatch.StartNew()
     let mutable snapRoomChangedAt = 0L
+    let mutable snapRoomSettleMs = 3000
     let mutable snapRoomFront : IntPtr option = None
     let mutable snapRoomLastMember : IntPtr option = None
     let mutable snapRoomTimer : IDisposable option = None
@@ -2067,7 +2068,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let hwnd = snapRoomObserved |> Option.map fst |> Option.defaultValue IntPtr.Zero
         WindowFrameMargin.trace (sprintf "external-snap-room-queue hwnd=%X origin=%s state=-1 retry=%A waitMs=%d"
             (int64 hwnd) origin snapRoomRetry
-            (TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt))
+            (TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomSettleMs snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt))
 #endif
         ()
 
@@ -2127,6 +2128,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                     if snapRoomObserved |> Option.exists (fun (old,_) -> old <> hwnd) then
                         this.traceExternalSnapSkip("front-changed", -1)
                     snapRoomChangedAt <- snapRoomClock.ElapsedMilliseconds
+                    snapRoomSettleMs <- Services.settings.getValue "snapTabMarginDelayMilliseconds" |> unbox<int> |> max 0 |> min 10000
                 snapRoomObserved <- Some(hwnd, bounds)
                 let newWait = snapRoomTimer.IsNone
                 this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Position) |> ignore
@@ -2138,13 +2140,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             match snapRoomObserved with
             | None -> this.traceExternalSnapSkip("no-candidate", -1)
             | Some _ ->
-                let delay = TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt
+                let delay = TabEdgeLayout.ExternalSnapRetry.timerDelay snapRoomSettleMs snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt
                 snapRoomTimer <- Some(ThreadHelper.cancelablePostBack delay (fun () ->
                     snapRoomTimer <- None
                     try
                         if snapRoomDisposed || not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then
                             this.resetExternalSnapRoom(if snapRoomDisposed then "destroy" else "mode")
-                        elif TabEdgeLayout.ExternalSnapRetry.waitsForSettle snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt then
+                        elif TabEdgeLayout.ExternalSnapRetry.waitsForSettle snapRoomSettleMs snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt then
                             this.traceExternalSnapSkip("settling", -1)
                             this.scheduleExternalSnapRoom()
                         else
@@ -2156,7 +2158,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                                 this.traceExternalSnapSkip("button", 6)
                                 this.scheduleExternalSnapRoom()
                             | TabEdgeLayout.ExternalSnapRetry.Inspect ->
-                                if TabEdgeLayout.ExternalSnapRetry.remainingMs snapRoomClock.ElapsedMilliseconds snapRoomChangedAt > 0 then
+                                if TabEdgeLayout.ExternalSnapRetry.remainingMs snapRoomSettleMs snapRoomClock.ElapsedMilliseconds snapRoomChangedAt > 0 then
                                     this.traceExternalSnapSkip("settling", -1)
                                     this.scheduleExternalSnapRoom()
                                 else this.inspectExternalSnapRoom()

@@ -747,6 +747,13 @@ type Settings(isStandAlone) as this =
             if rebuilding then
                 try
                     let settingsJson = this.settingsJson
+                    let readWait key fallback =
+                        try
+                            match settingsJson.getValueCI(key) with
+                            | Some token when token.Type = JTokenType.Integer ->
+                                token.Value<decimal>() |> max 0M |> min 10000M |> int
+                            | _ -> fallback
+                        with _ -> fallback
                     let settings = {
                         includedPaths = Set2(settingsJson.getStringArray("IncludedPaths").def(List2()))
                         excludedPaths = Set2(settingsJson.getStringArray("ExcludedPaths").def(List2()))
@@ -757,6 +764,7 @@ type Settings(isStandAlone) as this =
                         hideInactiveTabs = settingsJson.getBool("HideInactiveTabs").def(false)
                         groupTaskbarButtons = settingsJson.getBool("GroupTaskbarButtons").def(false)
                         taskbarActiveTabFirst = settingsJson.getBool("TaskbarActiveTabFirst").def(false)
+                        taskbarOrderDelayMilliseconds = readWait "TaskbarOrderDelayMilliseconds" 2000
                         enableTabbingByDefault = settingsJson.getBool("EnableTabbingByDefault").def(false)
                         enableCtrlNumberHotKey = settingsJson.getBool("EnableCtrlNumberHotKey").def(false)
                         enableAltNumberHotKey = settingsJson.getBool("EnableAltNumberHotKey").def(false)
@@ -786,6 +794,7 @@ type Settings(isStandAlone) as this =
                         hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
                         lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
                         snapTabMarginMode = SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" settingsJson |> Option.defaultValue SnapTabMarginMode.none
+                        snapTabMarginDelayMilliseconds = readWait "SnapTabMarginDelayMilliseconds" 3000
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
                         snapOnDragDetach = settingsJson.getBool("SnapOnDragDetach").def(false)
                         version = settingsJson.getString("Version").def(String.Empty)
@@ -832,6 +841,7 @@ type Settings(isStandAlone) as this =
                         hideInactiveTabs = false
                         groupTaskbarButtons = false
                         taskbarActiveTabFirst = false
+                        taskbarOrderDelayMilliseconds = 2000
                         enableTabbingByDefault = false
                         enableCtrlNumberHotKey = false
                         enableAltNumberHotKey = false
@@ -849,6 +859,7 @@ type Settings(isStandAlone) as this =
                         hideTabsWhileMoving = false
                         lockWindowPosition = false
                         snapTabMarginMode = SnapTabMarginMode.none
+                        snapTabMarginDelayMilliseconds = 3000
                         changeTabPositionOnSnap = "change"
                         snapOnDragDetach = false
                         version = String.Empty
@@ -879,6 +890,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
             settingsJson.setBool("GroupTaskbarButtons", settings.groupTaskbarButtons)
             settingsJson.setBool("TaskbarActiveTabFirst", settings.taskbarActiveTabFirst)
+            settingsJson.setInt32("TaskbarOrderDelayMilliseconds", max 0 (min 10000 settings.taskbarOrderDelayMilliseconds))
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
@@ -897,6 +909,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
             settingsJson.setBool("SnapTabHeightMargin", SnapTabMarginMode.enabled settings.snapTabMarginMode)
             settingsJson.setString("SnapTabMarginMode", SnapTabMarginMode.normalize settings.snapTabMarginMode)
+            settingsJson.setInt32("SnapTabMarginDelayMilliseconds", max 0 (min 10000 settings.snapTabMarginDelayMilliseconds))
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setBool("SnapOnDragDetach", settings.snapOnDragDetach)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

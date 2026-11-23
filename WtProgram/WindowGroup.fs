@@ -358,6 +358,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
     let mutable taskbarOrderTimer : IDisposable option = None
     let mutable taskbarOrderWork : System.Threading.CancellationTokenSource option = None
     let mutable taskbarOrderChangedAt = 0L
+    let mutable taskbarOrderSettleMs = 2000
     let mutable taskbarOrderObserved : (IntPtr * Set<IntPtr>) option = None
     let mutable taskbarOrderFront : IntPtr option = None
     let mutable taskbarOrderCompleted : (IntPtr * Set<IntPtr>) option = None
@@ -1096,7 +1097,8 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.cancelTaskbarOrderWork()
                     taskbarOrderObserved <- observed
                     taskbarOrderChangedAt <- stripClock.ElapsedMilliseconds
-                    if taskbarOrderTimer.IsNone then this.scheduleTaskbarOrder(TaskbarOrderPolicy.settleMs)
+                    taskbarOrderSettleMs <- Services.settings.getValue "taskbarOrderDelayMilliseconds" |> unbox<int> |> max 0 |> min 10000
+                    if taskbarOrderTimer.IsNone then this.scheduleTaskbarOrder(max 1 taskbarOrderSettleMs)
 
     member private this.scheduleTaskbarOrder(delay) =
         taskbarOrderTimer <- Some(ThreadHelper.cancelablePostBack delay (fun () ->
@@ -1105,7 +1107,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                 if taskbarOrderEnabled && not isDestroyed.value && desktopShown then
                     match taskbarOrderObserved with
                     | Some(front, members) when members = Set.ofList this.windows.items.list ->
-                        match TaskbarOrderPolicy.decide taskbarOrderChangedAt stripClock.ElapsedMilliseconds front members taskbarOrderCompleted with
+                        match TaskbarOrderPolicy.decide taskbarOrderSettleMs taskbarOrderChangedAt stripClock.ElapsedMilliseconds front members taskbarOrderCompleted with
                         | TaskbarOrderPolicy.Wait remaining -> this.scheduleTaskbarOrder(remaining)
                         | TaskbarOrderPolicy.Ignore -> ()
                         | TaskbarOrderPolicy.Execute ->

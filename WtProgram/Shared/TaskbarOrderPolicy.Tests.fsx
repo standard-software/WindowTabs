@@ -3,22 +3,21 @@ open Bemo.TaskbarOrderPolicy
 
 let check name expected actual = if expected <> actual then failwith name
 let members = Set.ofList [1; 2; 3]
-check "fixed delay" 3000 settleMs
-check "initial wait" (Wait 3000) (decide 0L 0L 1 members None)
-check "before deadline" (Wait 1) (decide 0L 2999L 1 members None)
-check "at deadline" Execute (decide 0L 3000L 1 members None)
-check "late callback" Execute (decide 0L 5000L 1 members None)
-check "change postpones" (Wait 2500) (decide 2500L 3000L 2 members None)
+check "initial wait" (Wait 3000) (decide 3000 0L 0L 1 members None)
+check "before deadline" (Wait 1) (decide 3000 0L 2999L 1 members None)
+check "at deadline" Execute (decide 3000 0L 3000L 1 members None)
+check "late callback" Execute (decide 3000 0L 5000L 1 members None)
+check "change postpones" (Wait 2500) (decide 3000 2500L 3000L 2 members None)
 for changed in [1000L; 2000L; 3000L; 4000L] do
-    check "busy changes wait" (Wait 2999) (decide changed (changed + 1L) 2 members None)
-check "quiet after burst" Execute (decide 4000L 7000L 2 members None)
-check "same front and members" Ignore (decide 0L 3000L 1 members (Some(1, members)))
-check "new front" Execute (decide 0L 3000L 2 members (Some(1, members)))
-check "new member" Execute (decide 0L 3000L 1 (members.Add 4) (Some(1, members)))
-check "removed member" Execute (decide 0L 3000L 1 (members.Remove 3) (Some(1, members)))
-check "empty group" Ignore (decide 0L 3000L 1 Set.empty None)
-check "single member" Ignore (decide 0L 3000L 1 (Set.singleton 1) None)
-check "front removed" Ignore (decide 0L 3000L 4 members None)
+    check "busy changes wait" (Wait 2999) (decide 3000 changed (changed + 1L) 2 members None)
+check "quiet after burst" Execute (decide 3000 4000L 7000L 2 members None)
+check "same front and members" Ignore (decide 3000 0L 3000L 1 members (Some(1, members)))
+check "new front" Execute (decide 3000 0L 3000L 2 members (Some(1, members)))
+check "new member" Execute (decide 3000 0L 3000L 1 (members.Add 4) (Some(1, members)))
+check "removed member" Execute (decide 3000 0L 3000L 1 (members.Remove 3) (Some(1, members)))
+check "empty group" Ignore (decide 3000 0L 3000L 1 Set.empty None)
+check "single member" Ignore (decide 3000 0L 3000L 1 (Set.singleton 1) None)
+check "front removed" Ignore (decide 3000 0L 3000L 4 members None)
 check "fixed registration interval" 300 paceMs
 check "bounded additions" 3 addAttempts
 check "first registration is immediate" 0 (paceRemaining 0 None)

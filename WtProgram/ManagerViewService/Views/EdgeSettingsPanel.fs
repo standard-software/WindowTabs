@@ -140,57 +140,58 @@ module EdgeRows =
         combo.MinimumSize <- Size(width, 0)
         combo.DropDownWidth <- max combo.Width width
 
-    /// The same radio rows and delay field on every edge page.
+    /// The same choice and wait field on every edge page: 3/5 and 2/5.
     let hideTabsControls (read: unit -> string * int) (save: string -> int -> unit) =
-        let table = UIHelper.settingsRadioGroup 3 3
-        table.Padding <- Padding(0)
-        table.Margin <- Padding(0)
-        let delay = new TextBox(Width = 60, Anchor = AnchorStyles.Left, Margin = Padding(0))
-        SettingsField.apply delay
+        let modes = ["never", "HideTabsNever"; "down", "HideTabsWhenDown"; "doubleclick", "HideTabsOnClick"]
+        let combo = choice (modes |> List.map (snd >> Localization.getString))
+        fitChoiceWidth combo
+        combo.DropDown.Add(fun _ -> fitChoiceWidth combo)
+        let delay = SettingsNumericUpDown.Create()
+        delay.Minimum <- 0m
+        delay.Maximum <- 10000m
+        delay.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+        delay.Margin <- Padding(0, marginPx, 0, marginPx)
         let label = caption (Localization.getString "HideTabsDelayMilliseconds")
-        label.Margin <- Padding(10, 0, 3, 0)
-        let radios =
-            ["never", "HideTabsNever"; "down", "HideTabsWhenDown"; "doubleclick", "HideTabsOnClick"]
-            |> List.mapi (fun row (mode, key) ->
-                let radio = UIHelper.settingsRadio key
-                table.Controls.Add(radio, 0, row)
-                mode, radio)
-        // Sit on the same line as the radio button of this row.
-        let rowRadio = snd radios.[1]
-        label.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left
-        label.Margin <- Padding(10, rowRadio.Margin.Top, 3, 0)
-        label.MinimumSize <- rowRadio.MinimumSize
-        table.Controls.Add(label, 1, 1)
-        table.Controls.Add(delay, 2, 1)
+        label.Margin <- Padding(10, marginPx, 5, marginPx)
+        let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill, Margin = Padding(0),
+                                        AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
+        cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+        cell.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        cell.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        cell.Controls.Add(label, 0, 0)
+        cell.Controls.Add(delay, 1, 0)
+        let table = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Margin = Padding(0),
+                                         AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
+        table.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
+        table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 60.0f)) |> ignore
+        table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 40.0f)) |> ignore
+        table.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        table.Controls.Add(combo, 0, 0)
+        table.Controls.Add(cell, 1, 0)
         let mutable refreshing = false
         let refresh () =
             refreshing <- true
             try
                 let mode, milliseconds = read ()
-                for value, radio in radios do radio.Checked <- (value = TabEdgeSettings.normalizeHideMode mode)
-                delay.Text <- string milliseconds
-                delay.Enabled <- (mode = "down")
+                let mode = TabEdgeSettings.normalizeHideMode mode
+                combo.SelectedIndex <- modes |> List.tryFindIndex (fun (value, _) -> value = mode) |> Option.defaultValue 0
+                delay.Value <- decimal (max 0 (min 10000 milliseconds))
+                // The wait is used only by "hide after the given time".
+                cell.Enabled <- (mode = "down")
             finally refreshing <- false
         refresh ()
-        for mode, radio in radios do
-            radio.CheckedChanged.Add(fun _ ->
-                if radio.Checked && not refreshing then
-                    let current, milliseconds = read ()
-                    if mode <> current then save mode milliseconds
-                    delay.Enabled <- (mode = "down"))
-        let commitDelay () =
+        combo.SelectedIndexChanged.Add(fun _ ->
+            if not refreshing && combo.SelectedIndex >= 0 then
+                let mode = fst modes.[combo.SelectedIndex]
+                let current, milliseconds = read ()
+                if mode <> current then save mode milliseconds
+                cell.Enabled <- (mode = "down"))
+        delay.ValueChanged.Add(fun _ ->
             if not refreshing then
                 let mode, previous = read ()
-                match Int32.TryParse delay.Text with
-                | true, value when value >= 0 && value <= 10000 ->
-                    if value <> previous then save mode value
-                | _ -> delay.Text <- string previous
-        delay.LostFocus.Add(fun _ -> commitDelay ())
+                if int delay.Value <> previous then save mode (int delay.Value))
         let defaultDelay = snd (TabEdgeSettings.hideSettings (JObject()) TabEdges.Edge.Top)
-        NumericFieldMenu.attach delay (fun text -> fst (Int32.TryParse text)) commitDelay
-            (Some(string defaultDelay, fun () ->
-                delay.Text <- string defaultDelay
-                commitDelay ()))
+        delay.SetNumericMenu(Some(string defaultDelay, fun () -> delay.Value <- decimal defaultDelay))
         table, refresh
 
     /// A number field with IntEditor's range.

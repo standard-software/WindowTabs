@@ -2,6 +2,17 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.22_next4
+
+- Two wait times can be set (#36)
+  - Before the tab margin is added after a snap by Windows:
+    Interaction page, default 3000 ms.
+  - Before the active tab is moved to the front of the
+    taskbar buttons: General page, default 2000 ms (was 3000).
+- "Tab room when snapping or moving": shorter wording
+- "Hide inside tabs" is a drop-down list with its wait time
+- The items of the General page are in a new order
+
 ## version ss_2026.11.22_next3
 
 - Number fields of the settings dialog have their own

@@ -33,6 +33,7 @@ type SettingsRec = {
     hideInactiveTabs: bool
     groupTaskbarButtons: bool
     taskbarActiveTabFirst: bool
+    taskbarOrderDelayMilliseconds: int
     enableTabbingByDefault: bool
     enableCtrlNumberHotKey: bool
     // Alt+1 .. Alt+9 activate tabs. Exclusive with the Ctrl setting above in
@@ -54,6 +55,7 @@ type SettingsRec = {
     hideTabsWhileMoving: bool
     lockWindowPosition: bool
     snapTabMarginMode: string
+    snapTabMarginDelayMilliseconds: int
     // "change": on a snap or move to the left, right or a corner, re-align every
     // tab of a uniformly aligned group to that side. "nochange": leave alignment alone.
     changeTabPositionOnSnap: string

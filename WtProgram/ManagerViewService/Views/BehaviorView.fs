@@ -7,6 +7,49 @@ open Bemo.Win32
 open Bemo.Win32.Forms
 
 
+module private BehaviorControls =
+    let row (shares: float32 list) (controls: Control list) =
+        let panel = new TableLayoutPanel(ColumnCount = shares.Length, RowCount = 1, Dock = DockStyle.Fill,
+                                         Margin = Padding(0), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
+        for share in shares do
+            panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, share * 100.0f / List.sum shares)) |> ignore
+        panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        controls |> List.iteri (fun column control ->
+            control.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right
+            control.Margin <- Padding(0)
+            // Keep a width a control asked for (a choice sized to its longest item).
+            control.MinimumSize <- Size(control.MinimumSize.Width, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
+            panel.Controls.Add(control, column, 0))
+        panel :> Control
+
+    let labelled key leftMargin (number: Control) =
+        let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill,
+                                        AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                                        Margin = Padding(leftMargin, 0, 0, 0))
+        cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
+        cell.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        cell.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        let label = new Label(AutoSize = true, Text = Localization.getString(key),
+                              TextAlign = ContentAlignment.MiddleLeft,
+                              MinimumSize = Size(0, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx),
+                              Anchor = (AnchorStyles.Top ||| AnchorStyles.Left), Margin = Padding(0, 0, 5, 0))
+        number.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right
+        cell.Controls.Add(label, 0, 0)
+        cell.Controls.Add(number, 1, 0)
+        cell :> Control
+
+    let number key minimum maximum defaultValue save (refreshers: ResizeArray<unit -> unit>) =
+        let number = SettingsNumericUpDown.Create()
+        number.Minimum <- decimal minimum
+        number.Maximum <- decimal maximum
+        let refresh() = number.Value <- decimal (max minimum (min maximum (unbox<int>(Services.settings.getValue key))))
+        refresh()
+        refreshers.Add(refresh)
+        number.ValueChanged.Add(fun _ -> save key (box (int number.Value)))
+        number.Margin <- Padding(0)
+        number.SetNumericMenu(Some(string defaultValue, fun () -> number.Value <- decimal defaultValue))
+        number :> Control
+
 type InteractionView() =
     let mutable refreshing = false
     let refreshers = ResizeArray<unit -> unit>()
@@ -65,51 +108,25 @@ type InteractionView() =
             settingsChoice "snapTabMarginMode" SnapTabMarginMode.normalize SnapTabMarginMode.choices
 
         let previewNumber key minimum maximum defaultValue =
-            let number = SettingsNumericUpDown.Create()
-            number.Minimum <- decimal minimum
-            number.Maximum <- decimal maximum
-            number.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
-            let refresh() = number.Value <- decimal (max minimum (min maximum (unbox<int>(Services.settings.getValue key))))
-            refresh()
-            refreshers.Add(refresh)
-            number.ValueChanged.Add(fun _ -> save key (box (int number.Value)))
-            number.Margin <- Padding(0)
-            number.SetNumericMenu(Some(string defaultValue, fun () -> number.Value <- decimal defaultValue))
-            number :> Control
+            BehaviorControls.number key minimum maximum defaultValue save refreshers
 
         let previewControls =
-            // One row: the check box takes 1/7, the delay and the size 3/7 each.
-            // Everything starts at the top of the row with the caption's
-            // height, so the texts sit on the line of the row's caption.
-            let lineHeight = UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx
-            let top = AnchorStyles.Top ||| AnchorStyles.Left
-            let panel = new TableLayoutPanel(ColumnCount = 3, RowCount = 1, Dock = DockStyle.Fill, Margin = Padding(0),
-                                             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
-            for share in [1.0f; 3.0f; 3.0f] do
-                panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, share * 100.0f / 7.0f)) |> ignore
-            panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-            let check = settingsCheckbox "enableTabPreview"
-            check.Anchor <- top
-            check.Margin <- Padding(0)
-            check.MinimumSize <- Size(0, lineHeight)
-            panel.Controls.Add(check, 0, 0)
-            let labelled column key (number: Control) =
-                let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill,
-                                                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                                                Margin = Padding((if column = 1 then 0 else 20), 0, 0, 0))
-                cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
-                cell.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
-                cell.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-                let label = new Label(AutoSize = true, Text = Localization.getString(key),
-                                      TextAlign = ContentAlignment.MiddleLeft, MinimumSize = Size(0, lineHeight),
-                                      Anchor = top, Margin = Padding(0, 0, 5, 0))
-                number.Anchor <- top ||| AnchorStyles.Right
-                cell.Controls.Add(label, 0, 0)
-                cell.Controls.Add(number, 1, 0)
-                panel.Controls.Add(cell, column, 0)
-            labelled 1 "HideTabsDelayMilliseconds" (previewNumber "tabPreviewDelay" 0 5000 500)
-            labelled 2 "TabPreviewSize" (previewNumber "tabPreviewSize" 80 1000 320)
-            panel :> Control
+            let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "tabPreviewDelay" 0 5000 500)
+            let size = BehaviorControls.labelled "TabPreviewSize" 0 (previewNumber "tabPreviewSize" 80 1000 320)
+            let panel = BehaviorControls.row [1.0f; 2.0f; 2.0f] [settingsCheckbox "enableTabPreview"; size; delay]
+            delay.Margin <- Padding(10, 0, 0, 0)
+            panel
+
+        let snapMarginControls =
+            let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "snapTabMarginDelayMilliseconds" 0 10000 3000)
+            let refreshEnabled() =
+                delay.Enabled <- Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.externalEnabled
+            refreshEnabled()
+            refreshers.Add(refreshEnabled)
+            (snapMarginChoice :?> ComboBox).SelectedIndexChanged.Add(fun _ -> refreshEnabled())
+            let panel = BehaviorControls.row [3.0f; 2.0f] [snapMarginChoice; delay]
+            delay.Margin <- Padding(10, 0, 0, 0)
+            panel
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
@@ -118,7 +135,7 @@ type InteractionView() =
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("LockWindowPosition", lockPositionCheckbox)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
-            ("SnapTabMarginMode", snapMarginChoice)
+            ("SnapTabMarginMode", snapMarginControls)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
             ("EnableTabPreview", previewControls)
         ])
@@ -204,14 +221,24 @@ type GeneralView() =
                              Margin = Padding(3, 0, 3, 0), TextAlign = ContentAlignment.MiddleLeft,
                              Text = Localization.getString("GroupTaskbarButtonsNote"))
         taskbarButtons.Controls.Add(note)
+        let activeFirst = settingsCheckbox "taskbarActiveTabFirst"
+        let save key value = if not refreshing then Services.settings.setValue(key, value)
+        let delayNumber = BehaviorControls.number "taskbarOrderDelayMilliseconds" 0 10000 2000 save refreshers
+        let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 delayNumber
+        let refreshEnabled() = delay.Enabled <- Services.settings.getValue "taskbarActiveTabFirst" |> unbox<bool>
+        refreshEnabled()
+        refreshers.Add(refreshEnabled)
+        (activeFirst :?> CheckBox).CheckedChanged.Add(fun _ -> refreshEnabled())
+        let activeFirstControls = BehaviorControls.row [3.0f; 2.0f] [activeFirst; delay]
+        delay.Margin <- Padding(10, 0, 0, 0)
         let fields = List2([
             ("RunAtStartup", startupCheckbox())
             ("IsTabbingEnabledForAllProcessesByDefault", checkBox(prop<IFilterService, bool>(Services.filter, "isTabbingEnabledForAllProcessesByDefault")))
             ("GroupTaskbarButtons", taskbarButtons :> Control)
+            ("TaskbarActiveTabFirst", activeFirstControls)
             ("HideInactiveTabs", settingsCheckbox "hideInactiveTabs")
             ("HideTabsOnFullscreen", settingsCheckbox "hideTabsOnFullscreen")
             ("HideTabsWhileMoving", settingsCheckbox "hideTabsWhileMoving")
-            ("TaskbarActiveTabFirst", settingsCheckbox "taskbarActiveTabFirst")
         ])
         let panel = UIHelper.form fields
         panel.Padding <- UIHelper.settingsPagePadding
