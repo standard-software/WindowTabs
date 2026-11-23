@@ -141,6 +141,7 @@ Auto Grouping brings windows of the same app together; shared categories (1–10
 - Rename a tab by right-clicking it.
 - Add a tab by launching another instance of the app in the selected tab. You can also choose its position or tab group.
 - Close the tabs to the right or left of a tab, all tabs on an edge, or the whole group.
+- Rest the pointer on a tab to see a preview of its window. The wait time and the size can be changed in the settings.
 
 ### Compatibility
 
