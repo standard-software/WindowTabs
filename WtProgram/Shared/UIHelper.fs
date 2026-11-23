@@ -123,9 +123,16 @@ type SettingsNumericUpDown() =
         control.SetNumericMenu(None)
         control
     member private this.CommitNumericText() = this.ValidateEditText()
+    // A field that cannot be negative does not take a typed minus sign either.
+    override this.OnKeyPress(e) =
+        if e.KeyChar = '-' && this.Minimum >= 0m then e.Handled <- true
+        base.OnKeyPress(e)
     member this.SetNumericMenu(reset) =
+        // Digits only; a leading minus sign only where the field allows negative values.
         NumericFieldMenu.attach this
-            (fun text -> fst (Decimal.TryParse(text, Globalization.NumberStyles.Number, Globalization.CultureInfo.CurrentCulture)))
+            (fun text ->
+                let digits = if this.Minimum < 0m && text.StartsWith "-" then text.Substring 1 else text
+                digits.Length > 0 && digits.Length <= 9 && digits |> Seq.forall (fun c -> c >= '0' && c <= '9'))
             (fun () -> this.CommitNumericText()) reset
     override this.OnLayout(e) =
         if not (SettingsField.arrangingNumeric this) then

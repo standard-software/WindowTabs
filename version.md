@@ -14,6 +14,8 @@
 - The items of the General page are in a new order
 - Disabled labels of the settings dialog are drawn in plain
   gray, without the shadow
+- Number fields take digits only when pasting; a minus sign
+  only where negative values are allowed
 
 ## version ss_2026.11.22_next3
 
