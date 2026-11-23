@@ -219,7 +219,7 @@ type PendingRegroup = {
 }
 
 type Program() as this =
-    let version = "ss_2026.11.22_next4"
+    let version = "ss_2026.11.22_next5"
     let isStandAlone = System.Diagnostics.Debugger.IsAttached
 
     let Cell = CellScope()
@@ -2577,7 +2577,7 @@ type Program() as this =
     // ------------------------------------------------------------- hot keys --
     //
     // The keys of the Shortcut Keys tab - numbers 1-9, Next / Previous Tab,
-    // add a tab to the right - are RegisterHotKey hot keys, and a key that
+    // add a tab to the right, close all tabs - are RegisterHotKey hot keys, and a key that
     // RegisterHotKey holds is taken from EVERY program. So they are held only
     // while a tabbed window is in front and released the moment anything
     // else is, which is what leaves Ctrl+1 to Notepad. HotKeyPolicy decides;
@@ -2685,6 +2685,7 @@ type Program() as this =
             | HotKeyPolicy.ActivateTab n -> group.activateIndex(n - 1)
             | HotKeyPolicy.NextTab -> group.switchWindow(true, false)
             | HotKeyPolicy.PrevTab -> group.switchWindow(false, false)
+            | HotKeyPolicy.CloseAllTabs -> TabStripDecorator.closeAllTabs(group.hwnd)
             | HotKeyPolicy.NewTabRight ->
                 // The tab menu's "New tab : right of this tab", from the
                 // keyboard. The same NewWindowLaunch.start the menu item

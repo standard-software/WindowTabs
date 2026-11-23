@@ -128,6 +128,7 @@
   "NextTab": "Nächster Tab",
   "PrevTab": "Vorheriger Tab",
   "NewTabRightOfActive": "Neuen Tab rechts neben dem aktiven Tab hinzufügen",
+  "CloseAllTabsOfGroup": "Alle Tabs der Gruppe schließen",
   "HotKeyNone": "Keine",
 
   "Workspace": "Arbeitsbereich",

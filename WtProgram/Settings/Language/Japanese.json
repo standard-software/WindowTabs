@@ -130,6 +130,7 @@
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
   "NewTabRightOfActive": "アクティブタブの右にタブを追加する",
+  "CloseAllTabsOfGroup": "グループのすべてのタブを閉じる",
   "HotKeyNone": "なし",
 
   "Workspace": "ワークスペース",

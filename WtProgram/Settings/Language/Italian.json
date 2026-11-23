@@ -128,6 +128,7 @@
   "NextTab": "Scheda successiva",
   "PrevTab": "Scheda precedente",
   "NewTabRightOfActive": "Aggiungi una nuova scheda a destra della scheda attiva",
+  "CloseAllTabsOfGroup": "Chiudi tutte le schede del gruppo",
   "HotKeyNone": "Nessuno",
 
   "Workspace": "Area di lavoro",

@@ -10,7 +10,8 @@ open Bemo.Win32.Forms
 // One form in the layout the other tabs use (UIHelper.form: 250-px caption
 // column, input column). Rows, top to bottom: "Activate Tab" with the 3 x 3
 // grid of number fields and the two mode check boxes under it; Next Tab;
-// Previous Tab; "Add a new tab to the right of the active tab". Every field
+// Previous Tab; "Add a new tab to the right of the active tab";
+// "Close all tabs of the group". Every field
 // is a HotKeyEditor. Next / Previous retain their settings keys
 // on the Shortcut Keys page, so nobody's setting is lost.
 //
@@ -182,6 +183,7 @@ type ShortcutKeysView() =
     let nextTabEditor = boundEditor HotKeyPolicy.nextTabKey
     let prevTabEditor = boundEditor HotKeyPolicy.prevTabKey
     let newTabRightEditor = boundEditor HotKeyPolicy.newTabRightKey
+    let closeAllTabsEditor = boundEditor HotKeyPolicy.closeAllTabsKey
 
     let panel =
         let form = UIHelper.form (List2([
@@ -189,6 +191,7 @@ type ShortcutKeysView() =
             ("NextTab", nextTabEditor.control)
             ("PrevTab", prevTabEditor.control)
             ("NewTabRightOfActive", newTabRightEditor.control)
+            ("CloseAllTabsOfGroup", closeAllTabsEditor.control)
             ]))
         // The nested table itself owns five complete 35-px rows. An additional
         // outer margin would make the following shortcut start off-grid.
@@ -209,7 +212,8 @@ type ShortcutKeysView() =
             altCheck.Checked <- alt && not ctrl
             for key, editor in [HotKeyPolicy.nextTabKey, nextTabEditor;
                                 HotKeyPolicy.prevTabKey, prevTabEditor;
-                                HotKeyPolicy.newTabRightKey, newTabRightEditor] do
+                                HotKeyPolicy.newTabRightKey, newTabRightEditor;
+                                HotKeyPolicy.closeAllTabsKey, closeAllTabsEditor] do
                 editor.value <- box(Services.program.getHotKey(key))
             applyMode()
         finally

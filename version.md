@@ -2,6 +2,11 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
+## version ss_2026.11.22_next5
+
+- New shortcut key: close all tabs of the group (#39)
+  - Shortcut Keys page. Not set by default.
+
 ## version ss_2026.11.22_next4
 
 - Two wait times can be set (#36)

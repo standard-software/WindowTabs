@@ -75,6 +75,7 @@ module HotKeyPolicy =
     let nextTabKey = "nextTab"
     let prevTabKey = "prevTab"
     let newTabRightKey = "newTabRight"
+    let closeAllTabsKey = "closeAllTabs"
     let activateTabKey (n: int) = sprintf "activateTab%d" n
 
     /// The tab numbers the grid offers.
@@ -131,6 +132,7 @@ module HotKeyPolicy =
         /// Start the foreground window's program again and put the new
         /// window right of the active tab.
         | NewTabRight
+        | CloseAllTabs
 
     /// One key to hold: its settings name, its packed code, its action.
     type Binding = {
@@ -143,7 +145,8 @@ module HotKeyPolicy =
     let describe (b: Binding) = sprintf "%s=0x%04X" b.name b.code
 
     /// Every key the settings ask for, in the order of the dialog: numbers
-    /// 1-9, Next Tab, Previous Tab, add a tab to the right. `stored` reads a
+    /// 1-9, Next Tab, Previous Tab, add a tab to the right, close all tabs.
+    /// `stored` reads a
     /// hot key by settings name. Fields left at None are not in the list: an
     /// unset key must not be registered, or it would be VK 0 with some
     /// modifiers and RegisterHotKey would fail or, worse, succeed.
@@ -156,7 +159,8 @@ module HotKeyPolicy =
         let others =
             [ { name = nextTabKey; code = stored nextTabKey; action = NextTab }
               { name = prevTabKey; code = stored prevTabKey; action = PrevTab }
-              { name = newTabRightKey; code = stored newTabRightKey; action = NewTabRight } ]
+              { name = newTabRightKey; code = stored newTabRightKey; action = NewTabRight }
+              { name = closeAllTabsKey; code = stored closeAllTabsKey; action = CloseAllTabs } ]
         numberBindings @ others |> List.filter (fun b -> isSet b.code)
 
     /// Two fields holding one key. RegisterHotKey would refuse the second

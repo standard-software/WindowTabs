@@ -128,6 +128,7 @@
   "NextTab": "Następna karta",
   "PrevTab": "Poprzednia karta",
   "NewTabRightOfActive": "Dodaj nową kartę po prawej stronie aktywnej karty",
+  "CloseAllTabsOfGroup": "Zamknij wszystkie karty grupy",
   "HotKeyNone": "Brak",
 
   "Workspace": "Obszar roboczy",

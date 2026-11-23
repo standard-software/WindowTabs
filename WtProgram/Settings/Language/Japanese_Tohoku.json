@@ -128,6 +128,7 @@
   "NextTab": "次のタブ",
   "PrevTab": "前のタブ",
   "NewTabRightOfActive": "アクティブなタブの右にタブ足すべ",
+  "CloseAllTabsOfGroup": "グループのすべてのタブを閉じるべ",
   "HotKeyNone": "ねえ",
 
   "Workspace": "ワークスペース",

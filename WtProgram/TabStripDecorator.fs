@@ -1356,6 +1356,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 let (Tab(tabHwnd)) = tab
                 this.onCloseWindow tabHwnd
 
+    // Dispatch to the owning group thread and reuse the menu command.
+    static member closeAllTabs(groupHwnd: IntPtr) =
+        let target = lock decorators (fun () ->
+            match decorators.TryGetValue(groupHwnd) with
+            | true, decorator -> Some decorator
+            | _ -> None)
+        target |> Option.iter (fun decorator ->
+            decorator.group.invokeAsync(fun () -> decorator.onCloseAllWindows()))
+
     member private this.onCloseAllWindows(?edge: TabEdges.Edge) =
         group.windows.items.iter (fun hwnd ->
             if edge |> Option.forall (fun e -> this.ts.edgeOf(Tab hwnd) = e) then
@@ -4137,8 +4146,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             })
 
         let closeAllTabsItem =
+            let caption = String.Format(Localization.getString("CloseAllTabsFormat"), group.windows.items.count)
+            let darkMode = defaultArg (Services.settings.root.getBool("EnableDarkMode")) false
+            let shortcut = Bemo.Win32.HotKeyControl.FormatMenuShortcut(Services.program.getHotKey(HotKeyPolicy.closeAllTabsKey), darkMode)
             CmiRegular({
-                text = String.Format(Localization.getString("CloseAllTabsFormat"), group.windows.items.count)
+                text = if String.IsNullOrEmpty(shortcut) then caption else caption + "\t" + shortcut
                 image = None
                 click = fun() -> this.onCloseAllWindows()
                 flags = List2()

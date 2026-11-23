@@ -128,6 +128,7 @@
   "NextTab": "다음 탭",
   "PrevTab": "이전 탭",
   "NewTabRightOfActive": "활성 탭 오른쪽에 새 탭 추가",
+  "CloseAllTabsOfGroup": "그룹의 모든 탭 닫기",
   "HotKeyNone": "없음",
 
   "Workspace": "작업 영역",

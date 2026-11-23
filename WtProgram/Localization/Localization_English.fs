@@ -153,6 +153,7 @@ module Localization_English =
         ("ActivateTab", "Activate Tab")
         ("EnableAltNumberHotKey", "Enable Alt+1, ...Alt+9 to activate tab")
         ("NewTabRightOfActive", "Add a new tab to the right of the active tab")
+        ("CloseAllTabsOfGroup", "Close all tabs of the group")
 
         ("Workspace", "Workspace")
         ("New", "New")

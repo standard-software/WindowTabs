@@ -130,6 +130,7 @@
   "NextTab": "Next Tab",
   "PrevTab": "Previous Tab",
   "NewTabRightOfActive": "Add a new tab to the right of the active tab",
+  "CloseAllTabsOfGroup": "Close all tabs of the group",
   "HotKeyNone": "None",
 
   "Workspace": "Workspace",

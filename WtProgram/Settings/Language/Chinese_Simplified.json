@@ -128,6 +128,7 @@
   "NextTab": "下一个标签页",
   "PrevTab": "上一个标签页",
   "NewTabRightOfActive": "在活动标签页右侧添加新标签页",
+  "CloseAllTabsOfGroup": "关闭组内所有标签页",
   "HotKeyNone": "无",
 
   "Workspace": "工作区",
