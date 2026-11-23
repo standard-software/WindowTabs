@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Chỉ khi neo hoặc di chuyển bằng WindowTabs",
   "SnapTabMarginAll": "Khi neo bằng WindowTabs và Windows",
   "SnapOnDragDetach": "Ghép vào cạnh màn hình khi kéo thẻ ra thành cửa sổ mới",
+  "EnableTabPreview": "Hiển thị bản xem trước cửa sổ khi di chuột qua thẻ",
+  "TabPreviewSize": "Kích thước cạnh dài",
 
   "General": "Chung",
   "RunAtStartup": "Chạy WindowTabs khi khởi động",

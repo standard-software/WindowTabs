@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Ancrage ou déplacement par WindowTabs uniquement",
   "SnapTabMarginAll": "Ancrage par WindowTabs et Windows",
   "SnapOnDragDetach": "Ancrer au bord de l'écran en faisant glisser un onglet vers une nouvelle fenêtre",
+  "EnableTabPreview": "Afficher un aperçu de la fenêtre au survol d’un onglet",
+  "TabPreviewSize": "Taille du côté long",
 
   "General": "Général",
   "RunAtStartup": "Lancer WindowTabs au démarrage",

@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Nur Andocken oder Verschieben mit WindowTabs",
   "SnapTabMarginAll": "Andocken mit WindowTabs und Windows",
   "SnapOnDragDetach": "Beim Herausziehen eines Tabs in ein neues Fenster am Bildschirmrand andocken",
+  "EnableTabPreview": "Fenstervorschau beim Überfahren eines Tabs anzeigen",
+  "TabPreviewSize": "Größe der langen Seite",
 
   "General": "Allgemein",
   "RunAtStartup": "WindowTabs beim Systemstart ausführen",

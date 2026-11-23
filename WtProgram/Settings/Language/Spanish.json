@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Solo al acoplar o mover con WindowTabs",
   "SnapTabMarginAll": "Al acoplar con WindowTabs y Windows",
   "SnapOnDragDetach": "Acoplar al borde de la pantalla al arrastrar una pestaña a una nueva ventana",
+  "EnableTabPreview": "Mostrar la vista previa de la ventana al pasar el ratón sobre una pestaña",
+  "TabPreviewSize": "Tamaño del lado largo",
 
   "General": "General",
   "RunAtStartup": "Ejecutar WindowTabs al iniciar el sistema",

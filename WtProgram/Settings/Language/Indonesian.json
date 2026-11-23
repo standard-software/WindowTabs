@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Hanya penempelan atau pemindahan oleh WindowTabs",
   "SnapTabMarginAll": "Penempelan oleh WindowTabs dan Windows",
   "SnapOnDragDetach": "Snap ke tepi layar saat menyeret tab keluar menjadi jendela baru",
+  "EnableTabPreview": "Tampilkan pratinjau jendela saat mengarahkan kursor ke tab",
+  "TabPreviewSize": "Ukuran sisi panjang",
 
   "General": "Umum",
   "RunAtStartup": "Jalankan WindowTabs saat startup",

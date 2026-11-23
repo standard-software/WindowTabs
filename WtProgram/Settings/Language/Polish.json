@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Tylko przyciąganie lub przenoszenie przez WindowTabs",
   "SnapTabMarginAll": "Przyciąganie przez WindowTabs i Windows",
   "SnapOnDragDetach": "Przyciągaj do krawędzi ekranu przy przeciąganiu karty do nowego okna",
+  "EnableTabPreview": "Pokaż podgląd okna po najechaniu na kartę",
+  "TabPreviewSize": "Rozmiar dłuższego boku",
 
   "General": "Ogólne",
   "RunAtStartup": "Uruchamiaj WindowTabs przy starcie systemu",

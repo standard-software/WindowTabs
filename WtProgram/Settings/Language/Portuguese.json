@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Somente encaixe ou movimento pelo WindowTabs",
   "SnapTabMarginAll": "Encaixe pelo WindowTabs e Windows",
   "SnapOnDragDetach": "Ajustar à borda da tela ao arrastar uma guia para uma nova janela",
+  "EnableTabPreview": "Mostrar a pré-visualização da janela ao passar o mouse sobre uma guia",
+  "TabPreviewSize": "Tamanho do lado maior",
 
   "General": "Geral",
   "RunAtStartup": "Executar o WindowTabs na inicialização",

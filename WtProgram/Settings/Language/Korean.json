@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "WindowTabs로 스냅 또는 이동할 때만",
   "SnapTabMarginAll": "WindowTabs 및 Windows 기본 스냅 시",
   "SnapOnDragDetach": "탭을 끌어 새 창으로 분리할 때 놓은 위치에 따라 화면 가장자리에 스냅",
+  "EnableTabPreview": "탭에 마우스를 올리면 창 미리 보기 표시",
+  "TabPreviewSize": "긴 변 크기",
 
   "General": "일반",
   "RunAtStartup": "시작 시 WindowTabs 실행",

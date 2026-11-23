@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Solo aggancio o spostamento con WindowTabs",
   "SnapTabMarginAll": "Aggancio con WindowTabs e Windows",
   "SnapOnDragDetach": "Aggancia al bordo dello schermo trascinando una scheda in una nuova finestra",
+  "EnableTabPreview": "Mostra l’anteprima della finestra al passaggio del mouse su una scheda",
+  "TabPreviewSize": "Dimensione del lato lungo",
 
   "General": "Generale",
   "RunAtStartup": "Esegui WindowTabs all'avvio",

@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "Yalnızca WindowTabs ile yaslama veya taşıma",
   "SnapTabMarginAll": "WindowTabs ve Windows ile yaslama",
   "SnapOnDragDetach": "Sekmeyi yeni pencereye sürükleyip ayırırken ekran kenarına yasla",
+  "EnableTabPreview": "Fareyle sekmenin üzerine gelince pencere önizlemesini göster",
+  "TabPreviewSize": "Uzun kenar boyutu",
 
   "General": "Genel",
   "RunAtStartup": "WindowTabs'ı başlangıçta çalıştır",

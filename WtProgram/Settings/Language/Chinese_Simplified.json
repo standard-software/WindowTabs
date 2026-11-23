@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "仅限 WindowTabs 贴靠或移动",
   "SnapTabMarginAll": "WindowTabs 和 Windows 标准贴靠",
   "SnapOnDragDetach": "拖出标签页创建新窗口时，按放下位置吸附到屏幕边缘",
+  "EnableTabPreview": "鼠标悬停在标签页上时显示窗口预览",
+  "TabPreviewSize": "长边大小",
 
   "General": "常规",
   "RunAtStartup": "开机时启动 WindowTabs",

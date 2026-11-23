@@ -108,6 +108,8 @@
   "SnapTabMarginWindowTabs": "WindowTabsでのスナップや移動時のみ",
   "SnapTabMarginAll": "WindowTabsとWindows標準のスナップ時",
   "SnapOnDragDetach": "タブ分離したとき落とした位置でスナップするで",
+  "EnableTabPreview": "タブにマウスを重ねたらプレビューを表示するで",
+  "TabPreviewSize": "長辺の大きさ",
 
   "General": "全般やで",
   "RunAtStartup": "パソコン起動したらWindowTabs立ち上げるで",
