@@ -14,6 +14,7 @@
     Interaction page, default 3000 ms.
   - Before the active tab is moved to the front of the
     taskbar buttons: General page, default 2000 ms (was 3000).
+  - Both can be set from 100 to 10000 ms.
 - "Tab room when snapping or moving": shorter wording
 - "Hide inside tabs" is a drop-down list with its wait time
 - The items of the General page are in a new order

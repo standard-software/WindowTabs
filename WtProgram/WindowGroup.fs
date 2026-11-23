@@ -1097,7 +1097,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
                     this.cancelTaskbarOrderWork()
                     taskbarOrderObserved <- observed
                     taskbarOrderChangedAt <- stripClock.ElapsedMilliseconds
-                    taskbarOrderSettleMs <- Services.settings.getValue "taskbarOrderDelayMilliseconds" |> unbox<int> |> max 0 |> min 10000
+                    taskbarOrderSettleMs <- Services.settings.getValue "taskbarOrderDelayMilliseconds" |> unbox<int> |> max 100 |> min 10000
                     if taskbarOrderTimer.IsNone then this.scheduleTaskbarOrder(max 1 taskbarOrderSettleMs)
 
     member private this.scheduleTaskbarOrder(delay) =

@@ -751,7 +751,7 @@ type Settings(isStandAlone) as this =
                         try
                             match settingsJson.getValueCI(key) with
                             | Some token when token.Type = JTokenType.Integer ->
-                                token.Value<decimal>() |> max 0M |> min 10000M |> int
+                                token.Value<decimal>() |> max 100M |> min 10000M |> int
                             | _ -> fallback
                         with _ -> fallback
                     let settings = {
@@ -890,7 +890,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("HideInactiveTabs", settings.hideInactiveTabs)
             settingsJson.setBool("GroupTaskbarButtons", settings.groupTaskbarButtons)
             settingsJson.setBool("TaskbarActiveTabFirst", settings.taskbarActiveTabFirst)
-            settingsJson.setInt32("TaskbarOrderDelayMilliseconds", max 0 (min 10000 settings.taskbarOrderDelayMilliseconds))
+            settingsJson.setInt32("TaskbarOrderDelayMilliseconds", max 100 (min 10000 settings.taskbarOrderDelayMilliseconds))
             settingsJson.setBool("EnableTabbingByDefault", settings.enableTabbingByDefault)
             settingsJson.setBool("EnableCtrlNumberHotKey", settings.enableCtrlNumberHotKey)
             settingsJson.setBool("EnableAltNumberHotKey", settings.enableAltNumberHotKey)
@@ -909,7 +909,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
             settingsJson.setBool("SnapTabHeightMargin", SnapTabMarginMode.enabled settings.snapTabMarginMode)
             settingsJson.setString("SnapTabMarginMode", SnapTabMarginMode.normalize settings.snapTabMarginMode)
-            settingsJson.setInt32("SnapTabMarginDelayMilliseconds", max 0 (min 10000 settings.snapTabMarginDelayMilliseconds))
+            settingsJson.setInt32("SnapTabMarginDelayMilliseconds", max 100 (min 10000 settings.snapTabMarginDelayMilliseconds))
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setBool("SnapOnDragDetach", settings.snapOnDragDetach)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

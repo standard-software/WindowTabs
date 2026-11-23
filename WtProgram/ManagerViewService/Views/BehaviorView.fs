@@ -118,7 +118,7 @@ type InteractionView() =
             panel
 
         let snapMarginControls =
-            let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "snapTabMarginDelayMilliseconds" 0 10000 3000)
+            let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "snapTabMarginDelayMilliseconds" 100 10000 3000)
             let refreshEnabled() =
                 delay.Enabled <- Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.externalEnabled
             refreshEnabled()
@@ -223,7 +223,7 @@ type GeneralView() =
         taskbarButtons.Controls.Add(note)
         let activeFirst = settingsCheckbox "taskbarActiveTabFirst"
         let save key value = if not refreshing then Services.settings.setValue(key, value)
-        let delayNumber = BehaviorControls.number "taskbarOrderDelayMilliseconds" 0 10000 2000 save refreshers
+        let delayNumber = BehaviorControls.number "taskbarOrderDelayMilliseconds" 100 10000 2000 save refreshers
         let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 delayNumber
         let refreshEnabled() = delay.Enabled <- Services.settings.getValue "taskbarActiveTabFirst" |> unbox<bool>
         refreshEnabled()

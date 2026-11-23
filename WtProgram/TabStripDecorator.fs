@@ -2137,7 +2137,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                     if snapRoomObserved |> Option.exists (fun (old,_) -> old <> hwnd) then
                         this.traceExternalSnapSkip("front-changed", -1)
                     snapRoomChangedAt <- snapRoomClock.ElapsedMilliseconds
-                    snapRoomSettleMs <- Services.settings.getValue "snapTabMarginDelayMilliseconds" |> unbox<int> |> max 0 |> min 10000
+                    snapRoomSettleMs <- Services.settings.getValue "snapTabMarginDelayMilliseconds" |> unbox<int> |> max 100 |> min 10000
                 snapRoomObserved <- Some(hwnd, bounds)
                 let newWait = snapRoomTimer.IsNone
                 this.advanceExternalSnapRoom(TabEdgeLayout.ExternalSnapRetry.Position) |> ignore
