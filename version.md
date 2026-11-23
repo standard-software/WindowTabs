@@ -2,46 +2,37 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.22_next5
-
-- New shortcut key: close all tabs of the group (#39)
-  - Shortcut Keys page. Not set by default.
-
-## version ss_2026.11.22_next4
-
-- Two wait times can be set (#36)
-  - Before the tab margin is added after a snap by Windows:
-    Interaction page, default 3000 ms.
-  - Before the active tab is moved to the front of the
-    taskbar buttons: General page, default 2000 ms (was 3000).
-  - Both can be set from 100 to 10000 ms.
-- "Tab room when snapping or moving": shorter wording
-- "Hide inside tabs" is a drop-down list with its wait time
-- The items of the General page are in a new order
-- Disabled labels of the settings dialog are drawn in plain
-  gray, without the shadow
-- Number fields take digits only when pasting; a minus sign
-  only where negative values are allowed
-
-## version ss_2026.11.22_next3
-
-- Number fields of the settings dialog have their own
-  right-click menu: Copy, Paste, Select all, Reset
-  - Copy takes the whole text. Paste replaces the whole text
-    and is enabled only while the clipboard holds a number.
-  - The reset buttons beside the fields are removed.
-- Color fields have the same menu: Copy, Paste, Select all
-  - Paste is enabled only for 1 to 6 hexadecimal digits.
-- The tab preview setting, its wait time and its size are
-  on one row of the Interaction page
-
-## version ss_2026.11.22_next2
+## version ss_2026.11.24
 
 - Reduced CPU use while nothing is happening (#37)
   - The periodic refresh of the tab strip is skipped while its
     state is unchanged. One refresh still runs every 10 seconds.
   - The check for restoring closed tabs no longer rebuilds
     the same path strings every second.
+- Two wait times can be set (#36)
+  - Before the tab margin is added after a snap by Windows:
+    Interaction page, default 3000 ms.
+  - Before the active tab is moved to the front of the
+    taskbar buttons: General page, default 2000 ms (was 3000).
+  - Both can be set from 100 to 10000 ms.
+- New shortcut key: close all tabs of the group (#39)
+  - Shortcut Keys page. Not set by default.
+- Number fields of the settings dialog have their own
+  right-click menu: Copy, Paste, Select all, Reset
+  - Copy takes the whole text. Paste replaces the whole text.
+  - Paste is enabled while the clipboard holds digits only.
+    A minus sign is accepted only where negative values are allowed.
+  - The reset buttons beside the fields are removed.
+- Color fields have the same menu: Copy, Paste, Select all
+  - Paste is enabled only for 1 to 6 hexadecimal digits.
+- The settings dialog is tidied up
+  - Interaction page: the tab preview settings are on one row.
+  - Interaction page: "Tab room when snapping or moving" has
+    shorter wording.
+  - Tabs page: "Hide inner tabs" is a drop-down list.
+  - General page: the items are in a new order.
+  - Disabled labels are drawn in plain gray, without the shadow.
+- The tab preview settings are translated in 14 more languages
 
 ## version ss_2026.11.22
 
