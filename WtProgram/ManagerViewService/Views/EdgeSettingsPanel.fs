@@ -356,7 +356,7 @@ module EdgeRows =
                 e.DrawBackground()
             let listed = shapes ()
             if e.Index >= 0 && e.Index < listed.Length && e.Index < combo.Items.Count then
-                let textColor = if darkOn then DarkMode.darkText else e.ForeColor
+                let textColor = if darkOn then DarkMode.comboBoxTextColor combo else e.ForeColor
                 let pad = max 2 (e.Bounds.Height / 6)
                 let previewHeight = max 4 (e.Bounds.Height - 2 * pad - 1)
                 // Every list uses the top tab's item height. Rows written across

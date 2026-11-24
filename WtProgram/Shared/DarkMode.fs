@@ -209,6 +209,10 @@ module DarkMode =
     let darkText = Color.FromArgb(240, 240, 240)
     let darkAccent = Color.FromArgb(0, 120, 212)
 
+    // Match the disabled captions of labels, check boxes and radio buttons.
+    let comboBoxTextColor (combo: ComboBox) =
+        if combo.Enabled then darkText else Color.FromArgb(160, 160, 160)
+
     // Module-wide flag set by DesktopManagerForm before view construction.
     // Used by code paths that need to know dark mode is on but live in
     // modules below DesktopManagerForm in compile order (e.g.
@@ -574,7 +578,7 @@ module DarkMode =
                                 | null -> ""
                                 | o -> o.ToString()
                             TextRenderer.DrawText(
-                                g, txt, cmb.Font, e.Bounds, darkText,
+                                g, txt, cmb.Font, e.Bounds, comboBoxTextColor cmb,
                                 TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis))
                 // Theme the dropdown LIST (popup) separately when it's about
                 // to open. The popup is a different HWND from the combo proper
@@ -1123,7 +1127,8 @@ module DarkMode =
         inherit ComboBox()
         member this.DrawSelectedItem(graphics: Graphics, bounds: Rectangle) =
             let args = new DrawItemEventArgs(graphics, this.Font, bounds, this.SelectedIndex,
-                                            DrawItemState.ComboBoxEdit, darkText, darkPanel)
+                                            (DrawItemState.ComboBoxEdit ||| (if this.Enabled then DrawItemState.None else DrawItemState.Disabled)),
+                                            comboBoxTextColor this, darkPanel)
             this.OnDrawItem(args)
 
     type private DarkComboBoxSubclass(cmb: ComboBox) as this =
@@ -1165,12 +1170,12 @@ module DarkMode =
                         | o -> o.ToString()
                     let textRect = Rectangle(r.Left + 4, r.Top, r.Width - arrowWidth - 8, r.Height)
                     TextRenderer.DrawText(
-                        g, txt, cmb.Font, textRect, darkText,
+                        g, txt, cmb.Font, textRect, comboBoxTextColor cmb,
                         TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
                 elif not (System.String.IsNullOrEmpty(cmb.Text)) then
                     let textRect = Rectangle(r.Left + 4, r.Top, r.Width - arrowWidth - 8, r.Height)
                     TextRenderer.DrawText(
-                        g, cmb.Text, cmb.Font, textRect, darkText,
+                        g, cmb.Text, cmb.Font, textRect, comboBoxTextColor cmb,
                         TextFormatFlags.Left ||| TextFormatFlags.VerticalCenter ||| TextFormatFlags.EndEllipsis)
                 // Border last so it sits on top of any earlier fill.
                 use border = new Pen(darkBorder)

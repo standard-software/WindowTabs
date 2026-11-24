@@ -601,7 +601,7 @@ type AppearanceView() as this =
             else
                 e.DrawBackground()
             if e.Index >= 0 && e.Index < TabShape.all.Length then
-                let textColor = if darkOn then DarkMode.darkText else e.ForeColor
+                let textColor = if darkOn then DarkMode.comboBoxTextColor combo else e.ForeColor
                 let pad = max 2 (e.Bounds.Height / 6)
                 let previewHeight = max 4 (e.Bounds.Height - 2 * pad - 1)
                 // The closed box is a plain drop-down's height: one small
@@ -1372,7 +1372,7 @@ type AppearanceView() as this =
                     | Preset name | CustomTheme name -> name
                     | UnsavedCustom -> "Custom"
                 let textColor =
-                    if darkOn then DarkMode.darkText
+                    if darkOn then DarkMode.comboBoxTextColor colorThemeComboBox
                     else e.ForeColor
                 use brush = new SolidBrush(textColor)
                 // Calculate vertical center position for text

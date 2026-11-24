@@ -11,6 +11,7 @@
     the other tab groups.
   - Each edge has a setting "Place the add-tab button".
     It is on by default.
+- Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24
 
