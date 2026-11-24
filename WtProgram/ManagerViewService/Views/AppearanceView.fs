@@ -201,15 +201,17 @@ type AppearanceView() as this =
         page
 
     let edgeChecks = TabEdges.priority |> List.map (fun edge ->
-        let check = new CheckBox(AutoSize = true, Anchor = AnchorStyles.Left,
-                                 Margin = Padding(0, EdgeRows.marginPx, 0, EdgeRows.marginPx))
+        // The same control as the other yes/no rows of the dialog (BoolEditor).
+        let check = new SettingsCheckBox(Anchor = AnchorStyles.Left,
+                                         Margin = Padding(0, EdgeRows.marginPx, 0, EdgeRows.marginPx))
+        check.MinimumSize <- check.Size
         check.Text <- Localization.getString("Use" + TabEdgeSettings.edgeName edge + "Tabs")
         edge, check)
     let topHeader, topCopyButton =
         EdgeRows.pageHeader (edgeChecks |> List.find (fun (edge, _) -> edge = TabEdges.Edge.Top) |> snd)
             "ApplySameSettingsToBottomEdge" (fun () -> this.copyToBottom())
     let panel = createPage 1
-    let topEdgePanel = createPage 3
+    let topEdgePanel = createPage 4
     do
         // Only the outer Appearance page scrolls; the tab grows to its content.
         topEdgePanel.AutoScroll <- false
@@ -747,6 +749,16 @@ type AppearanceView() as this =
         colorPage.SetColumn(checkbox, 1)
         checkbox
 
+    let writeEdge (f: JObject -> unit) =
+        if not suppressEvents then
+            let root = Services.settings.root
+            f root
+            Services.settings.root <- root
+            TabEdgeSettings.changed.Trigger()
+    let topAddButton, refreshTopAddButton, topAddButtonRow = EdgeRows.addTabButton TabEdges.Edge.Top writeEdge
+    do placementRefreshers.Add refreshTopAddButton
+    do topEdgePanel.Controls.Add(topAddButtonRow, 0, 3)
+
     // ---- "Tab position" and the edges' pages (8) ----
 
     let edgeCaption (edge: TabEdges.Edge) =
@@ -839,6 +851,7 @@ type AppearanceView() as this =
         for edge, check in edgeChecks do
             check.Enabled <- not (check.Checked && now.Length = 1)
             if edge = TabEdges.Edge.Top then
+                topAddButtonRow.Enabled <- check.Checked
                 upperPanel.Enabled <- check.Checked
                 placementPanel.Enabled <- check.Checked
                 topCopyButton.Enabled <- check.Checked
@@ -2043,6 +2056,7 @@ type AppearanceView() as this =
             tabIndentNormal = a.tabIndentNormal
             tabIndentFlipped = a.tabIndentFlipped }
         let top = { TabEdgeSettings.noValues with
+                        addTabButton = Some topAddButton.Checked
                         hideMode = Some(fst (TabEdgeSettings.hideSettings Services.settings.root TabEdges.Edge.Top))
                         hideDelay = Some(snd (TabEdgeSettings.hideSettings Services.settings.root TabEdges.Edge.Top))
                         tabHeight = Some a.tabHeight

@@ -20,6 +20,8 @@ open System.Globalization
 
 type ExplicitDestination =
     | JoinGroup of IntPtr * IntPtr
+    // The group, and the edge and group of tabs the window goes to the end of.
+    | JoinGroupAt of IntPtr * TabEdges.Edge * TabAlign
     | FreshGroup of (IntPtr -> unit)
 
 type ProgramInput =
@@ -333,6 +335,7 @@ type Program() as this =
     // Only ExplicitLaunch.active grants protection; expired requests are absent.
     let explicitWindows = Cell.create(Map2<IntPtr, ExplicitLaunch.Request<ExplicitDestination>>())
     let pendingNewTabInvokers = Cell.create(Map2<IntPtr, IntPtr>())
+    let pendingNewTabPlaces = Cell.create(Map2<IntPtr, TabEdges.Edge * TabAlign>())
     let pendingStandalonePostActions = Cell.create(Map2<IntPtr, IntPtr -> unit>())
     // Destinations decided by a grouping setting's off-to-on edge, and by
     // nothing else. Every entry is put here by regroupNow and consumed by the
@@ -874,23 +877,31 @@ type Program() as this =
         | Some(r) ->
             explicitWindows.map(fun m -> m.add window.hwnd r)
             this.suppressExplicitRestore(window.hwnd, window.text) |> ignore
+            // An explicitly chosen destination may be hidden on another desktop.
+            // Automatic grouping still uses only groups drawn here.
+            let target groupHwnd =
+                let targets = if VirtualDesktopGroups.keepAway then this.desktop.groups.list else this.joinableGroups
+                targets |> List.tryFind (fun g -> g.hwnd = groupHwnd)
             match r.destination with
             | JoinGroup(groupHwnd, invokerHwnd) ->
-                // An explicitly chosen destination may be hidden on another desktop.
-                // Automatic grouping still uses only groups drawn here.
-                let targets = if VirtualDesktopGroups.keepAway then this.desktop.groups.list else this.joinableGroups
-                match targets |> List.tryFind (fun g -> g.hwnd = groupHwnd) with
+                match target groupHwnd with
                 | Some(g) ->
                     let anchor = if g.windows.contains((=) invokerHwnd) then invokerHwnd else IntPtr.Zero
                     pendingNewTabInvokers.map(fun m -> m.add window.hwnd anchor)
                     Some(Some(g))
                 // A vanished destination cannot hand control back to restore.
                 | None -> Some(None)
+            | JoinGroupAt(groupHwnd, edge, align) ->
+                match target groupHwnd with
+                | Some(g) ->
+                    pendingNewTabPlaces.map(fun m -> m.add window.hwnd (edge, align))
+                    Some(Some(g))
+                | None -> Some(None)
             | FreshGroup(postAction) ->
                 pendingStandalonePostActions.map(fun m -> m.add window.hwnd postAction)
                 Some(None)
 
-    member private this.startExplicitWindow(processPath: string, destination: ExplicitDestination) =
+    member private this.withExplicitLaunch(processPath: string, destination: ExplicitDestination, launch: unit -> bool) =
         let request: ExplicitLaunch.Request<ExplicitDestination> = {
             id = Guid.NewGuid()
             exePath = processPath
@@ -900,13 +911,17 @@ type Program() as this =
         }
         pendingExplicitLaunches.map(fun pending -> pending @ [request])
         try
-            let psi = ProcessStartInfo()
-            psi.UseShellExecute <- true
-            psi.FileName <- LaunchPath.resolve processPath |> Option.defaultValue processPath
-            Process.Start(psi) |> ignore
+            let started = launch()
+            if not started then pendingExplicitLaunches.map(List.filter (fun r -> r.id <> request.id))
+            started
         with _ ->
             pendingExplicitLaunches.map(List.filter (fun r -> r.id <> request.id))
             reraise()
+
+    member private this.startExplicitWindow(processPath: string, destination: ExplicitDestination) =
+        this.withExplicitLaunch(processPath, destination, fun () ->
+            LaunchPath.resolve processPath |> Option.defaultValue processPath |> NewWindowLaunch.startDirect
+            true) |> ignore
 
     // Get the category number (1-10) for a given process path, or 0 if no category is set
     member private this.getCategoryForProcess(procPath: string) =
@@ -2285,6 +2300,8 @@ type Program() as this =
         if isNewGroup then detachedLock |> Option.iter (fun locked -> group.lockWindowPosition <- locked)
         let invokerHwnd = pendingNewTabInvokers.value.tryFind(hwnd).def(IntPtr.Zero)
         pendingNewTabInvokers.map(fun m -> m.remove hwnd)
+        let newTabPlace = pendingNewTabPlaces.value.tryFind(hwnd)
+        pendingNewTabPlaces.map(fun m -> m.remove hwnd)
         // A tab opened beside another takes its colours along with its side
         // and pin. They are copied before the tab is added, so it is drawn in
         // them from the start.
@@ -2315,9 +2332,10 @@ type Program() as this =
             if (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsSome then None
             else this.savedAlignFor(try window.pid.processPath with _ -> "")
         let explicitLink =
-            ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
-            |> Option.exists (fun request ->
-                match request.destination with JoinGroup _ -> true | _ -> false)
+            newTabPlace.IsSome ||
+            (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))
+             |> Option.exists (fun request ->
+                 match request.destination with JoinGroup _ | JoinGroupAt _ -> true | _ -> false))
         let restoreTargetHidden = not group.isDesktopShown || pendingLinkedRestores.value.Contains hwnd
         pendingLinkedRestores.map(Set.remove hwnd)
         let restoreInFormerGroup = returningState |> Option.exists (this.isInfoGroup group)
@@ -2330,7 +2348,7 @@ type Program() as this =
         let replaceHiddenSelection =
             automatic && not isNewGroup && not isDropped && returning.IsNone &&
             not (this.isInGroup(hwnd)) && not startupRestore && not restoreTargetHidden &&
-            invokerHwnd = IntPtr.Zero &&
+            newTabPlace.IsNone && invokerHwnd = IntPtr.Zero &&
             (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone
         match group :> obj with
         | :? GroupInfo as gi ->
@@ -2354,7 +2372,21 @@ type Program() as this =
                         trace "join-failed"
                         reraise()
                 let invoker = Tab(invokerHwnd)
-                if invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
+                let placed =
+                    match newTabPlace with
+                    | Some(placeEdge, placeAlign) ->
+                        // From an add-tab button: unpinned, at the end of that
+                        // edge's group of tabs with this alignment.
+                        let edge = TabEdges.fallback wg.ts.allowedEdges placeEdge
+                        if linked then
+                            addLinked(fun () ->
+                                wg.addWindowLinked(hwnd, withDelay, alignment=placeAlign, pinned=false, edge=edge))
+                        else
+                            wg.addWindow(hwnd, withDelay, alignment=placeAlign, pinned=false, edge=edge)
+                        true
+                    | None -> false
+                if placed then ()
+                elif invokerHwnd <> IntPtr.Zero && wg.ts.tabs.contains(invoker) then
                     if linked then
                         addLinked(fun () ->
                             wg.addWindowLinked(hwnd, withDelay, alignment=wg.ts.getTabAlign(invoker),
@@ -2385,7 +2417,7 @@ type Program() as this =
                                      edge=edge, replaceHiddenSelection=replaceHiddenSelection))
         | _ -> group.addWindow(hwnd, withDelay)
         // For auto-grouping, position new tab next to same-exe tabs
-        if invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
+        if newTabPlace.IsNone && invokerHwnd = IntPtr.Zero && returningState.IsNone && not isNewGroup && not isDropped && (ExplicitLaunch.active DateTime.Now (explicitWindows.value.tryFind(hwnd))).IsNone then
             let procPath = window.pid.processPath
             match group :> obj with
             | :? GroupInfo as gi ->
@@ -2533,6 +2565,7 @@ type Program() as this =
                 pendingClosedTabRestores.map(fun m -> m.remove hwnd)
                 explicitWindows.map(fun m -> m.remove hwnd)
                 pendingNewTabInvokers.map(fun m -> m.remove hwnd)
+                pendingNewTabPlaces.map(fun m -> m.remove hwnd)
                 pendingStandalonePostActions.map(fun m -> m.remove hwnd)
                 // A window closed between leaving its group and rejoining one
                 // never arrives to retire its own entry.
@@ -4272,6 +4305,10 @@ type Program() as this =
 
         member x.launchNewWindow(groupHwnd)(invokerHwnd)(processPath) =
             this.startExplicitWindow(processPath, JoinGroup(groupHwnd, invokerHwnd))
+
+        member x.launchNewWindowAt(groupHwnd)(edge)(align)(sourceHwnd)(processPath) =
+            NewWindowLaunch.startPlaced sourceHwnd processPath (fun launch ->
+                this.withExplicitLaunch(processPath, JoinGroupAt(groupHwnd, edge, align), launch))
 
         member x.launchStandaloneWindow(processPath)(postAction) =
             this.startExplicitWindow(processPath, FreshGroup(postAction))

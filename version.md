@@ -4,6 +4,14 @@
 
 ## version ss_2026.11.24_next1
 
+- Added an add-tab button [+] after the tabs on each edge
+  - Left click starts another window of the active tab's program
+    as a new tab at the end of that edge.
+  - Right click lists the programs of this tab group and of
+    the other tab groups.
+  - Each edge has a setting "Place the add-tab button".
+    It is on by default.
+
 ## version ss_2026.11.24
 
 - Reduced CPU use while nothing is happening (#37)

@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "Gleiche Einstellungen auf linke Tabs anwenden",
   "ApplySameSettingsToRightEdge": "Gleiche Einstellungen auf rechte Tabs anwenden",
   "ApplySameSettingsToBottomEdge": "Gleiche Einstellungen auf untere Tabs anwenden",
+  "AddTabButton": "Schaltfläche zum Hinzufügen von Tabs platzieren",
+  "AddTabTooltip": "Neuer Tab : {0} starten",
+  "AddTabLaunchProgramHeader": "Programm als neuen Tab starten",
+  "AddTabOtherGroupPrograms": "Programme anderer Tabgruppen",
 
   "Tab Shape": "Tab-Stil",
   "SideTextHorizontal": "Waagerecht",

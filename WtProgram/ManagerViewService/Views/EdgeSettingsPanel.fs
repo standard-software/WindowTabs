@@ -61,15 +61,33 @@ module EdgeRows =
         button.Click.Add(fun _ -> onClick ())
         button
 
+    let addTabButton edge write =
+        // The same control as the other yes/no rows of the dialog (BoolEditor).
+        let check = new SettingsCheckBox(Anchor = AnchorStyles.Left)
+        check.MinimumSize <- check.Size
+        check.Margin <- Padding(0, SettingsField.heightPx / 2, 0, marginPx)
+        let refresh () =
+            check.Checked <- TabEdgeSettings.addTabButton Services.settings.root edge
+        refresh()
+        check.CheckedChanged.Add(fun _ ->
+            write (fun root -> TabEdgeSettings.writeBool root edge TabEdgeSettings.addTabButtonKey check.Checked))
+        let row = rowTable 1
+        let label = caption (Localization.getString "AddTabButton")
+        label.Margin <- check.Margin
+        place row label 0 0
+        place row check 1 0
+        check, refresh, row
+
     let pageHeader (check: CheckBox) key onClick =
-        let header = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Top,
-                                          Margin = Padding(0), ColumnCount = 2, RowCount = 1)
-        header.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
+        let header = rowTable 1
+        header.ColumnCount <- 3
         header.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
-        header.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
-        header.Controls.Add(check, 0, 0)
+        let label = caption check.Text
+        check.Text <- ""
+        place header label 0 0
+        place header check 1 0
         let copy = copyButton key onClick
-        header.Controls.Add(copy, 1, 0)
+        place header copy 2 0
         header, copy
 
     /// Two numeric fields on the same row grid.
@@ -458,10 +476,10 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             | _ -> "ApplySameSettingsToTopEdge"
         EdgeRows.pageHeader check key (fun () -> this.copyToOpposite())
     let panel = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Top,
-                                    Margin = Padding(0), ColumnCount = 1, RowCount = 3)
+                                    Margin = Padding(0), ColumnCount = 1, RowCount = 4)
     do
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
-        for _ in 1..3 do panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        for _ in 1..4 do panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         panel.Controls.Add(header, 0, 0)
         panel.Controls.Add(table, 0, 1)
     let mutable nextRow = 0
@@ -529,7 +547,10 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         for combo in [alignCombo; directionCombo] do
             combo.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         grid
-    do panel.Controls.Add(placementPanel, 0, 2)
+    let addButton, refreshAddButton, addButtonRow = EdgeRows.addTabButton edge write
+    do
+        panel.Controls.Add(placementPanel, 0, 2)
+        panel.Controls.Add(addButtonRow, 0, 3)
     let firstEnd, secondEnd = if sideways then "EdgeTop", "EdgeBottom" else "EdgeLeft", "EdgeRight"
     let outside = EdgeRows.distancePair (text firstEnd) (text secondEnd) TabEdges.defaultOutsideDistance
     let inside = EdgeRows.distancePair (text firstEnd) (text secondEnd) TabEdges.defaultInsideDistance
@@ -649,12 +670,14 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
     member this.control = panel :> Control
 
     member this.setEnabled(enabled) =
+        addButtonRow.Enabled <- enabled
         table.Enabled <- enabled
         placementPanel.Enabled <- enabled
         copyButton.Enabled <- enabled
 
     member private this.copyToOpposite() =
         let source = { TabEdgeSettings.noValues with
+                          addTabButton = Some addButton.Checked
                           hideMode = Some(fst (TabEdgeSettings.hideSettings Services.settings.root edge))
                           hideDelay = Some(snd (TabEdgeSettings.hideSettings Services.settings.root edge))
                           tabHeight = Some(int heightInput.Value)
@@ -693,6 +716,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         let previous = refreshing
         refreshing <- true
         try
+            refreshAddButton ()
             refreshHideTabs ()
             let v = values ()
             textBottomCombo.SelectedIndex <- if defaultArg v.textBottomInside true then 0 else 1

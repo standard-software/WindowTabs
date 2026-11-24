@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "Zastosuj te same ustawienia do lewych kart",
   "ApplySameSettingsToRightEdge": "Zastosuj te same ustawienia do prawych kart",
   "ApplySameSettingsToBottomEdge": "Zastosuj te same ustawienia do dolnych kart",
+  "AddTabButton": "Umieść przycisk dodawania karty",
+  "AddTabTooltip": "Nowa karta : Uruchom {0}",
+  "AddTabLaunchProgramHeader": "Uruchom program jako nową kartę",
+  "AddTabOtherGroupPrograms": "Programy w innych grupach kart",
 
   "Tab Shape": "Styl kart",
   "SideTextHorizontal": "Poziomo",

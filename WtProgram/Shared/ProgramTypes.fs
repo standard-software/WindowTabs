@@ -194,6 +194,9 @@ type IProgram =
     abstract member isShuttingDown : bool
     abstract member saveTabGroupsBeforeExit : unit -> unit
     abstract member launchNewWindow : IntPtr -> IntPtr -> string -> unit
+    // Launch a process whose window joins the group at the end of an edge's
+    // start or end group of tabs (the add-tab button).
+    abstract member launchNewWindowAt : IntPtr -> TabEdges.Edge -> TabAlign -> IntPtr -> string -> unit
     // Launch a process as a standalone tab group (bypassing auto-grouping).
     // postAction runs after the new window has been added to its new group.
     abstract member launchStandaloneWindow : string -> (IntPtr -> unit) -> unit

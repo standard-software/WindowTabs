@@ -55,6 +55,9 @@ module TabEdgeSettings =
     /// The key of one edge's own values: "TabEdgeLeft" and so on.
     let edgeKey (edge: Edge) = "TabEdge" + edgeName edge
 
+    [<Literal>]
+    let addTabButtonKey = "addTabButton"
+
     // Keys are read without regard to case, as the saved tabs' keys are.
     let private propertyOf (o: JObject) (key: string) =
         o.Properties()
@@ -122,6 +125,7 @@ module TabEdgeSettings =
         outsideEnd: int option
         insideStart: int option
         insideEnd: int option
+        addTabButton: bool option
     }
 
     let noValues = {
@@ -141,6 +145,7 @@ module TabEdgeSettings =
         outsideEnd = None
         insideStart = None
         insideEnd = None
+        addTabButton = None
     }
 
     // "TopLeft" / "TopRight" as a saved tab writes them - the start and the
@@ -186,8 +191,16 @@ module TabEdgeSettings =
               outsideStart = distance "tabOutsideDistanceStart"
               outsideEnd = distance "tabOutsideDistanceEnd"
               insideStart = distance "tabInsideDistanceStart"
-              insideEnd = distance "tabInsideDistanceEnd" }
+              insideEnd = distance "tabInsideDistanceEnd"
+              addTabButton = boolIn o addTabButtonKey }
         | _ -> noValues
+
+    /// Whether an edge's strip shows the add-tab button (AddTabButton). Kept
+    /// under "TabEdge<name>" for every edge, the top one included - the key
+    /// is new, so there is no older place to keep reading it from. Where the
+    /// file has no value every edge shows the button.
+    let addTabButton (root: JObject) (edge: Edge) =
+        defaultArg (valuesOf root edge).addTabButton true
 
     let normalizeHideMode mode =
         match mode with
@@ -338,6 +351,7 @@ module TabEdgeSettings =
                 source.textBottomInside |> Option.iter (writeBool result edge "tabTextBottomInside")
                 source.text |> Option.iter (fun text -> writeString result edge "tabText" (textName text))
             source.tabShape |> Option.iter (writeString result edge "tabShape")
+            source.addTabButton |> Option.iter (writeBool result edge addTabButtonKey)
             source.align |> Option.iter (fun align -> writeString result edge "tabAlignment" (alignName align))
             source.direction |> Option.iter (fun direction -> writeString result edge "tabDirection" (directionName direction)))
         if sourceEdge = Edge.Bottom then
@@ -358,6 +372,7 @@ module TabEdgeSettings =
                 value |> Option.iter (fun n -> put appearance key (JValue(int64 n)))
             source.tabPinnedTabWidthIcon |> Option.iter (fun b -> put appearance "tabPinnedTabWidthIcon" (JValue(b)))
             source.tabShape |> Option.iter (fun s -> put appearance "tabShape" (JValue(s)))
+            source.addTabButton |> Option.iter (writeBool result Edge.Top addTabButtonKey)
             source.align |> Option.iter (fun a -> put result "TabPositionByDefault" (JValue(alignName a)))
             source.direction |> Option.iter (fun d ->
                 let mode = if d = Direction.AlwaysInside then TabBehaviorPolicy.verticalAlwaysDown else TabBehaviorPolicy.verticalAuto

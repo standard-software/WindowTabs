@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "Áp dụng cùng cài đặt cho thẻ trái",
   "ApplySameSettingsToRightEdge": "Áp dụng cùng cài đặt cho thẻ phải",
   "ApplySameSettingsToBottomEdge": "Áp dụng cùng cài đặt cho thẻ dưới",
+  "AddTabButton": "Đặt nút thêm thẻ",
+  "AddTabTooltip": "Thẻ mới : Khởi chạy {0}",
+  "AddTabLaunchProgramHeader": "Khởi chạy chương trình trong thẻ mới",
+  "AddTabOtherGroupPrograms": "Chương trình trong các nhóm thẻ khác",
 
   "Tab Shape": "Kiểu thẻ",
   "SideTextHorizontal": "Ngang",

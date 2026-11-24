@@ -873,6 +873,18 @@ type TabStripSprite<'id> when 'id : equality = {
 
     member this.tabSize = Sz(int(this.unpinnedTabLength), (this.size.height) - 1)
 
+    /// Where the start group ends and the end group starts along the strip
+    /// as the tabs are laid out now (tabLocation), and whether each group has
+    /// a tab. For what is drawn beside the tabs (the add-tab buttons); the
+    /// layout and the drop position do not use it.
+    member this.groupExtents : float * float * bool * bool =
+        let adjusted = this.adjustedVisualOrder
+        let startTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopLeft)
+        let endTabs = adjusted.where(fun t -> this.getAdjustedAlignment(t) = TopRight)
+        this.calcGroupWidth(startTabs),
+        max 0.0 (float(this.size.width) - this.calcGroupWidth(endTabs)),
+        not startTabs.isEmpty, not endTabs.isEmpty
+
     // The lengths this strip lays its tabs out with, for a caller that has to
     // judge a drop by the tabs as they are drawn (TabEdges.StripLengths):
     // (pinned tab length, unpinned tab length).

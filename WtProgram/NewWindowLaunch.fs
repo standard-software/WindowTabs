@@ -82,10 +82,10 @@ module NewWindowLaunch =
             trace "ActivateApplication" ex.HResult
             false
 
-    /// Direct launches retain their existing placement callbacks. Activation
-    /// may reuse an existing window; it deliberately does not manufacture a
-    /// pending placement request for a window that might never be created.
-    let start (hwnd: IntPtr) (processPath: string) (launch: string -> unit) =
+    // The optional placement wrapper owns the entire attempt, including alias
+    // fallback and package activation. Its identity remains the source exe.
+    let private startCore (hwnd: IntPtr) (processPath: string) (launch: string -> unit)
+                          (run: (unit -> bool) -> bool) =
         let showUwpError () =
             let appName = IO.Path.GetFileNameWithoutExtension(processPath)
             let message = String.Format(Localization.getString("NewLaunchErrorUWP"), appName)
@@ -96,7 +96,7 @@ module NewWindowLaunch =
                 with ex ->
                     trace "Direct launch" ex.HResult
                     reraise()
-            if not (LaunchPath.startWith processPath direct (fun () -> appIdForWindow hwnd) activate) then
+            if not (run (fun () -> LaunchPath.startWith processPath direct (fun () -> appIdForWindow hwnd) activate)) then
                 showUwpError ()
         with
         | :? System.ComponentModel.Win32Exception as ex ->
@@ -107,3 +107,17 @@ module NewWindowLaunch =
             let message = String.Format(Localization.getString("NewLaunchErrorUnexpected"), ex.Message)
             AppDialog.info "WindowTabs Error" message
             trace "Unexpected launch failure" ex.HResult
+
+    // Preserve the tab-menu and hot-key behavior for existing callers.
+    let start hwnd processPath launch = startCore hwnd processPath launch (fun run -> run())
+
+    // Register placement before any launch effect. A failed activation or an
+    // exception removes the request; a successful reuse expires normally.
+    let startDirect path =
+        let psi = Diagnostics.ProcessStartInfo()
+        psi.UseShellExecute <- true
+        psi.FileName <- path
+        Diagnostics.Process.Start(psi) |> ignore
+
+    let startPlaced hwnd processPath run =
+        startCore hwnd processPath startDirect run

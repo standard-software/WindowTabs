@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "왼쪽 탭에 동일한 설정 적용",
   "ApplySameSettingsToRightEdge": "오른쪽 탭에 동일한 설정 적용",
   "ApplySameSettingsToBottomEdge": "아래쪽 탭에 동일한 설정 적용",
+  "AddTabButton": "탭 추가 버튼 배치",
+  "AddTabTooltip": "새 탭 : {0} 실행",
+  "AddTabLaunchProgramHeader": "새 탭으로 프로그램 실행",
+  "AddTabOtherGroupPrograms": "다른 탭 그룹의 프로그램",
 
   "Tab Shape": "탭 스타일",
   "SideTextHorizontal": "가로쓰기",

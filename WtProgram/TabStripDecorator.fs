@@ -896,6 +896,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 edge, (if layout.defaultAlign = TabEdges.AlignStart then TopLeft else TopRight))
             |> Map.ofList
         this.ts.setEdgeDefaultAlignments(defaults)
+        // The edges that show add-tab buttons: checked on the edge's page, and
+        // only on an edge tabs may use (an unchecked edge's page is disabled).
+        this.ts.setAddTabEdges(
+            TabEdges.edgesOf allowed
+            |> List.filter (fun edge -> try TabEdgeSettings.addTabButton root edge with _ -> false)
+            |> Set.ofList)
 
     // A window for each allowed edge other than the top that has none yet,
     // registered for drops and for files dropped on its tabs.
@@ -3061,10 +3067,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // the per-group application icons and the hand-painted colour swatches.
     // Win32Menu.show is given the same number for the bitmap size it resizes
     // to, so nothing in the menu is drawn at one scale and shown at another.
-    member private  this.contextMenu(hwnd, menuScale: float) =
-        let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
-        let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
-
+    //
+    // The other groups as a menu lists them, for the tab menu's link items
+    // and for the add-tab button's menu: `make` turns a group's caption and
+    // icon into the item.
+    member private this.linkGroupMenu(menuScale: float) =
         // A group's application icon for this menu. At 100% the item bitmap is
         // 16 px, so hand over the window's own 16 px artwork and the menu looks
         // exactly as it did before any of this DPI work - no 32 px picture
@@ -3115,7 +3122,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             |> Map.ofList
 
         // All link menus use one immutable reading and the same presentation.
-        let linkGroupItems exclude click =
+        let linkGroupItemsWith (make: TabGroupInfo -> TabStripDecorator -> CmiRegular -> ContextMenuItem) exclude =
             this.updateGroupInfo()
 #if DEBUG
             let mutable listedGroups = Set.empty<IntPtr>
@@ -3151,10 +3158,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 #if DEBUG
                         listedGroups <- listedGroups.Add info.hwnd
 #endif
-                        CmiPreviewFrom({ text = text; image = groupMenuIcon { info with firstTabIcon = big; firstTabIconSmall = small }
-                                         click = (fun () -> click decorator); flags = List2() },
-                                       (fun () -> decorator.currentPreviewFrame()),
-                                       (fun () -> this.currentPreviewFrame())))
+                        make info decorator
+                            { text = text; image = groupMenuIcon { info with firstTabIcon = big; firstTabIconSmall = small }
+                              click = (fun () -> ()); flags = List2() })
                 with _ -> None
             let views = infos |> List.map (fun info ->
                 let tabs = List.zip info.tabHwnds info.tabNames
@@ -3199,6 +3205,19 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                         state.current.IsSome state.listed.IsSome (prefix state.current) (prefix explorerDesktop) listedGroups.Count)
 #endif
             hereItems @ (if parents.IsEmpty then [] else CmiSeparator :: parents)
+        linkGroupItemsWith
+
+    member private  this.contextMenu(hwnd, menuScale: float) =
+        let checked(isChecked) = if isChecked then List2([MenuFlags.MF_CHECKED]) else List2()
+        let grayed(isGrayed) = if isGrayed then List2([MenuFlags.MF_GRAYED]) else List2()
+
+        // A link item joins the chosen group and previews its frame.
+        let linkGroupItemsWith = this.linkGroupMenu(menuScale)
+        let linkGroupItems exclude click =
+            linkGroupItemsWith (fun _ decorator item ->
+                CmiPreviewFrom({ item with click = (fun () -> click decorator) },
+                               (fun () -> decorator.currentPreviewFrame()),
+                               (fun () -> this.currentPreviewFrame()))) exclude
 
         let withPlacementPreview calculate item =
             match item with
@@ -5014,7 +5033,99 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         member x.group = box this
         member x.runsAcross = true
 
+    // The add-tab button (AddTabButton). The left button starts another
+    // window of the active tab's program; the right button offers every
+    // program of this group - those of the top, left, right and bottom tabs
+    // in their order - and below them the other
+    // groups as the link menus list them, each with its own programs.
+    // Whatever is started joins this group where the button stands: at the
+    // end of that edge's start or end group.
+    member private this.addTabProgramName(path: string) =
+        System.IO.Path.GetFileName(path).ToLower()
+
+    member private this.addTabTooltip() =
+        try
+            this.ts.zorder.tryHead |> Option.bind (fun (Tab hwnd) ->
+                let path = os.windowFromHwnd(hwnd).pid.processPath
+                if String.IsNullOrWhiteSpace(path) then None
+                else
+                    let name = this.addTabProgramName path
+                    if String.IsNullOrWhiteSpace(name) then None
+                    else Some(String.Format(Localization.getString "AddTabTooltip", name)))
+        with _ -> None
+
+    member private this.addTabClick(button: MouseButton, edge: TabEdges.Edge, align: TabAlign, point: Pt) =
+        let pathOf (hwnd: IntPtr) = try os.windowFromHwnd(hwnd).pid.processPath with _ -> ""
+        // A window whose program cannot be read starts nothing.
+        let launch (hwnd: IntPtr) =
+            let path = pathOf hwnd
+            if not (String.IsNullOrWhiteSpace path) then
+                Services.program.launchNewWindowAt group.hwnd edge align hwnd path
+        let active = this.ts.zorder.tryHead |> Option.map (fun (Tab hwnd) -> hwnd)
+        match button with
+        | MouseLeft -> active |> Option.iter launch
+        | MouseRight ->
+            let scale = Dpi.scaleForPoint point
+            let owned = ResizeArray<Img>()
+            // One item for each program, in the order of the windows given.
+            let programItems (windows: (IntPtr * (unit -> Img option)) list) =
+                let seen = System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                windows |> List.choose (fun (hwnd, image) ->
+                    let path = pathOf hwnd
+                    if String.IsNullOrWhiteSpace(path) || not (seen.Add(path)) then None
+                    else
+                        Some(CmiRegular({ text = this.addTabProgramName path
+                                          image = (try image() with _ -> None)
+                                          flags = List2()
+                                          click = fun () -> launch hwnd })))
+            let ownIcon (hwnd: IntPtr) () =
+                let icon = ScaledIcon.at (this.ts.tabInfo(Tab hwnd)).iconBig (Dpi.px scale 16)
+                let img = icon.ToBitmap().img
+                owned.Add(img)
+                Some img
+            let own =
+                (TabEdges.priority |> List.collect (fun e -> (this.ts.bandOf e).list) |> List.map (fun (Tab hwnd) -> hwnd))
+                |> List.map (fun hwnd -> hwnd, ownIcon hwnd)
+                |> programItems
+            let mutable hasOtherGroups = false
+            let others =
+                (this.linkGroupMenu scale)
+                    (fun info _ item ->
+                        hasOtherGroups <- true
+                        let icon (hwnd: IntPtr) () =
+                            match Map.tryFind hwnd info.tabIcons with
+                            | Some(big, small) -> if scale = 1.0 then small else big
+                            | None -> None
+                        let programs = info.tabHwnds |> List.map (fun hwnd -> hwnd, icon hwnd) |> programItems
+                        CmiPopUp({ text = item.text; image = item.image; items = List2(programs)
+                                   flags = if programs.IsEmpty then List2([MenuFlags.MF_GRAYED]) else List2() }))
+                    (fun _ -> false)
+            let isSeparator = function CmiSeparator -> true | _ -> false
+            let others =
+                others |> List.skipWhile isSeparator |> List.rev
+                |> List.skipWhile isSeparator |> List.rev
+            let otherGroups =
+                if not hasOtherGroups || others.IsEmpty then [] else
+                [CmiPopUp({ text = Localization.getString "AddTabOtherGroupPrograms"; image = None
+                            items = List2(others); flags = List2() })]
+            let header =
+                CmiRegular({ text = Localization.getString "AddTabLaunchProgramHeader"; image = None
+                             click = (fun () -> ()); flags = List2([MenuFlags.MF_GRAYED]) })
+            let body = own @ (if own.IsEmpty || otherGroups.IsEmpty then otherGroups else CmiSeparator :: otherGroups)
+            let items = header :: (if body.IsEmpty then [] else CmiSeparator :: body)
+            if not items.IsEmpty then
+                group.bb.write("contextMenuVisible", true)
+                try
+                    let dark = try defaultArg (Services.settings.root.getBool("EnableDarkMode")) false with _ -> false
+                    Win32Menu.show group.hwnd point scale (List2 items) dark
+                finally
+                    group.bb.write("contextMenuVisible", false)
+                    for img in owned do img.bitmap.Dispose()
+        | _ -> ()
+
     interface ITabStripMonitor with
+        member x.addTabTooltip() = this.addTabTooltip()
+        member x.addTabClick(button, edge, align, point) = this.addTabClick(button, edge, align, point)
         member x.tabClick((btn, tab, part, action, pt)) =
             let (Tab(hwnd)) = tab
             mouseEvent.Trigger(hwnd, btn, part, action, pt)

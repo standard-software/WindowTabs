@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "左タブを同じ設定にするで",
   "ApplySameSettingsToRightEdge": "右タブを同じ設定にするで",
   "ApplySameSettingsToBottomEdge": "下タブを同じ設定にするで",
+  "AddTabButton": "タブ追加ボタンタブを配置するで",
+  "AddTabTooltip": "新しいタブ : {0} 起動するで",
+  "AddTabLaunchProgramHeader": "新しいタブとしてプログラムを起動",
+  "AddTabOtherGroupPrograms": "別のタブグループのプログラム",
 
   "Tab Shape": "タブのスタイル",
   "SideTextHorizontal": "横書き",

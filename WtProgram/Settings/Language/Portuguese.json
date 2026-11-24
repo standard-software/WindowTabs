@@ -20,6 +20,10 @@
   "ApplySameSettingsToLeftEdge": "Aplicar as mesmas configurações às guias à esquerda",
   "ApplySameSettingsToRightEdge": "Aplicar as mesmas configurações às guias à direita",
   "ApplySameSettingsToBottomEdge": "Aplicar as mesmas configurações às guias inferiores",
+  "AddTabButton": "Colocar o botão de adicionar guia",
+  "AddTabTooltip": "Nova guia : Iniciar {0}",
+  "AddTabLaunchProgramHeader": "Iniciar um programa em uma nova guia",
+  "AddTabOtherGroupPrograms": "Programas de outros grupos de guias",
 
   "Tab Shape": "Estilo das guias",
   "SideTextHorizontal": "Horizontal",
