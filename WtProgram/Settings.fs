@@ -430,6 +430,9 @@ type Settings(isStandAlone) as this =
                         // Seed the new-install default so root-only saves preserve it too.
                         let defaults = JObject()
                         defaults.setString("ChangeTabPositionOnSnap", "nochange")
+                        // A new install leaves room for tabs on WindowTabs snaps; an existing
+                        // file without the key keeps the published default (no room).
+                        defaults.setString("SnapTabMarginMode", SnapTabMarginMode.windowTabs)
                         defaults
             with
             | ex ->
@@ -751,6 +754,9 @@ type Settings(isStandAlone) as this =
             if rebuilding then
                 try
                     let settingsJson = this.settingsJson
+                    let snapMarginMode =
+                        SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" settingsJson
+                        |> Option.defaultValue SnapTabMarginMode.none
                     let readWait key fallback =
                         try
                             match settingsJson.getValueCI(key) with
@@ -797,7 +803,9 @@ type Settings(isStandAlone) as this =
                         hideTabsOnFullscreen = settingsJson.getBool("HideTabsOnFullscreen").def(true)
                         hideTabsWhileMoving = settingsJson.getBool("HideTabsWhileMoving").def(false)
                         lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
-                        snapTabMarginMode = SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" settingsJson |> Option.defaultValue SnapTabMarginMode.none
+                        snapTabMarginMode = snapMarginMode
+                        snapDetectionMode =
+                            SnapTabMarginMode.detection snapMarginMode (settingsJson.getString("SnapDetectionMode"))
                         snapTabMarginDelayMilliseconds = readWait "SnapTabMarginDelayMilliseconds" 3000
                         snapButtonOnlyMargin = settingsJson.getBool("SnapButtonOnlyMargin").def(true)
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
@@ -863,7 +871,8 @@ type Settings(isStandAlone) as this =
                         hideTabsOnFullscreen = true
                         hideTabsWhileMoving = false
                         lockWindowPosition = false
-                        snapTabMarginMode = SnapTabMarginMode.none
+                        snapTabMarginMode = if this.fileExists then SnapTabMarginMode.none else SnapTabMarginMode.windowTabs
+                        snapDetectionMode = SnapTabMarginMode.windowTabs
                         snapTabMarginDelayMilliseconds = 3000
                         snapButtonOnlyMargin = true
                         changeTabPositionOnSnap = if this.fileExists then "change" else "nochange"
@@ -915,6 +924,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("LockWindowPosition", settings.lockWindowPosition)
             settingsJson.setBool("SnapTabHeightMargin", SnapTabMarginMode.enabled settings.snapTabMarginMode)
             settingsJson.setString("SnapTabMarginMode", SnapTabMarginMode.normalize settings.snapTabMarginMode)
+            settingsJson.setString("SnapDetectionMode", settings.snapDetectionMode)
             settingsJson.setInt32("SnapTabMarginDelayMilliseconds", max 100 (min 10000 settings.snapTabMarginDelayMilliseconds))
             settingsJson.setBool("SnapButtonOnlyMargin", settings.snapButtonOnlyMargin)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
@@ -968,8 +978,13 @@ type Settings(isStandAlone) as this =
                 runAtStartup <- unbox<bool>(value)
             else
                 let settings = x.settings
-                let settings = Serialize.writeField settings key value
-                x.settings <- unbox<SettingsRec>(settings)
+                let updated = Serialize.writeField settings key value |> unbox<SettingsRec>
+                let updated =
+                    if key = "snapTabMarginMode" || key = "snapDetectionMode" then
+                        { updated with snapTabMarginMode =
+                                        SnapTabMarginMode.marginForDetection (SnapTabMarginMode.enabled updated.snapTabMarginMode) updated.snapDetectionMode }
+                    else updated
+                x.settings <- updated
             settingChangedEvent.Trigger(key, value)
 
         member x.getValue(key) =

@@ -55,6 +55,7 @@ type SettingsRec = {
     hideTabsWhileMoving: bool
     lockWindowPosition: bool
     snapTabMarginMode: string
+    snapDetectionMode: string
     snapTabMarginDelayMilliseconds: int
     snapButtonOnlyMargin: bool
     // "change": on a snap or move to the left, right or a corner, re-align every

@@ -35,6 +35,15 @@
     the snap direction, even when the alignments are mixed.
   - A new installation starts with "Don't change".
     Existing settings behave as before.
+- Added "Snap detection" to the Interaction page
+  - When snapping or moving with WindowTabs /
+    also when snapping with Windows (after the wait time)
+  - A detected snap applies both the room for tabs and
+    the change of tab alignment.
+  - "Leave room for tabs when snapping" is now one row: a checkbox
+    and the choice for edges with only buttons.
+  - A new installation starts with the room on.
+    Existing settings behave as before.
 - Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24

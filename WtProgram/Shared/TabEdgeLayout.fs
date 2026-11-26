@@ -537,6 +537,29 @@ module TabEdgeLayout =
             elif target = bounds then None, 3, None
             else Some {workArea=area; before=bounds; after=target}, 5, Some target
 
+    // Only an unambiguous work-area edge supplies an axis. Full-width or
+    // full-height placements have no direction on that axis.
+    // A window that already left room for its tabs sits on the reserved
+    // area's edge instead of the work area's; both count as that side.
+    let externalSnapDirection ((ax,ay,aw,ah): Box) ((rx,ry,rw,rh): Box) ((x,y,w,h): Box) =
+        let near a b = abs (int64 a - int64 b) <= 1L
+        let left, right = (near x ax || near x rx), (near (x+w) (ax+aw) || near (x+w) (rx+rw))
+        let top, bottom = (near y ay || near y ry), (near (y+h) (ay+ah) || near (y+h) (ry+rh))
+        let horizontal = if left <> right then (if left then "left" else "right") else ""
+        let vertical = if top <> bottom then (if top then "top" else "bottom") else ""
+        if w <= 0 || h <= 0 || aw <= 0 || ah <= 0 ||
+           x < ax-1 || y < ay-1 || x+w > ax+aw+1 || y+h > ay+ah+1 ||
+           (horizontal = "" && vertical = "") then None
+        else Some("snap" + vertical + horizontal)
+
+    // Reuse the margin latch and geometry. A detected snap with no reserved
+    // margin still gets one alignment pass, without a native placement write.
+    let externalSnapDetection mode normal moving released arranged remembered area reserved bounds =
+        let memory, reason, target = externalSnapRoom mode normal moving released arranged remembered area reserved bounds
+        if reason = 3 && (externalSnapDirection area reserved bounds).IsSome then
+            Some {workArea=area; before=bounds; after=bounds}, 5, None
+        else memory, reason, target
+
     /// Clamp a popup on all four sides; only new edge popups use this policy.
     let fitPopup ((wx, wy, ww, wh): Box) ((x, y, w, h): Box) : Box =
         let w, h = min w (max 1 ww), min h (max 1 wh)

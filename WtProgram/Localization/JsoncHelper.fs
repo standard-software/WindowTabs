@@ -68,7 +68,7 @@ module JsoncHelper =
 // Retire only these root settings; nested objects belong to their own schemas.
 module RemovedSettings =
     let isRemovedKey key =
-        [ "combineIconsInTaskbar"; "replaceAltTab"; "groupWindowsInSwitcher"; "RunAtStartup" ]
+        [ "combineIconsInTaskbar"; "replaceAltTab"; "groupWindowsInSwitcher"; "RunAtStartup"; "SnapTabMarginPreferredMode" ]
         |> List.exists (fun removed ->
             System.String.Equals(key, removed, System.StringComparison.OrdinalIgnoreCase))
 

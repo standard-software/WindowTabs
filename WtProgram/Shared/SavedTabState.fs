@@ -9,16 +9,31 @@ module SnapTabMarginMode =
     let none = "none"
     let windowTabs = "windowtabs"
     let all = "all"
-    let choices = [none,"SnapTabMarginNone"; windowTabs,"SnapTabMarginWindowTabs"; all,"SnapTabMarginAll"]
+    let choices = [windowTabs,"SnapDetectionWindowTabs"; all,"SnapDetectionAll"]
     let normalize mode = if mode = all then all elif mode = windowTabs then windowTabs else none
     let enabled mode = normalize mode <> none
     let externalEnabled mode = normalize mode = all
     let ofLegacy enabled = if enabled then windowTabs else none
+    // Detection is independent of margins; absent keys preserve released modes.
+    let detection legacyMode stored =
+        match stored with
+        | Some value when value = all -> all
+        | Some value when value = windowTabs -> windowTabs
+        | _ -> if externalEnabled legacyMode then all else windowTabs
+    let marginForDetection on detectionMode =
+        if not on then none elif detectionMode = all then all else windowTabs
+    // Keep an active mode separate from the effective legacy-compatible value.
+    let preferred mode stored =
+        if enabled mode then normalize mode
+        elif stored = all then all
+        else windowTabs
+    let withEnabled on mode stored =
+        if on then preferred mode stored else none
     let load legacy stored =
         match legacy with
         | Some false -> Some none
         | Some true -> Some (if stored = Some all then all else windowTabs)
-        | None -> stored |> Option.filter (fun value -> choices |> List.exists (fun (key,_) -> key = value))
+        | None -> stored |> Option.filter (fun value -> [none; windowTabs; all] |> List.contains value)
     let readJson legacyKey modeKey (token: JToken) =
         let value key =
             match token with

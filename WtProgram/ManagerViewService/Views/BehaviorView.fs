@@ -143,9 +143,6 @@ type InteractionView() =
                 (fun mode -> if mode = "nochange" || mode = "always" then mode else "change")
                 ["nochange", "ChangeTabPositionOnSnapNever"; "always", "ChangeTabPositionOnSnapAlways"; "change", "ChangeTabPositionOnSnapWhenUniform"]
 
-        let snapMarginChoice =
-            settingsChoice "snapTabMarginMode" SnapTabMarginMode.normalize SnapTabMarginMode.choices
-
         let previewNumber key minimum maximum defaultValue =
             BehaviorControls.number key minimum maximum defaultValue save refreshers
 
@@ -156,24 +153,49 @@ type InteractionView() =
             delay.Margin <- Padding(10, 0, 0, 0)
             panel
 
-        let snapMarginControls =
-            let delay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "snapTabMarginDelayMilliseconds" 100 10000 3000)
-            let refreshEnabled() =
-                delay.Enabled <- Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.externalEnabled
-            refreshEnabled()
-            refreshers.Add(refreshEnabled)
-            (snapMarginChoice :?> ComboBox).SelectedIndexChanged.Add(fun _ -> refreshEnabled())
-            let panel = BehaviorControls.row [3.0f; 2.0f] [snapMarginChoice; delay]
-            delay.Margin <- Padding(10, 0, 0, 0)
-            panel
+        let snapMarginEnabled =
+            checkBox {
+                new IProperty<bool> with
+                    member _.value
+                        with get() = Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.enabled
+                        and set on =
+                            let preferred = Services.settings.getValue "snapDetectionMode" |> unbox<string>
+                            save "snapTabMarginMode" (box (SnapTabMarginMode.marginForDetection on preferred)) }
 
-        let buttonOnlyMarginCheckbox = settingsCheckbox "snapButtonOnlyMargin"
-        let refreshButtonOnlyMarginEnabled() =
-            buttonOnlyMarginCheckbox.Enabled <-
-                Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.enabled
-        refreshButtonOnlyMarginEnabled()
-        refreshers.Add(refreshButtonOnlyMarginEnabled)
-        (snapMarginChoice :?> ComboBox).SelectedIndexChanged.Add(fun _ -> refreshButtonOnlyMarginEnabled())
+        let snapMarginChoice = EdgeRows.choice (SnapTabMarginMode.choices |> List.map (snd >> Localization.getString))
+        let fitSnapMarginChoice() = EdgeRows.fitChoiceWidth snapMarginChoice
+        fitSnapMarginChoice()
+        snapMarginChoice.FontChanged.Add(fun _ -> fitSnapMarginChoice())
+        snapMarginChoice.DropDown.Add(fun _ -> fitSnapMarginChoice())
+        let buttonOnlyMarginChoice = EdgeRows.choice (["SnapButtonOnlyMarginNone"; "SnapButtonOnlyMarginAll"] |> List.map Localization.getString)
+        let snapMarginDelay = BehaviorControls.labelled "HideTabsDelayMilliseconds" 0 (previewNumber "snapTabMarginDelayMilliseconds" 100 10000 3000)
+        let mutable refreshingMargin = false
+        let refreshMargin() =
+            refreshingMargin <- true
+            try
+                let mode = Services.settings.getValue "snapTabMarginMode" |> unbox<string>
+                let preferred = Services.settings.getValue "snapDetectionMode" |> unbox<string>
+                let selected = preferred
+                snapMarginChoice.SelectedIndex <- SnapTabMarginMode.choices |> List.findIndex (fun (value, _) -> value = selected)
+                buttonOnlyMarginChoice.SelectedIndex <- if Services.settings.getValue "snapButtonOnlyMargin" |> unbox<bool> then 1 else 0
+                let enabled = SnapTabMarginMode.enabled mode
+                snapMarginChoice.Enabled <- true
+                buttonOnlyMarginChoice.Enabled <- enabled
+                snapMarginDelay.Enabled <- SnapTabMarginMode.externalEnabled selected
+            finally refreshingMargin <- false
+        refreshMargin()
+        refreshers.Add(refreshMargin)
+        (snapMarginEnabled :?> CheckBox).CheckedChanged.Add(fun _ -> refreshMargin())
+        snapMarginChoice.SelectedIndexChanged.Add(fun _ ->
+            if not refreshingMargin && not refreshing && snapMarginChoice.SelectedIndex >= 0 then
+                let selected = fst SnapTabMarginMode.choices.[snapMarginChoice.SelectedIndex]
+                save "snapDetectionMode" (box selected)
+                refreshMargin())
+        buttonOnlyMarginChoice.SelectedIndexChanged.Add(fun _ ->
+            if not refreshingMargin && not refreshing && buttonOnlyMarginChoice.SelectedIndex >= 0 then
+                save "snapButtonOnlyMargin" (box (buttonOnlyMarginChoice.SelectedIndex = 1)))
+        let snapMarginControls = BehaviorControls.row [3.0f; 2.0f] [snapMarginChoice; snapMarginDelay]
+        do snapMarginDelay.Margin <- Padding(10, 0, 0, 0)
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
@@ -181,9 +203,9 @@ type InteractionView() =
             ("TabPinButton", buttonModeChoice "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
             ("CloseAllTabsButtonBehavior", closeAllControls :> Control)
             ("", new Panel() :> Control)
+            ("SnapDetectionMode", snapMarginControls)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
-            ("SnapTabMarginMode", snapMarginControls)
-            ("SnapButtonOnlyMargin", buttonOnlyMarginCheckbox)
+            ("SnapTabMarginMode", BehaviorControls.row [1.0f; 1.0f] [snapMarginEnabled; buttonOnlyMarginChoice])
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
             ("", new Panel() :> Control)
             ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")

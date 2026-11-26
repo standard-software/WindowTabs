@@ -653,9 +653,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 let known = snapRoomFront.IsSome
                 snapRoomFront <- front
                 if known && front.IsSome && not snapRoomDisposed &&
-                   SnapTabMarginMode.externalEnabled group.snapTabMarginMode then
+                   this.externalSnapDetectionEnabled() then
                     this.cancelExternalSnapCandidate("front-changed")
                     this.queueExternalSnapRoom(false)
+        Services.settings.notifyValue "snapDetectionMode" <| fun _ ->
+            group.invokeAsync <| fun () -> this.resetExternalSnapRoom("detection-mode")
         group.snapRoomChanged.Add this.queueExternalSnapRoom
         group.snapRoomStateChanged.Add this.resumeExternalSnapRoom
         group.desktopChanged.Add this.resumeExternalSnapRoom
@@ -2205,14 +2207,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         snapRoomReleased <- Map.empty
         snapRoomLastMember <- None
 
+    member private this.externalSnapDetectionEnabled() =
+        Services.settings.getValue "snapDetectionMode" |> unbox<string> |> SnapTabMarginMode.externalEnabled
+
     member private this.externalSnapRoomState(window: Window) =
-        if not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then 0
+        if not (this.externalSnapDetectionEnabled()) then 0
         else
             let normal = group.canApplySnapRoom && window.isWindow && not window.isMinimized &&
                          not window.isMaximized && not window.isCloaked && window.isVisible && not group.isFullscreen.value
             let moving = group.isInMoveSizeThreadSafe || window.isInMoveSize || isDraggingCell.value
             let held = Win32Helper.IsKeyPressed(VirtualKeyCodes.VK_LBUTTON)
-            let state = TabEdgeLayout.externalSnapReadiness group.snapTabMarginMode normal moving held
+            let state = TabEdgeLayout.externalSnapReadiness SnapTabMarginMode.all normal moving held
             // The cached fullscreen state rejects known fullscreen placements
             // before native monitor reads; check the live state only when ready.
             if state = 5 && window.isFullscreen then 1 else state
@@ -2231,7 +2236,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 
     // Notifications update the candidate without replacing a waiting timer.
     member private this.queueExternalSnapRoom(starting: bool) =
-        if starting || not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then
+        if starting || not (this.externalSnapDetectionEnabled()) then
             this.resetExternalSnapRoom(if starting then "reset" else "mode")
         elif not snapRoomDisposed && group.windows.items.count > 0 then
             let hwnd = group.topWindow
@@ -2263,7 +2268,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 snapRoomTimer <- Some(ThreadHelper.cancelablePostBack delay (fun () ->
                     snapRoomTimer <- None
                     try
-                        if snapRoomDisposed || not (SnapTabMarginMode.externalEnabled group.snapTabMarginMode) then
+                        if snapRoomDisposed || not (this.externalSnapDetectionEnabled()) then
                             this.resetExternalSnapRoom(if snapRoomDisposed then "destroy" else "mode")
                         elif TabEdgeLayout.ExternalSnapRetry.waitsForSettle snapRoomSettleMs snapRoomRetry snapRoomClock.ElapsedMilliseconds snapRoomChangedAt then
                             this.traceExternalSnapSkip("settling", -1)
@@ -2353,10 +2358,20 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 snapRoomLastMember <> Some window.hwnd
             let previous = snapRoomRemembered
             let remembered, reason, target =
-                TabEdgeLayout.externalSnapRoom group.snapTabMarginMode true false released arrangedBefore snapRoomRemembered
+                TabEdgeLayout.externalSnapDetection SnapTabMarginMode.all true false released arrangedBefore snapRoomRemembered
                     (box area) (box reserved) before
 
             snapRoomRemembered <- remembered
+            if reason = 5 then
+                match TabEdgeLayout.externalSnapDirection (box area) (box reserved) before with
+                | Some direction -> this.applyGroupSnapRealign direction
+                | None ->
+                    // No unambiguous work-area edge: the alignment is left as it is.
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine(sprintf "[snapDetect] native snap without a direction area=%A bounds=%A" (box area) before)
+#else
+                    ()
+#endif
             match target with
             | Some(x,y,w,h) ->
                 // Consume all old release evidence before any native write.
@@ -4444,7 +4459,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 // Both of these are about how the window behaves rather than
                 // how the tabs look, which is what separates them from the
                 // rest of the menu. Each one starts from the dialog's value
-                // and is overridden here for this group alone.
+                // and is overridden here for this group alone. Turning the
+                // room on takes the mode the dialog remembers.
                 text = Localization.getString("WindowBehaviorMenu")
                 image = None
                 items = List2([
@@ -4455,14 +4471,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                         click = fun() ->
                             group.lockWindowPosition <- not group.lockWindowPosition
                     })
-                    CmiPopUp({
+                    CmiRegular({
                         text = Localization.getString("SnapTabMarginMode")
                         image = None
-                        flags = List2()
-                        items = List2(SnapTabMarginMode.choices |> List.map (fun (mode, caption) ->
-                            CmiRegular({ text = Localization.getString(caption); image = None
-                                         flags = if group.snapTabMarginMode = mode then List2([MenuFlags.MF_CHECKED]) else List2()
-                                         click = fun () -> group.snapTabMarginMode <- mode })))
+                        flags =
+                            if SnapTabMarginMode.enabled group.snapTabMarginMode then List2([MenuFlags.MF_CHECKED])
+                            else List2()
+                        click = fun () ->
+                            let mode = group.snapTabMarginMode
+                            let detection = Services.settings.getValue "snapDetectionMode" |> unbox<string>
+                            group.snapTabMarginMode <-
+                                SnapTabMarginMode.marginForDetection (not (SnapTabMarginMode.enabled mode)) detection
                     })
                 ])
                 flags = List2()

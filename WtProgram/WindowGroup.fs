@@ -2859,7 +2859,7 @@ type WindowGroup(plugins:List2<IPlugin>) as this =
         // before the queued move. Their subsequent normal move updates their
         // restore rectangle; minimized/hidden/maximized members are untouched.
         let released =
-            if SnapTabMarginMode.externalEnabled this.snapTabMarginMode && this.canApplySnapRoom then
+            if this.snapTabHeightMargin && this.canApplySnapRoom then
                 this.windows.items.list |> List.filter (fun hwnd ->
                     hwnd <> this.topWindow && this.isSameWindow(hwnd) && not (OS().windowFromHwnd(hwnd).isCloaked) &&
                     Win32Helper.ReleaseWindowArrangement(hwnd))
