@@ -795,6 +795,7 @@ type Settings(isStandAlone) as this =
                         lockWindowPosition = settingsJson.getBool("LockWindowPosition").def(false)
                         snapTabMarginMode = SnapTabMarginMode.readJson "SnapTabHeightMargin" "SnapTabMarginMode" settingsJson |> Option.defaultValue SnapTabMarginMode.none
                         snapTabMarginDelayMilliseconds = readWait "SnapTabMarginDelayMilliseconds" 3000
+                        snapButtonOnlyMargin = settingsJson.getBool("SnapButtonOnlyMargin").def(true)
                         changeTabPositionOnSnap = settingsJson.getString("ChangeTabPositionOnSnap").def("change")
                         snapOnDragDetach = settingsJson.getBool("SnapOnDragDetach").def(false)
                         version = settingsJson.getString("Version").def(String.Empty)
@@ -860,6 +861,7 @@ type Settings(isStandAlone) as this =
                         lockWindowPosition = false
                         snapTabMarginMode = SnapTabMarginMode.none
                         snapTabMarginDelayMilliseconds = 3000
+                        snapButtonOnlyMargin = true
                         changeTabPositionOnSnap = "change"
                         snapOnDragDetach = false
                         version = String.Empty
@@ -910,6 +912,7 @@ type Settings(isStandAlone) as this =
             settingsJson.setBool("SnapTabHeightMargin", SnapTabMarginMode.enabled settings.snapTabMarginMode)
             settingsJson.setString("SnapTabMarginMode", SnapTabMarginMode.normalize settings.snapTabMarginMode)
             settingsJson.setInt32("SnapTabMarginDelayMilliseconds", max 100 (min 10000 settings.snapTabMarginDelayMilliseconds))
+            settingsJson.setBool("SnapButtonOnlyMargin", settings.snapButtonOnlyMargin)
             settingsJson.setString("ChangeTabPositionOnSnap", settings.changeTabPositionOnSnap)
             settingsJson.setBool("SnapOnDragDetach", settings.snapOnDragDetach)
             settingsJson.setStringArray("IncludedPaths", settings.includedPaths.items)

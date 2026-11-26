@@ -211,7 +211,7 @@ type AppearanceView() as this =
         EdgeRows.pageHeader (edgeChecks |> List.find (fun (edge, _) -> edge = TabEdges.Edge.Top) |> snd)
             "ApplySameSettingsToBottomEdge" (fun () -> this.copyToBottom())
     let panel = createPage 1
-    let topEdgePanel = createPage 4
+    let topEdgePanel = createPage 5
     do
         // Only the outer Appearance page scrolls; the tab grows to its content.
         topEdgePanel.AutoScroll <- false
@@ -758,6 +758,9 @@ type AppearanceView() as this =
     let topAddButton, refreshTopAddButton, topAddButtonRow = EdgeRows.addTabButton TabEdges.Edge.Top writeEdge
     do placementRefreshers.Add refreshTopAddButton
     do topEdgePanel.Controls.Add(topAddButtonRow, 0, 3)
+    let refreshTopCloseButtons, topCloseButtonsRow = EdgeRows.closeAllButtons TabEdges.Edge.Top writeEdge
+    do placementRefreshers.Add refreshTopCloseButtons
+    do topEdgePanel.Controls.Add(topCloseButtonsRow, 0, 4)
 
     // ---- "Tab position" and the edges' pages (8) ----
 
@@ -780,18 +783,24 @@ type AppearanceView() as this =
         let tabs = new SettingsSurfaceTabControl()
         tabs.Dock <- DockStyle.Top
         tabs.Margin <- Padding(0)
-        for edge in TabEdges.priority do
-            let page = new TabPage(edgeCaption edge)
+        let newPage (caption: string) =
+            let page = new TabPage(caption)
             page.UseVisualStyleBackColor <- false
             // Inherit the light form surface; DarkMode supplies its form surface.
             page.BackColor <- SystemColors.Control
             // The outer Appearance page scrolls when needed; this tab fits its content.
             page.AutoScroll <- false
             page.Padding <- UIHelper.settingsPagePadding
+            page
+        // Edge pages follow TabEdges.priority.
+        for edge in TabEdges.priority do
+            let page = newPage (edgeCaption edge)
             if edge = TabEdges.Edge.Top then
                 topEdgePanel.Dock <- DockStyle.Top
                 page.Controls.Add(topEdgePanel)
             tabs.TabPages.Add(page)
+        // The dialog opens on the top edge's page.
+        tabs.SelectedIndex <- 0
         tabs
 
     do
@@ -841,8 +850,9 @@ type AppearanceView() as this =
                 p.setEnabled(List.contains edge (checkedEdges ()))
 
     let refreshEdgePage () =
+        // Refresh the selected edge; the top page (index 0) has no panel here.
         let index = edgeTabs.SelectedIndex
-        if index > 0 then
+        if index > 0 && index < TabEdges.priority.Length then
             edgePanels.[TabEdges.priority.[index]].refresh()
         resizeEdgeTabs ()
 

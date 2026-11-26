@@ -13,6 +13,21 @@
     It is on by default.
 - Settings dialog: captions and inputs are centred vertically
   in their rows
+- Added a button [x] that closes all tabs of a tab group
+  - Left click closes every tab. Whether it asks first is chosen
+    with "Close-all-tabs button behavior" on the Interaction page.
+  - Right click closes all, the selected or the unselected tabs,
+    for the whole group or for one edge, without asking.
+  - Each edge has a setting "Close-all-tabs button display".
+    - Do not show / Always show / Show only when tabs exist
+    - Ends: left and right on the top and bottom edges,
+      top and bottom on the left and right edges
+    - By default the top edge shows it at the right end when it
+      has tabs, and the other edges do not show it.
+  - "Always show" puts the button on an edge without tabs too.
+    Whether such an edge gets room on snap is chosen
+    on the Interaction page.
+  - The rows of the Interaction page are regrouped.
 - Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24

@@ -10,14 +10,47 @@ module AddTabButton =
 
     /// The group of tabs a button belongs to: the one against the start of
     /// the strip (left, or top on a left or right strip) or against its end.
+    ///
+    /// CloseAll identifies one of the group's independent close buttons ([x]). It looks and is pressed like an add-tab
+    /// button and belongs to no group of tabs: it keeps a place of its own
+    /// at its end of the strip, outside the place the add-tab buttons use.
     type Slot =
         | AtStart
         | AtEnd
+        | CloseAll of atStart: bool
 
     /// How long a button is along its strip: `wanted` (a tab's height), or
     /// nothing when the strip is too short to keep a button's place.
     let length (wanted: int) (stripLength: int) =
         if wanted > 0 && stripLength >= 2 * wanted then wanted else 0
+
+    /// How long the close-all button is along its edge. Beside tabs it
+    /// follows the add-tab button's rule; standing alone on an edge with no
+    /// tabs it is `wanted`, cut to the length of the edge.
+    let closeLength (wanted: int) (stripLength: int) (hasTabs: bool) =
+        if hasTabs then length wanted stripLength else max 0 (min wanted stripLength)
+
+    let closeEnds (wanted: int) (stripLength: int) hasTabs atStart atEnd =
+        let count = (if atStart then 1 else 0) + (if atEnd then 1 else 0)
+        let size = if count = 0 then 0 else closeLength wanted (stripLength / count) hasTabs
+        [ if atStart && size > 0 then yield true, 0, size
+          if atEnd && size > 0 then yield false, stripLength - size, size ]
+
+    /// The place of the close-all button standing alone on an edge with no
+    /// tabs, cut out of the rectangle (x, y, width, height) a strip would
+    /// have there: one button (`wanted`) along the edge at the chosen end
+    /// and, on a left or right edge, no wider than `thickness`, against the
+    /// side of the rectangle the window's frame is on. A top or bottom edge
+    /// keeps the rectangle's height.
+    let aloneBounds (wanted: int) (thickness: int) (horizontal: bool) (frameOnRight: bool) (atStart: bool)
+                    ((x, y, w, h): int * int * int * int) : int * int * int * int =
+        if horizontal then
+            let length = closeLength wanted w false
+            (if atStart then x else x + w - length), y, length, h
+        else
+            let length = closeLength wanted h false
+            let width = max 0 (min thickness w)
+            (if frameOnRight then x + w - width else x), (if atStart then y else y + h - length), width, length
 
     /// Show a button only for an alignment group containing real tabs.
     let slots (hasStart: bool) (hasEnd: bool) =
@@ -37,6 +70,7 @@ module AddTabButton =
         else
             slots hasStart hasEnd |> List.choose (fun slot ->
                 match slot with
+                | CloseAll _ -> None
                 | AtEnd -> Some(AtEnd, area)
                 | AtStart ->
                     let at = max 0 (int (ceil startEnd))

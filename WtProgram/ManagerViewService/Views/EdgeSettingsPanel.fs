@@ -158,6 +158,46 @@ module EdgeRows =
         combo.MinimumSize <- Size(width, 0)
         combo.DropDownWidth <- max combo.Width width
 
+    let closeAllButtons edge write =
+        let row = rowTable 1
+        row.ColumnCount <- 4
+        // The choice takes half of the input area; each end a quarter.
+        row.ColumnStyles.[1].Width <- 50.0f
+        row.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 25.0f)) |> ignore
+        row.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 25.0f)) |> ignore
+        let modes = TabEdgeSettings.closeAllShowChoices
+        let combo = choice (["CloseAllShowHidden"; "CloseAllShowAlways"; "CloseAllShowWithTabs"] |> List.map Localization.getString)
+        fitChoiceWidth combo
+        combo.FontChanged.Add(fun _ -> fitChoiceWidth combo)
+        let horizontal = TabEdges.runsHorizontally edge
+        let first = new SettingsCheckBox(Text = Localization.getString(if horizontal then "CloseAllLeftEnd" else "CloseAllTopEnd"), AutoSize = true, Anchor = AnchorStyles.Left)
+        let last = new SettingsCheckBox(Text = Localization.getString(if horizontal then "CloseAllRightEnd" else "CloseAllBottomEnd"), AutoSize = true, Anchor = AnchorStyles.Left)
+        let mutable refreshing = false
+        let refresh () =
+            refreshing <- true
+            try
+                let value = (TabEdgeSettings.closeAllSettings Services.settings.root).[edge]
+                combo.SelectedIndex <- modes |> List.findIndex (fun (_, mode) -> mode = value.show)
+                first.Checked <- value.atStart
+                last.Checked <- value.atEnd
+                first.Enabled <- value.show <> TabEdgeSettings.Hidden
+                last.Enabled <- first.Enabled
+            finally refreshing <- false
+        refresh()
+        combo.SelectedIndexChanged.Add(fun _ ->
+            if not refreshing && combo.SelectedIndex >= 0 then
+                write (fun root -> TabEdgeSettings.writeCloseAllShowMode root edge (snd modes.[combo.SelectedIndex]))
+                refresh())
+        for control, atStart in [first, true; last, false] do
+            control.Margin <- Padding(10, marginPx, 0, marginPx)
+            control.CheckedChanged.Add(fun _ ->
+                if not refreshing then write (fun root -> TabEdgeSettings.writeCloseAllPosition root edge atStart control.Checked))
+        place row (caption (Localization.getString "CloseAllTabsButtonDisplay")) 0 0
+        place row combo 1 0
+        place row first 2 0
+        place row last 3 0
+        refresh, row
+
     /// The same choice and wait field on every edge page: 3/5 and 2/5.
     let hideTabsControls (read: unit -> string * int) (save: string -> int -> unit) =
         let modes = ["never", "HideTabsNever"; "down", "HideTabsWhenDown"; "doubleclick", "HideTabsOnClick"]
@@ -476,10 +516,10 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             | _ -> "ApplySameSettingsToTopEdge"
         EdgeRows.pageHeader check key (fun () -> this.copyToOpposite())
     let panel = new SettingsTableLayoutPanel(AutoSize = true, Dock = DockStyle.Top,
-                                    Margin = Padding(0), ColumnCount = 1, RowCount = 4)
+                                    Margin = Padding(0), ColumnCount = 1, RowCount = 5)
     do
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
-        for _ in 1..4 do panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
+        for _ in 1..5 do panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         panel.Controls.Add(header, 0, 0)
         panel.Controls.Add(table, 0, 1)
     let mutable nextRow = 0
@@ -548,9 +588,11 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             combo.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         grid
     let addButton, refreshAddButton, addButtonRow = EdgeRows.addTabButton edge write
+    let refreshCloseButtons, closeButtonsRow = EdgeRows.closeAllButtons edge write
     do
         panel.Controls.Add(placementPanel, 0, 2)
         panel.Controls.Add(addButtonRow, 0, 3)
+        panel.Controls.Add(closeButtonsRow, 0, 4)
     let firstEnd, secondEnd = if sideways then "EdgeTop", "EdgeBottom" else "EdgeLeft", "EdgeRight"
     let outside = EdgeRows.distancePair (text firstEnd) (text secondEnd) TabEdges.defaultOutsideDistance
     let inside = EdgeRows.distancePair (text firstEnd) (text secondEnd) TabEdges.defaultInsideDistance
@@ -717,6 +759,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
         refreshing <- true
         try
             refreshAddButton ()
+            refreshCloseButtons ()
             refreshHideTabs ()
             let v = values ()
             textBottomCombo.SelectedIndex <- if defaultArg v.textBottomInside true then 0 else 1

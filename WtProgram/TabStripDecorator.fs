@@ -230,6 +230,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // top (TabEdgeSettings), read with the allowed edges: when the group
     // starts and whenever the dialog changes them.
     let mutable edgeValues : Map<TabEdges.Edge, TabEdgeSettings.EdgeValues> = Map.empty
+    // The same values of the edge the group's close-all button stands on
+    // (AddTabButton.CloseAll), when that is an edge other than the top that
+    // tabs may not use: the button is placed by that edge's page all the
+    // same. The edge is not added to the edges tabs may use, and no tab can
+    // be put on it. None with no button on such an edge, and then nothing
+    // below differs.
+    let mutable closeEdgeValues : Map<TabEdges.Edge, TabEdgeSettings.EdgeValues> = Map.empty
     // The windows of the other edges as registered for drops and files,
     // taken off again as the strip destroys them.
     let mutable edgeRegistrations : (IntPtr * OleDropTarget option) list = []
@@ -902,18 +909,34 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             TabEdges.edgesOf allowed
             |> List.filter (fun edge -> try TabEdgeSettings.addTabButton root edge with _ -> false)
             |> Set.ofList)
+        // Button-only edges use their own appearance even when tabs are disabled.
+        let closeAll = try TabEdgeSettings.closeAllSettings root with _ -> Map.empty
+        closeEdgeValues <-
+            closeAll |> Map.toList |> List.choose (fun (edge, value) ->
+                if TabEdgeSettings.closeAllVisible false value then Some edge else None)
+            |> List.filter (fun edge -> edge <> TabEdges.Edge.Top && not (edgeValues.ContainsKey edge))
+            |> List.map (fun edge -> edge, (try TabEdgeSettings.valuesOf root edge with _ -> TabEdgeSettings.noValues))
+            |> Map.ofList
+        this.ts.setCloseAll(closeAll)
 
     // A window for each allowed edge other than the top that has none yet,
     // registered for drops and for files dropped on its tabs.
     member private this.addEdgeWindows() =
-        let existing = this.ts.edgeHwnds
         for edge in edgeValues |> Map.toList |> List.map fst do
             let hwnd = this.ts.addEdge(edge)
-            if not (List.contains hwnd existing) then
+            // Every window made here is registered as it is made. The one
+            // made below for the close-all button alone is not, until tabs
+            // may use its edge: so the test is the registration itself.
+            if not (edgeRegistrations |> List.exists (fun (registered, _) -> registered = hwnd)) then
                 Services.dragDrop.registerTarget(hwnd, this.edgeDropTarget edge)
                 // Files dropped on a tab of this strip, as on the top strip's.
                 let ole = try Some(OleDropTarget(this.ts, hwnd, fun pt -> this.ts.tryHitOn(edge, pt))) with _ -> None
                 edgeRegistrations <- edgeRegistrations @ [ hwnd, ole ]
+        // The close-all button on an edge tabs may not use stands in that
+        // edge's window. No tab can be dropped there, so the window is not
+        // registered as a place to drop on. When the button moves away the
+        // window stays, empty and hidden, as an unchecked edge's does.
+        closeEdgeValues |> Map.iter (fun edge _ -> this.ts.addEdge(edge) |> ignore)
 
     // The dialog changed the edges (TabEdgeSettings.changed); on this
     // group's thread. A newly checked edge gets its strip; the tabs of an
@@ -1010,7 +1033,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 // WindowGroup is the single owner of visibility policy. Keeping
                 // placement updates on the same decision prevents move-state races.
                 this.ts.visible <- group.shouldShowTabs
-                if TabEdges.isTopOnly this.ts.allowedEdges then group.repairStripZorder("placement")
+                if TabEdges.isTopOnly this.ts.allowedEdges && closeEdgeValues.IsEmpty then group.repairStripZorder("placement")
 
                 // The strips of the other edges (none while the top edge is the
                 // only one): placed from the same window rectangle, and kept in
@@ -1021,7 +1044,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             this.updateTopEdgeGuard()
         )
         // Rendering and side placement must finish before repairing the stack.
-        if not (TabEdges.isTopOnly this.ts.allowedEdges) then group.repairStripZorder("placement")
+        // (Also with the top edge alone, when the close-all button is shown
+        // in another edge's window.)
+        if not (TabEdges.isTopOnly this.ts.allowedEdges && closeEdgeValues.IsEmpty) then group.repairStripZorder("placement")
 
     // The scale of the display an edge's side of the frame is on.
     static member private sideScale (edge: TabEdges.Edge) ((fx, fy, fw, fh): TabEdgeLayout.Box) (fallback: float) =
@@ -1147,14 +1172,25 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 TabEdgeLayout.placementMonitors false
                     (Mon.fromHwnd(hwnd) |> Option.map (fun m -> box m.workRect))
                     (Mon.all.list |> List.map (fun m -> box m.workRect))
+            // The close-all button standing alone on the top or the bottom
+            // edge takes its corner as a strip there would: one button's.
+            let closeCorner edge =
+                this.ts.closeAloneBounds edge |> List.map box
             let topCorner =
                 if this.ts.topShows then
                     let b = top.bounds
                     [ b.location.x, b.location.y, b.size.width, b.size.height ]
-                else []
+                else closeCorner TabEdges.Edge.Top
             let mutable bottomCorner = []
             for edge in [ TabEdges.Edge.Bottom; TabEdges.Edge.Left; TabEdges.Edge.Right ] do
-                match edgeValues.TryFind(edge) with
+                // An edge tabs may use, or the one the close-all button
+                // stands on although they may not.
+                let values =
+                    match edgeValues.TryFind(edge), closeEdgeValues.TryFind(edge) with
+                    | Some(values), _ -> Some(values)
+                    | None, Some(values) -> Some(values)
+                    | None, _ -> None
+                match values with
                 | Some(values) ->
                     let scale = TabStripDecorator.sideScale edge frame top.scale
                     let spec, appearance = this.edgeSpec edge values scale
@@ -1163,8 +1199,9 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                     this.ts.setTextBottomInside(edge, defaultArg values.textBottomInside true)
                     this.ts.setEdgePlacement(edge, Rect(Pt(x, y), Sz(w, h)), appearance, scale,
                                              { inside = placed.inside; across = spec.across })
-                    if edge = TabEdges.Edge.Bottom && not (this.ts.bandOf edge).isEmpty then
-                        bottomCorner <- [ placed.rect ]
+                    if edge = TabEdges.Edge.Bottom then
+                        if not (this.ts.bandOf edge).isEmpty then bottomCorner <- [ placed.rect ]
+                        else bottomCorner <- closeCorner edge
                 | None -> ()
         | _ -> ()
 
@@ -1246,6 +1283,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // Convert the tab's text client position to screen coordinates.
         let mutable pt = POINT(X = textBounds.location.x, Y = textBounds.location.y + verticalMargin)
         if sideBox.IsNone then
+            // The sprite's place is the top strip's layout's: in the window
+            // it is past the place the close-all button keeps at the start
+            // (nothing without one).
+            pt <- POINT(X = pt.X + this.ts.topTabAreaStart, Y = pt.Y)
             WinUserApi.ClientToScreen(this.ts.hwnd, &pt) |> ignore
 
         form.Location <- Point(pt.X, pt.Y)
@@ -1370,6 +1411,56 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             | _ -> None)
         target |> Option.iter (fun decorator ->
             decorator.group.invokeAsync(fun () -> decorator.onCloseAllWindows()))
+
+    member private this.showCloseAllMenu(point: Pt) =
+        let windows = group.windows.items.list
+        let active = this.ts.zorder.tryHead
+        let retained = active |> Option.map (fun (Tab hwnd) -> this.actionTargets(hwnd) |> Set.ofList)
+        let others, sections =
+            TabEdges.closeMenuTargets (TabEdges.edgesOf this.ts.allowedEdges)
+                (windows |> List.map (fun hwnd -> hwnd, this.ts.edgeOf(Tab hwnd)))
+                (defaultArg retained Set.empty)
+        let closeItem text targets enabled =
+            CmiRegular({ text = text; image = None
+                         flags = if enabled && not (List.isEmpty targets) then List2() else List2([MenuFlags.MF_GRAYED])
+                         click = fun () ->
+                             // Never close a window that has since left this group.
+                             let current = group.windows.items.list |> Set.ofList
+                             targets |> List.filter current.Contains |> List.iter this.onCloseWindow })
+        let edgeName edge = Localization.getString(string edge + "TabsInMenu")
+        let items =
+            [ closeItem (String.Format(Localization.getString("CloseAllTabsFormat"), windows.Length)) windows true
+              closeItem (String.Format(Localization.getString("CloseUnselectedTabsFormat"), (if retained.IsSome then others.Length else 0)))
+                  (if retained.IsSome then others else []) retained.IsSome ] @
+            (sections |> List.collect (fun (edge, targets, unselected) ->
+                let selected = targets |> List.filter (fun hwnd ->
+                    retained |> Option.exists (fun selection -> selection.Contains hwnd))
+                let partialSelection = not selected.IsEmpty && not unselected.IsEmpty
+                let selectionText countKey noCountKey count =
+                    if partialSelection then
+                        String.Format(Localization.getString(countKey), edgeName edge, count)
+                    else
+                        String.Format(Localization.getString(noCountKey), edgeName edge)
+                [ CmiSeparator
+                  closeItem (String.Format(Localization.getString("CloseEdgeTabsFormat"), edgeName edge, targets.Length)) targets true
+                  closeItem (selectionText "CloseSelectedEdgeTabsFormat" "CloseSelectedEdgeTabsNoCountFormat" selected.Length) selected partialSelection
+                  closeItem (selectionText "CloseUnselectedEdgeTabsFormat" "CloseUnselectedEdgeTabsNoCountFormat" unselected.Length) unselected partialSelection ]))
+        let dark = Services.settings.root.getBool("EnableDarkMode") |> Option.defaultValue false
+        group.bb.write("contextMenuVisible", true)
+        try Win32Menu.show group.hwnd point (Dpi.scaleForPoint point) (List2(items)) dark
+        finally group.bb.write("contextMenuVisible", false)
+
+    member private this.onCloseAllButton() =
+        if group.windows.items.count > 0 then
+            match TabEdgeSettings.closeAllMode Services.settings.root with
+            | TabEdgeSettings.Disabled -> ()
+            | TabEdgeSettings.Immediate -> TabStripDecorator.closeAllTabs(group.hwnd)
+            | TabEdgeSettings.Confirm ->
+                let ownerHwnd = group.topWindow
+                let owner = { new IWin32Window with member _.Handle = ownerHwnd }
+                let message = String.Format(Localization.getString("CloseAllButtonQuestion"), group.windows.items.count)
+                if AppDialog.confirmOwned owner "WindowTabs" message then
+                    TabStripDecorator.closeAllTabs(group.hwnd)
 
     member private this.onCloseAllWindows(?edge: TabEdges.Edge) =
         group.windows.items.iter (fun hwnd ->
@@ -2031,7 +2122,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 let scale =
                     try Dpi.scaleForRect(Rect(Pt(workArea.X, workArea.Y), Sz(max 1 workArea.Width, max 1 workArea.Height)))
                     with _ -> this.ts.scale
-                TabStripDecorator.snapReserveAt(edges, edgeValues, group.tabAppearanceRaw,
+                let values =
+                    if Services.settings.getValue "snapButtonOnlyMargin" |> unbox<bool> then
+                        closeEdgeValues |> Map.fold (fun values edge settings -> Map.add edge settings values) edgeValues
+                    else edgeValues
+                TabStripDecorator.snapReserveAt(edges, values, group.tabAppearanceRaw,
                                                 Services.program.defaultTabAppearanceInfo, scale, true,
                                                 Services.settings.getValue("tabVerticalDirection") :?> string)
         with _ -> TabEdgeLayout.noReserve
@@ -2041,14 +2136,23 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // Callers without a detached snapshot use the first allowed edge.
     member private this.snapEdges (ofGroup: bool, detachedEdges: TabEdges.Edge list option) =
         let allowed = this.ts.allowedEdges
-        if TabEdges.isTopOnly allowed then [ TabEdges.Edge.Top ]
-        elif ofGroup then this.ts.edgesInUse
-        else defaultArg detachedEdges [ TabEdges.firstAllowed allowed ]
-             |> List.map (TabEdges.fallback allowed)
-             |> List.distinct
+        let tabEdges =
+            if TabEdges.isTopOnly allowed then [ TabEdges.Edge.Top ]
+            elif ofGroup then this.ts.edgesInUse
+            else defaultArg detachedEdges [ TabEdges.firstAllowed allowed ]
+                 |> List.map (TabEdges.fallback allowed)
+        // Optionally reserve room even when only a button occupies the edge.
+        let buttonEdges =
+            if Services.settings.getValue "snapButtonOnlyMargin" |> unbox<bool> then
+                TabEdges.priority |> List.filter this.ts.hasCloseAllWithoutTabsOn
+            else []
+        (tabEdges @ buttonEdges) |> List.distinct
 
     member private this.useTopOnlySnap(ofGroup: bool) =
-        TabEdges.useTopOnlySnap this.ts.allowedEdges this.ts.edgesInUse ofGroup
+        let hasSideButton =
+            (Services.settings.getValue "snapButtonOnlyMargin" |> unbox<bool>) &&
+            (TabEdges.priority |> List.exists (fun edge -> edge <> TabEdges.Edge.Top && this.ts.hasCloseAllWithoutTabsOn edge))
+        not hasSideButton && TabEdges.useTopOnlySnap this.ts.allowedEdges this.ts.edgesInUse ofGroup
 
     member private this.adjustWorkAreaForTabHeight(workArea: System.Drawing.Rectangle, ?ofGroup: bool, ?detachedEdges: TabEdges.Edge list) =
         let (x, y, width, height) =
@@ -4397,12 +4501,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             with
             | _ -> 3000
         )
+        let offCloseEdge edge =
+            this.ts.hasCloseAllOn edge && not (TabEdges.isAllowed allowedEdges.value edge)
         let recentEdges = Cell.create(Set.empty<TabEdges.Edge>)
         let recentCallbacks = System.Collections.Generic.Dictionary<TabEdges.Edge, IDisposable>()
         group.zorder.changed.Add <| fun () ->
             for callback in recentCallbacks.Values do callback.Dispose()
             recentCallbacks.Clear()
-            let edges = TabEdgeSettings.recentHideEdges allowedEdges.value edgeHideSettings.value
+            let edges =
+                TabEdgeSettings.recentHideEdges allowedEdges.value edgeHideSettings.value
+                @ (insideHideEdges.value |> Set.toList |> List.filter (fun edge ->
+                    offCloseEdge edge && fst edgeHideSettings.value.[edge] = "down"))
             recentEdges.value <- Set.ofList edges
             for edge in edges do
                 let delay = snd edgeHideSettings.value.[edge]
@@ -4470,7 +4579,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                             cancelEdge edge
                             let callback = ThreadHelper.cancelablePostBack (TabBehaviorPolicy.hideTimerInterval delay) <| fun() ->
                                 edgeCallbacks.Remove edge |> ignore
-                                if not (TabEdges.isTopOnly allowedEdges.value)
+                                if (not (TabEdges.isTopOnly allowedEdges.value) || offCloseEdge edge)
                                    && Set.contains edge insideHideEdges.value
                                    && hoveredEdge.value <> Some edge
                                    && fst edgeHideSettings.value.[edge] = "down"
@@ -4486,10 +4595,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 if this.ts.isShrunk then this.ts.isShrunk <- false
                 updateEdges()
             else
-                for edge in TabEdges.priority do
-                    cancelEdge edge
-                    this.ts.setShrunkOn(edge, false)
-                edgeIconProtection.Clear()
+                if not closeEdgeValues.IsEmpty then
+                    // Only the OFF-edge button joins the per-edge hide path.
+                    // The legacy top-strip state and timer below stay unchanged.
+                    updateEdges()
+                else
+                    for edge in TabEdges.priority do
+                        cancelEdge edge
+                        this.ts.setShrunkOn(edge, false)
+                    edgeIconProtection.Clear()
                 // Update isWindowInside based on current tab position: any strip
                 // inside the window, on any edge ("hide inside tabs", 5-3) - the
                 // top strip's direction alone while the top edge is the only one.
@@ -4560,6 +4674,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // A dragged tab enters the strip of `edge` (the top strip's through this
     // decorator, the others' through edgeDropTarget), `pt` along the strip.
     member private this.dragEnterOn(edge: TabEdges.Edge, data: obj, pt: Pt) =
+        // An edge tabs may not use shows its window only for the close-all
+        // button, and that is no place to drop a tab on - the always
+        // registered top strip included. Without the button nothing changes.
+        if this.invokeSync (fun () ->
+            this.ts.hasCloseAllOn edge && not (TabEdges.isAllowed this.ts.allowedEdges edge)) then false else
         let accepted = this.invokeSync <| fun() ->
             let dragInfo = data :?> TabDragInfo
             let (Tab(hwnd)) = dragInfo.tab
@@ -5131,6 +5250,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         | _ -> ()
 
     interface ITabStripMonitor with
+        // Only the close-all button follows the configured confirmation mode.
+        member x.closeAllClick(button, point) =
+            if not (DialogState.isBusy()) then
+                match button with
+                | MouseLeft -> this.onCloseAllButton()
+                | MouseRight -> this.showCloseAllMenu(point)
+                | _ -> ()
         member x.addTabTooltip() = this.addTabTooltip()
         member x.addTabClick(button, edge, align, point) = this.addTabClick(button, edge, align, point)
         member x.tabClick((btn, tab, part, action, pt)) =

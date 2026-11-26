@@ -23,6 +23,8 @@ type TabTooltipForm() =
         parameters
 
 type ITabStripMonitor =
+    // A click on the group's close-all button (AddTabButton.CloseAll).
+    abstract member closeAllClick : MouseButton * Pt -> unit
     abstract member addTabTooltip : unit -> string option
     // A click on an add-tab button: the mouse button, the edge of the strip,
     // the group of tabs the button stands after, and where a menu goes.
@@ -211,6 +213,8 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // The edges whose strip shows add-tab buttons (AddTabButton), as the
     // settings have them; an edge tabs may not use shows none.
     let addTabEdgesCell = Cell.create(Set.empty<TabEdges.Edge>)
+    // Visibility mode and independent ends for each edge's close-all buttons.
+    let closeAllCell = Cell.create(Map.empty<TabEdges.Edge, TabEdgeSettings.CloseAllEdge>)
     let addTabHoverCell = Cell.create(None : (TabEdges.Edge * AddTabButton.Slot) option)
     let mutable addTabPress : (TabEdges.Edge * AddTabButton.Slot * MouseButton) option = None
     let capturedCell = Cell.create(None : Option<Tab*TabPart>)
@@ -319,12 +323,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         | None -> if hoverCell.value.IsSome then Some mouseEdgeCell.value else None
 
     let insideHideEdgesExport = Cell.export <| fun() ->
-        if TabEdges.isTopOnly allowedEdgesCell.value then Set.empty
-        else
+        if TabEdges.isTopOnly allowedEdgesCell.value then
             TabEdges.priority
             |> List.filter (fun edge ->
-                TabEdges.isAllowed allowedEdgesCell.value edge &&
-                this.isInsideOn edge && not (this.bandOf edge).isEmpty)
+                not (TabEdges.isAllowed allowedEdgesCell.value edge)
+                && this.closeStandsAloneOn edge && this.isInsideOn edge)
+            |> Set.ofList
+        else
+            // An edge with tabs, and the edge the close-all button stands
+            // alone on: it is hidden as that edge's tabs would be.
+            TabEdges.priority
+            |> List.filter (fun edge ->
+                this.isInsideOn edge &&
+                ((TabEdges.isAllowed allowedEdgesCell.value edge && not (this.bandOf edge).isEmpty)
+                 || this.closeStandsAloneOn edge))
             |> Set.ofList
 
     let addEvent(evt,handler) =
@@ -468,7 +480,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.ptScreen = this.window.ptToScreen(this.pt)
     member private this.setPt = ptCell.set
 
-    member private this.size = sizeCell.value
+    // The top strip's size and place as the decorator set them - or, while
+    // the close-all button stands alone on the top edge, the button's own
+    // (closeAloneOn): there is no strip then, and the window is the button.
+    member private this.size : Sz =
+        match this.topAloneRect with
+        | Some(r) -> r.size
+        | None -> sizeCell.value
 
     member this.showInside = showInsideCell.value
 
@@ -529,6 +547,179 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member this.edgesInUse =
         TabEdges.priority |> List.filter (fun e -> not (this.bandOf e).isEmpty)
+
+    // ----- the close-all button (AddTabButton.CloseAll) -----
+    //
+    // Independent buttons at either end of each edge; an edge tabs
+    // may not use included. It is one more button of the add-tab buttons'
+    // kind: drawn, hovered, pressed and given its tooltip by the same code.
+    //
+    // On an edge with tabs the strip keeps one button's place at that end
+    // and lays its tabs - with their add-tab buttons - out in the rest: the
+    // layout, the hit test and the drop position work in a strip that much
+    // shorter. Where the place is at the strip's start, a point of the
+    // window is that far along from the same point of the layout
+    // (tabAreaStart).
+    //
+    // On an edge with no tabs there is no strip. The edge's window shows the
+    // button alone, in one button's place at that corner (closeAloneOn),
+    // cut out of the place the decorator gave the edge. While a tab is
+    // dragged the button is neither drawn nor hit, as an add-tab button is
+    // not, and an edge with no tabs is what it is without the button: the
+    // thin strip to drop on along the whole edge, or nothing.
+
+    /// Per-edge visibility and ends; tab-dependent visibility follows bandOf.
+    member this.setCloseAll(place: Map<TabEdges.Edge, TabEdgeSettings.CloseAllEdge>) =
+        if closeAllCell.value <> place then
+            Cell.beginUpdate()
+            closeAllCell.set(place)
+            match addTabHoverCell.value with
+            | Some(_, AddTabButton.CloseAll _) -> addTabHoverCell.set(None)
+            | _ -> ()
+            match addTabPress with
+            | Some(edge, AddTabButton.CloseAll _, _) ->
+                addTabPress <- None
+                this.windowOf edge |> Option.iter (fun w -> if w.hasCapture then w.releaseCapture())
+            | _ -> ()
+            Cell.endUpdate()
+
+    member this.hasCloseAllWithoutTabsOn (edge: TabEdges.Edge) : bool =
+        closeAllCell.value |> Map.tryFind edge
+        |> Option.exists (TabEdgeSettings.closeAllVisible false)
+
+    member this.hasCloseAllOn (edge: TabEdges.Edge) : bool =
+        closeAllCell.value |> Map.tryFind edge
+        |> Option.exists (TabEdgeSettings.closeAllVisible (not (this.bandOf edge).isEmpty))
+
+    member private this.closeAllAtStart (edge: TabEdges.Edge) : bool =
+        this.hasCloseAllOn edge && (closeAllCell.value |> Map.tryFind edge |> Option.exists (fun value -> value.atStart))
+
+    member private this.closeAllAtEnd (edge: TabEdges.Edge) : bool =
+        this.hasCloseAllOn edge && (closeAllCell.value |> Map.tryFind edge |> Option.exists (fun value -> value.atEnd))
+
+    /// Whether the close-all button's edge has no tabs: the button stands
+    /// there alone, whatever a drag makes of it for the moment.
+    member this.closeStandsAloneOn (edge: TabEdges.Edge) : bool =
+        this.hasCloseAllOn edge && (this.bandOf edge).isEmpty && not visualOrderCell.value.isEmpty
+
+    // The same, as it is shown now: not while a tab is dragged.
+    member private this.closeAloneOn (edge: TabEdges.Edge) : bool =
+        this.closeStandsAloneOn edge && slideCell.value.IsNone && not receivingCell.value
+
+    // How long a button of an edge's strip wants to be: as long as the
+    // strip's tabs are high - a square on every strip, a row written across
+    // included. `size` is the strip's, along it and then across.
+    member private this.buttonWanted (edge: TabEdges.Edge) (size: Sz) : int =
+        if this.isAcross edge then
+            match edgePlacementCell.value.TryFind(edge) with
+            | Some((_, a, _)) -> min (max 1 (a.tabHeight - 1)) size.height
+            | None -> 0
+        else size.height - 1
+
+    // One button's place at the button's end of `bounds`, the place of an
+    // edge's strip: as wide as the button too on a left or right edge - a
+    // strip written across is wider than a button - and against the
+    // window's frame there (AddTabButton.aloneBounds).
+    member private this.aloneRectAt (edge: TabEdges.Edge) (atStart: bool) (bounds: Rect) : Rect =
+        let horizontal = TabEdges.runsHorizontally edge
+        let across = if horizontal then bounds.size.height else bounds.size.width
+        let count = (if this.closeAllAtStart edge then 1 else 0) + (if this.closeAllAtEnd edge then 1 else 0)
+        let along = if horizontal then bounds.size.width else bounds.size.height
+        let wanted = min (this.buttonWanted edge (Sz(0, across))) (along / max 1 count)
+        let thickness =
+            if this.isAcross edge then min wanted (AddTabButton.closeLength wanted bounds.size.height false)
+            else across
+        let frameOnRight = (edge = TabEdges.Edge.Left) <> (this.edgeDraw edge).inside
+        let x, y, w, h =
+            AddTabButton.aloneBounds wanted thickness horizontal frameOnRight atStart
+                (bounds.location.x, bounds.location.y, bounds.size.width, bounds.size.height)
+        // Remove the normal strip's hairline, retaining the button's exact
+        // screen rectangle. Across-text strips already have no extra pixel.
+        let offset = match this.directionOn edge with TabUp -> 0 | TabDown -> 1
+        if horizontal then Rect(Pt(x, y + offset), Sz(w, max 0 (h - 1)))
+        elif this.isAcross edge then Rect(Pt(x, y), Sz(w, h))
+        else
+            let width = max 0 (w - 1)
+            let column = TabEdges.sideTabColumn (this.sideTextClockwise edge) w offset width
+            Rect(Pt(x + column, y), Sz(width, h))
+
+    member private this.aloneRects (edge: TabEdges.Edge) (bounds: Rect) =
+        [ if this.closeAllAtStart edge then yield this.aloneRectAt edge true bounds
+          if this.closeAllAtEnd edge then yield this.aloneRectAt edge false bounds ]
+
+    member private this.aloneRect (edge: TabEdges.Edge) (bounds: Rect) =
+        match this.aloneRects edge bounds with
+        | [] -> bounds
+        | first :: rest ->
+            rest |> List.fold (fun (a: Rect) (b: Rect) ->
+                let x = min a.location.x b.location.x
+                let y = min a.location.y b.location.y
+                let right = max (a.location.x + a.size.width) (b.location.x + b.size.width)
+                let bottom = max (a.location.y + a.size.height) (b.location.y + b.size.height)
+                Rect(Pt(x, y), Sz(right - x, bottom - y))) first
+
+    member private this.topAloneRect : Rect option =
+        if this.closeAloneOn TabEdges.Edge.Top then
+            Some(this.aloneRect TabEdges.Edge.Top (Rect(locationCell.value, sizeCell.value)))
+        else None
+
+    // Where an edge's strip is and what it is drawn with, of an edge other
+    // than the top: as the decorator placed it (setEdgePlacement) - or,
+    // while the close-all button stands alone there, the button's place.
+    // The thin strip to drop on reads the decorator's value itself.
+    member private this.placementOf (edge: TabEdges.Edge) : (Rect * TabAppearanceInfo * float) option =
+        match edgePlacementCell.value.TryFind(edge) with
+        | Some((bounds, a, scale)) when this.closeAloneOn edge -> Some(this.aloneRect edge bounds, a, scale)
+        | placed -> placed
+
+    /// The place on the screen of the close-all button standing alone on an
+    /// edge, which takes the corners a strip there would; empty where it does
+    /// not stand alone. Keep this reservation while a drag hides the picture.
+    member this.closeAloneBounds (edge: TabEdges.Edge) : Rect list =
+        if not (this.closeStandsAloneOn edge) then []
+        elif edge = TabEdges.Edge.Top then
+            this.aloneRects edge (Rect(locationCell.value, sizeCell.value))
+        else
+            edgePlacementCell.value.TryFind(edge)
+            |> Option.map (fun (bounds, _, _) -> this.aloneRects edge bounds)
+            |> Option.defaultValue []
+
+    member private this.closeButtonEnds (edge: TabEdges.Edge) =
+        if not (this.hasCloseAllOn edge) || ((this.bandOf edge).isEmpty && not (this.closeAloneOn edge)) then []
+        else
+            let size = this.logicalSizeOf edge
+            let wanted =
+                if this.closeAloneOn edge then
+                    this.closeAloneBounds edge
+                    |> List.tryHead
+                    |> Option.map (fun bounds -> if TabEdges.runsHorizontally edge then bounds.size.width else bounds.size.height)
+                    |> Option.defaultValue 0
+                else this.buttonWanted edge size
+            AddTabButton.closeEnds wanted size.width (not (this.closeAloneOn edge))
+                (this.closeAllAtStart edge) (this.closeAllAtEnd edge)
+
+    member private this.closeButtonLength (edge: TabEdges.Edge) : int =
+        this.closeButtonEnds edge |> List.sumBy (fun (_, _, length) -> length)
+
+    // How far along its strip an edge's layout starts in the strip's
+    // window: past the close-all button's place where that is at the start.
+    member private this.tabAreaStart (edge: TabEdges.Edge) : int =
+        this.closeButtonEnds edge |> List.tryPick (fun (atStart, _, length) -> if atStart then Some length else None) |> Option.defaultValue 0
+
+    // A point of an edge's window, as the strip's layout has it.
+    member private this.tabAreaPoint (edge: TabEdges.Edge) (pt: Pt) : Pt =
+        let start = this.tabAreaStart edge
+        if start = 0 then pt
+        elif TabEdges.runsHorizontally edge then Pt(pt.x - start, pt.y)
+        else Pt(pt.x, pt.y - start)
+
+    // A rectangle of the picture of an edge's tabs, in the picture the
+    // strip's window shows.
+    member private this.offsetTabRect (edge: TabEdges.Edge) (r: Rectangle) : Rectangle =
+        let start = this.tabAreaStart edge
+        if start = 0 then r
+        elif TabEdges.runsHorizontally edge then Rectangle(r.X + start, r.Y, r.Width, r.Height)
+        else Rectangle(r.X, r.Y + start, r.Width, r.Height)
 
     // ----- add-tab buttons (AddTabButton) -----
 
@@ -670,14 +861,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 if this.isAcross edge then
                     this.acrossOf edge |> Option.bind (fun layout ->
                         layout.rowOf tab |> Option.map (fun (x, along, sprite) ->
-                            Rect(Pt(origin.x + x + sprite.textLocation.x, origin.y + along),
+                            Rect(Pt(origin.x + x + sprite.textLocation.x, origin.y + along + this.tabAreaStart edge),
                                  Sz(max (Dpi.px scale 60) sprite.textSize.width, layout.rows.length))))
                 elif TabEdges.runsHorizontally edge then
                     let ts = this.tsOn edge
                     ts.sprite.children.tryPick (fun (at, sprite) ->
                         match sprite with
                         | :? TabSprite<Tab> as s when s.id = tab ->
-                            Some(Rect(Pt(origin.x + at.x + s.textLocation.x, origin.y + at.y + s.textLocation.y), s.textSize))
+                            Some(Rect(Pt(origin.x + at.x + this.tabAreaStart edge + s.textLocation.x, origin.y + at.y + s.textLocation.y), s.textSize))
                         | _ -> None)
                 else
                     let ts = this.tsOn edge
@@ -687,7 +878,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     let x =
                         if edge = TabEdges.Edge.Left then origin.x + bounds.size.width
                         else origin.x - width
-                    Some(Rect(Pt(x, origin.y + along),
+                    Some(Rect(Pt(x, origin.y + along + this.tabAreaStart edge),
                               Sz(width, max 1 (appearance.tabHeight - Dpi.px scale 4))))
             | None -> None
 
@@ -789,10 +980,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // A left or right strip lays its tabs out along its height: the sprite
     // is built as a top strip as long as the column is high and as thick as
     // it is wide, and each tab is drawn turned (see renderSide).
-    member private this.logicalSizeOf (edge: TabEdges.Edge) =
+    member private this.logicalSizeOf (edge: TabEdges.Edge) : Sz =
         if edge = TabEdges.Edge.Top then this.size
         else
-            match edgePlacementCell.value.TryFind(edge) with
+            match this.placementOf edge with
             | Some((bounds, _, _)) ->
                 if TabEdges.runsHorizontally edge then bounds.size
                 else Sz(bounds.size.height, bounds.size.width)
@@ -932,8 +1123,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let band = (this.bandOf edge).list
             let count = band.Length
             let button = px 14
-            // The rows' own strip: less the place kept for an add-tab button.
-            let stripLength = bounds.size.height - this.addButtonLength edge
+            // The rows' own strip: less the places kept for an add-tab button
+            // and for the close-all button.
+            let stripLength = bounds.size.height - this.addButtonLength edge - this.closeButtonLength edge
             let viewStart, viewLength = TabEdgeLayout.viewport rows count stripLength button
             let stored = defaultArg (edgeScrollCell.value.TryFind(edge)) 0
             let scroll = TabEdgeLayout.clampScroll rows count viewLength stored
@@ -998,6 +1190,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     /// A scroll button under a point of a strip written across: Some(true)
     /// for the one towards the first row.
     member private this.acrossButtonAt (edge: TabEdges.Edge) (pt: Pt) : bool option =
+        let pt = this.tabAreaPoint edge pt
         match this.acrossOf edge with
         | Some(layout) when layout.viewStart > 0 && pt.x >= 0 && pt.x < layout.stripWidth ->
             if pt.y >= 0 && pt.y < layout.viewStart then Some(true)
@@ -1068,8 +1261,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             | _ -> offset
         else offset
 
+    // `point` is the pointer in the strip's window, along the strip; the
+    // slide is a place in the strip's layout (tabAreaStart).
     member this.slideFromPointer(tab: Tab, point: Pt, offset: Pt) =
-        tab, point.x - this.alongOffset(tab, offset.x)
+        tab, point.x - this.tabAreaStart (this.edgeOf tab) - this.alongOffset(tab, offset.x)
 
     // Visible geometry of an additional strip: crop and screen position.
     member this.edgePresentation(edge: TabEdges.Edge, bounds: Rect) =
@@ -1090,7 +1285,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 Rect(Pt(), Sz(w,s)), Pt(bounds.left,bounds.bottom-s)
 
     member private this.presentedPoint edge (pt: Pt) =
-        match edgePlacementCell.value.TryFind edge with
+        match this.placementOf edge with
         | Some(bounds,_,_) when this.isShrunkOn edge && (this.edgeDraw edge).inside ->
             let crop,_ = this.edgePresentation(edge,bounds)
             pt.add(crop.location)
@@ -1103,32 +1298,29 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         if not (this.addButtonsEnabledOn edge) || (this.bandOf edge).isEmpty then 0
         else
             let size = this.logicalSizeOf edge
-            let wanted =
-                if this.isAcross edge then
-                    match edgePlacementCell.value.TryFind(edge) with
-                    | Some((_, a, _)) -> min (max 1 (a.tabHeight - 1)) size.height
-                    | None -> 0
-                else size.height - 1
-            AddTabButton.length wanted size.width
+            // The strip the add-tab button's place is kept in is the one
+            // without the close-all button's place.
+            AddTabButton.length (this.buttonWanted edge size) (size.width - this.closeButtonLength edge)
 
     // The length an edge's tabs are laid out along, and the strip's width
-    // across: the strip less the place kept for the button at its far end.
+    // across: the strip less the places kept for the add-tab button at its
+    // far end and for the close-all button at its own end.
     // The layout, the hit test and the drop position of a dragged tab all
     // work in this size, as they did in the whole strip.
     member private this.tabAreaSizeOf (edge: TabEdges.Edge) : Sz =
         let size = this.logicalSizeOf edge
-        let button = this.addButtonLength edge
+        let button = this.addButtonLength edge + this.closeButtonLength edge
         if button <= 0 then size else Sz(size.width - button, size.height)
 
     // The add-tab buttons of an edge's strip, each with its rectangle in the
-    // strip window's coordinates (the whole strip, before a shrunk strip is
-    // cropped). Read from the layout the tabs are drawn with.
-    member private this.addButtonsOn (edge: TabEdges.Edge) =
+    // strip's layout (the strip less the close-all button's place, before a
+    // shrunk strip is cropped). Read from the layout the tabs are drawn with.
+    member private this.plusButtonsOn (edge: TabEdges.Edge) : (AddTabButton.Slot * Rectangle) list =
         let button = this.addButtonLength edge
         if button <= 0 || slideCell.value.IsSome then []
         else
             let full = this.logicalSizeOf edge
-            let area = full.width - button
+            let area = full.width - button - this.closeButtonLength edge
             match this.acrossOf edge with
             | Some(layout) ->
                 let band = (this.bandOf edge).list
@@ -1161,6 +1353,38 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         let column = TabEdges.sideTabColumn (this.sideTextClockwise edge) full.height offset (full.height - 1)
                         slot, Rectangle(column, at, full.height - 1, button))
 
+    // The close-all button's rectangle in an edge's window, where it shows
+    // one: a square at its end of the strip, placed across the strip as an
+    // add-tab button is (against the window's frame on a strip written
+    // across).
+    member private this.closeButtonOn (edge: TabEdges.Edge) : (AddTabButton.Slot * Rectangle) list =
+        if slideCell.value.IsSome then []
+        else
+            let full = this.logicalSizeOf edge
+            let offset = match this.directionOn edge with TabUp -> 0 | TabDown -> 1
+            this.closeButtonEnds edge |> List.map (fun (atStart, at, length) ->
+                let rect =
+                    if this.closeAloneOn edge then
+                        if TabEdges.runsHorizontally edge then Rectangle(at, 0, length, full.height)
+                        else Rectangle(0, at, full.height, length)
+                    elif TabEdges.runsHorizontally edge then Rectangle(at, offset, length, full.height - 1)
+                    elif this.isAcross edge then
+                        let standsOnRight = (edge = TabEdges.Edge.Left) <> (this.edgeDraw edge).inside
+                        let width = min length full.height
+                        Rectangle(TabEdges.sideTabColumn standsOnRight full.height 0 width, at, width, length)
+                    else
+                        let column = TabEdges.sideTabColumn (this.sideTextClockwise edge) full.height offset (full.height - 1)
+                        Rectangle(column, at, full.height - 1, length)
+                AddTabButton.CloseAll atStart, rect)
+
+    // Every button of an edge's strip - its add-tab buttons and the
+    // close-all button - each with its rectangle in the strip window's
+    // coordinates (the whole strip, before a shrunk strip is cropped).
+    member private this.addButtonsOn (edge: TabEdges.Edge) : (AddTabButton.Slot * Rectangle) list =
+        let plus = this.plusButtonsOn edge
+        if not (this.hasCloseAllOn edge) then plus
+        else this.closeButtonOn edge @ (plus |> List.map (fun (slot, r) -> slot, this.offsetTabRect edge r))
+
     member private this.addButtonCropOrigin edge =
         if edge = TabEdges.Edge.Top && this.isShrunkOn edge && this.direction = TabDirection.TabDown then
             Pt(0, max 0 ((this.logicalSizeOf edge).height - Dpi.px this.scale 7))
@@ -1170,27 +1394,32 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // is being dragged: the buttons take no part in a drag.
     member private this.addButtonAt (edge: TabEdges.Edge) (pt: Pt) : AddTabButton.Slot option =
         try
-            if slideCell.value.IsSome || this.addButtonLength edge <= 0 then None
+            if slideCell.value.IsSome || this.addButtonLength edge + this.closeButtonLength edge <= 0 then None
             else
                 let pt = pt.add(this.addButtonCropOrigin edge)
                 this.addButtonsOn edge
                 |> List.tryPick (fun (slot, r) -> if r.Contains(pt.x, pt.y) then Some slot else None)
         with _ -> None
 
-    // The reserved tail never belongs to a tab, including during a slide.
+    // The reserved tail never belongs to a tab, including during a slide;
+    // nor does the close-all button's place at the strip's start.
     member private this.inKeptPlace (edge: TabEdges.Edge) (pt: Pt) =
-        let button = this.addButtonLength edge
-        if button <= 0 then false
+        let start = this.tabAreaStart edge
+        let button = this.addButtonLength edge + this.closeButtonLength edge - start
+        if button <= 0 && start <= 0 then false
         else
             let pt = pt.add(this.addButtonCropOrigin edge)
-            (if TabEdges.runsHorizontally edge then pt.x else pt.y) >= (this.logicalSizeOf edge).width - button
+            let along = if TabEdges.runsHorizontally edge then pt.x else pt.y
+            (start > 0 && along < start) || (button > 0 && along >= (this.logicalSizeOf edge).width - button)
 
     member private this.setAddTabHover (value: (TabEdges.Edge * AddTabButton.Slot) option) =
         if addTabHoverCell.value <> value then addTabHoverCell.set(value)
 
     // The button as it is drawn: an inactive tab's colours (the mouse-over
-    // ones under the pointer), a one-pixel border and a plus sign.
-    member private this.drawAddButton (g: Graphics) (r: Rectangle) (a: TabAppearanceInfo) (scale: float) (hover: bool) =
+    // ones under the pointer), a one-pixel border and a plus sign - or, the
+    // close-all button, the same sign turned to a cross: its two strokes are
+    // as long as the plus sign's.
+    member private this.drawAddButton (g: Graphics) (r: Rectangle) (a: TabAppearanceInfo) (scale: float) (hover: bool) (cross: bool) =
         let state = g.Save()
         try
             g.SmoothingMode <- SmoothingMode.None
@@ -1203,8 +1432,14 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let cy = float32 r.Y + float32 (r.Height - 1) / 2.0f
             let half = min (Dpi.pxf scale 4.0f) (float32 (min r.Width r.Height) / 4.0f)
             g.SmoothingMode <- SmoothingMode.AntiAlias
-            g.DrawLine(plus, cx - half, cy, cx + half, cy)
-            g.DrawLine(plus, cx, cy - half, cx, cy + half)
+            if cross then
+                // A stroke of the plus sign, turned by 45 degrees.
+                let arm = half * 0.70710678f
+                g.DrawLine(plus, cx - arm, cy - arm, cx + arm, cy + arm)
+                g.DrawLine(plus, cx - arm, cy + arm, cx + arm, cy - arm)
+            else
+                g.DrawLine(plus, cx - half, cy, cx + half, cy)
+                g.DrawLine(plus, cx, cy - half, cx, cy + half)
         finally g.Restore(state)
 
     // Paint the buttons after the tabs and the reserved area's background.
@@ -1212,8 +1447,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.withAddButtons (edge: TabEdges.Edge) (tabs: Img) : Img =
         let composed =
             try
+                let close = this.closeButtonLength edge
                 let button = this.addButtonLength edge
-                if button <= 0 then None
+                if button + close <= 0 then None
                 else
                     let logical = this.logicalSizeOf edge
                     let horizontal = TabEdges.runsHorizontally edge
@@ -1228,17 +1464,33 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                     try
                         use g = img.graphics
                         g.CompositingMode <- CompositingMode.SourceCopy
-                        g.DrawImageUnscaled(tabs.bitmap, 0, 0)
-                        let kept =
-                            if horizontal then Rectangle(full.width - button, 0, button, full.height)
-                            else Rectangle(0, full.height - button, full.width, button)
-                        let bg = if this.transparent then Color.FromArgb(0, 0, 0, 0) else Color.FromArgb(1, 1, 1, 1)
+                        let bg = if this.transparent || this.closeAloneOn edge then Color.FromArgb(0, 0, 0, 0) else Color.FromArgb(1, 1, 1, 1)
                         use brush = new SolidBrush(bg)
-                        g.CompositingMode <- CompositingMode.SourceCopy
-                        g.FillRectangle(brush, kept)
+                        if close <= 0 then
+                            g.DrawImageUnscaled(tabs.bitmap, 0, 0)
+                            let kept =
+                                if horizontal then Rectangle(full.width - button, 0, button, full.height)
+                                else Rectangle(0, full.height - button, full.width, button)
+                            g.CompositingMode <- CompositingMode.SourceCopy
+                            g.FillRectangle(brush, kept)
+                        else
+                            // The tabs' picture is the layout's: it goes past
+                            // the close-all button's place at the start, and
+                            // every kept place is background.
+                            g.FillRectangle(brush, Rectangle(0, 0, img.width, img.height))
+                            let start = this.tabAreaStart edge
+                            let area = (if horizontal then full.width else full.height) - button - close
+                            if area > 0 then
+                                if horizontal then
+                                    g.SetClip(Rectangle(start, 0, area, full.height))
+                                    g.DrawImageUnscaled(tabs.bitmap, start, 0)
+                                else
+                                    g.SetClip(Rectangle(0, start, full.width, area))
+                                    g.DrawImageUnscaled(tabs.bitmap, 0, start)
+                                g.ResetClip()
                         g.CompositingMode <- CompositingMode.SourceOver
                         for (slot, r) in buttons do
-                            this.drawAddButton g r appearance scale (hoverOf slot)
+                            this.drawAddButton g r appearance scale (hoverOf slot) (match slot with AddTabButton.CloseAll _ -> true | _ -> false)
                         Some img
                     with _ ->
                         img.bitmap.Dispose()
@@ -1253,16 +1505,30 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // What the top strip's picture depends on besides its tabs.
     member private this.addButtonKey (edge: TabEdges.Edge) =
         let size = this.logicalSizeOf edge
+        let closeAll = this.hasCloseAllOn edge
         this.addButtonsEnabledOn edge,
         // No button is drawn during a tab drag, on whichever edge it runs.
-        (this.addButtonsEnabledOn edge && slideCell.value.IsSome),
+        ((this.addButtonsEnabledOn edge || closeAll) && slideCell.value.IsSome),
         (match addTabHoverCell.value with Some(e, slot) when e = edge -> Some slot | _ -> None),
-        (size.width, size.height)
+        (size.width, size.height),
+        // The close-all button's end of the strip, and the place kept there.
+        this.closeButtonEnds edge
 
     // Use the same screen conversion as a tab menu, at the mouse position.
+    // Both buttons use screen coordinates for the group's close menu.
     member private this.addTabClicked (edge: TabEdges.Edge, slot: AddTabButton.Slot, btn: MouseButton, pt: Pt) =
-        let align = if slot = AddTabButton.AtStart then TopLeft else TopRight
-        monitor.addTabClick(btn, edge, align, this.screenPointOn(edge, this.logicalPt edge pt))
+        match slot with
+        | AddTabButton.CloseAll _ -> monitor.closeAllClick(btn, this.screenPointOn(edge, this.logicalPt edge pt))
+        | _ ->
+            let align = if slot = AddTabButton.AtStart then TopLeft else TopRight
+            monitor.addTabClick(btn, edge, align, this.screenPointOn(edge, this.logicalPt edge pt))
+
+    // What a button's tooltip says: the close-all button's is the name of
+    // the command it runs, which the tab menu and the hot keys' page show.
+    member private this.buttonTooltip (slot: AddTabButton.Slot) : string option =
+        match slot with
+        | AddTabButton.CloseAll _ -> Some(Localization.getString "CloseAllTabsOfGroup")
+        | _ -> monitor.addTabTooltip()
 
     // A strip written across, drawn: the rows in the view, and the scroll
     // buttons at its ends when they do not all fit.
@@ -1330,7 +1596,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // is found along the strip, and the point is turned back into that tab's
     // own coordinates to find the part (the close and pin buttons).
     member private this.hitTabsOn (edge: TabEdges.Edge) (pt: Pt) : Option<Tab*TabPart> =
-        let pt = this.presentedPoint edge pt
+        let pt = this.tabAreaPoint edge (this.presentedPoint edge pt)
         if TabEdges.runsHorizontally edge then (this.tsOn edge).tryHit(pt)
         elif this.isAcross edge then
             this.acrossOf edge |> Option.bind (fun layout -> layout.partAt pt)
@@ -1357,7 +1623,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member this.tryHitOn(edge: TabEdges.Edge, pt: Pt) = this.hitOn edge pt
 
     member private this.tooltipTabsOn (edge: TabEdges.Edge) (pt: Pt) : Option<Tab> =
-        let pt = this.presentedPoint edge pt
+        let pt = this.tabAreaPoint edge (this.presentedPoint edge pt)
         if this.isAcross edge then
             this.acrossOf edge |> Option.bind (fun layout -> layout.tryHit pt) |> Option.map (fun (tab, _, _, _) -> tab)
         else
@@ -1391,13 +1657,13 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let others =
                 edgeWindows.Keys
                 |> Seq.choose (fun edge ->
-                    match edgePlacementCell.value.TryFind(edge) with
-                    | Some((bounds, _, _)) when not (this.bandOf edge).isEmpty ->
+                    match this.placementOf edge with
+                    | Some((bounds, _, _)) when not (this.bandOf edge).isEmpty || this.closeAloneOn edge ->
                         let crop, at = this.edgePresentation(edge, bounds)
                         Some(edge, at, crop.size)
                     | _ -> None)
                 |> List.ofSeq
-            (if this.topShows then top else []) @ others
+            (if this.topShows || this.closeAloneOn TabEdges.Edge.Top then top else []) @ others
 
     member private this.cursorOutsideStrips (c: System.Drawing.Point) =
         this.shownStripRects |> List.forall (fun (_, loc, sz) ->
@@ -1548,7 +1814,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
 
     member private this.tooltipTarget edge addHit tooltipTab =
         match addHit with
-        | Some slot -> monitor.addTabTooltip() |> Option.map (fun text -> Choice2Of2(edge, slot, text))
+        | Some slot -> this.buttonTooltip slot |> Option.map (fun text -> Choice2Of2(edge, slot, text))
         | None -> tooltipTab |> Option.map Choice1Of2
 
     member private this.updateTooltipTarget(target, tooltipHit) =
@@ -1558,7 +1824,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             dismissPreview()
             shownTooltipTab <- None
             let button = this.addButtonsOn edge |> List.tryFind (fun (s, _) -> s = slot)
-            match button, monitor.addTabTooltip() with
+            match button, this.buttonTooltip slot with
             | Some(_, rect), Some text ->
                 let origin = this.addButtonCropOrigin edge
                 let along = if TabEdges.runsHorizontally edge then rect.Left - origin.x else rect.Top - origin.y
@@ -1602,7 +1868,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             // Calculate final position based on tab's left edge, always below tab strip
             let otherStrip =
                 if edge = TabEdges.Edge.Top then None
-                else edgePlacementCell.value.TryFind(edge) |> Option.map (fun (bounds, _, _) -> bounds)
+                else this.placementOf edge |> Option.map (fun (bounds, _, _) -> bounds)
             let tabScreenX, tabScreenY =
                 match otherStrip with
                 // A bottom strip: above the tab, on the window's side.
@@ -1721,7 +1987,12 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let addHit = this.addButtonAt edge pt
             this.setAddTabHover (addHit |> Option.map (fun slot -> edge, slot))
             let addPressed = addTabPress
-            let isDown = (action = MouseDown || action = MouseDblClick) && (btn = MouseLeft || btn = MouseRight)
+            // The close-all button accepts left and right clicks, but
+            // not by the second press of a double click: one double click
+            // must not close the group's windows twice.
+            let isDown =
+                if (match addHit with Some(AddTabButton.CloseAll _) -> true | _ -> false) then action = MouseDown && (btn = MouseLeft || btn = MouseRight)
+                else (action = MouseDown || action = MouseDblClick) && (btn = MouseLeft || btn = MouseRight)
             let releasesPress = action = MouseUp && addPressed.IsSome
             let nextPress, clicked =
                 AddTabButton.press isDown (action = MouseUp)
@@ -1768,7 +2039,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             let loc =
                 if isTop then this.location
                 else
-                    match edgePlacementCell.value.TryFind(edge) with
+                    match this.placementOf edge with
                     | Some((bounds, _, _)) -> snd (this.edgePresentation(edge, bounds))
                     | None -> this.location
             let clientPt = Pt(c.X - loc.x, c.Y - loc.y)
@@ -1929,7 +2200,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     member private this.top = zorderCell.value.head
     member private this.isEmpty = this.visualOrder.isEmpty
     member private this.contentOffset = this.appearance.tabHeightOffset
-    member private this.location = locationCell.value 
+    member private this.location : Pt =
+        match this.topAloneRect with
+        | Some(r) -> r.location
+        | None -> locationCell.value
     
     member this.withContentSource<'a>(source: string, f: unit -> 'a) =
 #if DEBUG
@@ -1997,7 +2271,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
             TabGlass.refresh()
         let glassGeneration = TabGlass.generation()
         if destroyed then ()
-        elif this.visible && not this.topBandEmpty then
+        // (The close-all button standing alone on the top edge is drawn as a
+        // strip with no tabs, one button long: this.size, this.location.)
+        elif this.visible && (not this.topBandEmpty || this.closeAloneOn TabEdges.Edge.Top) then
             // Read the complete sprite input on every listener pass, even on a
             // cache hit, so Cell retains all dependencies after move-only work.
             let rendered =
@@ -2039,7 +2315,7 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         | None -> PerfTrace.count "stripReuseShow"
 #endif
                     this.show(this.window, image, location, alpha, fun () ->
-                        let rects = this.dimmedRects ts
+                        let rects = this.dimmedRects ts |> List.map (this.offsetTabRect TabEdges.Edge.Top)
                         if shrunk then
                             // render keeps the bottom sliver of the strip.
                             let cut = ts.size.height - Dpi.px ts.scale 7
@@ -2130,16 +2406,20 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                         let column = TabEdges.sideTabColumn clockwise ts.size.height r.Y r.Height
                         Rectangle(column, r.X, r.Height, r.Width))
             let crop, _ = this.edgePresentation(edge, bounds)
-            rects |> List.map (fun r -> Rectangle(r.X - crop.location.x, r.Y - crop.location.y, r.Width, r.Height))
+            rects
+            |> List.map (this.offsetTabRect edge)
+            |> List.map (fun r -> Rectangle(r.X - crop.location.x, r.Y - crop.location.y, r.Width, r.Height))
 
     member private this.updateEdgeWindows() =
         let receivers = this.receiverEdges
         for kv in edgeWindows do
             let edge = kv.Key
             let window = _os.windowFromHwnd(kv.Value.hwnd)
-            match edgePlacementCell.value.TryFind(edge) with
+            // The strip's place, or the close-all button's own where it
+            // stands alone on this edge: then the window shows the button.
+            match this.placementOf edge with
             | Some((bounds, _, _)) when this.visible && not bounds.size.isEmptyArea ->
-                if not (this.bandOf edge).isEmpty then
+                if not (this.bandOf edge).isEmpty || this.closeAloneOn edge then
                     PerfTrace.time "stripRender" (fun () ->
                         let generation = TabGlass.generation()
                         let img, location = this.presentEdge edge bounds
@@ -2188,8 +2468,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // The thin strip to drop on (2-5): along the side of the strip's place
     // that touches the window, eight pixels at 100%.
     member private this.receiverRect (edge: TabEdges.Edge) : Rect =
+        // The strip's place as the decorator set it: the close-all button
+        // standing alone on the edge is not shown while this strip is.
         let bounds, scale =
-            if edge = TabEdges.Edge.Top then Rect(this.location, this.size), this.scale
+            if edge = TabEdges.Edge.Top then Rect(locationCell.value, sizeCell.value), this.scale
             else
                 match edgePlacementCell.value.TryFind(edge) with
                 | Some((b, _, s)) -> b, s
@@ -2240,7 +2522,9 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     /// (for the strip window, and for pictures made without one).
     member this.renderEdge (edge: TabEdges.Edge) : Img =
         let tabs =
-            if TabEdges.runsHorizontally edge then
+            // No tabs to draw where the close-all button stands alone.
+            if this.closeAloneOn edge then Img(Sz(1, 1))
+            elif TabEdges.runsHorizontally edge then
                 try this.renderBand (this.tsOn edge) with _ -> Img(Sz(1, 1))
             elif this.isAcross edge then
                 try this.renderAcross edge with _ -> Img(Sz(1, 1))
@@ -2638,13 +2922,16 @@ type TabStrip(monitor:ITabStripMonitor) as this =
                 zorderCell.value.tryHead |> Option.iter this.scrollToShow
 
     member this.sprite = this.ts.sprite
+
+    /// How far the top strip's layout (this.sprite) starts along its window.
+    member this.topTabAreaStart : int = this.tabAreaStart TabEdges.Edge.Top
             
     member this.isShrunk
         with get() = isShrunkCell.value
         and set(newValue) = isShrunkCell.set(newValue)
 
     member this.isShrunkOn edge =
-        if TabEdges.isTopOnly this.allowedEdges then this.isShrunk
+        if TabEdges.isTopOnly this.allowedEdges && (edge = TabEdges.Edge.Top || not (this.hasCloseAllOn edge)) then this.isShrunk
         else Set.contains edge shrunkEdgesCell.value
 
     member this.setShrunkOn(edge, value) =
@@ -2932,13 +3219,18 @@ type TabStrip(monitor:ITabStripMonitor) as this =
     // Where a tab is in its own strip's layout (along the strip for a left
     // strip, see logicalPt).
     // A row written across: where it starts along the strip, then across.
+    // In the strip's window: past the place the close-all button keeps at
+    // the strip's start (tabAreaStart), which is nothing without one.
     member this.tabLocation (tab: Tab) =
         let edge = this.edgeOf tab
-        if this.isAcross edge then
-            match this.acrossOf edge |> Option.bind (fun layout -> layout.rowOf tab) with
-            | Some(x, y, _) -> Pt(y, x)
-            | None -> Pt()
-        else (this.tsOn edge).tabLocation tab
+        let start = this.tabAreaStart edge
+        let at : Pt =
+            if this.isAcross edge then
+                match this.acrossOf edge |> Option.bind (fun layout -> layout.rowOf tab) with
+                | Some(x, y, _) -> Pt(y, x)
+                | None -> Pt()
+            else (this.tsOn edge).tabLocation tab
+        if start = 0 then at else Pt(at.x + start, at.y)
 
     member this.dragTabLocation (tab:Tab, previewWidth:int) : Pt=
         // MouseDown needs only geometry. Rendering here would send PrintWindow
@@ -3325,4 +3617,10 @@ type TabStrip(monitor:ITabStripMonitor) as this =
         tooltipForm.Dispose()
         this.window.destroy()
             
-    member this.tryHit(pt) : Option<_> = this.ts.tryHit(pt)
+    // (A point of the top strip's window: taken into the layout where the
+    // close-all button keeps a place at the strip's start.)
+    member this.tryHit(pt: Pt) : Option<_> =
+        let start = this.tabAreaStart TabEdges.Edge.Top
+        if start = 0 then this.ts.tryHit(pt)
+        elif pt.x < start then None
+        else this.ts.tryHit(Pt(pt.x - start, pt.y))

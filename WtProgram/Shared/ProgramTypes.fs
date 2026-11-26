@@ -56,6 +56,7 @@ type SettingsRec = {
     lockWindowPosition: bool
     snapTabMarginMode: string
     snapTabMarginDelayMilliseconds: int
+    snapButtonOnlyMargin: bool
     // "change": on a snap or move to the left, right or a corner, re-align every
     // tab of a uniformly aligned group to that side. "nochange": leave alignment alone.
     changeTabPositionOnSnap: string

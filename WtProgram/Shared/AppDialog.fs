@@ -18,6 +18,7 @@ module AppDialog =
     type Buttons =
         | OkOnly
         | OkCancel
+        | YesNo
 
     type DefaultButton =
         | DefaultOk
@@ -38,7 +39,7 @@ module AppDialog =
         form.MaximizeBox <- false
         form.MinimizeBox <- false
         form.StartPosition <- (if owner.IsSome then FormStartPosition.CenterParent else FormStartPosition.CenterScreen)
-        form.TopMost <- true
+        form.TopMost <- buttons <> YesNo
         form.ShowInTaskbar <- false
         form.KeyPreview <- true
 
@@ -49,17 +50,17 @@ module AppDialog =
         form.Controls.Add(label)
 
         let okBtn = new Button()
-        okBtn.Text <- if englishButtons then "OK" else Localization.getString("OK")
-        okBtn.DialogResult <- DialogResult.OK
+        okBtn.Text <- if buttons = YesNo then Localization.getString("Yes") elif englishButtons then "OK" else Localization.getString("OK")
+        okBtn.DialogResult <- if buttons = YesNo then DialogResult.Yes else DialogResult.OK
         okBtn.Size <- Size(80, 30)
         form.Controls.Add(okBtn)
 
         let cancelBtn =
             match buttons with
-            | OkCancel ->
+            | OkCancel | YesNo ->
                 let b = new Button()
-                b.Text <- if englishButtons then "Cancel" else Localization.getString("Cancel")
-                b.DialogResult <- DialogResult.Cancel
+                b.Text <- if buttons = YesNo then Localization.getString("No") elif englishButtons then "Cancel" else Localization.getString("Cancel")
+                b.DialogResult <- if buttons = YesNo then DialogResult.No else DialogResult.Cancel
                 b.Size <- Size(80, 30)
                 form.Controls.Add(b)
                 Some(b)
@@ -96,6 +97,7 @@ module AppDialog =
         // pointer. The Load handler
         // below runs afterwards and reads the scale this establishes.
         match owner with
+        | Some(o) when buttons = YesNo -> form.InitializeDpi(Dpi.scaleForHwnd o.Handle)
         | Some(_) -> form.InitializeDpi(SettingsDpi.current())
         | None -> form.InitializeDpi(SettingsDpi.forCursor())
 
@@ -192,3 +194,12 @@ module AppDialog =
         // Owned messages are part of the settings session. ShowDialog disables
         // the parent while the child is open; external entry points stay gated.
         run (Some owner) title message OkOnly DefaultOk |> ignore
+
+    /// A group-button question uses its window as owner and the existing
+    /// dialog gate: repeated clicks cannot open or queue another question.
+    let confirmOwned (owner: IWin32Window) (title: string) (message: string) : bool =
+        match DialogState.tryAcquire() with
+        | None -> false
+        | Some session ->
+            use lifetime = session
+            run (Some owner) title message YesNo DefaultCancel = DialogResult.Yes

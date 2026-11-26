@@ -58,6 +58,43 @@ type InteractionView() =
     let save key value =
         if not refreshing then Services.settings.setValue(key, value)
 
+    let writeEdge f =
+        if not refreshing then
+            let root = Services.settings.root
+            f root
+            Services.settings.root <- root
+            TabEdgeSettings.changed.Trigger()
+
+    let refreshCloseAll, closeAllControls =
+        let modes = TabEdgeSettings.closeAllModeChoices
+        let combo = EdgeRows.choice (["CloseAllButtonConfirm"; "CloseAllButtonImmediate"] |> List.map Localization.getString)
+        // Disabled controls do not receive mouse messages. Their enabled parent
+        // owns the tooltip over the same area instead.
+        let host = BehaviorControls.row [1.0f] [combo]
+        let hint = new ToolTip(ShowAlways = true)
+        let refreshHint () =
+            hint.Active <- not combo.Enabled
+            hint.SetToolTip(host, if combo.Enabled then "" else Localization.getString "CloseAllButtonDisabledHint")
+        combo.EnabledChanged.Add(fun _ -> refreshHint())
+        host.Disposed.Add(fun _ -> hint.Dispose())
+        let mutable refreshingMode = false
+        let refresh () =
+            refreshingMode <- true
+            try
+                let mode = TabEdgeSettings.closeAllConfirmation Services.settings.root
+                combo.SelectedIndex <- modes |> List.findIndex (fun (_, m) -> m = mode)
+                combo.Enabled <- not (List.isEmpty (TabEdgeSettings.closeAllPositions Services.settings.root))
+            finally refreshingMode <- false
+        refresh()
+        refreshHint()
+        combo.SelectedIndexChanged.Add(fun _ ->
+            if not refreshingMode && combo.SelectedIndex >= 0 then
+                writeEdge (fun root -> TabEdgeSettings.writeCloseAllMode root (snd modes.[combo.SelectedIndex])))
+        let subscription = TabEdgeSettings.changed.Publish.Subscribe(fun () -> refresh())
+        combo.Disposed.Add(fun _ -> subscription.Dispose())
+        refresh, host
+    do refreshers.Add refreshCloseAll
+
     let settingsProperty name =
         {
             new IProperty<'a> with
@@ -130,16 +167,29 @@ type InteractionView() =
             delay.Margin <- Padding(10, 0, 0, 0)
             panel
 
+        let buttonOnlyMarginCheckbox = settingsCheckbox "snapButtonOnlyMargin"
+        let refreshButtonOnlyMarginEnabled() =
+            buttonOnlyMarginCheckbox.Enabled <-
+                Services.settings.getValue "snapTabMarginMode" |> unbox<string> |> SnapTabMarginMode.enabled
+        refreshButtonOnlyMarginEnabled()
+        refreshers.Add(refreshButtonOnlyMarginEnabled)
+        (snapMarginChoice :?> ComboBox).SelectedIndexChanged.Add(fun _ -> refreshButtonOnlyMarginEnabled())
+
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
             ("TabCloseButton", buttonModeChoice "tabCloseButton" ["TabCloseActiveOnly"; "TabCloseAll"; "TabCloseNone"])
             ("TabPinButton", buttonModeChoice "tabPinButton" ["TabPinActiveOnly"; "TabPinAll"; "TabPinNone"])
-            ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
-            ("LockWindowPosition", lockPositionCheckbox)
+            ("CloseAllTabsButtonBehavior", closeAllControls :> Control)
+            ("", new Panel() :> Control)
             ("ChangeTabPositionOnSnap", snapChangeTabPositionChoice)
             ("SnapTabMarginMode", snapMarginControls)
+            ("SnapButtonOnlyMargin", buttonOnlyMarginCheckbox)
             ("SnapOnDragDetach", settingsCheckbox "snapOnDragDetach")
+            ("", new Panel() :> Control)
+            ("EnableHoverActivate", settingsCheckbox "enableHoverActivate")
             ("EnableTabPreview", previewControls)
+            ("", new Panel() :> Control)
+            ("LockWindowPosition", lockPositionCheckbox)
         ])
 
         let formPanel = UIHelper.form fields
@@ -158,6 +208,14 @@ type InteractionView() =
             control.Margin <- Padding(0)
             formPanel.RowStyles.[row].SizeType <- SizeType.Absolute
             formPanel.RowStyles.[row].Height <- float32 UIHelper.settingsRowHeightPx
+
+        // Empty half-row gaps use the same layout as the System page.
+        for gapRow in [3; 8; 11] do
+            for column in 0 .. 1 do
+                let control = formPanel.GetControlFromPosition(column, gapRow)
+                formPanel.Controls.Remove(control)
+                control.Dispose()
+            formPanel.RowStyles.[gapRow].Height <- float32 (UIHelper.settingsRowHeightPx / 2)
 
         formPanel.Dock <- DockStyle.Fill
         formPanel.Padding <- UIHelper.settingsPagePadding

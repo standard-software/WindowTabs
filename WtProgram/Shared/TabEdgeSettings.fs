@@ -202,6 +202,103 @@ module TabEdgeSettings =
     let addTabButton (root: JObject) (edge: Edge) =
         defaultArg (valuesOf root edge).addTabButton true
 
+    /// The root key holding all four edges' close-all button settings.
+    [<Literal>]
+    let closeAllButtonKey = "CloseAllTabsButton"
+
+    /// Every place the button can stand at, in the order the settings dialog
+    /// lists them, each with the name the file keeps it under: the edge, and
+    /// whether the button is at the edge's start (its left end, or the top
+    /// end of a left or right edge).
+    let closeAllChoices : (string * (Edge * bool) option) list =
+        [ "none", None
+          "topStart", Some(Edge.Top, true)
+          "topEnd", Some(Edge.Top, false)
+          "leftStart", Some(Edge.Left, true)
+          "leftEnd", Some(Edge.Left, false)
+          "rightStart", Some(Edge.Right, true)
+          "rightEnd", Some(Edge.Right, false)
+          "bottomStart", Some(Edge.Bottom, true)
+          "bottomEnd", Some(Edge.Bottom, false) ]
+
+    /// Fallback for an unrecognized development-build position string.
+    let closeAllDefault : (Edge * bool) option = Some(Edge.Top, false)
+
+    [<Literal>]
+    let closeAllModeKey = "CloseAllTabsButtonMode"
+
+    type CloseAllMode = Disabled | Confirm | Immediate
+
+    let closeAllModeChoices = [ "confirm", Confirm; "immediate", Immediate ]
+
+    /// Keep the confirmation preference even while the button is hidden.
+    /// Missing or invalid values require confirmation.
+    let closeAllConfirmation (root: JObject) =
+        stringIn root closeAllModeKey
+        |> Option.bind (fun name ->
+            closeAllModeChoices |> List.tryFind (fun (n, _) -> String.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+        |> Option.map snd
+        |> Option.defaultValue Confirm
+
+    type CloseAllShowMode = Hidden | Always | WithTabs
+    type CloseAllEdge = { show: CloseAllShowMode; atStart: bool; atEnd: bool }
+
+    let closeAllShowChoices = [ "hidden", Hidden; "always", Always; "tabs", WithTabs ]
+
+    let closeAllDefaultFor edge =
+        { show = if edge = Edge.Top then WithTabs else Hidden
+          atStart = not (TabEdges.runsHorizontally edge)
+          atEnd = TabEdges.runsHorizontally edge }
+
+    /// Object values keep the visibility and both ends independently.
+    /// Development arrays and single strings retain their always-visible ends.
+    let closeAllSettings (root: JObject) : Map<Edge, CloseAllEdge> =
+        let decode name =
+            closeAllChoices |> List.tryFind (fun (n, _) -> String.Equals(n, name, StringComparison.OrdinalIgnoreCase))
+            |> Option.bind snd
+        let stored = propertyOf root closeAllButtonKey
+        let legacy =
+            match stored with
+            | Some(:? JArray as items) ->
+                Some(items |> Seq.choose (fun item -> if item.Type = JTokenType.String then decode (string item) else None) |> Seq.toList)
+            | Some(:? JValue as item) when item.Type = JTokenType.String ->
+                Some(if String.Equals(string item, "none", StringComparison.OrdinalIgnoreCase) then []
+                     else decode (string item) |> Option.orElse closeAllDefault |> Option.toList)
+            | _ -> None
+        priority |> List.map (fun edge ->
+            let fallback = closeAllDefaultFor edge
+            let value =
+                match legacy, stored with
+                | Some positions, _ ->
+                    let ends = positions |> List.filter (fun (e, _) -> e = edge)
+                    if List.isEmpty ends then { fallback with show = Hidden }
+                    else { show = Always; atStart = List.contains (edge, true) ends; atEnd = List.contains (edge, false) ends }
+                | _, Some(:? JObject as edges) ->
+                    match propertyOf edges (edgeName edge) with
+                    | Some(:? JObject as value) ->
+                        { show = stringIn value "show"
+                                 |> Option.bind (fun name -> closeAllShowChoices |> List.tryFind (fun (n, _) -> String.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+                                 |> Option.map snd |> Option.defaultValue fallback.show
+                          atStart = defaultArg (boolIn value "start") fallback.atStart
+                          atEnd = defaultArg (boolIn value "end") fallback.atEnd }
+                    | _ -> fallback
+                | _ -> fallback
+            edge, value) |> Map.ofList
+
+    let closeAllVisible hasTabs setting =
+        (setting.atStart || setting.atEnd) &&
+        (match setting.show with Hidden -> false | Always -> true | WithTabs -> hasTabs)
+
+    /// Configured positions, independent of the current group's tab counts.
+    let closeAllPositions (root: JObject) : (Edge * bool) list =
+        closeAllSettings root |> Map.toList |> List.collect (fun (edge, value) ->
+            if not (closeAllVisible true value) then [] else
+            [ if value.atStart then yield edge, true
+              if value.atEnd then yield edge, false ])
+
+    let closeAllMode (root: JObject) =
+        if List.isEmpty (closeAllPositions root) then Disabled else closeAllConfirmation root
+
     let normalizeHideMode mode =
         match mode with
         | "never" | "down" | "doubleclick" -> mode
@@ -298,6 +395,30 @@ module TabEdgeSettings =
     let writeListed (root: JObject) (edges: Edge list) =
         let names = priority |> List.filter (fun e -> List.contains e edges) |> List.map edgeName
         put root allowedKey (JArray(names |> List.map (fun n -> JValue(n) :> obj) |> Array.ofList))
+
+    let private writeCloseAllEdge (root: JObject) edge update =
+        let settings = closeAllSettings root
+        let settings = settings.Add(edge, update settings.[edge])
+        let edges = JObject()
+        for e in priority do
+            let value = settings.[e]
+            let item = JObject()
+            put item "show" (JValue(closeAllShowChoices |> List.find (fun (_, mode) -> mode = value.show) |> fst))
+            put item "start" (JValue(value.atStart))
+            put item "end" (JValue(value.atEnd))
+            put edges (edgeName e) item
+        put root closeAllButtonKey edges
+
+    let writeCloseAllPosition (root: JObject) edge atStart enabled =
+        writeCloseAllEdge root edge (fun value ->
+            if atStart then { value with atStart = enabled } else { value with atEnd = enabled })
+
+    let writeCloseAllShowMode (root: JObject) edge mode =
+        writeCloseAllEdge root edge (fun value -> { value with show = mode })
+
+    let writeCloseAllMode (root: JObject) mode =
+        let name = closeAllModeChoices |> List.find (fun (_, m) -> m = mode) |> fst
+        put root closeAllModeKey (JValue(name))
 
     let private edgeObject (root: JObject) (edge: Edge) =
         match propertyOf root (edgeKey edge) with

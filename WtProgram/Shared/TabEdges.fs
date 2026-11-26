@@ -34,6 +34,20 @@ module TabEdges =
     /// The one order every rule walks the edges in: top, left, right, bottom.
     let priority = [ Edge.Top; Edge.Left; Edge.Right; Edge.Bottom ]
 
+    /// Fixed-order sections for the close-all button menu. The selection
+    /// includes the active tab and may span multiple edges.
+    let closeMenuTargets (allowedEdges: Edge list) (tabs: ('id * Edge) list) (selected: Set<'id>) =
+        let onEdge edge = tabs |> List.choose (fun (id, e) -> if e = edge then Some id else None)
+        let unselected ids = ids |> List.filter (fun id -> not (selected.Contains id))
+        let others = tabs |> List.map fst |> unselected
+        let sections =
+            priority |> List.choose (fun edge ->
+                let ids = onEdge edge
+                if List.contains edge allowedEdges && not (List.isEmpty ids) then
+                    Some(edge, ids, unselected ids)
+                else None)
+        others, sections
+
     let rank (edge: Edge) =
         match edge with
         | Edge.Top -> 0

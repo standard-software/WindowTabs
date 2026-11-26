@@ -223,7 +223,14 @@ type Desktop(notify:IDesktopNotification) as this =
         let snapDirection = SnapGeometry.directionForPoint workArea (pt.x, pt.y)
         // Use the same destination edges for margins, alignment and insertion.
         let area =
-            let inUse = edges |> Map.toList |> List.map snd |> List.distinct
+            let root = match previewRoot with Some root -> root | None -> Services.settings.root
+            let buttonEdges =
+                if Services.settings.getValue "snapButtonOnlyMargin" |> unbox<bool> then
+                    TabEdgeSettings.closeAllSettings root |> Map.toList
+                    |> List.choose (fun (edge, value) ->
+                        if TabEdgeSettings.closeAllVisible (edges |> Map.exists (fun _ e -> e = edge)) value then Some edge else None)
+                else []
+            let inUse = ((edges |> Map.toList |> List.map snd) @ buttonEdges) |> List.distinct
             if inUse = [TabEdges.Edge.Top] then
                 let tabHeight =
                     if TabBehaviorPolicy.reserveTopMargin (SnapTabMarginMode.enabled dragInfo.sourceSnapTabMarginMode) (Services.settings.getValue("tabVerticalDirection") :?> string) then
@@ -235,7 +242,6 @@ type Desktop(notify:IDesktopNotification) as this =
                 let reserve =
                     try
                         let scale = Dpi.scaleForMonitorHandle mon.hMonitor
-                        let root = match previewRoot with Some root -> root | None -> Services.settings.root
                         let values = inUse |> List.map (fun edge -> edge, TabEdgeSettings.valuesOf root edge) |> Map.ofList
                         TabStripDecorator.snapReserveAt(inUse, values, Services.program.tabAppearanceInfo,
                                                         Services.program.defaultTabAppearanceInfo, scale, (SnapTabMarginMode.enabled dragInfo.sourceSnapTabMarginMode),
