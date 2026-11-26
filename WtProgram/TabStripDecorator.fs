@@ -5034,10 +5034,10 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         member x.runsAcross = true
 
     // The add-tab button (AddTabButton). The left button starts another
-    // window of the active tab's program; the right button offers every
-    // program of this group - those of the top, left, right and bottom tabs
-    // in their order - and below them the other
-    // groups as the link menus list them, each with its own programs.
+    // window of the active tab's program; the right button offers programs
+    // on the clicked edge, then the remaining programs on the other edges,
+    // and below them the other groups as the link menus list them,
+    // each with its own programs.
     // Whatever is started joins this group where the button stands: at the
     // end of that edge's start or end group.
     member private this.addTabProgramName(path: string) =
@@ -5068,8 +5068,8 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             let scale = Dpi.scaleForPoint point
             let owned = ResizeArray<Img>()
             // One item for each program, in the order of the windows given.
-            let programItems (windows: (IntPtr * (unit -> Img option)) list) =
-                let seen = System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            let newProgramSet() = System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            let programItems (seen: System.Collections.Generic.HashSet<string>) (windows: (IntPtr * (unit -> Img option)) list) =
                 windows |> List.choose (fun (hwnd, image) ->
                     let path = pathOf hwnd
                     if String.IsNullOrWhiteSpace(path) || not (seen.Add(path)) then None
@@ -5083,10 +5083,13 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                 let img = icon.ToBitmap().img
                 owned.Add(img)
                 Some img
-            let own =
-                (TabEdges.priority |> List.collect (fun e -> (this.ts.bandOf e).list) |> List.map (fun (Tab hwnd) -> hwnd))
-                |> List.map (fun hwnd -> hwnd, ownIcon hwnd)
-                |> programItems
+            let ownPrograms = newProgramSet()
+            let edgePrograms edges =
+                edges |> List.collect (fun e -> (this.ts.bandOf e).list)
+                |> List.map (fun (Tab hwnd) -> hwnd, ownIcon hwnd)
+                |> programItems ownPrograms
+            let clickedEdge = edgePrograms [edge]
+            let otherEdges = TabEdges.priority |> List.filter ((<>) edge) |> edgePrograms
             let mutable hasOtherGroups = false
             let others =
                 (this.linkGroupMenu scale)
@@ -5096,7 +5099,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
                             match Map.tryFind hwnd info.tabIcons with
                             | Some(big, small) -> if scale = 1.0 then small else big
                             | None -> None
-                        let programs = info.tabHwnds |> List.map (fun hwnd -> hwnd, icon hwnd) |> programItems
+                        let programs = info.tabHwnds |> List.map (fun hwnd -> hwnd, icon hwnd) |> programItems (newProgramSet())
                         CmiPopUp({ text = item.text; image = item.image; items = List2(programs)
                                    flags = if programs.IsEmpty then List2([MenuFlags.MF_GRAYED]) else List2() }))
                     (fun _ -> false)
@@ -5111,7 +5114,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             let header =
                 CmiRegular({ text = Localization.getString "AddTabLaunchProgramHeader"; image = None
                              click = (fun () -> ()); flags = List2([MenuFlags.MF_GRAYED]) })
-            let body = own @ (if own.IsEmpty || otherGroups.IsEmpty then otherGroups else CmiSeparator :: otherGroups)
+            let body =
+                [clickedEdge; otherEdges; otherGroups]
+                |> List.filter (fun section -> not section.IsEmpty)
+                |> List.fold (fun items section ->
+                    if List.isEmpty items then section else items @ (CmiSeparator :: section)) []
             let items = header :: (if body.IsEmpty then [] else CmiSeparator :: body)
             if not items.IsEmpty then
                 group.bb.write("contextMenuVisible", true)

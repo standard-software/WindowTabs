@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "将相同设置应用到左侧标签页",
   "ApplySameSettingsToRightEdge": "将相同设置应用到右侧标签页",
   "ApplySameSettingsToBottomEdge": "将相同设置应用到底部标签页",
-  "AddTabButton": "放置添加标签页按钮",
+  "AddTabButton": "显示添加标签页按钮",
   "AddTabTooltip": "新建标签页 : 启动 {0}",
   "AddTabLaunchProgramHeader": "在新标签页中启动程序",
   "AddTabOtherGroupPrograms": "其他标签组的程序",

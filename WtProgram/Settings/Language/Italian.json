@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Applica le stesse impostazioni alle schede a sinistra",
   "ApplySameSettingsToRightEdge": "Applica le stesse impostazioni alle schede a destra",
   "ApplySameSettingsToBottomEdge": "Applica le stesse impostazioni alle schede inferiori",
-  "AddTabButton": "Posiziona il pulsante Aggiungi scheda",
+  "AddTabButton": "Mostra il pulsante Aggiungi scheda",
   "AddTabTooltip": "Nuova scheda : Avvia {0}",
   "AddTabLaunchProgramHeader": "Avvia un programma in una nuova scheda",
   "AddTabOtherGroupPrograms": "Programmi degli altri gruppi di schede",

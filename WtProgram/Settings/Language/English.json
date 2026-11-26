@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Apply the same settings to the left tabs",
   "ApplySameSettingsToRightEdge": "Apply the same settings to the right tabs",
   "ApplySameSettingsToBottomEdge": "Apply the same settings to the bottom tabs",
-  "AddTabButton": "Place the add-tab button",
+  "AddTabButton": "Show the add-tab button",
   "AddTabTooltip": "New tab : Launch {0}",
   "AddTabLaunchProgramHeader": "Launch a program as a new tab",
   "AddTabOtherGroupPrograms": "Programs in other tab groups",

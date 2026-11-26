@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Aynı ayarları sol sekmelere uygula",
   "ApplySameSettingsToRightEdge": "Aynı ayarları sağ sekmelere uygula",
   "ApplySameSettingsToBottomEdge": "Aynı ayarları alt sekmelere uygula",
-  "AddTabButton": "Sekme ekleme düğmesini yerleştir",
+  "AddTabButton": "Sekme ekle düğmesini göster",
   "AddTabTooltip": "Yeni sekme : {0} başlat",
   "AddTabLaunchProgramHeader": "Programı yeni bir sekme olarak başlat",
   "AddTabOtherGroupPrograms": "Diğer sekme gruplarındaki programlar",

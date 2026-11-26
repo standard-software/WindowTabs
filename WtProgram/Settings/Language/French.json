@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Appliquer les mêmes réglages aux onglets de gauche",
   "ApplySameSettingsToRightEdge": "Appliquer les mêmes réglages aux onglets de droite",
   "ApplySameSettingsToBottomEdge": "Appliquer les mêmes réglages aux onglets du bas",
-  "AddTabButton": "Placer le bouton d'ajout d'onglet",
+  "AddTabButton": "Afficher le bouton d’ajout d’onglet",
   "AddTabTooltip": "Nouvel onglet : Lancer {0}",
   "AddTabLaunchProgramHeader": "Lancer un programme dans un nouvel onglet",
   "AddTabOtherGroupPrograms": "Programmes des autres groupes d’onglets",

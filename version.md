@@ -7,9 +7,9 @@
 - Added an add-tab button [+] after the tabs on each edge
   - Left click starts another window of the active tab's program
     as a new tab at the end of that edge.
-  - Right click lists the programs of this tab group and of
-    the other tab groups.
-  - Each edge has a setting "Place the add-tab button".
+  - Right click lists programs: those of the clicked edge, then of
+    the other edges, then of the other tab groups.
+  - Each edge has a setting "Show the add-tab button".
     It is on by default.
 - Dark mode: the text of a disabled combo box is now gray
 

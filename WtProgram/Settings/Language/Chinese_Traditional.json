@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "將相同設定套用至左側分頁",
   "ApplySameSettingsToRightEdge": "將相同設定套用至右側分頁",
   "ApplySameSettingsToBottomEdge": "將相同設定套用至下方分頁",
-  "AddTabButton": "放置新增分頁按鈕",
+  "AddTabButton": "顯示新增分頁按鈕",
   "AddTabTooltip": "新增分頁 : 啟動 {0}",
   "AddTabLaunchProgramHeader": "在新分頁中啟動程式",
   "AddTabOtherGroupPrograms": "其他分頁群組的程式",

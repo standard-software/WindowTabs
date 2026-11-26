@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Terapkan pengaturan yang sama ke tab kiri",
   "ApplySameSettingsToRightEdge": "Terapkan pengaturan yang sama ke tab kanan",
   "ApplySameSettingsToBottomEdge": "Terapkan pengaturan yang sama ke tab bawah",
-  "AddTabButton": "Tempatkan tombol tambah tab",
+  "AddTabButton": "Tampilkan tombol tambah tab",
   "AddTabTooltip": "Tab baru : Jalankan {0}",
   "AddTabLaunchProgramHeader": "Jalankan program sebagai tab baru",
   "AddTabOtherGroupPrograms": "Program di grup tab lain",

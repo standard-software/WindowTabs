@@ -20,7 +20,7 @@
   "ApplySameSettingsToLeftEdge": "Aplicar la misma configuración a las pestañas izquierdas",
   "ApplySameSettingsToRightEdge": "Aplicar la misma configuración a las pestañas derechas",
   "ApplySameSettingsToBottomEdge": "Aplicar la misma configuración a las pestañas inferiores",
-  "AddTabButton": "Colocar el botón de añadir pestaña",
+  "AddTabButton": "Mostrar el botón Añadir pestaña",
   "AddTabTooltip": "Nueva pestaña : Iniciar {0}",
   "AddTabLaunchProgramHeader": "Iniciar un programa en una pestaña nueva",
   "AddTabOtherGroupPrograms": "Programas de otros grupos de pestañas",
