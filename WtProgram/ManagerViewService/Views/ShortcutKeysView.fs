@@ -124,7 +124,7 @@ type ShortcutKeysView() =
         //   [7][field]  [8][field]  [9][field]
         //   [x] Enable Ctrl+1, ...Ctrl+9 to activate tab
         //   [x] Enable Alt+1, ...Alt+9 to activate tab
-        let table = TableLayoutPanel()
+        let table = SettingsTableLayoutPanel()
         // AutoSize on a nested container is mandatory here for the reason
         // AppearanceView's pinned-width panel gives: an AutoSize row takes a
         // non-AutoSize child's CURRENT size, and a never-laid-out panel is

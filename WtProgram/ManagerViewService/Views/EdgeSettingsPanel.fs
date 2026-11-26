@@ -32,7 +32,7 @@ module EdgeRows =
     /// Caption and input columns, one AutoSize row each: a caption
     /// that wraps makes its row taller instead of being cut off.
     let rowTable (rows: int) =
-        let p = TableLayoutPanel()
+        let p = SettingsTableLayoutPanel()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
         p.Margin <- Padding(0)
@@ -92,7 +92,7 @@ module EdgeRows =
 
     /// Two numeric fields on the same row grid.
     let pairTable () =
-        let pair = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
+        let pair = new SettingsTableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
                                        Margin = Padding(0), ColumnCount = 4, RowCount = 1)
         pair.GrowStyle <- TableLayoutPanelGrowStyle.FixedSize
         pair.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
@@ -171,14 +171,14 @@ module EdgeRows =
         delay.Margin <- Padding(0, marginPx, 0, marginPx)
         let label = caption (Localization.getString "HideTabsDelayMilliseconds")
         label.Margin <- Padding(10, marginPx, 5, marginPx)
-        let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill, Margin = Padding(0),
+        let cell = new SettingsTableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill, Margin = Padding(0),
                                         AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
         cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
         cell.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
         cell.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         cell.Controls.Add(label, 0, 0)
         cell.Controls.Add(delay, 1, 0)
-        let table = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Margin = Padding(0),
+        let table = new SettingsTableLayoutPanel(ColumnCount = 2, RowCount = 1, Margin = Padding(0),
                                          AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
         table.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         table.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 60.0f)) |> ignore
@@ -394,7 +394,7 @@ module EdgeRows =
         let iconOnly = RadioButton()
         let specify = RadioButton()
         let width = SettingsNumericUpDown.Create()
-        let tbl = TableLayoutPanel()
+        let tbl = SettingsTableLayoutPanel()
         tbl.ColumnCount <- 3
         tbl.RowCount <- 1
         tbl.Dock <- DockStyle.Fill
@@ -475,7 +475,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
             | TabEdges.Edge.Right -> "ApplySameSettingsToLeftEdge"
             | _ -> "ApplySameSettingsToTopEdge"
         EdgeRows.pageHeader check key (fun () -> this.copyToOpposite())
-    let panel = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Top,
+    let panel = new SettingsTableLayoutPanel(AutoSize = true, Dock = DockStyle.Top,
                                     Margin = Padding(0), ColumnCount = 1, RowCount = 4)
     do
         panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
@@ -500,7 +500,7 @@ type EdgeSettingsPanel(edge: TabEdges.Edge, check: CheckBox, copied: unit -> uni
     let textBottomCombo = EdgeRows.choice [ text "SideTextBottomInside"; text "SideTextBottomOutside" ]
     let textCombo = EdgeRows.choice [ text "SideTextVertical"; text "SideTextHorizontal" ]
     // Keep the writing mode and baseline direction on the same row.
-    let textOptions = new TableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
+    let textOptions = new SettingsTableLayoutPanel(AutoSize = true, Dock = DockStyle.Fill,
                                            Margin = Padding(0), ColumnCount = 2, RowCount = 1)
     do
         let textWidth =

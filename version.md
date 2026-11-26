@@ -11,6 +11,8 @@
     the other edges, then of the other tab groups.
   - Each edge has a setting "Show the add-tab button".
     It is on by default.
+- Settings dialog: captions and inputs are centred vertically
+  in their rows
 - Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24

@@ -187,7 +187,7 @@ type AppearanceView() as this =
     let colorGridRowCount = 7  // theme + header + five states
 
     let createPage rowCount =
-        let page = TableLayoutPanel()
+        let page = SettingsTableLayoutPanel()
         page.SuspendLayout()
         page.AutoScroll <- true
         page.Dock <- DockStyle.Fill
@@ -242,7 +242,7 @@ type AppearanceView() as this =
 
     // Appearance controls retain their order, starting with tab shape.
     let upperPanel =
-        let p = TableLayoutPanel()
+        let p = SettingsTableLayoutPanel()
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
@@ -269,7 +269,7 @@ type AppearanceView() as this =
 
     // Color grid panel for color settings (separate from upper panel)
     let colorPanel =
-        let p = TableLayoutPanel()
+        let p = SettingsTableLayoutPanel()
         p.SuspendLayout()
         p.Dock <- DockStyle.Top
         p.AutoSize <- true
@@ -408,7 +408,7 @@ type AppearanceView() as this =
     let pinnedWidthNumeric = SettingsNumericUpDown.Create()
 
     let pinnedWidthInputPanel =
-        let tbl = TableLayoutPanel()
+        let tbl = SettingsTableLayoutPanel()
         tbl.ColumnCount <- 3
         tbl.RowCount <- 1
         tbl.Dock <- DockStyle.Fill

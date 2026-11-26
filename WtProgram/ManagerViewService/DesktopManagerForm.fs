@@ -194,6 +194,7 @@ type DesktopManagerForm() =
         WorkspaceView() :> ISettingsView
         SystemView() :> ISettingsView
         ])
+    do tabs.iter (fun view -> UIHelper.centerSettingsRows view.control)
 #if DEBUG
     do DesktopManagerFormState.log (sprintf "settings pages ms=%.1f" constructionClock.Elapsed.TotalMilliseconds)
 #endif

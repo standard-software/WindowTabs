@@ -5,6 +5,14 @@ open System.Windows.Forms
 open Bemo.Win32
 open Aga.Controls.Tree
 
+/// Run row alignment after the standard table layout has placed its children.
+type SettingsTableLayoutPanel() =
+    inherit TableLayoutPanel()
+    member val RowAlignment: Action = null with get, set
+    override this.OnLayout(args) =
+        base.OnLayout(args)
+        if not (isNull this.RowAlignment) then this.RowAlignment.Invoke()
+
 // The size grip every sizable dialog shows: drawn in the corner only, laid
 // OVER whatever fills the client area, and the same drawing everywhere. The
 // form's own grip needs the corner free (freeing it with padding under a
@@ -804,7 +812,7 @@ module UIHelper =
     // dialogs it left the caption visibly lower than its text box.
     let private buildForm (fields:List2<_>) (labelWidthPx: float32) (autoScroll: bool) (centerRows: bool) =
         let panel =
-            let t = TableLayoutPanel()
+            let t = SettingsTableLayoutPanel()
             t.AutoScroll <- autoScroll
             t.AutoSize <- true
             t.Dock <- DockStyle.Fill
@@ -852,6 +860,50 @@ module UIHelper =
             panel.SetRow(control, i)
             panel.SetColumn(control, 1)
         panel
+
+    /// Adjust only ordinary settings rows. Compound editors and tall rows
+    /// retain their native layout, including their original caption positions.
+    let centerSettingsRows (root: Control) =
+        let rec install (control: Control) =
+            match control with
+            | :? SettingsTableLayoutPanel as table ->
+                let mutable centering = false
+                let align () =
+                    if not centering && not table.IsDisposed then
+                        centering <- true
+                        table.SuspendLayout()
+                        try
+                            let heights = table.GetRowHeights()
+                            let rowLimit = SettingsDpi.px (settingsRowHeightPx + 2)
+                            let mutable rowTop = table.DisplayRectangle.Top
+                            for row in 0 .. heights.Length - 1 do
+                                let cells = table.Controls |> Seq.cast<Control>
+                                            |> Seq.filter (fun child -> table.GetPositionFromControl(child).Row = row)
+                                            |> Seq.toArray
+                                let simple (child: Control) =
+                                    table.GetRowSpan(child) = 1 && child.Dock = DockStyle.None &&
+                                    (match child with
+                                     | :? Label as label ->
+                                         not (label.Text.Contains("\n")) &&
+                                         TextRenderer.MeasureText(label.Text, label.Font,
+                                             Size(max 1 label.Width, Int32.MaxValue), TextFormatFlags.WordBreak).Height <= label.Font.Height
+                                     | :? ButtonBase | :? ComboBox | :? TextBoxBase | :? UpDownBase -> true
+                                     | _ -> false)
+                                if heights.[row] > 0 && heights.[row] <= rowLimit &&
+                                   cells.Length > 0 && Array.forall simple cells then
+                                    for child in cells do
+                                        let top = rowTop + (heights.[row] - child.Height) / 2
+                                        // A larger move belongs to a compound or stretched layout.
+                                        if abs (top - child.Top) <= SettingsDpi.px 2 && child.Top <> top then
+                                            child.Top <- top
+                                rowTop <- rowTop + heights.[row]
+                        finally
+                            table.ResumeLayout(false)
+                            centering <- false
+                table.RowAlignment <- Action(align)
+            | _ -> ()
+            for child in control.Controls do install child
+        install root
 
     // Default form layout: 250-px label column (matches the Appearance /
     // Interaction pages where labels are long).

@@ -9,13 +9,15 @@ open Bemo.Win32.Forms
 
 module private BehaviorControls =
     let row (shares: float32 list) (controls: Control list) =
-        let panel = new TableLayoutPanel(ColumnCount = shares.Length, RowCount = 1, Dock = DockStyle.Fill,
+        let panel = new SettingsTableLayoutPanel(ColumnCount = shares.Length, RowCount = 1, Dock = DockStyle.Fill,
                                          Margin = Padding(0), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink)
         for share in shares do
             panel.ColumnStyles.Add(ColumnStyle(SizeType.Percent, share * 100.0f / List.sum shares)) |> ignore
         panel.RowStyles.Add(RowStyle(SizeType.AutoSize)) |> ignore
         controls |> List.iteri (fun column control ->
-            control.Anchor <- AnchorStyles.Top ||| AnchorStyles.Left ||| AnchorStyles.Right
+            // No top or bottom anchor: a cell shorter than the row (a number
+            // beside a taller choice) stands at the row's vertical centre.
+            control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
             control.Margin <- Padding(0)
             // Keep a width a control asked for (a choice sized to its longest item).
             control.MinimumSize <- Size(control.MinimumSize.Width, UIHelper.settingsRowHeightPx - 2 * UIHelper.settingsRowMarginPx)
@@ -23,7 +25,7 @@ module private BehaviorControls =
         panel :> Control
 
     let labelled key leftMargin (number: Control) =
-        let cell = new TableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill,
+        let cell = new SettingsTableLayoutPanel(ColumnCount = 2, RowCount = 1, Dock = DockStyle.Fill,
                                         AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                                         Margin = Padding(leftMargin, 0, 0, 0))
         cell.ColumnStyles.Add(ColumnStyle(SizeType.AutoSize)) |> ignore
@@ -210,7 +212,7 @@ type GeneralView() =
                         (Localization.getString("StartupRegistrationFailed")))
         editor.control
     let table =
-        let taskbarButtons = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2)
+        let taskbarButtons = new SettingsTableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2)
         taskbarButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
         for _ in 1 .. 2 do taskbarButtons.RowStyles.Add(new RowStyle(SizeType.AutoSize)) |> ignore
         let checkbox = settingsCheckbox "groupTaskbarButtons"
@@ -270,7 +272,7 @@ type SystemView() =
                                 Margin = Padding(3, 0, 3, 0), TextAlign = ContentAlignment.MiddleLeft,
                                 Text = text "PortableDescription")
     let reason = new Label(AutoSize = true, Anchor = (AnchorStyles.Left ||| AnchorStyles.Right))
-    let operations = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 5)
+    let operations = new SettingsTableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 5)
     let buttons = ResizeArray<Button * bool>()
     let showFailure() =
         active.Text <- Services.settings.activePath
@@ -288,7 +290,7 @@ type SystemView() =
         reason.Text <- if exeWritable then "" else text "PortableExeNotWritable"
         reason.Visible <- not exeWritable
     let folder path =
-        let row = new TableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2)
+        let row = new SettingsTableLayoutPanel(AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2)
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100.0f)) |> ignore
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)) |> ignore
         let value = pathField path
