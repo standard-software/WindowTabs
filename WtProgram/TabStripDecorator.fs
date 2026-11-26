@@ -2745,12 +2745,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
 
             position |> Option.iter this.applyGroupSnapRealign
 
-    // Whether the "Tab alignment on snap and move" setting is enabled.
-    member private this.snapRealignEnabled() =
-        try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
-        with _ -> false
+    // Read the snap alignment policy without changing legacy stored values.
+    member private this.snapRealignMode() =
+        try Services.settings.getValue("changeTabPositionOnSnap") :?> string
+        with _ -> "nochange"
 
-    // Realign each uniformly aligned edge when the setting is enabled.
+    // Realign each edge according to the selected policy.
     // Horizontal strips follow the horizontal snap component, vertical strips
     // the vertical component; corner snaps affect both axes. setAlignAll updates
     // visible tabs for a group snap or persists alignment before detaching.
@@ -2758,10 +2758,11 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     // TabEdges.snapRealignTabs uses the edge supplied by edgeOf, sharing the
     // alignment rule with Desktop.dragDrop and the top-only path.
     member private this.applySnapRealignOn(tabHwnds: IntPtr list, edgeOf: IntPtr -> TabEdges.Edge, snapDirection: string, setAlignAll: IntPtr list -> TabAlign -> unit) =
-        if this.snapRealignEnabled() && not tabHwnds.IsEmpty then
+        let mode = this.snapRealignMode()
+        if (mode = "change" || mode = "always") && not tabHwnds.IsEmpty then
             let toAlign a = if a = TopLeft then TabEdges.AlignStart else TabEdges.AlignEnd
             let tabs = tabHwnds |> List.map (fun h -> h, edgeOf h, toAlign (group.getTabAlign h))
-            for (hwnds, desired) in TabEdges.snapRealignTabs true snapDirection tabs do
+            for (hwnds, desired) in TabEdges.snapRealignTabsMode mode snapDirection tabs do
                 setAlignAll hwnds (if desired = TabEdges.AlignStart then TopLeft else TopRight)
 
     // Detached tabs retain their edges; snap alignment follows each retained axis.

@@ -145,7 +145,8 @@ module Localization_English =
         ("EnableHoverActivate", "Enable mouse hover to activate tab")
 
         ("TabPositionByDefault", "Tab alignment")
-        ("ChangeTabPositionOnSnap", "Tab alignment on snap and move")
+        ("ChangeTabPositionOnSnap", "Change tab alignment on snap")
+        ("ChangeTabPositionOnSnapAlways", "Change")
         ("ChangeTabPositionOnSnapWhenUniform", "Change when all tabs on the same edge share the same alignment")
         ("ChangeTabPositionOnSnapNever", "Don't change")
         ("TabVerticalDirection", "Outer or inner tabs")

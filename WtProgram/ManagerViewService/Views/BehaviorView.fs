@@ -140,8 +140,8 @@ type InteractionView() =
 
         let snapChangeTabPositionChoice =
             settingsChoice "changeTabPositionOnSnap"
-                (fun mode -> if mode = "nochange" then "nochange" else "change")
-                ["change", "ChangeTabPositionOnSnapWhenUniform"; "nochange", "ChangeTabPositionOnSnapNever"]
+                (fun mode -> if mode = "nochange" || mode = "always" then mode else "change")
+                ["nochange", "ChangeTabPositionOnSnapNever"; "always", "ChangeTabPositionOnSnapAlways"; "change", "ChangeTabPositionOnSnapWhenUniform"]
 
         let snapMarginChoice =
             settingsChoice "snapTabMarginMode" SnapTabMarginMode.normalize SnapTabMarginMode.choices

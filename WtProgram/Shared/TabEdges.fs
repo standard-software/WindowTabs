@@ -734,15 +734,15 @@ module TabEdges =
 
     // ----------------------------------------------------------- snapping --
 
-    /// "Tab alignment on snap and move" (4-2), edge by edge: the tabs of a top or
+    /// Snap alignment, edge by edge: the tabs of a top or
     /// bottom strip answer a left or right snap, the tabs of a left or right
-    /// strip a top or bottom snap, and only when all of that edge's tabs -
-    /// pinned ones included - are aligned alike. The decision IS
+    /// strip a top or bottom snap. The legacy change mode requires uniform
+    /// alignment, including pinned tabs; always also realigns mixed edges. The decision IS
     /// SnapGeometry.realignment: horizontal strips follow the horizontal
     /// component, vertical strips the vertical component, including corners.
     /// Centre, maximise and unknown directions change nothing.
     /// Returns each edge to realign and its new alignment.
-    let snapRealign (enabled: bool) (snapDirection: string) (tabs: (Edge * Align) list) : (Edge * Align) list =
+    let snapRealignMode (mode: string) (snapDirection: string) (tabs: (Edge * Align) list) : (Edge * Align) list =
         priority
         |> List.choose (fun edge ->
             let aligns = tabs |> List.filter (fun (e, _) -> e = edge) |> List.map snd
@@ -755,16 +755,25 @@ module TabEdges =
                     | SnapGeometry.snapBottom | "snapbottomleft" | "snapbottomright"
                     | "bottom" | "bottomleft" | "bottomright" -> SnapGeometry.snapRight
                     | _ -> ""
-            SnapGeometry.realignment enabled direction aligns AlignStart AlignEnd
+            // Always mode bypasses only the uniformity check, not the snap axis.
+            let candidates = if mode = "always" then aligns |> List.truncate 1 else aligns
+            SnapGeometry.realignment (mode = "change" || mode = "always") direction candidates AlignStart AlignEnd
             |> Option.map (fun a -> edge, a))
+
+    // Retain the boolean entry point for callers using the legacy policy.
+    let snapRealign enabled snapDirection tabs =
+        snapRealignMode (if enabled then "change" else "nochange") snapDirection tabs
 
     /// snapRealign for a group's tabs: which tabs take which alignment, one
     /// entry per edge that realigns, its tabs in the order given. The tabs of
     /// an edge the snap does not concern are in no entry and keep theirs.
-    let snapRealignTabs (enabled: bool) (snapDirection: string) (tabs: ('id * Edge * Align) list) : ('id list * Align) list =
-        snapRealign enabled snapDirection (tabs |> List.map (fun (_, e, a) -> e, a))
+    let snapRealignTabsMode (mode: string) (snapDirection: string) (tabs: ('id * Edge * Align) list) : ('id list * Align) list =
+        snapRealignMode mode snapDirection (tabs |> List.map (fun (_, e, a) -> e, a))
         |> List.map (fun (edge, align) ->
             (tabs |> List.filter (fun (_, e, _) -> e = edge) |> List.map (fun (id, _, _) -> id)), align)
+
+    let snapRealignTabs enabled snapDirection tabs =
+        snapRealignTabsMode (if enabled then "change" else "nochange") snapDirection tabs
 
     // ------------------------------------------------------ the settings --
 

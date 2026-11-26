@@ -426,7 +426,11 @@ type Settings(isStandAlone) as this =
                     // and latched, and a backup may still hold what the file
                     // will not give up.
                     if this.fileExists then this.tryRecoverFromBackup().def(JObject())
-                    else JObject()
+                    else
+                        // Seed the new-install default so root-only saves preserve it too.
+                        let defaults = JObject()
+                        defaults.setString("ChangeTabPositionOnSnap", "nochange")
+                        defaults
             with
             | ex ->
                 this.logEmptyFallback "settingsJson outer" ex
@@ -862,7 +866,7 @@ type Settings(isStandAlone) as this =
                         snapTabMarginMode = SnapTabMarginMode.none
                         snapTabMarginDelayMilliseconds = 3000
                         snapButtonOnlyMargin = true
-                        changeTabPositionOnSnap = "change"
+                        changeTabPositionOnSnap = if this.fileExists then "change" else "nochange"
                         snapOnDragDetach = false
                         version = String.Empty
                         tabAppearance = this.defaultTabAppearance

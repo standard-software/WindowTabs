@@ -28,6 +28,13 @@
     Whether such an edge gets room on snap is chosen
     on the Interaction page.
   - The rows of the Interaction page are regrouped.
+- Changing tab alignment on snap now has three choices
+  - Don't change / Change /
+    Change when all tabs on the same edge share the same alignment
+  - "Change" gives every tab on the edge the alignment of
+    the snap direction, even when the alignments are mixed.
+  - A new installation starts with "Don't change".
+    Existing settings behave as before.
 - Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24

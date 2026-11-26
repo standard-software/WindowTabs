@@ -275,14 +275,14 @@ type Desktop(notify:IDesktopNotification) as this =
                     FramePlacement.moveDetachedSnap window margin baseBounds
                     for selected in dragInfo.selectedHwnds do
                         FramePlacement.prepareSnap selected dragInfo.sourceFrameMargins.[selected] baseBounds
-                    let realignEnabled =
-                        try (Services.settings.getValue("changeTabPositionOnSnap") :?> string) = "change"
-                        with _ -> false
+                    let realignMode =
+                        try Services.settings.getValue("changeTabPositionOnSnap") :?> string
+                        with _ -> "nochange"
                     let handles = hwnd :: dragInfo.selectedHwnds
                     let aligns =
                         List.zip handles dragInfo.sourceTabAligns
                         |> List.map (fun (h, a) -> edges.[h], (if a = TopLeft then TabEdges.AlignStart else TabEdges.AlignEnd))
-                    let realigned = TabEdges.snapRealign realignEnabled snapDirection aligns |> Map.ofList
+                    let realigned = TabEdges.snapRealignMode realignMode snapDirection aligns |> Map.ofList
                     for h in handles do
                         match Map.tryFind edges.[h] realigned with
                         | Some alignment ->
