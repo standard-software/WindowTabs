@@ -476,6 +476,7 @@ module EdgeRows =
         let tbl = pairTable ()
         let side text column =
             let n = number ()
+            n.Minimum <- 0m
             n.SetNumericMenu(Some(string resetValue, fun () -> n.Value <- decimal resetValue))
             tbl.Controls.Add(caption text, column, 0)
             tbl.Controls.Add(n, column + 1, 0)

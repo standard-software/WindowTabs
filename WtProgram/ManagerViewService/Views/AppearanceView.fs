@@ -332,6 +332,8 @@ type AppearanceView() as this =
             label.MinimumSize <- Size(0, rowMinimumHeight UIHelper.settingsRowMarginPx UIHelper.settingsRowMarginPx)
             label
         let editor = IntEditor() :> IPropEditor
+        if prop.key.StartsWith("tabIndent", StringComparison.Ordinal) then
+            (editor.control :?> SettingsNumericUpDown).Minimum <- 0m
 
         editor.control.Anchor <- AnchorStyles.Left ||| AnchorStyles.Right
         editor.control.Margin <- Padding(0, UIHelper.settingsRowMarginPx, 0, UIHelper.settingsRowMarginPx)

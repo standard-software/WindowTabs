@@ -44,6 +44,12 @@
     and the choice for edges with only buttons.
   - A new installation starts with the room on.
     Existing settings behave as before.
+- The distances of tabs from the ends of an edge may now be 0
+- The top tabs' distances are measured from the visible window
+  frame, like the other edges
+  - They used to include the invisible frame, so small values put
+    the tabs outside the window's width.
+  - With the same value the tabs may now sit slightly further in.
 - Dark mode: the text of a disabled combo box is now gray
 
 ## version ss_2026.11.24

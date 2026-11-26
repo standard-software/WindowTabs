@@ -1154,6 +1154,14 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         ordinaryFrameSample <- TabEdgeLayout.frameSample ordinaryFrameSample source read
         source |> Option.map (fun _ -> ordinaryFrameSample |> Option.map snd |> Option.defaultValue (0,0,0,0))
 
+    // Every edge uses the same stable visible frame, including the top's ends.
+    member private this.stripFrame (hwnd: IntPtr) (windowBounds: Rect) =
+        match this.ordinaryFrameInsets with
+        | Some insets ->
+            TabEdgeLayout.ordinaryFrame insets
+                (windowBounds.x, windowBounds.y, windowBounds.width, windowBounds.height)
+        | None -> this.visibleFrame hwnd windowBounds
+
     // The strips of the other edges, each where TabEdgeLayout.place puts it
     // for this frame and these displays: the bottom strip first, then the
     // left and right strips, which give the corners to the top and the
@@ -1164,12 +1172,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         match group.bounds.value, group.tryTopWindow with
         | Some(windowBounds), Some(hwnd) ->
             let box (r: Rect) = r.x, r.y, r.width, r.height
-            // Use the ordinary member's frame when available; otherwise retain
-            // the foreground body and DWM fallback.
-            let frame =
-                match this.ordinaryFrameInsets with
-                | Some insets -> TabEdgeLayout.ordinaryFrame insets (box windowBounds)
-                | None -> this.visibleFrame hwnd windowBounds
+            let frame = this.stripFrame hwnd windowBounds
             let monitors =
                 TabEdgeLayout.placementMonitors false
                     (Mon.fromHwnd(hwnd) |> Option.map (fun m -> box m.workRect))
@@ -1215,7 +1218,7 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
     member private this.invokeAsync f = group.invokeAsync f
     member private this.invokeSync f = group.invokeSync f
 
-    // Pure: reading the placement must not mutate the strip. (The scale and
+    // Reading the placement must not mutate the strip. (The scale and
     // appearance are pushed by updateTsPlacement, the single writer.)
     // Return type stated explicitly: TabStripSprite also has a `scale` field,
     // and F# would otherwise infer the most recently declared matching record.
@@ -1224,8 +1227,17 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         // One appearance read, so height / offset / indent and the scale handed
         // to the strip all describe the same monitor.
         let appearance = group.tabAppearanceAt scale
+        let windowBounds = group.bounds.value.def(Rect())
+        let topBounds =
+            match group.tryTopWindow with
+            | Some hwnd ->
+                let x, y, w, h =
+                    TabEdgeLayout.topFrame (this.stripFrame hwnd windowBounds)
+                        (windowBounds.x, windowBounds.y, windowBounds.width, windowBounds.height)
+                Rect(Pt(x, y), Sz(w, h))
+            | None -> windowBounds
         let decorator =  {
-            windowBounds = group.bounds.value.def(Rect())
+            windowBounds = topBounds
             monitorBounds =
                 List2(TabEdgeLayout.placementMonitors (TabEdges.isTopOnly this.ts.allowedEdges)
                     (group.tryTopWindow |> Option.bind Mon.fromHwnd |> Option.map (fun m -> m.workRect))

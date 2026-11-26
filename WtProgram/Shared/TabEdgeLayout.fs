@@ -28,8 +28,8 @@ module TabEdgeLayout =
             | Some insets -> Some(key, insets)
             | None -> previous |> Option.filter (fun (old, _) -> old = key))
 
-    /// Top placement stays on the group rectangle. Other edges share the
-    /// ordinary member's visible sides, even when a margin-bearing app is front.
+    /// All edges share the ordinary member's visible sides, even when a
+    /// margin-bearing app is front.
     let ordinaryFrame (left, top, right, bottom) ((x,y,w,h): Box) : Box =
         let cap value = max 0 (min 32 value)
         let left = min (max 0 (w-1)) (cap left)
@@ -37,6 +37,11 @@ module TabEdgeLayout =
         let top = min (max 0 (h-1)) (cap top)
         let bottom = min (max 0 (h-top-1)) (cap bottom)
         x+left,y+top,max 1 (w-left-right),max 1 (h-top-bottom)
+
+    /// Top distances use the shared visible sides. Keep the group's vertical
+    /// anchor so tab height offsets and snap room retain their existing meaning.
+    let topFrame ((fx, _, fw, _): Box) ((_, y, _, h): Box) : Box =
+        fx, y, fw, h
 
     /// Four-edge placement belongs to the window's monitor, even at a seam.
     /// The caller resolves that monitor with MonitorFromWindow. Keep the
@@ -95,8 +100,8 @@ module TabEdgeLayout =
     /// for a left or right one - and never below one pixel.
     let inset (edge: Edge) (first: int, last: int) ((x, y, w, h): Box) : Box =
         let cut length =
-            let first = min (max 0 (length - 1)) first
-            let last = min (max 0 (length - first - 1)) last
+            let first = min (max 0 (length - 1)) (max 0 first)
+            let last = min (max 0 (length - first - 1)) (max 0 last)
             first, max 1 (length - first - last)
         if runsHorizontally edge then
             let first, length = cut w

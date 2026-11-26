@@ -23,20 +23,24 @@ type WindowDecorator = {
         if isCentered then this.decoratorIndentFlipped, this.decoratorIndentFlippedRight
         else this.decoratorIndentNormal, this.decoratorIndentNormalRight
 
+    member private this.insetBounds(isInside) =
+        let r = this.windowBounds
+        let x, y, w, h = TabEdgeLayout.inset TabEdges.Edge.Top (this.indents(isInside))
+                            (r.x, r.y, r.width, r.height)
+        Rect(Pt(x, y), Sz(w, h))
+
     member private this.outsideBounds =
-        let rect = this.windowBounds
-        let left, right = this.indents(false)
+        let rect = this.insetBounds(false)
         Rect(
-            Pt(rect.x + left, rect.y - this.decoratorHeight + this.decoratorHeightOffset),
-            Sz(rect.width - left - right, this.decoratorHeight)
+            Pt(rect.x, rect.y - this.decoratorHeight + this.decoratorHeightOffset),
+            Sz(rect.width, this.decoratorHeight)
         )
 
     member this.insideBounds = 
-        let rect = this.windowBounds
-        let left, right = this.indents(true)
+        let rect = this.insetBounds(true)
         Rect(
-            Pt(rect.x + left, rect.y - 1), // offset by one so it covers edge case #741
-            Sz(rect.width - left - right, this.decoratorHeight)
+            Pt(rect.x, rect.y - 1), // offset by one so it covers edge case #741
+            Sz(rect.width, this.decoratorHeight)
         )
 
     member this.shouldShowInside =
