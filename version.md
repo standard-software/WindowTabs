@@ -5,52 +5,23 @@
 ## version ss_2026.11.24_next1
 
 - Added an add-tab button [+] after the tabs on each edge
-  - Left click starts another window of the active tab's program
-    as a new tab at the end of that edge.
-  - Right click lists programs: those of the clicked edge, then of
-    the other edges, then of the other tab groups.
-  - Each edge has a setting "Show the add-tab button".
-    It is on by default.
-- Settings dialog: captions and inputs are centred vertically
-  in their rows
-- Added a button [x] that closes all tabs of a tab group
-  - Left click closes every tab. Whether it asks first is chosen
-    with "Close-all-tabs button behavior" on the Interaction page.
-  - Right click closes all, the selected or the unselected tabs,
-    for the whole group or for one edge, without asking.
-  - Each edge has a setting "Close-all-tabs button display".
-    - Do not show / Always show / Show only when tabs exist
-    - Ends: left and right on the top and bottom edges,
-      top and bottom on the left and right edges
-    - By default the top edge shows it at the right end when it
-      has tabs, and the other edges do not show it.
-  - "Always show" puts the button on an edge without tabs too.
-    Whether such an edge gets room on snap is chosen
-    on the Interaction page.
-  - The rows of the Interaction page are regrouped.
+  - Left click: starts the exe of the active tab or the tab behind it
+  - Right click: choose the program to start from a list
+  - Can be shown or hidden per edge
+- Added a close-all-tabs button [x]
+  - Left click: closes all tabs (asks first)
+  - Right click: closes all, selected or unselected tabs of the
+    group or of one edge, without asking
+  - Shown per edge; can also be shown on an edge without tabs
 - Changing tab alignment on snap now has three choices
-  - Don't change / Change /
-    Change when all tabs on the same edge share the same alignment
-  - "Change" gives every tab on the edge the alignment of
-    the snap direction, even when the alignments are mixed.
-  - A new installation starts with "Don't change".
-    Existing settings behave as before.
+  - Don't change / Change / Change when the alignments match
 - Added "Snap detection" to the Interaction page
   - When snapping or moving with WindowTabs /
-    also when snapping with Windows (after the wait time)
-  - A detected snap applies both the room for tabs and
-    the change of tab alignment.
-  - "Leave room for tabs when snapping" is now one row: a checkbox
-    and the choice for edges with only buttons.
-  - A new installation starts with the room on.
-    Existing settings behave as before.
-- The distances of tabs from the ends of an edge may now be 0
-- The top tabs' distances are measured from the visible window
-  frame, like the other edges
-  - They used to include the invisible frame, so small values put
-    the tabs outside the window's width.
-  - With the same value the tabs may now sit slightly further in.
-- Dark mode: the text of a disabled combo box is now gray
+    also when snapping with Windows
+  - A detected snap applies the room for tabs and the alignment change
+- Fixed: the top tabs' end distances are now measured from
+  the visible window frame
+  - With the same value the tabs may sit slightly further in
 
 ## version ss_2026.11.24
 
