@@ -135,6 +135,24 @@ Auto Grouping brings windows of the same app together; shared categories (1–10
 
 - Give tabs a color, and choose whether to draw it as a background, underline, or border.
 
+### Add-tab button
+
+![Right-click menu of the add-tab button](README_Image/ShotAddTabMenu.png)
+
+- Show an add-tab button [+] after the last tab on each edge.
+- Left-click: launch the same program as the active tab, or the tab behind it, and add it as a tab.
+- Right-click: choose the program to launch from a list.
+- Show or hide the button for each edge.
+
+### Close-all-tabs button
+
+![Right-click menu of the close-all-tabs button](README_Image/ShotCloseAllMenu.png)
+
+- Show a close-all-tabs button [x].
+- Left-click: close all tabs after a confirmation.
+- Right-click: close all tabs, the selected tabs, or the unselected tabs, for the whole group or for one edge, without a confirmation.
+- Show or hide the button and choose its position for each edge. It can also be shown on an edge that has no tabs.
+
 ### More tab commands
 
 - Every feature you would expect from a tab UI is there.
