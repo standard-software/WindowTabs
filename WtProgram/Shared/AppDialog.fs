@@ -31,7 +31,8 @@ module AppDialog =
             | None -> false
         with _ -> false
 
-    let private build (owner: IWin32Window option) (title: string) (message: string)
+    let private build (owner: IWin32Window option) (placement: (Rectangle * Rectangle * float) option)
+                      (title: string) (message: string)
                       (buttons: Buttons) (defaultButton: DefaultButton) (englishButtons: bool) =
         let form = new DpiAwareDialog()
         form.Text <- title
@@ -39,7 +40,7 @@ module AppDialog =
         form.MaximizeBox <- false
         form.MinimizeBox <- false
         form.StartPosition <- (if owner.IsSome then FormStartPosition.CenterParent else FormStartPosition.CenterScreen)
-        form.TopMost <- buttons <> YesNo
+        form.TopMost <- true
         form.ShowInTaskbar <- false
         form.KeyPreview <- true
 
@@ -92,14 +93,14 @@ module AppDialog =
                 e.Handled <- true
                 e.SuppressKeyPress <- true)
 
-        // Owned by the settings dialog: laid out at its scale, since the box
-        // opens centred on it. Stand-alone: the monitor is taken from the
-        // pointer. The Load handler
-        // below runs afterwards and reads the scale this establishes.
-        match owner with
-        | Some(o) when buttons = YesNo -> form.InitializeDpi(Dpi.scaleForHwnd o.Handle)
-        | Some(_) -> form.InitializeDpi(SettingsDpi.current())
-        | None -> form.InitializeDpi(SettingsDpi.forCursor())
+        // Use the target monitor's scale before the Load handler sizes the box.
+        match placement, owner with
+        | Some(bounds, _, scale), _ ->
+            form.StartPosition <- FormStartPosition.Manual
+            form.Location <- bounds.Location
+            form.InitializeDpi(scale)
+        | None, Some(_) -> form.InitializeDpi(SettingsDpi.current())
+        | None, None -> form.InitializeDpi(SettingsDpi.forCursor())
 
         form.Load.Add(fun _ ->
             // Size the form around the label so multi-byte strings (Japanese,
@@ -115,7 +116,16 @@ module AppDialog =
             let top = label.Bottom + margin
             okBtn.Location <- Point(left, top)
             cancelBtn |> Option.iter (fun c -> c.Location <- Point(left + okBtn.Width + gap, top))
-            defaultBtn.Select())
+            defaultBtn.Select()
+            placement |> Option.iter (fun (bounds, workArea, _) ->
+                if form.Width > workArea.Width || form.Height > workArea.Height then
+                    form.AutoScroll <- true
+                    form.Size <- Size(min form.Width workArea.Width, min form.Height workArea.Height)
+                let x = bounds.Left + (bounds.Width - form.Width) / 2
+                let y = bounds.Top + (bounds.Height - form.Height) / 2
+                form.Location <- Point(
+                    max workArea.Left (min x (workArea.Right - form.Width)),
+                    max workArea.Top (min y (workArea.Bottom - form.Height)))))
 
         if darkOn() then
             DarkMode.applyDarkColorsBeforeShow form
@@ -125,7 +135,7 @@ module AppDialog =
         form
 
     let private run (owner: IWin32Window option) title message buttons defaultButton : DialogResult =
-        use form = build owner title message buttons defaultButton false
+        use form = build owner None title message buttons defaultButton false
         match owner with
         | Some(o) -> form.ShowDialog(o)
         | None -> form.ShowDialog()
@@ -136,7 +146,7 @@ module AppDialog =
 
     /// Language recovery messages must remain readable regardless of selection.
     let showReservedEnglish title message =
-        use form = build None title message OkOnly DefaultOk true
+        use form = build None None title message OkOnly DefaultOk true
         form.ShowDialog()
 
     /// A new top-level request is rejected while another dialog is open.
@@ -195,11 +205,13 @@ module AppDialog =
         // the parent while the child is open; external entry points stay gated.
         run (Some owner) title message OkOnly DefaultOk |> ignore
 
-    /// A group-button question uses its window as owner and the existing
-    /// dialog gate: repeated clicks cannot open or queue another question.
-    let confirmOwned (owner: IWin32Window) (title: string) (message: string) : bool =
+    /// A group-button question is ownerless, centred on the supplied bounds.
+    /// The dialog gate prevents repeated clicks from queuing another question.
+    let confirmAt (bounds: Rectangle) (workArea: Rectangle) (scale: float)
+                  (title: string) (message: string) : bool =
         match DialogState.tryAcquire() with
         | None -> false
         | Some session ->
             use lifetime = session
-            run (Some owner) title message YesNo DefaultCancel = DialogResult.Yes
+            use form = build None (Some(bounds, workArea, scale)) title message YesNo DefaultCancel false
+            form.ShowDialog() = DialogResult.Yes

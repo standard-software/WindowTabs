@@ -1476,10 +1476,15 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             | TabEdgeSettings.Disabled -> ()
             | TabEdgeSettings.Immediate -> TabStripDecorator.closeAllTabs(group.hwnd)
             | TabEdgeSettings.Confirm ->
-                let ownerHwnd = group.topWindow
-                let owner = { new IWin32Window with member _.Handle = ownerHwnd }
+                let targetHwnd = group.topWindow
+                let bounds = (os.windowFromHwnd(targetHwnd)).bounds.Rectangle
+                let workArea =
+                    match Mon.fromHwnd(targetHwnd) with
+                    | Some(mon) -> mon.workRect.Rectangle
+                    | None -> (this.getCurrentScreenForWindow(targetHwnd)).WorkingArea
+                let scale = Dpi.scaleForHwnd targetHwnd
                 let message = String.Format(Localization.getString("CloseAllButtonQuestion"), group.windows.items.count)
-                if AppDialog.confirmOwned owner "WindowTabs" message then
+                if AppDialog.confirmAt bounds workArea scale "WindowTabs" message then
                     TabStripDecorator.closeAllTabs(group.hwnd)
 
     member private this.onCloseAllWindows(?edge: TabEdges.Edge) =
