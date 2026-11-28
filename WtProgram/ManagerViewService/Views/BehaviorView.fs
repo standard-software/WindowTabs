@@ -163,7 +163,10 @@ type InteractionView() =
                             save "snapTabMarginMode" (box (SnapTabMarginMode.marginForDetection on preferred)) }
 
         let snapMarginChoice = EdgeRows.choice (SnapTabMarginMode.choices |> List.map (snd >> Localization.getString))
-        let fitSnapMarginChoice() = EdgeRows.fitChoiceWidth snapMarginChoice
+        let fitSnapMarginChoice() =
+            EdgeRows.fitChoiceWidth snapMarginChoice
+            // Keep the closed field within the shared editor column.
+            snapMarginChoice.MinimumSize <- Size.Empty
         fitSnapMarginChoice()
         snapMarginChoice.FontChanged.Add(fun _ -> fitSnapMarginChoice())
         snapMarginChoice.DropDown.Add(fun _ -> fitSnapMarginChoice())
@@ -195,7 +198,15 @@ type InteractionView() =
             if not refreshingMargin && not refreshing && buttonOnlyMarginChoice.SelectedIndex >= 0 then
                 save "snapButtonOnlyMargin" (box (buttonOnlyMarginChoice.SelectedIndex = 1)))
         let snapMarginControls = BehaviorControls.row [3.0f; 2.0f] [snapMarginChoice; snapMarginDelay]
-        do snapMarginDelay.Margin <- Padding(10, 0, 0, 0)
+        do
+            // Reserve the complete wait caption and a five-digit numeric field.
+            let delay = snapMarginDelay :?> TableLayoutPanel
+            delay.ColumnStyles.[1].SizeType <- SizeType.Absolute
+            delay.ColumnStyles.[1].Width <- 70.0f
+            let row = snapMarginControls :?> TableLayoutPanel
+            row.ColumnStyles.[0].Width <- 100.0f
+            row.ColumnStyles.[1].SizeType <- SizeType.AutoSize
+            snapMarginDelay.Margin <- Padding(10, 0, 0, 0)
 
         let lockPositionCheckbox = settingsCheckbox "lockWindowPosition"
         let fields = List2([
