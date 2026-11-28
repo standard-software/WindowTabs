@@ -270,6 +270,8 @@
   "TabPlural": "标签页",
   "CloseOtherTabsFormat": "关闭除此标签页外的 {0} 个标签页",
   "CloseOtherEdgeTabsFormat": "关闭{0}中除此标签页外的 {1} 个标签页",
+  "CloseSelectedGroupTabsFormat": "关闭选中的{0}个标签页",
+  "CloseSelectedGroupTabsNoCount": "关闭选中的标签页",
   "CloseUnselectedTabsFormat": "关闭未选中的{0}个标签页",
   "CloseAllTabsFormat": "关闭所有标签页 ({0})",
   "CloseEdgeTabsFormat": "关闭{0}中的所有标签页 ({1})",

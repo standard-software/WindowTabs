@@ -34,6 +34,11 @@ module TabEdges =
     /// The one order every rule walks the edges in: top, left, right, bottom.
     let priority = [ Edge.Top; Edge.Left; Edge.Right; Edge.Bottom ]
 
+    /// Selected close targets keep group order and are enabled only for a partial selection.
+    let selectedCloseMenuTargets (tabs: 'id list) (selection: Set<'id>) =
+        let selected = tabs |> List.filter selection.Contains
+        selected, not selected.IsEmpty && selected.Length < tabs.Length
+
     /// Fixed-order sections for the close-all button menu. The selection
     /// includes the active tab and may span multiple edges.
     let closeMenuTargets (allowedEdges: Edge list) (tabs: ('id * Edge) list) (selected: Set<'id>) =

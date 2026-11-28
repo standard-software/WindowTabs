@@ -1434,6 +1434,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
             TabEdges.closeMenuTargets (TabEdges.edgesOf this.ts.allowedEdges)
                 (windows |> List.map (fun hwnd -> hwnd, this.ts.edgeOf(Tab hwnd)))
                 (defaultArg retained Set.empty)
+        let selected, partialSelection =
+            TabEdges.selectedCloseMenuTargets windows (defaultArg retained Set.empty)
+        let selectedText =
+            if partialSelection then
+                String.Format(Localization.getString("CloseSelectedGroupTabsFormat"), selected.Length)
+            else Localization.getString("CloseSelectedGroupTabsNoCount")
         let closeItem text targets enabled =
             CmiRegular({ text = text; image = None
                          flags = if enabled && not (List.isEmpty targets) then List2() else List2([MenuFlags.MF_GRAYED])
@@ -1444,12 +1450,12 @@ type TabStripDecorator(group:WindowGroup, notifyDetached: IntPtr * TabEdges.Edge
         let edgeName edge = Localization.getString(string edge + "TabsInMenu")
         let items =
             [ closeItem (String.Format(Localization.getString("CloseAllTabsFormat"), windows.Length)) windows true
+              closeItem selectedText selected partialSelection
               closeItem (String.Format(Localization.getString("CloseUnselectedTabsFormat"), (if retained.IsSome then others.Length else 0)))
                   (if retained.IsSome then others else []) retained.IsSome ] @
             (sections |> List.collect (fun (edge, targets, unselected) ->
-                let selected = targets |> List.filter (fun hwnd ->
-                    retained |> Option.exists (fun selection -> selection.Contains hwnd))
-                let partialSelection = not selected.IsEmpty && not unselected.IsEmpty
+                let selected, partialSelection =
+                    TabEdges.selectedCloseMenuTargets targets (defaultArg retained Set.empty)
                 let selectionText countKey noCountKey count =
                     if partialSelection then
                         String.Format(Localization.getString(countKey), edgeName edge, count)

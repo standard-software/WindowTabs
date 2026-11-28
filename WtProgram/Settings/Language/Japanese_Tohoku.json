@@ -270,6 +270,8 @@
   "TabPlural": "タブ",
   "CloseOtherTabsFormat": "このタブ以外の{0}タブ閉じっぺ",
   "CloseOtherEdgeTabsFormat": "{0}のこのタブ以外の{1}タブ閉じっぺ",
+  "CloseSelectedGroupTabsFormat": "選んでる{0}タブ閉じっぺ",
+  "CloseSelectedGroupTabsNoCount": "選んでるタブ閉じっぺ",
   "CloseUnselectedTabsFormat": "選んでね{0}タブ閉じっぺ",
   "CloseAllTabsFormat": "すべてのタブ({0}タブ)閉じっぺ",
   "CloseEdgeTabsFormat": "{0}のすべてのタブ({1}タブ)閉じっぺ",

@@ -270,6 +270,8 @@
   "TabPlural": "Tabs",
   "CloseOtherTabsFormat": "Alle außer diesem Tab schließen ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: Alle außer diesem Tab schließen ({1})",
+  "CloseSelectedGroupTabsFormat": "{0} ausgewählte Tabs schließen",
+  "CloseSelectedGroupTabsNoCount": "Ausgewählte Tabs schließen",
   "CloseUnselectedTabsFormat": "{0} nicht ausgewählte Tabs schließen",
   "CloseAllTabsFormat": "Alle Tabs schließen ({0})",
   "CloseEdgeTabsFormat": "{0}: Alle Tabs schließen ({1})",

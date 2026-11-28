@@ -270,6 +270,8 @@
   "TabPlural": "Schede",
   "CloseOtherTabsFormat": "Chiudi tutto tranne questa scheda ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: chiudi tutto tranne questa scheda ({1})",
+  "CloseSelectedGroupTabsFormat": "Chiudi {0} schede selezionate",
+  "CloseSelectedGroupTabsNoCount": "Chiudi le schede selezionate",
   "CloseUnselectedTabsFormat": "Chiudi {0} schede non selezionate",
   "CloseAllTabsFormat": "Chiudi tutte le schede ({0})",
   "CloseEdgeTabsFormat": "{0}: chiudi tutte le schede ({1})",

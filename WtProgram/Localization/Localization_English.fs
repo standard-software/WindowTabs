@@ -273,6 +273,8 @@ module Localization_English =
         ("TabPlural", "Tabs")
         ("CloseOtherTabsFormat", "Close all tabs except this one ({0})")
         ("CloseOtherEdgeTabsFormat", "Close all {0} except this one ({1})")
+        ("CloseSelectedGroupTabsFormat", "Close {0} selected tabs")
+        ("CloseSelectedGroupTabsNoCount", "Close selected tabs")
         ("CloseUnselectedTabsFormat", "Close {0} unselected tabs")
         ("CloseEdgeTabsFormat", "Close all {0} ({1})")
         ("CloseSelectedEdgeTabsFormat", "Close selected {0} ({1})")

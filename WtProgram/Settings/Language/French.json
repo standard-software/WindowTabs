@@ -270,6 +270,8 @@
   "TabPlural": "Onglets",
   "CloseOtherTabsFormat": "Fermer tout sauf cet onglet ({0})",
   "CloseOtherEdgeTabsFormat": "{0} : fermer tout sauf cet onglet ({1})",
+  "CloseSelectedGroupTabsFormat": "Fermer les {0} onglets sélectionnés",
+  "CloseSelectedGroupTabsNoCount": "Fermer les onglets sélectionnés",
   "CloseUnselectedTabsFormat": "Fermer les {0} onglets non sélectionnés",
   "CloseAllTabsFormat": "Fermer tous les onglets ({0})",
   "CloseEdgeTabsFormat": "{0} : fermer tous les onglets ({1})",

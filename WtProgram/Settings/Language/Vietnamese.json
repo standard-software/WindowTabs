@@ -270,6 +270,8 @@
   "TabPlural": "Thẻ",
   "CloseOtherTabsFormat": "Đóng các thẻ trừ thẻ này ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: đóng các thẻ trừ thẻ này ({1})",
+  "CloseSelectedGroupTabsFormat": "Đóng {0} thẻ đã chọn",
+  "CloseSelectedGroupTabsNoCount": "Đóng các thẻ đã chọn",
   "CloseUnselectedTabsFormat": "Đóng {0} thẻ chưa chọn",
   "CloseAllTabsFormat": "Đóng tất cả thẻ ({0})",
   "CloseEdgeTabsFormat": "{0}: đóng tất cả thẻ ({1})",

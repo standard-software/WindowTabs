@@ -270,6 +270,8 @@
   "TabPlural": "Karty",
   "CloseOtherTabsFormat": "Zamknij wszystko oprócz tej karty ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: zamknij wszystko oprócz tej karty ({1})",
+  "CloseSelectedGroupTabsFormat": "Zamknij {0} zaznaczonych kart",
+  "CloseSelectedGroupTabsNoCount": "Zamknij zaznaczone karty",
   "CloseUnselectedTabsFormat": "Zamknij {0} niezaznaczonych kart",
   "CloseAllTabsFormat": "Zamknij wszystkie karty ({0})",
   "CloseEdgeTabsFormat": "{0}: zamknij wszystkie karty ({1})",

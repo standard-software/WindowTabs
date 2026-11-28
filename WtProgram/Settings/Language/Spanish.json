@@ -270,6 +270,8 @@
   "TabPlural": "Pestañas",
   "CloseOtherTabsFormat": "Cerrar todo excepto esta pestaña ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: cerrar todo excepto esta pestaña ({1})",
+  "CloseSelectedGroupTabsFormat": "Cerrar {0} pestañas seleccionadas",
+  "CloseSelectedGroupTabsNoCount": "Cerrar pestañas seleccionadas",
   "CloseUnselectedTabsFormat": "Cerrar {0} pestañas no seleccionadas",
   "CloseAllTabsFormat": "Cerrar todas las pestañas ({0})",
   "CloseEdgeTabsFormat": "{0}: cerrar todas las pestañas ({1})",

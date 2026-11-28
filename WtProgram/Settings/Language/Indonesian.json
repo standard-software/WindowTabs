@@ -270,6 +270,8 @@
   "TabPlural": "Tab",
   "CloseOtherTabsFormat": "Tutup tab selain tab ini ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: tutup tab selain tab ini ({1})",
+  "CloseSelectedGroupTabsFormat": "Tutup {0} tab yang dipilih",
+  "CloseSelectedGroupTabsNoCount": "Tutup tab yang dipilih",
   "CloseUnselectedTabsFormat": "Tutup {0} tab yang tidak dipilih",
   "CloseAllTabsFormat": "Tutup semua tab ({0})",
   "CloseEdgeTabsFormat": "{0}: tutup semua tab ({1})",

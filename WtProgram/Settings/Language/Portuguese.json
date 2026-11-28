@@ -270,6 +270,8 @@
   "TabPlural": "Guias",
   "CloseOtherTabsFormat": "Fechar tudo exceto esta guia ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: fechar tudo exceto esta guia ({1})",
+  "CloseSelectedGroupTabsFormat": "Fechar {0} guias selecionadas",
+  "CloseSelectedGroupTabsNoCount": "Fechar guias selecionadas",
   "CloseUnselectedTabsFormat": "Fechar {0} guias não selecionadas",
   "CloseAllTabsFormat": "Fechar todas as guias ({0})",
   "CloseEdgeTabsFormat": "{0}: fechar todas as guias ({1})",

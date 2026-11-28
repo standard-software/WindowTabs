@@ -270,6 +270,8 @@
   "TabPlural": "탭",
   "CloseOtherTabsFormat": "이 탭을 제외한 탭 {0}개 닫기",
   "CloseOtherEdgeTabsFormat": "{0}에서 이 탭을 제외한 탭 {1}개 닫기",
+  "CloseSelectedGroupTabsFormat": "선택한 {0}개 탭 닫기",
+  "CloseSelectedGroupTabsNoCount": "선택한 탭 닫기",
   "CloseUnselectedTabsFormat": "선택하지 않은 {0}개 탭 닫기",
   "CloseAllTabsFormat": "모든 탭 닫기 ({0})",
   "CloseEdgeTabsFormat": "{0}의 모든 탭 닫기 ({1})",

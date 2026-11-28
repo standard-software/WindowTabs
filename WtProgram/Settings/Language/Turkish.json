@@ -270,6 +270,8 @@
   "TabPlural": "Sekme",
   "CloseOtherTabsFormat": "Bu sekme dışındakileri kapat ({0})",
   "CloseOtherEdgeTabsFormat": "{0}: bu sekme dışındakileri kapat ({1})",
+  "CloseSelectedGroupTabsFormat": "Seçili {0} sekmeyi kapat",
+  "CloseSelectedGroupTabsNoCount": "Seçili sekmeleri kapat",
   "CloseUnselectedTabsFormat": "Seçili olmayan {0} sekmeyi kapat",
   "CloseAllTabsFormat": "Tüm sekmeleri kapat ({0})",
   "CloseEdgeTabsFormat": "{0}: tüm sekmeleri kapat ({1})",

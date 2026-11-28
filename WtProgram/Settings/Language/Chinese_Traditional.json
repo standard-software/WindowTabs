@@ -270,6 +270,8 @@
   "TabPlural": "分頁",
   "CloseOtherTabsFormat": "關閉除此分頁外的 {0} 個分頁",
   "CloseOtherEdgeTabsFormat": "關閉{0}中除此分頁外的 {1} 個分頁",
+  "CloseSelectedGroupTabsFormat": "關閉選取的{0}個分頁",
+  "CloseSelectedGroupTabsNoCount": "關閉選取的分頁",
   "CloseUnselectedTabsFormat": "關閉未選取的{0}個分頁",
   "CloseAllTabsFormat": "關閉所有分頁 ({0})",
   "CloseEdgeTabsFormat": "關閉{0}中的所有分頁 ({1})",
