@@ -96,7 +96,7 @@ type SettingsDialogWindow(initialScale: float) =
 
     // A size the user dragged the border to REPLACES the design size, so their
     // choice survives the move to another monitor exactly the way the original
-    // 800 x 600 does. Gated on WM_SIZING so that neither a plain move nor the
+    // design size does. Gated on WM_SIZING so that neither a plain move nor the
     // re-size above can be mistaken for one, and skipped while maximised,
     // where the size is the monitor's rather than one anybody chose.
     override this.OnResizeEnd(e: EventArgs) =
@@ -223,7 +223,7 @@ type DesktopManagerForm() =
         // The window's size in 96-dpi design units. Used twice below - to build
         // the window in design units, and to register what every later scale is
         // computed from - so the two cannot drift apart.
-        let designSize = Sz(800, 600)
+        let designSize = Sz(800, 630)
         tabs.iter <| fun view ->
             let page = TabPage(view.title)
             let control = view.control
@@ -296,7 +296,7 @@ type DesktopManagerForm() =
         // still scrolls: every tab is either an AutoScroll TableLayoutPanel
         // or a TreeViewAdv.
         //
-        // The 800 x 600 is registered as the window's design size BEFORE the
+        // The default size is registered as the window's design size BEFORE the
         // clamp, and it is the design size - not the clamped result - that
         // every later monitor change is computed from. Without that, opening
         // on a monitor too short for the dialog left it permanently short on
