@@ -2,7 +2,7 @@
 
 **Language:** [English](version.md)
 
-## version ss_2026.11.24_next1
+## version ss_2026.11.29
 
 - 各辺のタブの末尾に、タブ追加ボタン [+] を追加
   - 左クリック: アクティブタブか後ろのタブのexeを起動

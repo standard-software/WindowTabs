@@ -2,7 +2,7 @@
 
 **Language:** [Japanese/日本語](version_Japanese.md)
 
-## version ss_2026.11.24_next1
+## version ss_2026.11.29
 
 - Added an add-tab button [+] after the tabs on each edge
   - Left click: starts the exe of the active tab or the tab behind it
